@@ -1,0 +1,6 @@
+{
+  "name": "NusaHR Enterprise - SaaS HRMS & Workforce Platform",
+  "description": "SaaS HRMS Enterprise lengkap dengan kepatuhan regulasi Indonesia: PPh 21 TER 2024, BPJS, Personalia, Absensi, Pinjaman, KPI, SP/PHK, Rekrutmen, GA Aset QR, Procurement, Dokumen QR, dan Multi-Tenant.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
