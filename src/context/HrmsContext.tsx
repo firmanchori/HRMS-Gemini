@@ -39,6 +39,7 @@ import {
   PersonaliaRequest,
   OrgStructureNode,
   OrgChangeProposal,
+  OrgStructureSnapshot,
   ProbationEvaluation,
   ContractRenewalReview,
   CompanyCalendarEvent,
@@ -56,6 +57,11 @@ import {
   UniversalPreviewItem,
   RoleDefinition,
   OperationPermissions,
+  CompanyDivision,
+  CompanyDepartment,
+  MasterJobPosition,
+  FlexibleNikSettings,
+  NikPatternConfig,
 } from '../types/hrms';
 import {
   INITIAL_TENANTS,
@@ -88,6 +94,7 @@ import {
   INITIAL_OVERTIME_REQUESTS,
   INITIAL_REIMBURSEMENT_CLAIMS,
   INITIAL_PERSONALIA_REQUESTS,
+  INITIAL_MASTER_JOB_POSITIONS,
   INITIAL_ORG_NODES,
   INITIAL_ORG_PROPOSALS,
   INITIAL_PROBATION_EVALUATIONS,
@@ -106,9 +113,16 @@ import {
   INITIAL_ENPS_SURVEY,
   INITIAL_PAYROLL_RECORDS,
   INITIAL_ROLE_PERMISSIONS,
+  INITIAL_DIVISIONS,
+  INITIAL_DEPARTMENTS,
 } from '../data/initialData';
 import { calculatePPh21TER, calculateBPJS, calculateOvertimePay, calculateSeverancePay } from '../utils/taxCalculator';
 import { generateDocumentNumber } from '../utils/documentNumbering';
+import {
+  DEFAULT_FLEXIBLE_NIK_SETTINGS,
+  generateFlexibleNik,
+  normalizeEmploymentType,
+} from '../utils/nikGenerator';
 
 interface HrmsContextType {
   // Tenant & User RBAC
@@ -307,6 +321,30 @@ interface HrmsContextType {
   currentEntity: CompanyEntity;
   addEntity: (entity: Omit<CompanyEntity, 'id' | 'tenantId'>) => void;
   updateEntity: (id: string, updates: Partial<CompanyEntity>) => void;
+  deleteEntity: (id: string) => void;
+  toggleEntityDepartmentLevel: (entityId: string) => void;
+
+  // 22B. Divisi & Departemen Fleksibel
+  divisions: CompanyDivision[];
+  addDivision: (division: Omit<CompanyDivision, 'id'>) => void;
+  updateDivision: (id: string, updates: Partial<CompanyDivision>) => void;
+  deleteDivision: (id: string) => void;
+  departments: CompanyDepartment[];
+  addDepartment: (department: Omit<CompanyDepartment, 'id'>) => void;
+  updateDepartment: (id: string, updates: Partial<CompanyDepartment>) => void;
+  deleteDepartment: (id: string) => void;
+
+  // 22B-2. Master Jabatan / Standar Posisi (Kamus Jabatan)
+  masterJobPositions: MasterJobPosition[];
+  addMasterJobPosition: (posData: Omit<MasterJobPosition, 'id'>) => void;
+  updateMasterJobPosition: (id: string, updates: Partial<MasterJobPosition>) => void;
+  deleteMasterJobPosition: (id: string) => void;
+  assignEmployeeToPosition: (positionId: string, employeeId: string | null) => void;
+
+  // 22C. Format NIK Fleksibel
+  flexibleNikSettings: FlexibleNikSettings;
+  updateFlexibleNikSettings: (settings: FlexibleNikSettings) => void;
+  generateNextNik: (employmentType: string, entityId?: string) => string;
 
   // 23. Employee Staging (Onboarding Gate)
   employeeStaging: EmployeeStaging[];
@@ -330,11 +368,26 @@ interface HrmsContextType {
   submitPersonaliaRequest: (req: Omit<PersonaliaRequest, 'id' | 'tenantId' | 'status'>) => void;
   reviewPersonaliaRequest: (id: string, approved: boolean) => void;
 
-  // 27. Org Chart & Proposals
+  // 27. Org Chart & Per-Entity Governance
+  isOrgGovernanceLocked: boolean;
+  isEntityGovernanceLocked: (entityId?: string) => boolean;
+  toggleEntityGovernanceLock: (entityId: string) => void;
+  setOrgGovernanceLocked: (locked: boolean) => void;
   orgNodes: OrgStructureNode[];
+  addOrgNode: (node: Omit<OrgStructureNode, 'id'>) => void;
+  updateOrgNode: (id: string, updates: Partial<OrgStructureNode>) => void;
+  deleteOrgNode: (id: string) => void;
   orgProposals: OrgChangeProposal[];
   submitOrgProposal: (proposal: Omit<OrgChangeProposal, 'id' | 'tenantId' | 'status' | 'implemented'>) => void;
-  reviewOrgProposal: (id: string, approved: boolean) => void;
+  reviewOrgProposal: (id: string, approved: boolean, rejectionReason?: string) => void;
+  orgSnapshots: OrgStructureSnapshot[];
+  replaceEntityStructure: (
+    entityId: string,
+    newDivisions: CompanyDivision[],
+    newDepartments: CompanyDepartment[],
+    newNodes: OrgStructureNode[],
+    proposalInfo?: { skDocNumber?: string; title?: string; effectiveDate?: string; reason?: string }
+  ) => void;
 
   // 28. Probation Evaluation
   probationEvaluations: ProbationEvaluation[];
@@ -669,6 +722,22 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return entities.find((e) => e.id === currentEntityId) || entities[0];
   }, [entities, currentEntityId]);
 
+  // 22B. Divisions & Departments
+  const [divisions, setDivisions] = useState<CompanyDivision[]>(() => {
+    const saved = localStorage.getItem('nusahr_divisions');
+    return saved ? JSON.parse(saved) : INITIAL_DIVISIONS;
+  });
+  const [departments, setDepartments] = useState<CompanyDepartment[]>(() => {
+    const saved = localStorage.getItem('nusahr_departments');
+    return saved ? JSON.parse(saved) : INITIAL_DEPARTMENTS;
+  });
+
+  // 22B-2. Master Standar Jabatan (Kamus Jabatan)
+  const [masterJobPositions, setMasterJobPositions] = useState<MasterJobPosition[]>(() => {
+    const saved = localStorage.getItem('nusahr_master_job_positions');
+    return saved ? JSON.parse(saved) : INITIAL_MASTER_JOB_POSITIONS;
+  });
+
   // 23. Employee Staging
   const [employeeStaging, setEmployeeStaging] = useState<EmployeeStaging[]>(() => {
     const saved = localStorage.getItem('nusahr_staging');
@@ -695,13 +764,80 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // 27. Org Nodes & Proposals
   const [orgNodes, setOrgNodes] = useState<OrgStructureNode[]>(() => {
-    const saved = localStorage.getItem('nusahr_org_nodes');
+    const saved = localStorage.getItem('nusahr_org_nodes_v2');
     return saved ? JSON.parse(saved) : INITIAL_ORG_NODES;
   });
   const [orgProposals, setOrgProposals] = useState<OrgChangeProposal[]>(() => {
     const saved = localStorage.getItem('nusahr_org_proposals');
     return saved ? JSON.parse(saved) : INITIAL_ORG_PROPOSALS;
   });
+  const [lockedEntities, setLockedEntities] = useState<Record<string, boolean>>(() => {
+    const saved = localStorage.getItem('nusahr_org_locked_entities');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        // fallback
+      }
+    }
+    return {
+      'ent-ntm-holding': true,
+      'ent-ntm-digital': true,
+      'ent-ntm-cloud': false,
+    };
+  });
+
+  const [orgSnapshots, setOrgSnapshots] = useState<OrgStructureSnapshot[]>(() => {
+    const saved = localStorage.getItem('nusahr_org_snapshots');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        // fallback
+      }
+    }
+    return [
+      {
+        id: 'snap-holding-2025-v1',
+        tenantId: 'default',
+        entityId: 'ent-ntm-holding',
+        skDocNumber: 'SK-DIR/HOLDING/2025/001',
+        versionTitle: 'Versi Awal Pembentukan Holding 2025 (Baseline SK-001)',
+        effectiveDate: '2025-01-02',
+        archivedAt: '2025-12-30',
+        archivedBy: 'Direktur Utama',
+        reason: 'Arsip penetapan awal struktur organisasi holding PT Nusantara Tech Media',
+        divisions: INITIAL_DIVISIONS.filter((d) => d.entityId === 'ent-ntm-holding'),
+        departments: INITIAL_DEPARTMENTS.filter((d) => d.entityId === 'ent-ntm-holding'),
+        orgNodes: INITIAL_ORG_NODES.filter((n) => n.entityId === 'ent-ntm-holding'),
+      },
+    ];
+  });
+
+  useEffect(() => {
+    localStorage.setItem('nusahr_org_snapshots', JSON.stringify(orgSnapshots));
+  }, [orgSnapshots]);
+
+  const isEntityGovernanceLocked = (entityId?: string) => {
+    const targetId = entityId || currentEntityId;
+    return lockedEntities[targetId] ?? false;
+  };
+
+  const toggleEntityGovernanceLock = (entityId: string) => {
+    setLockedEntities((prev) => {
+      const next = { ...prev, [entityId]: !prev[entityId] };
+      localStorage.setItem('nusahr_org_locked_entities', JSON.stringify(next));
+      return next;
+    });
+  };
+
+  const setIsOrgGovernanceLocked = (locked: boolean) => {
+    setLockedEntities((prev) => {
+      const next = { ...prev, [currentEntityId]: locked };
+      localStorage.setItem('nusahr_org_locked_entities', JSON.stringify(next));
+      return next;
+    });
+  };
 
   // 28. Probation Evaluations
   const [probationEvaluations, setProbationEvaluations] = useState<ProbationEvaluation[]>(() => {
@@ -814,6 +950,22 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     localStorage.setItem('nusahr_payroll', JSON.stringify(payrollRecords));
   }, [payrollRecords]);
+
+  useEffect(() => {
+    localStorage.setItem('nusahr_entities', JSON.stringify(entities));
+  }, [entities]);
+
+  useEffect(() => {
+    localStorage.setItem('nusahr_divisions', JSON.stringify(divisions));
+  }, [divisions]);
+
+  useEffect(() => {
+    localStorage.setItem('nusahr_departments', JSON.stringify(departments));
+  }, [departments]);
+
+  useEffect(() => {
+    localStorage.setItem('nusahr_master_job_positions', JSON.stringify(masterJobPositions));
+  }, [masterJobPositions]);
 
   // Filtered scoped items for active tenant
   const tenantEmployees = useMemo(
@@ -2322,6 +2474,150 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     logAuditAction('Struktur Entitas', 'UPDATE_ENTITAS', id, `Memperbarui konfigurasi entitas ${id}`);
   };
 
+  const deleteEntity = (id: string) => {
+    setEntities((prev) => prev.filter((e) => e.id !== id));
+    logAuditAction('Struktur Entitas', 'HAPUS_ENTITAS', id, `Menghapus entitas ${id}`);
+  };
+
+  const toggleEntityDepartmentLevel = (entityId: string) => {
+    setEntities((prev) =>
+      prev.map((e) =>
+        e.id === entityId ? { ...e, useDepartmentLevel: !(e.useDepartmentLevel ?? true) } : e
+      )
+    );
+    const target = entities.find((e) => e.id === entityId);
+    logAuditAction(
+      'Struktur Organisasi',
+      'TOGGLE_DEPT_LEVEL',
+      entityId,
+      `Mengubah fleksibilitas hierarki departemen pada ${target?.name || entityId}`
+    );
+  };
+
+  // 22B. Divisi & Departemen Handlers
+  const addDivision = (divData: Omit<CompanyDivision, 'id'>) => {
+    const newDiv: CompanyDivision = {
+      ...divData,
+      id: `div-${Date.now()}`,
+    };
+    setDivisions((prev) => [...prev, newDiv]);
+    logAuditAction('Struktur Divisi', 'TAMBAH_DIVISI', newDiv.id, `Menambahkan divisi: ${newDiv.name}`);
+  };
+
+  const updateDivision = (id: string, updates: Partial<CompanyDivision>) => {
+    setDivisions((prev) => prev.map((d) => (d.id === id ? { ...d, ...updates } : d)));
+    logAuditAction('Struktur Divisi', 'UPDATE_DIVISI', id, `Memperbarui divisi ${id}`);
+  };
+
+  const deleteDivision = (id: string) => {
+    setDivisions((prev) => prev.filter((d) => d.id !== id));
+    logAuditAction('Struktur Divisi', 'HAPUS_DIVISI', id, `Menghapus divisi ${id}`);
+  };
+
+  const addDepartment = (deptData: Omit<CompanyDepartment, 'id'>) => {
+    const newDept: CompanyDepartment = {
+      ...deptData,
+      id: `dept-${Date.now()}`,
+    };
+    setDepartments((prev) => [...prev, newDept]);
+    logAuditAction('Struktur Departemen', 'TAMBAH_DEPARTEMEN', newDept.id, `Menambahkan departemen: ${newDept.name}`);
+  };
+
+  const updateDepartment = (id: string, updates: Partial<CompanyDepartment>) => {
+    setDepartments((prev) => prev.map((d) => (d.id === id ? { ...d, ...updates } : d)));
+    logAuditAction('Struktur Departemen', 'UPDATE_DEPARTEMEN', id, `Memperbarui departemen ${id}`);
+  };
+
+  const deleteDepartment = (id: string) => {
+    setDepartments((prev) => prev.filter((d) => d.id !== id));
+    logAuditAction('Struktur Departemen', 'HAPUS_DEPARTEMEN', id, `Menghapus departemen ${id}`);
+  };
+
+  // 22B-2. Master Jabatan Handlers
+  const addMasterJobPosition = (posData: Omit<MasterJobPosition, 'id'>) => {
+    const newPos: MasterJobPosition = {
+      ...posData,
+      id: `mjp-${Date.now()}`,
+    };
+    setMasterJobPositions((prev) => [...prev, newPos]);
+    logAuditAction('Master Jabatan', 'TAMBAH_MASTER_JABATAN', newPos.id, `Menambahkan standar jabatan: ${newPos.title}`);
+  };
+
+  const updateMasterJobPosition = (id: string, updates: Partial<MasterJobPosition>) => {
+    setMasterJobPositions((prev) => prev.map((p) => (p.id === id ? { ...p, ...updates } : p)));
+    logAuditAction('Master Jabatan', 'UPDATE_MASTER_JABATAN', id, `Memperbarui standar jabatan ${id}`);
+  };
+
+  const deleteMasterJobPosition = (id: string) => {
+    setMasterJobPositions((prev) => prev.filter((p) => p.id !== id));
+    logAuditAction('Master Jabatan', 'HAPUS_MASTER_JABATAN', id, `Menghapus standar jabatan ${id}`);
+  };
+
+  const assignEmployeeToPosition = (positionId: string, employeeId: string | null) => {
+    setOrgNodes((prev) =>
+      prev.map((node) => {
+        if (node.id === positionId) {
+          return {
+            ...node,
+            currentEmployeeId: employeeId || undefined,
+            isVacant: !employeeId,
+          };
+        }
+        return node;
+      })
+    );
+    if (employeeId) {
+      const targetNode = orgNodes.find((n) => n.id === positionId);
+      if (targetNode) {
+        setEmployees((prev) =>
+          prev.map((emp) =>
+            emp.id === employeeId ? { ...emp, position: targetNode.title, department: targetNode.department } : emp
+          )
+        );
+      }
+    }
+    logAuditAction(
+      'Assign Jabatan',
+      employeeId ? 'ASSIGN_KARYAWAN' : 'VACANT_JABATAN',
+      positionId,
+      employeeId ? `Menetapkan karyawan ${employeeId} ke posisi ${positionId}` : `Mengosongkan formasi posisi ${positionId}`
+    );
+  };
+
+  // 22C. Flexible NIK Handlers
+  const flexibleNikSettings: FlexibleNikSettings = useMemo(() => {
+    return moduleSettings.employee?.flexibleNik || DEFAULT_FLEXIBLE_NIK_SETTINGS;
+  }, [moduleSettings]);
+
+  const updateFlexibleNikSettings = (newSettings: FlexibleNikSettings) => {
+    updateModuleSettings('employee', {
+      ...moduleSettings.employee,
+      flexibleNik: newSettings,
+    });
+    logAuditAction('Format NIK', 'UPDATE_NIK_FORMAT', 'global', 'Memperbarui formula pola NIK dinamis karyawan');
+  };
+
+  const generateNextNik = (employmentType: string, entityId?: string): string => {
+    const ent = entities.find((e) => e.id === (entityId || currentEntityId)) || currentEntity;
+    const typeKey = normalizeEmploymentType(employmentType);
+    const patternCfg = flexibleNikSettings[typeKey] || DEFAULT_FLEXIBLE_NIK_SETTINGS[typeKey];
+
+    const sameTypeCount = employees.filter(
+      (e) => normalizeEmploymentType(e.employmentType) === typeKey
+    ).length;
+    const counter = Math.max(patternCfg.counter || 1, sameTypeCount + 1);
+
+    return generateFlexibleNik({
+      pattern: patternCfg.pattern,
+      employmentType,
+      entityCode: ent.code || currentTenant.code,
+      counter,
+      digitPadding: patternCfg.digitPadding || 4,
+      customPrefix: patternCfg.prefix,
+      customSuffix: patternCfg.suffix,
+    });
+  };
+
   // 23. Employee Staging Handlers
   const addEmployeeStaging = (staging: Omit<EmployeeStaging, 'id' | 'tenantId' | 'tempNik' | 'status'>) => {
     const tempNik = `TEMP-${Math.floor(1000 + Math.random() * 9000)}`;
@@ -2645,31 +2941,176 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // 27. Org Proposals
+  const replaceEntityStructure = (
+    entityId: string,
+    newDivisions: CompanyDivision[],
+    newDepartments: CompanyDepartment[],
+    newNodes: OrgStructureNode[],
+    proposalInfo?: { skDocNumber?: string; title?: string; effectiveDate?: string; reason?: string }
+  ) => {
+    // 1. Simpan snapshot struktur existing sebelum direplace
+    const prevDivs = divisions.filter((d) => d.entityId === entityId);
+    const prevDepts = departments.filter((d) => d.entityId === entityId);
+    const prevNodes = orgNodes.filter((n) => n.entityId === entityId);
+
+    const snapshot: OrgStructureSnapshot = {
+      id: `snap-${Date.now()}`,
+      tenantId: currentTenant.id,
+      entityId,
+      skDocNumber: proposalInfo?.skDocNumber || 'SK-RESTRUCT-AUTO',
+      versionTitle: `Versi Pra-Restrukturisasi: ${proposalInfo?.title || 'Penataan Struktur'}`,
+      effectiveDate: proposalInfo?.effectiveDate || new Date().toISOString().split('T')[0],
+      archivedAt: new Date().toISOString().split('T')[0],
+      archivedBy: currentUser.name,
+      reason: proposalInfo?.reason || 'Snapshot otomatis diarsipkan saat restrukturisasi resmi disetujui',
+      divisions: prevDivs,
+      departments: prevDepts,
+      orgNodes: prevNodes,
+    };
+
+    setOrgSnapshots((prev) => [snapshot, ...prev]);
+
+    // 2. Replace data existing entitas dengan data draft baru
+    setDivisions((prev) => [...prev.filter((d) => d.entityId !== entityId), ...newDivisions]);
+    setDepartments((prev) => [...prev.filter((d) => d.entityId !== entityId), ...newDepartments]);
+    setOrgNodes((prev) => [...prev.filter((n) => n.entityId !== entityId), ...newNodes]);
+
+    logAuditAction(
+      'Struktur Organisasi',
+      'REPLACE_STRUCTURE',
+      entityId,
+      `Restrukturisasi menyeluruh diterapkan untuk entitas ${entityId}. Struktur lama diarsipkan ke snapshot ID ${snapshot.id}`
+    );
+  };
+
   const submitOrgProposal = (proposal: Omit<OrgChangeProposal, 'id' | 'tenantId' | 'status' | 'implemented'>) => {
+    const targetEntId = proposal.entityId || currentEntityId;
+    const isLocked = isEntityGovernanceLocked(targetEntId);
+    const isAutoApproved = Boolean(proposal.isCorrectionOnly) || !isLocked;
     const newProp: OrgChangeProposal = {
       ...proposal,
       id: `org-prop-${Date.now()}`,
       tenantId: currentTenant.id,
-      status: 'Menunggu Approval',
-      implemented: false,
+      status: isAutoApproved ? 'Disetujui' : 'Menunggu Approval',
+      implemented: isAutoApproved,
+      createdAt: new Date().toISOString().split('T')[0],
+      approvedBy: isAutoApproved ? currentUser.name : undefined,
     };
     setOrgProposals((prev) => [newProp, ...prev]);
-    logAuditAction('Struktur Organisasi', 'SUBMIT_PROPOSAL', newProp.id, `Pengusulan perubahan struktur: ${newProp.proposalTitle}`);
+
+    // Jika mode koreksi typo atau mode setup awal, langsung terapkan
+    if (isAutoApproved && proposal.payload) {
+      if (proposal.payload.type === 'full_restructure' || (proposal.payload.newDivisions && proposal.payload.newNodes)) {
+        replaceEntityStructure(
+          targetEntId,
+          proposal.payload.newDivisions || [],
+          proposal.payload.newDepartments || [],
+          proposal.payload.newNodes || [],
+          {
+            skDocNumber: proposal.skDocNumber,
+            title: proposal.proposalTitle,
+            effectiveDate: proposal.effectiveDate,
+            reason: proposal.description,
+          }
+        );
+      } else {
+        applyProposalPayload(proposal.payload);
+      }
+    }
+
+    logAuditAction(
+      proposal.category === 'perusahaan' ? 'Struktur Perusahaan' : 'Struktur Organisasi',
+      'SUBMIT_PROPOSAL',
+      newProp.id,
+      `Pengusulan perubahan struktur: ${newProp.proposalTitle} [No. SK: ${newProp.skDocNumber || '-'}]`
+    );
   };
 
-  const reviewOrgProposal = (id: string, approved: boolean) => {
+  const applyProposalPayload = (payload: any) => {
+    if (!payload) return;
+    if (payload.type === 'create_position') {
+      addOrgNode(payload.data);
+    } else if (payload.type === 'update_position') {
+      updateOrgNode(payload.id, payload.data);
+    } else if (payload.type === 'delete_position') {
+      deleteOrgNode(payload.id);
+    } else if (payload.type === 'create_division') {
+      addDivision(payload.data);
+    } else if (payload.type === 'update_division') {
+      updateDivision(payload.id, payload.data);
+    } else if (payload.type === 'delete_division') {
+      deleteDivision(payload.id);
+    } else if (payload.type === 'create_department') {
+      addDepartment(payload.data);
+    } else if (payload.type === 'update_department') {
+      updateDepartment(payload.id, payload.data);
+    } else if (payload.type === 'delete_department') {
+      deleteDepartment(payload.id);
+    } else if (payload.type === 'create_entity') {
+      addEntity(payload.data);
+    } else if (payload.type === 'update_entity') {
+      updateEntity(payload.id, payload.data);
+    } else if (payload.type === 'delete_entity') {
+      deleteEntity(payload.id);
+    }
+  };
+
+  const reviewOrgProposal = (id: string, approved: boolean, rejectionReason?: string) => {
     setOrgProposals((prev) =>
-      prev.map((p) =>
-        p.id === id
-          ? {
-              ...p,
-              status: approved ? 'Disetujui' : 'Ditolak',
-              approvedBy: currentUser.name,
-              implemented: approved,
-            }
-          : p
-      )
+      prev.map((p) => {
+        if (p.id !== id) return p;
+        if (approved && p.payload) {
+          if (p.payload.type === 'full_restructure' || (p.payload.newDivisions && p.payload.newNodes)) {
+            replaceEntityStructure(
+              p.entityId,
+              p.payload.newDivisions || [],
+              p.payload.newDepartments || [],
+              p.payload.newNodes || [],
+              {
+                skDocNumber: p.skDocNumber,
+                title: p.proposalTitle,
+                effectiveDate: p.effectiveDate,
+                reason: p.description,
+              }
+            );
+          } else {
+            applyProposalPayload(p.payload);
+          }
+        }
+        return {
+          ...p,
+          status: approved ? 'Disetujui' : 'Ditolak',
+          approvedBy: approved ? currentUser.name : p.approvedBy,
+          rejectionReason: !approved ? (rejectionReason || 'Ditolak oleh pimpinan/direksi') : undefined,
+          implemented: approved,
+        };
+      })
     );
+    logAuditAction(
+      'Struktur Organisasi',
+      approved ? 'APPROVE_PROPOSAL' : 'REJECT_PROPOSAL',
+      id,
+      `Proposal restrukturisasi ${id} ${approved ? 'Disetujui dan diberlakukan' : `Ditolak: ${rejectionReason || '-'}`}`
+    );
+  };
+
+  const addOrgNode = (node: Omit<OrgStructureNode, 'id'>) => {
+    const newNode: OrgStructureNode = {
+      ...node,
+      id: `org-pos-${Date.now()}`,
+    };
+    setOrgNodes((prev) => [...prev, newNode]);
+    logAuditAction('Struktur Organisasi', 'TAMBAH_POSISI', newNode.id, `Menambahkan posisi jabatan: ${newNode.title}`);
+  };
+
+  const updateOrgNode = (id: string, updates: Partial<OrgStructureNode>) => {
+    setOrgNodes((prev) => prev.map((n) => (n.id === id ? { ...n, ...updates } : n)));
+    logAuditAction('Struktur Organisasi', 'UPDATE_POSISI', id, `Memperbarui posisi jabatan ${id}`);
+  };
+
+  const deleteOrgNode = (id: string) => {
+    setOrgNodes((prev) => prev.filter((n) => n.id !== id));
+    logAuditAction('Struktur Organisasi', 'HAPUS_POSISI', id, `Menghapus posisi jabatan ${id}`);
   };
 
   // 28. Probation Evaluations
@@ -3154,6 +3595,24 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         currentEntity,
         addEntity,
         updateEntity,
+        deleteEntity,
+        toggleEntityDepartmentLevel,
+        divisions: divisions.filter((d) => entities.some((e) => e.id === d.entityId && e.tenantId === currentTenant.id)),
+        addDivision,
+        updateDivision,
+        deleteDivision,
+        departments: departments.filter((dept) => entities.some((e) => e.id === dept.entityId && e.tenantId === currentTenant.id)),
+        addDepartment,
+        updateDepartment,
+        deleteDepartment,
+        masterJobPositions: masterJobPositions.filter((mjp) => entities.some((e) => e.id === mjp.entityId && e.tenantId === currentTenant.id)),
+        addMasterJobPosition,
+        updateMasterJobPosition,
+        deleteMasterJobPosition,
+        assignEmployeeToPosition,
+        flexibleNikSettings,
+        updateFlexibleNikSettings,
+        generateNextNik,
         employeeStaging: employeeStaging.filter((s) => s.tenantId === currentTenant.id),
         addEmployeeStaging,
         updateEmployeeStagingTask,
@@ -3168,10 +3627,19 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         personaliaRequests: personaliaRequests.filter((p) => p.tenantId === currentTenant.id),
         submitPersonaliaRequest,
         reviewPersonaliaRequest,
+        isOrgGovernanceLocked: isEntityGovernanceLocked(currentEntityId),
+        isEntityGovernanceLocked,
+        toggleEntityGovernanceLock,
+        setOrgGovernanceLocked: setIsOrgGovernanceLocked,
         orgNodes: orgNodes.filter((n) => entities.some((e) => e.id === n.entityId && e.tenantId === currentTenant.id)),
+        addOrgNode,
+        updateOrgNode,
+        deleteOrgNode,
         orgProposals: orgProposals.filter((p) => p.tenantId === currentTenant.id),
         submitOrgProposal,
         reviewOrgProposal,
+        orgSnapshots: orgSnapshots.filter((s) => s.tenantId === currentTenant.id),
+        replaceEntityStructure,
         probationEvaluations: probationEvaluations.filter((p) => p.tenantId === currentTenant.id),
         submitProbationEvaluation,
         reviewProbationEvaluation,

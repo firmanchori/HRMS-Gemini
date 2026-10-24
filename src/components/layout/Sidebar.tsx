@@ -26,6 +26,7 @@ import {
   ChevronLeft,
   UserCheck,
   History,
+  Network,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -57,6 +58,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       title: 'OPERASIONAL & PERSONALIA',
       items: [
         { id: 'dashboard', label: 'Ringkasan Dashboard', icon: LayoutDashboard },
+        { id: 'organization', label: 'Struktur Organisasi & Tree', icon: Network },
         { id: 'recruitment', label: 'Rekrutmen & Onboarding', icon: UserPlus },
         {
           id: 'employees',

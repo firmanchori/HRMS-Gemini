@@ -26,6 +26,7 @@ import {
   Printer,
   BarChart3,
   FileCheck2,
+  ChevronRight,
 } from 'lucide-react';
 import {
   AttendanceStatus,
@@ -146,6 +147,36 @@ export const AttendanceManagement: React.FC = () => {
       attachments: corr.attachmentUrl
         ? [{ fileName: corr.attachmentUrl, fileSize: '184 KB', fileType: 'PDF/Surat Dokter' }]
         : [{ fileName: `Surat_Keterangan_${corr.type}.pdf`, fileSize: '142 KB', fileType: 'PDF' }],
+    });
+  };
+
+  const handlePreviewShiftSwap = (swap: ShiftSwapRequest) => {
+    const req = employees.find((e) => e.id === swap.requesterId);
+    const target = employees.find((e) => e.id === swap.targetEmployeeId);
+    openFilePreview({
+      title: 'FORMULIR PERMOHONAN TUKAR SHIFT KERJA',
+      documentNumber: `SWAP-${swap.requestDate.replace(/-/g, '')}/${swap.id.slice(-4)}`,
+      typeBadge: 'Tukar Shift',
+      date: swap.requestDate,
+      partyName: `${req?.fullName || 'Pemohon'} ↔ ${target?.fullName || 'Pengganti'}`,
+      partyRole: `${req?.position || 'Staff'} & ${target?.position || 'Staff'}`,
+      statusBadge: {
+        label: swap.status,
+        variant: swap.status === 'Disetujui' ? 'success' : swap.status === 'Ditolak' ? 'danger' : 'warning',
+      },
+      detailsGrid: [
+        { label: 'Pemohon Asal', value: req?.fullName || '-' },
+        { label: 'Shift Pemohon', value: `${swap.requestShiftId} (${swap.requestDate})` },
+        { label: 'Rekan Pengganti', value: target?.fullName || '-' },
+        { label: 'Shift Pengganti', value: `${swap.targetShiftId} (${swap.targetDate})` },
+        { label: 'Alasan Penukaran', value: swap.reason },
+        { label: 'Status Verifikasi', value: swap.status },
+      ],
+      contentParagraphs: [
+        `Kedua belah pihak karyawan telah menyetujui pertukaran jadwal shift kerja operasional secara sukarela tanpa mengganggu kontinuitas layanan operasional.`,
+        `Alasan pertukaran: "${swap.reason}".`,
+        `Perubahan roster berlaku efektif pada tanggal ${swap.requestDate} dan ${swap.targetDate} setelah mendapatkan persetujuan Supervisor / HRD.`,
+      ],
     });
   };
 
@@ -615,17 +646,10 @@ export const AttendanceManagement: React.FC = () => {
                       )}
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handlePreviewMonthlyAttendanceCutoff(rec);
-                      }}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 rounded-md border border-indigo-200 transition-colors"
-                    >
-                      <Eye className="w-3.5 h-3.5" />
-                      <span>Rekap Presensi (Cut-Off)</span>
-                    </button>
+                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600">
+                      <span>Rekap Cut-Off</span>
+                      <ChevronRight className="w-3.5 h-3.5 text-slate-300" />
+                    </span>
                   </div>
                 </div>
               );
@@ -723,7 +747,24 @@ export const AttendanceManagement: React.FC = () => {
             {employees.map((emp) => {
               const todayRec = attendance.find((a) => a.employeeId === emp.id && a.date === selectedDate);
               return (
-                <div key={emp.id} className="p-3.5 bg-white border border-slate-200 rounded-lg shadow-xs space-y-2">
+                <div
+                  key={emp.id}
+                  onClick={() => {
+                    const rec = todayRec || {
+                      id: `temp-${emp.id}`,
+                      employeeId: emp.id,
+                      date: selectedDate,
+                      clockIn: '--:--',
+                      clockOut: '--:--',
+                      status: 'Belum Presensi' as const,
+                      lateMinutes: 0,
+                      overtimeHours: 0,
+                    };
+                    handlePreviewMonthlyAttendanceCutoff(rec);
+                  }}
+                  className="p-3.5 bg-white border border-slate-200 hover:border-indigo-300 rounded-lg shadow-xs space-y-2 cursor-pointer hover:shadow-sm transition-all group"
+                  title="Klik untuk melihat Lembar Catatan Presensi Periode Cut-Off"
+                >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       {emp.avatar ? (
@@ -734,22 +775,25 @@ export const AttendanceManagement: React.FC = () => {
                         </div>
                       )}
                       <div>
-                        <div className="font-bold text-slate-900 text-xs">{emp.fullName}</div>
+                        <div className="font-bold text-slate-900 group-hover:text-indigo-600 transition-colors text-xs">{emp.fullName}</div>
                         <div className="text-[10px] text-slate-500">{emp.position}</div>
                       </div>
                     </div>
 
-                    <span
-                      className={`text-[10px] px-2 py-0.5 rounded font-bold ${
-                        todayRec?.status === 'Hadir'
-                          ? 'bg-emerald-100 text-emerald-800'
-                          : todayRec?.status === 'Terlambat'
-                          ? 'bg-amber-100 text-amber-800'
-                          : 'bg-slate-100 text-slate-700'
-                      }`}
-                    >
-                      {todayRec?.status || 'Belum Presensi'}
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className={`text-[10px] px-2 py-0.5 rounded font-bold ${
+                          todayRec?.status === 'Hadir'
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : todayRec?.status === 'Terlambat'
+                            ? 'bg-amber-100 text-amber-800'
+                            : 'bg-slate-100 text-slate-700'
+                        }`}
+                      >
+                        {todayRec?.status || 'Belum Presensi'}
+                      </span>
+                      <ChevronRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-indigo-600 transition-colors" />
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-2 text-[11px] p-2 bg-slate-50 rounded border border-slate-100 font-mono">
@@ -874,22 +918,54 @@ export const AttendanceManagement: React.FC = () => {
                 const req = employees.find((e) => e.id === swap.requesterId);
                 const target = employees.find((e) => e.id === swap.targetEmployeeId);
                 return (
-                  <div key={swap.id} className="p-3 flex items-center justify-between">
+                  <div
+                    key={swap.id}
+                    onClick={() => handlePreviewShiftSwap(swap)}
+                    className="p-3 flex items-center justify-between hover:bg-indigo-50/40 cursor-pointer transition-colors group"
+                  >
                     <div>
-                      <div className="font-semibold text-slate-900">
+                      <div className="font-semibold text-slate-900 group-hover:text-indigo-600 transition-colors">
                         {req?.fullName} ↔ {target?.fullName}
                       </div>
                       <div className="text-slate-500 text-[11px]">
                         Tanggal: {swap.requestDate} tukar ke {swap.targetDate} · Alasan: {swap.reason}
                       </div>
                     </div>
-                    <span
-                      className={`text-[10px] px-2 py-0.5 rounded font-bold ${
-                        swap.status === 'Disetujui' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
-                      }`}
-                    >
-                      {swap.status}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      {swap.status === 'Menunggu' ? (
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              reviewShiftSwapRequest(swap.id, false);
+                            }}
+                            className="px-2.5 py-1 text-rose-700 hover:bg-rose-100 bg-rose-50 border border-rose-200 rounded text-xs font-medium"
+                          >
+                            Tolak
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              reviewShiftSwapRequest(swap.id, true);
+                            }}
+                            className="px-2.5 py-1 text-white hover:bg-emerald-700 bg-emerald-600 rounded text-xs font-medium shadow-xs"
+                          >
+                            Setujui
+                          </button>
+                        </div>
+                      ) : (
+                        <span
+                          className={`text-[10px] px-2 py-0.5 rounded font-bold ${
+                            swap.status === 'Disetujui' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                          }`}
+                        >
+                          {swap.status}
+                        </span>
+                      )}
+                      <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-indigo-600 transition-colors" />
+                    </div>
                   </div>
                 );
               })}
@@ -923,7 +999,8 @@ export const AttendanceManagement: React.FC = () => {
                 return (
                   <div
                     key={`mob-corr-${corr.id}`}
-                    className="p-4 bg-white border border-slate-200 rounded-xl shadow-xs space-y-3"
+                    onClick={() => handlePreviewCorrection(corr)}
+                    className="p-4 bg-white border border-slate-200 hover:border-indigo-300 rounded-xl shadow-xs space-y-3 cursor-pointer hover:shadow-sm transition-all group"
                   >
                     {/* Header */}
                     <div className="flex items-center justify-between">
@@ -990,36 +1067,36 @@ export const AttendanceManagement: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Action Buttons */}
-                    <div className="flex items-center gap-2 pt-1">
-                      <button
-                        type="button"
-                        onClick={() => handlePreviewCorrection(corr)}
-                        className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
-                      >
-                        <Eye className="w-3.5 h-3.5 text-indigo-600" />
-                        <span>Preview Surat</span>
-                      </button>
-
-                      {corr.status === 'Menunggu' && (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => reviewAttendanceCorrection(corr.id, false)}
-                            className="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold transition-colors"
-                          >
-                            Tolak
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => reviewAttendanceCorrection(corr.id, true)}
-                            className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-colors shadow-xs"
-                          >
-                            Setujui
-                          </button>
-                        </>
-                      )}
-                    </div>
+                    {/* Bottom Card Footer Actions */}
+                    {corr.status === 'Menunggu' ? (
+                      <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            reviewAttendanceCorrection(corr.id, false);
+                          }}
+                          className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded text-xs font-semibold transition-colors"
+                        >
+                          Tolak
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            reviewAttendanceCorrection(corr.id, true);
+                          }}
+                          className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-semibold shadow-xs transition-colors"
+                        >
+                          Setujui
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400">
+                        <span>Klik card untuk rincian surat</span>
+                        <ChevronRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-indigo-600 transition-colors" />
+                      </div>
+                    )}
                   </div>
                 );
               })
@@ -1043,7 +1120,7 @@ export const AttendanceManagement: React.FC = () => {
                 >
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
-                      <span className="font-bold text-slate-900">{emp?.fullName}</span>
+                      <span className="font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">{emp?.fullName}</span>
                       <span className="text-[10px] bg-indigo-50 text-indigo-700 font-semibold px-2 py-0.5 rounded border border-indigo-200">
                         {corr.type}
                       </span>
@@ -1058,24 +1135,39 @@ export const AttendanceManagement: React.FC = () => {
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handlePreviewCorrection(corr);
-                      }}
-                      className="px-2.5 py-1 text-slate-600 hover:text-indigo-600 bg-slate-100 hover:bg-slate-200 rounded text-xs font-medium inline-flex items-center gap-1"
-                    >
-                      <Eye className="w-3.5 h-3.5" />
-                      <span>Preview</span>
-                    </button>
-                    <span
-                      className={`text-[10px] px-2 py-0.5 rounded font-bold ${
-                        corr.status === 'Disetujui' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
-                      }`}
-                    >
-                      {corr.status}
-                    </span>
+                    {corr.status === 'Menunggu' ? (
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            reviewAttendanceCorrection(corr.id, false);
+                          }}
+                          className="px-2.5 py-1 text-rose-700 hover:bg-rose-100 bg-rose-50 border border-rose-200 rounded text-xs font-semibold"
+                        >
+                          Tolak
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            reviewAttendanceCorrection(corr.id, true);
+                          }}
+                          className="px-2.5 py-1 text-white hover:bg-emerald-700 bg-emerald-600 rounded text-xs font-semibold shadow-xs"
+                        >
+                          Setujui
+                        </button>
+                      </div>
+                    ) : (
+                      <span
+                        className={`text-[10px] px-2 py-0.5 rounded font-bold ${
+                          corr.status === 'Disetujui' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                        }`}
+                      >
+                        {corr.status}
+                      </span>
+                    )}
+                    <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-indigo-600 transition-colors" />
                   </div>
                 </div>
               );

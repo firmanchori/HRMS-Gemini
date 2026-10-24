@@ -4,6 +4,7 @@ import { Header } from './components/layout/Header';
 import { Sidebar } from './components/layout/Sidebar';
 import { MigrationWizardModal } from './components/modules/MigrationWizardModal';
 import { DashboardOverview } from './components/modules/DashboardOverview';
+import { OrganizationManagement } from './components/modules/OrganizationManagement';
 import { EmployeeManagement } from './components/modules/EmployeeManagement';
 import { AttendanceManagement } from './components/modules/AttendanceManagement';
 import { PayrollManagement } from './components/modules/PayrollManagement';
@@ -25,9 +26,14 @@ import { MssPortal } from './components/modules/MssPortal';
 import { AuditTrailManagement } from './components/modules/AuditTrailManagement';
 import { UniversalFilePreviewModal } from './components/common/UniversalFilePreviewModal';
 import { CommandPaletteModal } from './components/common/CommandPaletteModal';
+import { LoginScreen } from './components/auth/LoginScreen';
+import { UserRole } from './types/hrms';
 
 const MainLayout: React.FC = () => {
-  const { activeModule, setActiveModule } = useHrms();
+  const { activeModule, setActiveModule, setCurrentUserRole } = useHrms();
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    return localStorage.getItem('nusahr_is_logged_out') !== 'true';
+  });
   const [isMigrationWizardOpen, setIsMigrationWizardOpen] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isDesktopCollapsed, setIsDesktopCollapsed] = useState(false);
@@ -70,6 +76,8 @@ const MainLayout: React.FC = () => {
             onOpenQRScanner={() => setActiveModule('assets')}
           />
         );
+      case 'organization':
+        return <OrganizationManagement />;
       case 'employees':
         return <EmployeeManagement />;
       case 'personalia':
@@ -118,6 +126,20 @@ const MainLayout: React.FC = () => {
     }
   };
 
+  if (!isAuthenticated) {
+    return (
+      <LoginScreen
+        onLoginSuccess={(email, role) => {
+          localStorage.removeItem('nusahr_is_logged_out');
+          if (role) {
+            setCurrentUserRole(role as UserRole);
+          }
+          setIsAuthenticated(true);
+        }}
+      />
+    );
+  }
+
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-slate-100 font-sans text-slate-900 text-[13px] antialiased">
       {/* Sidebar Navigation (Desktop Collapsible & Mobile/Tablet Drawer) */}
@@ -142,6 +164,10 @@ const MainLayout: React.FC = () => {
             }
           }}
           isDesktopCollapsed={isDesktopCollapsed}
+          onLogout={() => {
+            localStorage.setItem('nusahr_is_logged_out', 'true');
+            setIsAuthenticated(false);
+          }}
         />
 
         {/* Viewport Content Area */}

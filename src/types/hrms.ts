@@ -859,6 +859,7 @@ export interface ModuleSettingsConfig {
     probationDurationMonths: number;
     defaultRetirementAge: number;
     mandatoryDocs: string[];
+    flexibleNik?: FlexibleNikSettings;
   };
   attendance: {
     lateGracePeriodMins: number;
@@ -902,6 +903,61 @@ export interface ModuleSettingsConfig {
   };
 }
 
+// NIK Flexible Configuration per Employment Type
+export interface NikPatternConfig {
+  pattern: string; // e.g. "{ENTITY}-TTP/{YYYY}/{SEQ:4}"
+  counter: number; // next sequence number e.g. 1
+  digitPadding: number; // e.g. 4 (0001) or 3 (001)
+  resetCycle: 'yearly' | 'monthly' | 'never';
+  prefix?: string;
+  suffix?: string;
+  description?: string;
+}
+
+export interface FlexibleNikSettings {
+  permanent: NikPatternConfig;   // Karyawan Tetap
+  contract: NikPatternConfig;    // Karyawan Kontrak
+  internship: NikPatternConfig;  // Karyawan Magang
+  freelance?: NikPatternConfig;  // Harian Lepas / Freelance
+}
+
+// Master Divisi & Departemen
+export interface CompanyDivision {
+  id: string;
+  entityId: string;
+  code: string;
+  name: string;
+  headEmployeeId?: string;
+  headTitle?: string;
+  description?: string;
+}
+
+export interface CompanyDepartment {
+  id: string;
+  entityId: string;
+  divisionId?: string;
+  code: string;
+  name: string;
+  headEmployeeId?: string;
+  headTitle?: string;
+  description?: string;
+}
+
+// Master Standar Jabatan (Kamus / Katalog Jabatan Perusahaan)
+export interface MasterJobPosition {
+  id: string;
+  entityId: string;
+  code: string;
+  title: string;
+  defaultLevel: number; // 1: Direksi, 2: VP/Head, 3: Manager, 4: Supervisor, 5: Staff
+  division?: string;
+  department?: string;
+  jobFamily?: string;   // e.g. 'Eksekutif', 'Teknologi', 'People & Culture', 'Keuangan', 'Operasional'
+  jobGrade?: string;    // e.g. 'Grade 10', 'Grade 08', 'Grade 06'
+  description?: string;
+  requirements?: string;
+}
+
 // 22. Holding & Subsidiary Entity Structure
 export interface CompanyEntity {
   id: string;
@@ -917,6 +973,8 @@ export interface CompanyEntity {
   nikPattern: string; // e.g. "{ENTITY}-{YYYY}-{SEQ:3}"
   docPrefix: string;
   status: 'Aktif' | 'Nonaktif';
+  useDepartmentLevel?: boolean; // Fleksibel: true jika butuh departemen, false jika lean (Divisi langsung ke Jabatan)
+  nikSettings?: FlexibleNikSettings;
 }
 
 // 23. Employee Staging (Onboarding Gate)
@@ -1012,24 +1070,54 @@ export interface OrgStructureNode {
   entityId: string;
   title: string;
   department: string;
+  division?: string;
+  code?: string;
+  jobGrade?: string;
+  description?: string;
   reportsToId?: string;
+  relationType?: 'struktural' | 'administratif';
   currentEmployeeId?: string;
   isVacant: boolean;
   level: number;
+  masterJobPositionId?: string;
 }
 
 export interface OrgChangeProposal {
   id: string;
   tenantId: string;
   entityId: string;
+  category?: 'organisasi' | 'perusahaan';
   proposalTitle: string;
-  changeType: 'Pindah Atasan' | 'Buat Posisi Baru' | 'Hapus Posisi' | 'Restrukturisasi Departemen';
+  changeType: 'Pindah Atasan' | 'Buat Posisi Baru' | 'Hapus Posisi' | 'Restrukturisasi Departemen' | 'Tambah Entitas Perusahaan' | 'Ubah Struktur Perusahaan' | 'Likuidasi Entitas' | 'Koreksi Typo / Administratif' | 'Restrukturisasi Menyeluruh (Draft Baru)';
   description: string;
   effectiveDate: string;
+  skDocNumber?: string;
+  skDocFileName?: string;
+  skDocUrl?: string;
   status: 'Draft' | 'Menunggu Approval' | 'Disetujui' | 'Ditolak';
   proposedBy: string;
   approvedBy?: string;
   implemented: boolean;
+  isCorrectionOnly?: boolean;
+  payload?: any;
+  createdAt?: string;
+  rejectionReason?: string;
+}
+
+export interface OrgStructureSnapshot {
+  id: string;
+  tenantId: string;
+  entityId: string;
+  proposalId?: string;
+  skDocNumber?: string;
+  versionTitle: string;
+  effectiveDate: string;
+  archivedAt: string;
+  archivedBy: string;
+  reason: string;
+  divisions: CompanyDivision[];
+  departments: CompanyDepartment[];
+  orgNodes: OrgStructureNode[];
 }
 
 // 28. Probation Evaluation

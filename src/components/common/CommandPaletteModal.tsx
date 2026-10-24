@@ -32,6 +32,7 @@ import {
   Check,
   Building2,
   History,
+  Network,
 } from 'lucide-react';
 import { Employee, GAAsset, OfficialDocument, UserRole } from '../../types/hrms';
 
@@ -54,6 +55,14 @@ const ALL_MODULES: ModuleDefinition[] = [
     description: 'Statistik eksekutif, KPI utama, proses aktif, dan ringkasan operasional lintas modul',
     keywords: ['dashboard', 'home', 'ringkasan', 'beranda', 'kpi', 'grafik', 'ikhtisar', 'overview'],
     icon: LayoutDashboard,
+  },
+  {
+    id: 'organization',
+    name: 'Struktur Organisasi & Tree',
+    group: 'Operasional & Personalia',
+    description: 'Bagan organisasi interaktif, relasi korporasi Holding/Anak/Cucu, pengaturan Divisi & Departemen fleksibel',
+    keywords: ['organisasi', 'struktur', 'tree', 'bagan', 'holding', 'anak perusahaan', 'cucu perusahaan', 'divisi', 'departemen', 'jabatan', 'posisi'],
+    icon: Network,
   },
   {
     id: 'employees',

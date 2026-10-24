@@ -394,33 +394,31 @@ export const BusinessTripManagement: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Footer Actions */}
-                    <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-100">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedTripForDoc(trip);
-                        }}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 rounded-md border border-indigo-200 transition-colors"
-                      >
-                        <FileText className="w-3.5 h-3.5" />
-                        <span>Cetak Berkas SPPD</span>
-                      </button>
-
-                      {trip.status === 'Menunggu Approval' && (
+                    {/* Footer Actions: Bottom approval buttons if Menunggu Approval */}
+                    {trip.status === 'Menunggu Approval' && (
+                      <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            reviewBusinessTrip(trip.id, 'Ditolak');
+                          }}
+                          className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded text-xs font-semibold transition-colors"
+                        >
+                          Tolak
+                        </button>
                         <button
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
                             reviewBusinessTrip(trip.id, 'Disetujui Atasan');
                           }}
-                          className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-semibold shadow-2xs transition-colors"
+                          className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-semibold shadow-xs transition-colors"
                         >
                           Setujui
                         </button>
-                      )}
-                    </div>
+                      </div>
+                    )}
                   </div>
                 );
               })
@@ -444,7 +442,7 @@ export const BusinessTripManagement: React.FC = () => {
                     <th className="py-2.5 px-3 font-semibold">Transportasi</th>
                     <th className="py-2.5 px-3 font-semibold text-right">Estimasi Biaya</th>
                     <th className="py-2.5 px-3 font-semibold text-center">Status</th>
-                    <th className="py-2.5 px-3 font-semibold text-center">Aksi Dokumen</th>
+                    <th className="py-2.5 px-3 font-semibold text-center"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -504,34 +502,17 @@ export const BusinessTripManagement: React.FC = () => {
                             <span
                               className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold ${
                                 trip.status === 'Disetujui Atasan' || trip.status === 'Disetujui Finance'
-                                  ? 'bg-emerald-100 text-emerald-800'
-                                  : trip.status === 'Selesai'
-                                  ? 'bg-blue-100 text-blue-800'
-                                  : 'bg-amber-100 text-amber-800'
+                                    ? 'bg-emerald-100 text-emerald-800'
+                                    : trip.status === 'Selesai'
+                                    ? 'bg-blue-100 text-blue-800'
+                                    : 'bg-amber-100 text-amber-800'
                               }`}
                             >
                               {trip.status}
                             </span>
                           </td>
                           <td className="py-2.5 px-3 text-center">
-                            <div className="flex items-center justify-center gap-1.5">
-                              <button
-                                onClick={() => setSelectedTripForDoc(trip)}
-                                className="inline-flex items-center gap-1 px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded text-[11px] font-medium transition-colors"
-                              >
-                                <FileText className="w-3.5 h-3.5" />
-                                <span>Cetak SPPD</span>
-                              </button>
-
-                              {trip.status === 'Menunggu Approval' && (
-                                <button
-                                  onClick={() => reviewBusinessTrip(trip.id, 'Disetujui Atasan')}
-                                  className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[11px] font-medium"
-                                >
-                                  Setujui
-                                </button>
-                              )}
-                            </div>
+                            <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-indigo-600 transition-colors ml-auto" />
                           </td>
                         </tr>
                       );
@@ -569,7 +550,11 @@ export const BusinessTripManagement: React.FC = () => {
               return (
                 <div
                   key={`mob-real-${trip.id}`}
-                  className="p-4 bg-white border border-slate-200 rounded-xl shadow-xs space-y-3"
+                  onClick={() => {
+                    setSelectedTripForClaim(trip);
+                    setActualExpense(trip.estimatedCost);
+                  }}
+                  className="p-4 bg-white border border-slate-200 hover:border-indigo-300 rounded-xl shadow-xs space-y-3 cursor-pointer hover:shadow-sm transition-all group"
                 >
                   <div className="flex items-center justify-between">
                     <span className="font-mono text-indigo-700 font-bold text-xs">
@@ -611,17 +596,13 @@ export const BusinessTripManagement: React.FC = () => {
                     </div>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedTripForClaim(trip);
-                      setActualExpense(trip.estimatedCost);
-                    }}
-                    className="w-full py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
-                  >
-                    <Receipt className="w-3.5 h-3.5 text-indigo-600" />
-                    <span>Form Settlement Nota & Kwitansi</span>
-                  </button>
+                  <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-indigo-600 font-semibold group-hover:text-indigo-700">
+                    <span className="flex items-center gap-1.5">
+                      <Receipt className="w-3.5 h-3.5 text-indigo-600" />
+                      Settlement Nota & Kwitansi
+                    </span>
+                    <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-indigo-600 transition-colors" />
+                  </div>
                 </div>
               );
             })}
@@ -632,7 +613,14 @@ export const BusinessTripManagement: React.FC = () => {
             {businessTrips.map((trip) => {
               const emp = employees.find((e) => e.id === trip.employeeId);
               return (
-                <div key={trip.id} className="py-4 flex flex-row items-center justify-between gap-4">
+                <div
+                  key={trip.id}
+                  onClick={() => {
+                    setSelectedTripForClaim(trip);
+                    setActualExpense(trip.estimatedCost);
+                  }}
+                  className="py-4 px-2 -mx-2 rounded-lg flex flex-row items-center justify-between gap-4 cursor-pointer hover:bg-indigo-50/50 transition-colors group"
+                >
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
                       <span className="font-mono text-indigo-700 font-bold text-xs">{trip.tripNumber}</span>
@@ -647,16 +635,10 @@ export const BusinessTripManagement: React.FC = () => {
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => {
-                        setSelectedTripForClaim(trip);
-                        setActualExpense(trip.estimatedCost);
-                      }}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded font-semibold text-xs transition-colors"
-                    >
-                      <Receipt className="w-3.5 h-3.5 text-indigo-600" />
-                      <span>Form Settlement Nota</span>
-                    </button>
+                    <span className="text-xs font-medium text-slate-400 group-hover:text-indigo-600 transition-colors hidden sm:inline">
+                      Settlement Nota
+                    </span>
+                    <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-indigo-600 transition-colors" />
                   </div>
                 </div>
               );

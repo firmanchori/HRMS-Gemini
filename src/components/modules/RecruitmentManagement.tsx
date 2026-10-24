@@ -2598,8 +2598,84 @@ export const RecruitmentManagement: React.FC = () => {
             )}
           </div>
 
-          {/* Table of Candidates in Offering Stage */}
-          <div className="bg-white border border-slate-200 rounded-xl shadow-2xs overflow-hidden">
+          {/* TAMPILAN MOBILE: Adaptive Cards (< md) */}
+          <div className="md:hidden space-y-3">
+            {offeringCandidates.length === 0 ? (
+              <div className="p-6 text-center text-slate-400 text-xs bg-white rounded-xl border border-slate-200">
+                Belum ada kandidat di tahap Offering. Silakan promosikan kandidat yang lolos tahap Interview.
+              </div>
+            ) : (
+              offeringCandidates.map((c) => {
+                const vacancy = vacancies.find((v) => v.id === c.jobVacancyId);
+                return (
+                  <div
+                    key={`mob-off-${c.id}`}
+                    onClick={() => {
+                      setActiveCandidate(c);
+                      setDocNumber(c.offeringDocNumber || '001/OL-HRD/NTM/X/2026');
+                      setIsOfferingDocPreviewOpen(true);
+                    }}
+                    className="p-4 bg-white border border-slate-200 hover:border-indigo-300 rounded-xl shadow-xs space-y-3 cursor-pointer hover:shadow-sm transition-all group"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-slate-900 group-hover:text-indigo-600 transition-colors text-xs">
+                        {c.name}
+                      </span>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-800 border border-blue-200">
+                        Offering Dikirim
+                      </span>
+                    </div>
+
+                    <div className="text-slate-600 text-xs font-medium">
+                      Posisi: <b className="text-slate-900">{vacancy?.title || 'Posisi Jabatan'}</b>
+                    </div>
+
+                    <div className="p-2.5 bg-slate-50 rounded-lg space-y-1 text-xs border border-slate-100 font-mono">
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-500 font-sans">No. Dokumen:</span>
+                        <span className="font-bold text-indigo-700">{c.offeringDocNumber || '001/OL-HRD/NTM/X/2026'}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-500 font-sans">Gaji Ditawarkan:</span>
+                        <span className="font-bold text-slate-900">{formatRupiah(c.offeredSalary || c.expectedSalary)}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1 border-t border-slate-200/60 font-sans">
+                        <span>Tanggal Kirim:</span>
+                        <span className="font-mono">{c.offeringSentDate || '2026-10-18'}</span>
+                      </div>
+                    </div>
+
+                    {/* Bottom Card Footer Actions */}
+                    <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleConfirmDisqualified(c, 'Kandidat menolak paket penawaran kerja.');
+                        }}
+                        className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded text-xs font-semibold transition-colors"
+                      >
+                        Tolak
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleConfirmHired(c);
+                        }}
+                        className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-semibold shadow-xs transition-colors"
+                      >
+                        Setujui (Hired)
+                      </button>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* Table of Candidates in Offering Stage (>= md) */}
+          <div className="hidden md:block bg-white border border-slate-200 rounded-xl shadow-2xs overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
@@ -2622,15 +2698,24 @@ export const RecruitmentManagement: React.FC = () => {
                     </tr>
                   ) : (
                     offeringCandidates.map((c) => (
-                      <tr key={c.id} className="hover:bg-slate-50/70 transition-colors">
+                      <tr
+                        key={c.id}
+                        onClick={() => {
+                          setActiveCandidate(c);
+                          setDocNumber(c.offeringDocNumber || '001/OL-HRD/NTM/X/2026');
+                          setIsOfferingDocPreviewOpen(true);
+                        }}
+                        className="hover:bg-indigo-50/40 cursor-pointer transition-colors group"
+                        title="Klik baris kandidat untuk melihat Dokumen Penawaran Kerja & Tindakan"
+                      >
                         <td className="py-3 px-4">
-                          <div className="font-bold text-slate-900">{c.name}</div>
+                          <div className="font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">{c.name}</div>
                           <span className="text-[10px] text-slate-500 font-mono">{c.email}</span>
                         </td>
                         <td className="py-3 px-4 font-semibold text-slate-800">
                           {vacancies.find((v) => v.id === c.jobVacancyId)?.title}
                         </td>
-                        <td className="py-3 px-4 font-mono font-bold text-blue-900">
+                        <td className="py-3 px-4 font-mono font-bold text-indigo-700">
                           {c.offeringDocNumber || '001/OL-HRD/NTM/X/2026'}
                         </td>
                         <td className="py-3 px-4 font-mono font-bold text-slate-800">
@@ -2645,34 +2730,7 @@ export const RecruitmentManagement: React.FC = () => {
                           </span>
                         </td>
                         <td className="py-3 px-4 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
-                            <button
-                              onClick={() => handleOpenOfferingModal(c)}
-                              className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded font-semibold text-[11px] flex items-center gap-1"
-                            >
-                              <Calculator className="w-3 h-3 text-blue-700" />
-                              <span>Kalkulator</span>
-                            </button>
-                            <button
-                              onClick={() => {
-                                setActiveCandidate(c);
-                                setDocNumber(c.offeringDocNumber || '001/OL-HRD/NTM/X/2026');
-                                setIsOfferingDocPreviewOpen(true);
-                              }}
-                              className="px-2.5 py-1 bg-blue-700 hover:bg-blue-800 text-white rounded font-semibold text-[11px] flex items-center gap-1 shadow-2xs"
-                            >
-                              <FileText className="w-3 h-3" />
-                              <span>Lihat SK QR</span>
-                            </button>
-                            <button
-                              onClick={() => {
-                                setActiveTab('decision');
-                              }}
-                              className="px-2.5 py-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded font-semibold text-[11px]"
-                            >
-                              Keputusan →
-                            </button>
-                          </div>
+                          <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-indigo-600 transition-colors ml-auto" />
                         </td>
                       </tr>
                     ))
@@ -5522,26 +5580,50 @@ export const RecruitmentManagement: React.FC = () => {
                 </div>
               </div>
 
-              <div className="pt-3 border-t border-slate-200 flex justify-end gap-2 font-sans">
-                <button
-                  type="button"
-                  onClick={() => window.print()}
-                  className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-semibold flex items-center gap-1.5"
-                >
-                  <Printer className="w-3.5 h-3.5" />
-                  <span>Cetak Dokumen</span>
-                </button>
+              <div className="pt-3 border-t border-slate-200 flex flex-wrap items-center justify-between gap-2 font-sans">
                 <button
                   type="button"
                   onClick={() => {
-                    handleConfirmHired(activeCandidate);
                     setIsOfferingDocPreviewOpen(false);
+                    handleOpenOfferingModal(activeCandidate);
                   }}
-                  className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg font-semibold shadow-2xs flex items-center gap-1.5"
+                  className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg font-semibold flex items-center gap-1.5 text-xs transition-colors"
                 >
-                  <CheckCircle className="w-3.5 h-3.5" />
-                  <span>Konfirmasi Terima (Hired)</span>
+                  <Calculator className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>Kalkulator & Form Offering</span>
                 </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => window.print()}
+                    className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-semibold flex items-center gap-1.5 text-xs transition-colors"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    <span>Cetak Dokumen</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleConfirmDisqualified(activeCandidate, 'Kandidat menolak paket penawaran kerja (offering letter).');
+                      setIsOfferingDocPreviewOpen(false);
+                    }}
+                    className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg font-semibold flex items-center gap-1.5 text-xs transition-colors"
+                  >
+                    <XCircle className="w-3.5 h-3.5" />
+                    <span>Tolak (Disqualified)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleConfirmHired(activeCandidate);
+                      setIsOfferingDocPreviewOpen(false);
+                    }}
+                    className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg font-semibold shadow-xs flex items-center gap-1.5 text-xs transition-colors"
+                  >
+                    <CheckCircle className="w-3.5 h-3.5" />
+                    <span>Konfirmasi Terima (Hired)</span>
+                  </button>
+                </div>
               </div>
             </div>
           </div>

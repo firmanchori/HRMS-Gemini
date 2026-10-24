@@ -80,6 +80,7 @@ export const ApprovalCenter: React.FC = () => {
 
   // Delegation Modal State
   const [isDelegationModalOpen, setIsDelegationModalOpen] = useState(false);
+  const [previewDelegation, setPreviewDelegation] = useState<ApprovalDelegation | null>(null);
   const [principalId, setPrincipalId] = useState(employees[0]?.id || '');
   const [substituteId, setSubstituteId] = useState(employees[1]?.id || '');
   const [delegationStart, setDelegationStart] = useState('2026-10-20');
@@ -354,7 +355,8 @@ export const ApprovalCenter: React.FC = () => {
                 return (
                   <div
                     key={`mob-${item.id}`}
-                    className="p-4 bg-white border border-slate-200 rounded-xl shadow-xs space-y-3"
+                    onClick={() => handlePreviewApprovalItem(item)}
+                    className="p-4 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl shadow-xs space-y-3 cursor-pointer transition-colors"
                   >
                     {/* Header: Category & Level */}
                     <div className="flex items-center justify-between gap-2">
@@ -437,44 +439,35 @@ export const ApprovalCenter: React.FC = () => {
                       )}
                     </div>
 
-                    {/* Mobile Actions */}
-                    <div className="flex items-center gap-2 pt-1">
-                      <button
-                        type="button"
-                        onClick={() => handlePreviewApprovalItem(item)}
-                        className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
-                      >
-                        <Eye className="w-3.5 h-3.5 text-indigo-600" />
-                        <span>Preview Berkas</span>
-                      </button>
-
-                      {item.status === 'Menunggu' && (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelectedItem(item);
-                              setReviewAction('reject');
-                            }}
-                            className="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1"
-                          >
-                            <XCircle className="w-3.5 h-3.5" />
-                            <span>Tolak</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelectedItem(item);
-                              setReviewAction('approve');
-                            }}
-                            className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-colors shadow-xs flex items-center justify-center gap-1"
-                          >
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                            <span>Setujui</span>
-                          </button>
-                        </>
-                      )}
-                    </div>
+                    {/* Mobile Card Bottom: Tolak & Setujui if Menunggu */}
+                    {item.status === 'Menunggu' && (
+                      <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedItem(item);
+                            setReviewAction('reject');
+                          }}
+                          className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1"
+                        >
+                          <XCircle className="w-3.5 h-3.5" />
+                          <span>Tolak</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedItem(item);
+                            setReviewAction('approve');
+                          }}
+                          className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-colors shadow-xs flex items-center justify-center gap-1"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>Setujui</span>
+                        </button>
+                      </div>
+                    )}
                   </div>
                 );
               })
@@ -485,119 +478,87 @@ export const ApprovalCenter: React.FC = () => {
             )}
           </div>
 
-          {/* TAMPILAN DESKTOP: List Row (>= md) */}
-          <div className="hidden md:block bg-white border border-slate-200 rounded-lg overflow-hidden shadow-xs divide-y divide-slate-100">
+          {/* TAMPILAN DESKTOP: List Row / Card Concept (>= md) */}
+          <div className="hidden md:block bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs divide-y divide-slate-100">
             {displayedItems.length > 0 ? (
               displayedItems.map((item) => {
                 const requester = employees.find((e) => e.id === item.requesterId);
                 return (
                   <div
                     key={item.id}
-                    className="p-4 hover:bg-slate-50/70 transition-colors flex flex-row items-center justify-between gap-4"
+                    onClick={() => handlePreviewApprovalItem(item)}
+                    className="p-4 hover:bg-slate-50/80 cursor-pointer transition-colors space-y-2.5 group"
                   >
-                    <div className="space-y-1.5 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span
-                          className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                            item.category === 'Cuti'
-                              ? 'bg-blue-100 text-blue-800'
-                              : item.category === 'Perbaikan Presensi'
-                              ? 'bg-purple-100 text-purple-800'
-                              : item.category === 'Pinjaman'
-                              ? 'bg-emerald-100 text-emerald-800'
-                              : item.category === 'Perjalanan Dinas'
-                              ? 'bg-indigo-100 text-indigo-800'
-                              : 'bg-amber-100 text-amber-800'
-                          }`}
-                        >
-                          {item.category}
-                        </span>
-                        <span className="text-xs font-bold text-slate-900 truncate">
-                          {item.title}
-                        </span>
-                        <span className="text-[10px] bg-slate-100 px-1.5 py-0.2 rounded font-mono text-slate-600">
-                          Tingkat {item.level} dari {item.totalLevels}
-                        </span>
-                      </div>
-
-                      <div className="text-xs text-slate-600 flex items-center gap-3 flex-wrap">
-                        <div className="flex items-center gap-1.5">
-                          {requester?.avatar ? (
-                            <img
-                              src={requester.avatar}
-                              alt={requester.fullName}
-                              className="w-5 h-5 rounded-full object-cover border border-slate-200"
-                            />
-                          ) : (
-                            <div className="w-5 h-5 rounded-full bg-slate-200 text-slate-700 text-[10px] flex items-center justify-center font-bold">
-                              {(requester?.fullName || 'K')[0]}
-                            </div>
-                          )}
-                          <span className="font-semibold text-slate-800">{requester?.fullName}</span>
-                          <span className="text-[10px] text-slate-400 font-mono">({requester?.nik})</span>
+                    <div className="flex flex-row items-center justify-between gap-4">
+                      <div className="space-y-1.5 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              item.category === 'Cuti'
+                                ? 'bg-blue-100 text-blue-800'
+                                : item.category === 'Perbaikan Presensi'
+                                ? 'bg-purple-100 text-purple-800'
+                                : item.category === 'Pinjaman'
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : item.category === 'Perjalanan Dinas'
+                                ? 'bg-indigo-100 text-indigo-800'
+                                : 'bg-amber-100 text-amber-800'
+                            }`}
+                          >
+                            {item.category}
+                          </span>
+                          <span className="text-xs font-bold text-slate-900 truncate group-hover:text-indigo-600 transition-colors">
+                            {item.title}
+                          </span>
+                          <span className="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded font-mono text-slate-600">
+                            Tingkat {item.level} dari {item.totalLevels}
+                          </span>
                         </div>
-                        <span>·</span>
-                        <span>Divisi: {item.department}</span>
-                        <span>·</span>
-                        <span className="flex items-center gap-1 text-slate-500">
-                          <Clock className="w-3.5 h-3.5 text-slate-400" />
-                          <span>Diajukan: {item.submittedAt}</span>
-                        </span>
-                        {item.amount && (
-                          <>
-                            <span>·</span>
-                            <span className="font-mono font-bold text-slate-900">
-                              Nominal: {formatRupiah(item.amount)}
-                            </span>
-                          </>
+
+                        <div className="text-xs text-slate-600 flex items-center gap-3 flex-wrap">
+                          <div className="flex items-center gap-1.5">
+                            {requester?.avatar ? (
+                              <img
+                                src={requester.avatar}
+                                alt={requester.fullName}
+                                className="w-5 h-5 rounded-full object-cover border border-slate-200"
+                              />
+                            ) : (
+                              <div className="w-5 h-5 rounded-full bg-slate-200 text-slate-700 text-[10px] flex items-center justify-center font-bold">
+                                {(requester?.fullName || 'K')[0]}
+                              </div>
+                            )}
+                            <span className="font-semibold text-slate-800">{requester?.fullName}</span>
+                            <span className="text-[10px] text-slate-400 font-mono">({requester?.nik})</span>
+                          </div>
+                          <span>·</span>
+                          <span>Divisi: {item.department}</span>
+                          <span>·</span>
+                          <span className="flex items-center gap-1 text-slate-500">
+                            <Clock className="w-3.5 h-3.5 text-slate-400" />
+                            <span>Diajukan: {item.submittedAt}</span>
+                          </span>
+                          {item.amount && (
+                            <>
+                              <span>·</span>
+                              <span className="font-mono font-bold text-slate-900">
+                                Nominal: {formatRupiah(item.amount)}
+                              </span>
+                            </>
+                          )}
+                        </div>
+
+                        {item.notes && (
+                          <div className="text-[11px] text-slate-500 bg-slate-50 p-2 rounded border border-slate-200/80 max-w-2xl">
+                            Catatan: {item.notes}
+                          </div>
                         )}
                       </div>
 
-                      {item.notes && (
-                        <div className="text-[11px] text-slate-500 bg-slate-50 p-2 rounded border border-slate-200/80 max-w-2xl">
-                          Catatan: {item.notes}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Actions */}
-                    <div className="flex items-center gap-2 shrink-0">
-                      <button
-                        onClick={() => handlePreviewApprovalItem(item)}
-                        className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-xs font-medium flex items-center gap-1 transition-colors"
-                        title="Lihat Berkas / Preview Pengajuan Resmi"
-                      >
-                        <Eye className="w-3.5 h-3.5 text-indigo-600" />
-                        <span>Preview</span>
-                      </button>
-
-                      {item.status === 'Menunggu' ? (
-                        <>
-                          <button
-                            onClick={() => {
-                              setSelectedItem(item);
-                              setReviewAction('reject');
-                            }}
-                            className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded text-xs font-semibold transition-colors flex items-center gap-1"
-                          >
-                            <XCircle className="w-3.5 h-3.5" />
-                            <span>Tolak</span>
-                          </button>
-
-                          <button
-                            onClick={() => {
-                              setSelectedItem(item);
-                              setReviewAction('approve');
-                            }}
-                            className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-xs font-semibold shadow-xs transition-colors flex items-center gap-1"
-                          >
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                            <span>Setujui</span>
-                          </button>
-                        </>
-                      ) : (
+                      {/* Header Status Badge if not Menunggu */}
+                      {item.status !== 'Menunggu' ? (
                         <span
-                          className={`px-3 py-1 rounded text-xs font-semibold ${
+                          className={`px-3 py-1 rounded text-xs font-semibold shrink-0 ${
                             item.status === 'Disetujui'
                               ? 'bg-emerald-100 text-emerald-800'
                               : 'bg-rose-100 text-rose-800'
@@ -605,8 +566,43 @@ export const ApprovalCenter: React.FC = () => {
                         >
                           {item.status}
                         </span>
+                      ) : (
+                        <span className="px-2.5 py-1 rounded text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200 shrink-0">
+                          Menunggu Persetujuan
+                        </span>
                       )}
                     </div>
+
+                    {/* Bottom Action Footer (Card Concept): Tolak & Setujui */}
+                    {item.status === 'Menunggu' && (
+                      <div className="flex items-center justify-end gap-2 pt-2.5 border-t border-slate-100">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedItem(item);
+                            setReviewAction('reject');
+                          }}
+                          className="px-3.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1"
+                        >
+                          <XCircle className="w-3.5 h-3.5" />
+                          <span>Tolak</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedItem(item);
+                            setReviewAction('approve');
+                          }}
+                          className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors flex items-center gap-1"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>Setujui</span>
+                        </button>
+                      </div>
+                    )}
                   </div>
                 );
               })
@@ -647,17 +643,16 @@ export const ApprovalCenter: React.FC = () => {
                 const principal = employees.find((e) => e.id === del.principalId);
                 const substitute = employees.find((e) => e.id === del.substituteId);
                 return (
-                  <div key={`del-mob-${del.id}`} className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5">
+                  <div
+                    key={`del-mob-${del.id}`}
+                    onClick={() => setPreviewDelegation(del)}
+                    className="p-3.5 bg-slate-50 hover:bg-slate-100/80 border border-slate-200 rounded-xl space-y-2.5 cursor-pointer transition-colors"
+                  >
                     <div className="flex items-center justify-between">
                       <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-semibold">
                         Delegasi Aktif
                       </span>
-                      <button
-                        onClick={() => setFeedbackMessage('Delegasi approver dinonaktifkan')}
-                        className="px-2.5 py-1 text-xs text-rose-600 hover:bg-rose-50 border border-rose-200 rounded font-medium"
-                      >
-                        Hentikan
-                      </button>
+                      <ChevronRight className="w-4 h-4 text-slate-400" />
                     </div>
                     <div className="space-y-1 text-xs">
                       <div className="font-semibold text-slate-900">{principal?.fullName} (Pejabat Utama)</div>
@@ -687,7 +682,11 @@ export const ApprovalCenter: React.FC = () => {
                 const principal = employees.find((e) => e.id === del.principalId);
                 const substitute = employees.find((e) => e.id === del.substituteId);
                 return (
-                  <div key={del.id} className="py-3 flex items-center justify-between text-xs">
+                  <div
+                    key={del.id}
+                    onClick={() => setPreviewDelegation(del)}
+                    className="py-3 px-3 hover:bg-slate-50 rounded-lg flex items-center justify-between text-xs cursor-pointer transition-colors group"
+                  >
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
                         <span className="font-bold text-slate-900">{principal?.fullName}</span>
@@ -702,12 +701,7 @@ export const ApprovalCenter: React.FC = () => {
                       </div>
                     </div>
 
-                    <button
-                      onClick={() => setFeedbackMessage('Delegasi approver dinonaktifkan')}
-                      className="px-2.5 py-1 text-slate-500 hover:text-rose-600 border border-slate-200 rounded font-medium"
-                    >
-                      Hentikan
-                    </button>
+                    <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-indigo-600 transition-colors" />
                   </div>
                 );
               })
@@ -997,6 +991,98 @@ export const ApprovalCenter: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Preview Pengganti Approver Delegasi */}
+      {previewDelegation && (
+        <div
+          onClick={() => setPreviewDelegation(null)}
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-2xl max-w-md w-full border border-slate-200 shadow-2xl overflow-hidden flex flex-col"
+          >
+            <div className="p-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                <h3 className="font-bold text-sm">Detail Pengganti Approver</h3>
+              </div>
+              <button
+                onClick={() => setPreviewDelegation(null)}
+                className="text-slate-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 text-xs">
+              {(() => {
+                const principal = employees.find((e) => e.id === previewDelegation.principalId);
+                const substitute = employees.find((e) => e.id === previewDelegation.substituteId);
+                return (
+                  <>
+                    <div className="p-3 bg-indigo-50/70 border border-indigo-200 rounded-xl space-y-2">
+                      <div className="text-[10px] text-indigo-700 font-bold uppercase tracking-wider">
+                        Pengalihan Hak Wewenang Approval
+                      </div>
+                      <div className="space-y-1">
+                        <div className="text-slate-500 text-[11px]">Pejabat Utama (Berhalangan / Cuti):</div>
+                        <div className="font-bold text-slate-900 text-xs">{principal?.fullName} ({principal?.nik})</div>
+                        <div className="text-[10px] text-slate-500">{principal?.position} · {principal?.department}</div>
+                      </div>
+                      <div className="pt-2 border-t border-indigo-200/60 space-y-1">
+                        <div className="text-indigo-700 font-semibold text-[11px] flex items-center gap-1">
+                          <ArrowRight className="w-3.5 h-3.5" />
+                          <span>Pejabat Pengganti (Penerima Wewenang):</span>
+                        </div>
+                        <div className="font-bold text-indigo-900 text-xs">{substitute?.fullName} ({substitute?.nik})</div>
+                        <div className="text-[10px] text-indigo-700">{substitute?.position} · {substitute?.department}</div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                      <div>
+                        <span className="text-[10px] text-slate-400 block">Mulai Berlaku:</span>
+                        <span className="font-mono font-bold text-slate-800 text-xs">{previewDelegation.startDate}</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 block">Berakhir:</span>
+                        <span className="font-mono font-bold text-slate-800 text-xs">{previewDelegation.endDate}</span>
+                      </div>
+                      <div className="col-span-2 pt-1 border-t border-slate-200">
+                        <span className="text-[10px] text-slate-400 block mb-0.5">Alasan Pengalihan:</span>
+                        <p className="text-slate-700 text-xs font-medium">{previewDelegation.reason}</p>
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+
+            {/* Bottom Footer Actions */}
+            <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setFeedbackMessage('Delegasi approver dinonaktifkan.');
+                  setPreviewDelegation(null);
+                }}
+                className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-semibold transition-colors"
+              >
+                Hentikan Delegasi
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setPreviewDelegation(null)}
+                className="px-4 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-xs font-semibold ml-auto transition-colors"
+              >
+                Tutup
+              </button>
+            </div>
           </div>
         </div>
       )}

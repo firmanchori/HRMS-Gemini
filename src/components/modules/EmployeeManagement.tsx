@@ -35,6 +35,7 @@ import {
   ChevronRight,
   ArrowLeft,
   ArrowRight,
+  RotateCcw,
 } from 'lucide-react';
 import { EmploymentType, PTKPStatus, Employee, FamilyMember, EmergencyContact, OnboardingProcess } from '../../types/hrms';
 import { formatRupiah, getTERCategory } from '../../utils/taxCalculator';
@@ -42,10 +43,10 @@ import { EmployeeSelect } from '../common/EmployeeSelect';
 import { CurrencyInput } from '../common/CurrencyInput';
 import { ValidatedDateInput } from '../common/ValidatedDateInput';
 import { validateBirthDate, validateDateString } from '../../utils/dateValidator';
-import { OrgChartManagement } from './OrgChartManagement';
 import { ScrollableTabNav } from '../common/ScrollableTabNav';
 import { ProbationManagement } from './ProbationManagement';
 import { ContractRenewalManagement } from './ContractRenewalManagement';
+import { NikFormatSettingsTab } from './NikFormatSettingsTab';
 
 export const DOSSIER_TABS = [
   { id: 'kepegawaian', label: 'Kepegawaian & Posisi', shortLabel: 'Posisi', icon: Briefcase },
@@ -74,6 +75,8 @@ export const EmployeeManagement: React.FC = () => {
     addEmployee,
     updateEmployee,
     currentTenant,
+    currentEntity,
+    generateNextNik,
     candidates,
     onboardingProcesses,
     addOnboardingProcess,
@@ -85,7 +88,7 @@ export const EmployeeManagement: React.FC = () => {
     personaliaLogs,
   } = useHrms();
 
-  const [activeTab, setActiveTab] = useState<'karyawan' | 'onboarding' | 'orgchart' | 'probation' | 'contracts' | 'pengaturan'>('karyawan');
+  const [activeTab, setActiveTab] = useState<'karyawan' | 'onboarding' | 'probation' | 'contracts' | 'nikformat' | 'pengaturan'>('karyawan');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<string>('all');
   const [filterDept, setFilterDept] = useState<string>('all');
@@ -378,7 +381,7 @@ export const EmployeeManagement: React.FC = () => {
 
     // Direct add as complete employee + create onboarding log
     const newEmp = addEmployee({
-      nik: newNik || `${code}-${new Date().getFullYear()}-${String(seq).padStart(3, '0')}`,
+      nik: newNik || generateNextNik(newType, currentEntity?.id),
       fullName: newName,
       avatar: newAvatar,
       email: newEmail || `${newName.toLowerCase().replace(/\s+/g, '.')}@${code.toLowerCase()}.id`,
@@ -567,17 +570,6 @@ export const EmployeeManagement: React.FC = () => {
           </span>
         </button>
 
-        <button
-          onClick={() => setActiveTab('orgchart')}
-          className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
-            activeTab === 'orgchart'
-              ? 'border-slate-900 text-slate-950 font-bold'
-              : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
-          }`}
-        >
-          <Network className="w-3.5 h-3.5" />
-          <span>Struktur Org & Tree</span>
-        </button>
 
         <button
           onClick={() => setActiveTab('probation')}
@@ -604,6 +596,18 @@ export const EmployeeManagement: React.FC = () => {
         </button>
 
         <button
+          onClick={() => setActiveTab('nikformat')}
+          className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
+            activeTab === 'nikformat'
+              ? 'border-indigo-600 text-indigo-700 font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+          }`}
+        >
+          <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+          <span>Format NIK Dinamis</span>
+        </button>
+
+        <button
           onClick={() => setActiveTab('pengaturan')}
           className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
             activeTab === 'pengaturan'
@@ -612,7 +616,7 @@ export const EmployeeManagement: React.FC = () => {
           }`}
         >
           <Settings className="w-3.5 h-3.5" />
-          <span>Format NIK & Pengaturan</span>
+          <span>Pengaturan Modul</span>
         </button>
       </ScrollableTabNav>
 
@@ -1158,76 +1162,68 @@ export const EmployeeManagement: React.FC = () => {
         </div>
       )}
 
+      {/* Dynamic NIK Format Settings Tab */}
+      {activeTab === 'nikformat' && <NikFormatSettingsTab />}
+
       {/* Settings Tab */}
       {activeTab === 'pengaturan' && (
-        <div className="bg-white border border-slate-200 rounded-lg p-5 shadow-xs space-y-6 max-w-2xl">
-          <div>
-            <h3 className="text-sm font-bold text-slate-900 mb-1">
-              Pengaturan Modul Master Karyawan
-            </h3>
-            <p className="text-xs text-slate-500">
-              Konfigurasi kode awalan NIK otomatis, durasi probation default, dan batas usia pensiun perusahaan.
-            </p>
-          </div>
+        <div className="space-y-6">
+          <NikFormatSettingsTab />
 
-          <div className="space-y-4 text-xs">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">
-                  Prefix Awalan NIK Karyawan
-                </label>
-                <input
-                  type="text"
-                  value={settNikPrefix}
-                  onChange={(e) => setSettNikPrefix(e.target.value.toUpperCase())}
-                  className="w-full px-3 py-1.5 border border-slate-300 rounded font-mono font-bold"
-                />
-                <span className="text-[10px] text-slate-400 mt-0.5 block">Format: {settNikPrefix}-YYYY-XXX</span>
-              </div>
-
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">
-                  Masa Percobaan Default (Probation)
-                </label>
-                <input
-                  type="number"
-                  min={1}
-                  value={settProbation}
-                  onChange={(e) => setSettProbation(Number(e.target.value))}
-                  className="w-full px-3 py-1.5 border border-slate-300 rounded font-mono"
-                />
-                <span className="text-[10px] text-slate-400 mt-0.5 block">Bulan (Maks. 3 Bulan sesuai UU Cipta Kerja)</span>
-              </div>
-            </div>
-
+          <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs space-y-4 max-w-2xl">
             <div>
-              <label className="font-semibold text-slate-700 block mb-1">
-                Batas Usia Pensiun Karyawan
-              </label>
-              <input
-                type="number"
-                value={settRetire}
-                onChange={(e) => setSettRetire(Number(e.target.value))}
-                className="w-32 px-3 py-1.5 border border-slate-300 rounded font-mono"
-              />
-              <span className="text-[10px] text-slate-400 mt-0.5 block">Tahun usia untuk otomatisasi notifikasi purnabakti</span>
+              <h3 className="text-sm font-bold text-slate-900 mb-1">
+                Pengaturan Umum Kepegawaian & Ketenagakerjaan
+              </h3>
+              <p className="text-xs text-slate-500">
+                Konfigurasi durasi masa percobaan (probation) default dan batas usia pensiun purnabakti perusahaan.
+              </p>
             </div>
 
-            <div className="pt-3 border-t border-slate-200 flex justify-end">
-              <button
-                type="button"
-                onClick={handleSaveSettings}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-semibold text-xs"
-              >
-                Simpan Pengaturan Karyawan
-              </button>
+            <div className="space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">
+                    Masa Percobaan Default (Probation)
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={settProbation}
+                    onChange={(e) => setSettProbation(Number(e.target.value))}
+                    className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono"
+                  />
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">Bulan (Maks. 3 Bulan sesuai UU Cipta Kerja)</span>
+                </div>
+
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">
+                    Batas Usia Pensiun Karyawan
+                  </label>
+                  <input
+                    type="number"
+                    value={settRetire}
+                    onChange={(e) => setSettRetire(Number(e.target.value))}
+                    className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono"
+                  />
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">Tahun usia untuk otomatisasi notifikasi purnabakti</span>
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-slate-200 flex justify-end">
+                <button
+                  type="button"
+                  onClick={handleSaveSettings}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold text-xs shadow-xs"
+                >
+                  Simpan Kebijakan Karyawan
+                </button>
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* 02B: Struktur Organisasi & Hierarki Tree */}
-      {activeTab === 'orgchart' && <OrgChartManagement />}
 
       {/* 02C: Evaluasi Probation H-14 */}
       {activeTab === 'probation' && <ProbationManagement />}
@@ -1286,6 +1282,7 @@ export const EmployeeManagement: React.FC = () => {
                 onClick={() => {
                   setIsOnboardingChoiceOpen(false);
                   setAddStep(1);
+                  setNewNik(generateNextNik(newType || 'Tetap', currentEntity?.id));
                   setIsDirectOnboardingOpen(true);
                 }}
                 className="w-full p-4 border-2 border-slate-200 hover:border-indigo-600 hover:bg-indigo-50/50 rounded-xl text-left transition-all group flex items-start gap-4"
@@ -1514,14 +1511,30 @@ export const EmployeeManagement: React.FC = () => {
                       />
                     </div>
                     <div>
-                      <label className="font-medium text-slate-700 block mb-1">NIK Internal (Opsional)</label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="font-semibold text-slate-700 block text-xs">
+                          NIK Internal ({newType}) *
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => setNewNik(generateNextNik(newType, currentEntity?.id))}
+                          className="text-[10px] text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1"
+                          title="Generate ulang NIK otomatis sesuai format pola aktif"
+                        >
+                          <RotateCcw className="w-3 h-3" />
+                          <span>Generate NIK</span>
+                        </button>
+                      </div>
                       <input
                         type="text"
                         placeholder="Otomatis terisi jika kosong"
                         value={newNik}
                         onChange={(e) => setNewNik(e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-300 rounded font-mono"
+                        className="w-full px-3 py-2 border-2 border-indigo-200 focus:border-indigo-600 rounded-lg font-mono font-bold text-indigo-900 bg-indigo-50/20"
                       />
+                      <span className="text-[10px] text-slate-400 mt-0.5 block">
+                        Format pola penomoran fleksibel otomatis untuk status {newType}
+                      </span>
                     </div>
                   </div>
 
@@ -1553,7 +1566,11 @@ export const EmployeeManagement: React.FC = () => {
                       <label className="font-medium text-slate-700 block mb-1">Status Ketenagakerjaan</label>
                       <select
                         value={newType}
-                        onChange={(e) => setNewType(e.target.value as any)}
+                        onChange={(e) => {
+                          const t = e.target.value as any;
+                          setNewType(t);
+                          setNewNik(generateNextNik(t, currentEntity?.id));
+                        }}
                         className="w-full px-3 py-2 border border-slate-300 rounded bg-white font-medium"
                       >
                         <option value="Tetap">Tetap (PKWTT)</option>
