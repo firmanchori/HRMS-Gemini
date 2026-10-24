@@ -407,6 +407,9 @@ interface HrmsContextType {
   gradeSalaryRanges: GradeSalaryRange[];
   addGradeSalaryRange: (range: Omit<GradeSalaryRange, 'id' | 'tenantId'>) => void;
   updateGradeSalaryRange: (id: string, updates: Partial<GradeSalaryRange>) => void;
+  deleteGradeSalaryRange: (id: string) => void;
+  jobGradingScheme: 'single' | 'broadbanding';
+  setJobGradingScheme: (scheme: 'single' | 'broadbanding') => void;
 
   // 32. Salary Components Master & Assignments
   salaryComponents: SalaryComponentMaster[];
@@ -867,8 +870,13 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // 31. Grade Salary Ranges
   const [gradeSalaryRanges, setGradeSalaryRanges] = useState<GradeSalaryRange[]>(() => {
-    const saved = localStorage.getItem('nusahr_grades');
+    const saved = localStorage.getItem('nusahr_grades_v2');
     return saved ? JSON.parse(saved) : INITIAL_GRADE_SALARY_RANGES;
+  });
+
+  const [jobGradingScheme, setJobGradingScheme] = useState<'single' | 'broadbanding'>(() => {
+    const saved = localStorage.getItem('nusahr_job_grading_scheme');
+    return saved === 'broadbanding' || saved === 'single' ? saved : 'single';
   });
 
   // 32. Salary Components & Assignments
@@ -974,6 +982,14 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     localStorage.setItem('nusahr_master_job_positions_v3', JSON.stringify(masterJobPositions));
   }, [masterJobPositions]);
+
+  useEffect(() => {
+    localStorage.setItem('nusahr_grades_v2', JSON.stringify(gradeSalaryRanges));
+  }, [gradeSalaryRanges]);
+
+  useEffect(() => {
+    localStorage.setItem('nusahr_job_grading_scheme', jobGradingScheme);
+  }, [jobGradingScheme]);
 
   // Filtered scoped items for active tenant
   const tenantEmployees = useMemo(
@@ -3242,6 +3258,11 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setGradeSalaryRanges((prev) => prev.map((g) => (g.id === id ? { ...g, ...updates } : g)));
   };
 
+  const deleteGradeSalaryRange = (id: string) => {
+    setGradeSalaryRanges((prev) => prev.filter((g) => g.id !== id));
+    logAuditAction('Grade Gaji', 'HAPUS_GRADE', id, `Menghapus master grade ${id}`);
+  };
+
   // 32. Salary Components
   const addSalaryComponent = (comp: Omit<SalaryComponentMaster, 'id' | 'tenantId'>) => {
     const newComp: SalaryComponentMaster = {
@@ -3662,6 +3683,9 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         gradeSalaryRanges: gradeSalaryRanges.filter((g) => g.tenantId === currentTenant.id),
         addGradeSalaryRange,
         updateGradeSalaryRange,
+        deleteGradeSalaryRange,
+        jobGradingScheme,
+        setJobGradingScheme,
         salaryComponents: salaryComponents.filter((s) => s.tenantId === currentTenant.id),
         addSalaryComponent,
         employeeSalaryAssignments: employeeSalaryAssignments.filter((a) => a.tenantId === currentTenant.id),

@@ -953,7 +953,10 @@ export interface MasterJobPosition {
   division?: string;
   department?: string;
   jobFamily?: string;   // e.g. 'Eksekutif', 'Teknologi', 'People & Culture', 'Keuangan', 'Operasional'
-  jobGrade?: string;    // e.g. 'Grade 10', 'Grade 08', 'Grade 06'
+  jobGrade?: string;    // e.g. 'Grade 10', 'Grade 08' or 'Grade 07 - Grade 09'
+  minGrade?: string;    // for broadbanding scheme
+  maxGrade?: string;    // for broadbanding scheme
+  gradingScheme?: 'single' | 'broadbanding';
   description?: string;
   requirements?: string;
 }

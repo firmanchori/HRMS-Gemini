@@ -41,6 +41,12 @@ import {
   History,
   UserPlus,
   UserMinus,
+  UserX,
+  Sliders,
+  Scale,
+  ArrowUpDown,
+  Save,
+  ArrowLeft,
 } from 'lucide-react';
 import { ValidatedDateInput } from '../common/ValidatedDateInput';
 import {
@@ -51,9 +57,234 @@ import {
   OrgChangeProposal,
   OrgStructureSnapshot,
   MasterJobPosition,
+  GradeSalaryRange,
+  Employee,
 } from '../../types/hrms';
 import { exportElementToPng, exportElementToPdf } from '../../utils/exportTreeHelper';
 import { ScrollableTabNav } from '../common/ScrollableTabNav';
+import { useTabSwipe } from '../../utils/useTabSwipe';
+
+interface EmployeeDropdownSelectProps {
+  value: string;
+  onChange: (employeeId: string) => void;
+  employees: Employee[];
+  label?: string;
+  allowVacant?: boolean;
+}
+
+const EmployeeDropdownSelect: React.FC<EmployeeDropdownSelectProps> = ({
+  value,
+  onChange,
+  employees,
+  label = 'Pilih Karyawan Pemegang Jabatan (Definitif) *',
+  allowVacant = true,
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const selectedEmployee = employees.find((e) => e.id === value);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isOpen]);
+
+  const filteredEmployees = employees.filter((emp) => {
+    if (!search) return true;
+    const q = search.toLowerCase();
+    return (
+      emp.fullName.toLowerCase().includes(q) ||
+      emp.nik.toLowerCase().includes(q) ||
+      (emp.department || '').toLowerCase().includes(q) ||
+      (emp.position || '').toLowerCase().includes(q)
+    );
+  });
+
+  const getAvatarUrl = (emp: Employee) => {
+    if (emp.avatar) return emp.avatar;
+    return `https://ui-avatars.com/api/?name=${encodeURIComponent(emp.fullName)}&background=0F172A&color=F8FAFC&size=96&bold=true`;
+  };
+
+  return (
+    <div className="space-y-1 relative" ref={dropdownRef}>
+      {label && (
+        <label className="font-semibold text-slate-700 block text-xs">
+          {label}
+        </label>
+      )}
+
+      {/* Selected Employee Display or Placeholder Trigger */}
+      <div
+        onClick={() => setIsOpen(!isOpen)}
+        className={`w-full p-2.5 rounded-xl border transition-all cursor-pointer bg-white flex items-center justify-between gap-3 ${
+          isOpen ? 'border-slate-800 ring-2 ring-slate-800/10' : 'border-slate-300 hover:border-slate-400'
+        }`}
+      >
+        {selectedEmployee ? (
+          <div className="flex items-center gap-3 min-w-0">
+            <img
+              src={getAvatarUrl(selectedEmployee)}
+              alt={selectedEmployee.fullName}
+              className="w-10 h-10 rounded-full object-cover border border-slate-200 shrink-0 shadow-2xs"
+            />
+            <div className="min-w-0 text-left">
+              <div className="font-bold text-slate-900 text-xs truncate">
+                {selectedEmployee.fullName}
+              </div>
+              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                <span className="font-mono text-[10px] font-bold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                  {selectedEmployee.nik}
+                </span>
+                <span className="text-[11px] text-slate-500 truncate max-w-[150px]">
+                  {selectedEmployee.department || 'Umum'} • {selectedEmployee.position || 'Karyawan'}
+                </span>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2.5 text-slate-400 py-1">
+            <div className="w-9 h-9 rounded-full bg-slate-100 border border-dashed border-slate-300 flex items-center justify-center shrink-0">
+              <Users className="w-4 h-4 text-slate-400" />
+            </div>
+            <div className="text-left">
+              <span className="text-xs font-medium text-slate-600 block">
+                Cari & Pilih Karyawan Definitif...
+              </span>
+              <span className="text-[10px] text-slate-400">
+                Pilih dari {employees.length} karyawan aktif terdaftar
+              </span>
+            </div>
+          </div>
+        )}
+
+        <div className="flex items-center gap-1.5 shrink-0 text-slate-400">
+          <span className="text-[11px] font-semibold text-slate-600 hover:text-slate-900 px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 transition-colors">
+            {selectedEmployee ? 'Ganti' : 'Pilih'}
+          </span>
+          <ChevronDown className={`w-4 h-4 transition-transform ${isOpen ? 'rotate-180 text-slate-800' : ''}`} />
+        </div>
+      </div>
+
+      {/* Dropdown Popover */}
+      {isOpen && (
+        <div className="absolute z-50 left-0 right-0 mt-1.5 bg-white rounded-xl border border-slate-300 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 flex flex-col max-h-72">
+          {/* Search Bar */}
+          <div className="p-2.5 border-b border-slate-200 bg-slate-50 shrink-0">
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                autoFocus
+                placeholder="Cari nama, NIK, atau unit kerja..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full pl-8 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs focus:outline-slate-800 font-medium"
+              />
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => setSearch('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* List of Options */}
+          <div className="overflow-y-auto divide-y divide-slate-100 flex-1">
+            {allowVacant && (
+              <div
+                onClick={() => {
+                  onChange('');
+                  setIsOpen(false);
+                }}
+                className={`p-2.5 flex items-center justify-between gap-2.5 hover:bg-rose-50 cursor-pointer transition-colors ${
+                  !value ? 'bg-rose-50/70 border-l-4 border-rose-500' : ''
+                }`}
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-8 h-8 rounded-full bg-rose-100 text-rose-700 flex items-center justify-center shrink-0 border border-rose-200">
+                    <UserX className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="font-bold text-xs text-rose-700">
+                      Kosongkan Kursi (Status Vacant)
+                    </div>
+                    <div className="text-[10px] text-rose-500">
+                      Formasi tanpa pemegang aktif, disiapkan untuk rekrutmen
+                    </div>
+                  </div>
+                </div>
+                {!value && <Check className="w-4 h-4 text-rose-600 shrink-0" />}
+              </div>
+            )}
+
+            {filteredEmployees.map((emp) => {
+              const isSelected = emp.id === value;
+              return (
+                <div
+                  key={emp.id}
+                  onClick={() => {
+                    onChange(emp.id);
+                    setIsOpen(false);
+                  }}
+                  className={`p-2.5 flex items-center justify-between gap-2.5 hover:bg-slate-50 cursor-pointer transition-colors ${
+                    isSelected ? 'bg-slate-100 border-l-4 border-slate-900' : ''
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <img
+                      src={getAvatarUrl(emp)}
+                      alt={emp.fullName}
+                      className="w-8 h-8 rounded-full object-cover border border-slate-200 shrink-0 shadow-2xs"
+                    />
+                    <div className="min-w-0">
+                      <div className="font-bold text-xs text-slate-900 truncate">
+                        {emp.fullName}
+                      </div>
+                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                        <span className="font-mono text-[10px] font-bold text-slate-700 bg-slate-200/80 px-1.5 py-0.5 rounded">
+                          {emp.nik}
+                        </span>
+                        <span className="text-[10px] text-slate-500 truncate">
+                          {emp.department || 'Umum'} • {emp.position || 'Karyawan'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {isSelected && (
+                    <span className="w-5 h-5 rounded-full bg-slate-900 text-white flex items-center justify-center shrink-0">
+                      <Check className="w-3 h-3" />
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+
+            {filteredEmployees.length === 0 && (
+              <div className="p-6 text-center text-slate-400 text-xs">
+                Tidak ada karyawan dengan nama atau NIK "{search}".
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
 export const OrganizationManagement: React.FC = () => {
   const {
@@ -80,6 +311,12 @@ export const OrganizationManagement: React.FC = () => {
     addMasterJobPosition,
     updateMasterJobPosition,
     deleteMasterJobPosition,
+    gradeSalaryRanges,
+    addGradeSalaryRange,
+    updateGradeSalaryRange,
+    deleteGradeSalaryRange,
+    jobGradingScheme,
+    setJobGradingScheme,
     assignEmployeeToPosition,
     addOrgNode,
     updateOrgNode,
@@ -145,10 +382,15 @@ export const OrganizationManagement: React.FC = () => {
 
   // Mode Draft Restrukturisasi: 'full' (Rancang Draft Lengkap: Divisi, Dept & Jabatan) vs 'single' (Perubahan Parsial Tunggal)
   const [restructureDraftMode, setRestructureDraftMode] = useState<'full' | 'single'>('full');
-  const [draftActiveTab, setDraftActiveTab] = useState<'info' | 'divisions' | 'departments' | 'positions'>('info');
+  const [draftActiveTab, setDraftActiveTab] = useState<'info' | 'grades' | 'divisions' | 'departments' | 'positions'>('info');
+  const [draftGradingScheme, setDraftGradingScheme] = useState<'single' | 'broadbanding'>('single');
+  const [draftGradeSalaryRanges, setDraftGradeSalaryRanges] = useState<GradeSalaryRange[]>([]);
   const [draftDivisions, setDraftDivisions] = useState<CompanyDivision[]>([]);
+  const [draftUseDeptLevel, setDraftUseDeptLevel] = useState<boolean>(true);
   const [draftDepartments, setDraftDepartments] = useState<CompanyDepartment[]>([]);
   const [draftNodes, setDraftNodes] = useState<OrgStructureNode[]>([]);
+  const [hasSavedDraft, setHasSavedDraft] = useState(false);
+  const [savedDraftTimestamp, setSavedDraftTimestamp] = useState<string | null>(null);
 
   // Direct CRUD Modals (HANYA AKTIF KETIKA BELUM DIKUNCI / MODE SETUP)
   const [isDivisionModalOpen, setIsDivisionModalOpen] = useState(false);
@@ -184,8 +426,8 @@ export const OrganizationManagement: React.FC = () => {
     description: '',
   });
 
-  // Sub-tab di Tab 3: Master Organisasi ('divisions' | 'departments' | 'master_positions')
-  const [structureSubTab, setStructureSubTab] = useState<'divisions' | 'departments' | 'master_positions'>('divisions');
+  // Sub-tab di Tab 3: Master Organisasi ('divisions' | 'departments' | 'master_positions' | 'grades')
+  const [structureSubTab, setStructureSubTab] = useState<'divisions' | 'departments' | 'master_positions' | 'grades'>('divisions');
   const [masterPositionSearch, setMasterPositionSearch] = useState('');
   const [masterPositionFamilyFilter, setMasterPositionFamilyFilter] = useState('ALL');
   const [masterPositionLevelFilter, setMasterPositionLevelFilter] = useState<number | 'ALL'>('ALL');
@@ -201,8 +443,26 @@ export const OrganizationManagement: React.FC = () => {
     department: '',
     jobFamily: 'Teknologi & Engineering',
     jobGrade: 'Grade 08',
+    minGrade: 'Grade 07',
+    maxGrade: 'Grade 09',
+    gradingScheme: 'single' as 'single' | 'broadbanding',
     description: '',
     requirements: '',
+  });
+
+  // State untuk Pengaturan Master Grade & Skema Jenjang
+  const [isGradeModalOpen, setIsGradeModalOpen] = useState(false);
+  const [previewGrade, setPreviewGrade] = useState<GradeSalaryRange | null>(null);
+  const [gradeSearch, setGradeSearch] = useState('');
+  const [gradeFormData, setGradeFormData] = useState({
+    id: '',
+    gradeCode: '',
+    gradeName: '',
+    minSalary: 8000000,
+    midSalary: 11000000,
+    maxSalary: 14000000,
+    effectiveDate: new Date().toISOString().split('T')[0],
+    notes: '',
   });
 
   // Filter & Quick Assign Karyawan untuk Tab 4: Assign Jabatan
@@ -257,7 +517,9 @@ export const OrganizationManagement: React.FC = () => {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (previewMasterJobPosition) setPreviewMasterJobPosition(null);
+        if (previewGrade) setPreviewGrade(null);
+        else if (isGradeModalOpen) setIsGradeModalOpen(false);
+        else if (previewMasterJobPosition) setPreviewMasterJobPosition(null);
         else if (previewPosition) setPreviewPosition(null);
         else if (previewDivision) setPreviewDivision(null);
         else if (previewDepartment) setPreviewDepartment(null);
@@ -272,6 +534,8 @@ export const OrganizationManagement: React.FC = () => {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [
+    previewGrade,
+    isGradeModalOpen,
     previewMasterJobPosition,
     previewPosition,
     previewDivision,
@@ -354,6 +618,294 @@ export const OrganizationManagement: React.FC = () => {
 
   const useDeptLevel = currentEntity?.useDepartmentLevel ?? true;
   const currentEntityLocked = isEntityGovernanceLocked(currentEntityId);
+
+  // Assign Jabatan hanya aktif ketika belum di-lock
+  useEffect(() => {
+    if (currentEntityLocked && activeTab === 'positions') {
+      setActiveTab('chart');
+    }
+  }, [currentEntityLocked, activeTab]);
+
+  // Swipe Navigation Setup for Main Sub-Menu Tabs
+  const mainTabList: ('chart' | 'corporate' | 'structure' | 'positions' | 'history')[] = currentEntityLocked
+    ? ['chart', 'corporate', 'structure', 'history']
+    : ['chart', 'corporate', 'structure', 'positions', 'history'];
+
+  const handleMainSwipeLeft = () => {
+    const idx = mainTabList.indexOf(activeTab);
+    if (idx < mainTabList.length - 1) setActiveTab(mainTabList[idx + 1]);
+  };
+  const handleMainSwipeRight = () => {
+    const idx = mainTabList.indexOf(activeTab);
+    if (idx > 0) setActiveTab(mainTabList[idx - 1]);
+  };
+
+  const mainTabSwipe = useTabSwipe({
+    tabs: mainTabList,
+    activeTab,
+    onTabChange: setActiveTab,
+  });
+
+  // Swipe Navigation Setup for Tab 3: Setup Divisi, Dept & Jabatan Sub-tabs
+  const structureSubTabList: ('divisions' | 'departments' | 'master_positions' | 'grades')[] = [
+    'divisions',
+    'departments',
+    'master_positions',
+    'grades',
+  ];
+
+  const handleStructureSwipeLeft = () => {
+    const idx = structureSubTabList.indexOf(structureSubTab);
+    if (idx < structureSubTabList.length - 1) {
+      setStructureSubTab(structureSubTabList[idx + 1]);
+    } else if (!currentEntityLocked) {
+      setActiveTab('positions');
+    } else {
+      setActiveTab('history');
+    }
+  };
+  const handleStructureSwipeRight = () => {
+    const idx = structureSubTabList.indexOf(structureSubTab);
+    if (idx > 0) {
+      setStructureSubTab(structureSubTabList[idx - 1]);
+    } else {
+      setActiveTab('corporate');
+    }
+  };
+
+  const structureSubTabSwipe = useTabSwipe({
+    tabs: structureSubTabList,
+    activeTab: structureSubTab,
+    onTabChange: setStructureSubTab,
+  });
+
+  // Swipe Navigation Setup for Tab 5: Riwayat Restrukturisasi Sub-tabs
+  const historySubTabList: ('proposals' | 'snapshots')[] = ['proposals', 'snapshots'];
+  const handleHistorySwipeLeft = () => setHistorySubTab('snapshots');
+  const handleHistorySwipeRight = () => setHistorySubTab('proposals');
+
+  const historySwipe = useTabSwipe({
+    tabs: historySubTabList,
+    activeTab: historySubTab,
+    onTabChange: setHistorySubTab,
+  });
+
+  // Step-by-Step Validation Logic for Restructuring Wizard
+  const isDraftStep1Valid = Boolean(
+    restructureForm.title.trim() &&
+    restructureForm.skDocNumber.trim() &&
+    restructureForm.effectiveDate.trim()
+  );
+
+  const isDraftStep2Valid = isDraftStep1Valid && draftGradeSalaryRanges.length > 0;
+
+  const isDraftStep3Valid =
+    isDraftStep2Valid &&
+    draftDivisions.length > 0 &&
+    draftDivisions.every((d) => d.name.trim() && d.code.trim());
+
+  const isDraftStep4Valid =
+    isDraftStep3Valid &&
+    (!draftUseDeptLevel ||
+      (draftDepartments.length > 0 &&
+        draftDepartments.every((d) => d.name.trim() && d.code.trim() && d.divisionId)));
+
+  const isDraftStep5Valid =
+    isDraftStep4Valid &&
+    draftNodes.length > 0 &&
+    draftNodes.every((n) => n.title.trim() && n.division);
+
+  const canAccessDraftTab = (tab: 'info' | 'grades' | 'divisions' | 'departments' | 'positions') => {
+    switch (tab) {
+      case 'info':
+        return true;
+      case 'grades':
+        return isDraftStep1Valid;
+      case 'divisions':
+        return isDraftStep2Valid;
+      case 'departments':
+        return isDraftStep3Valid;
+      case 'positions':
+        return isDraftStep4Valid;
+      default:
+        return false;
+    }
+  };
+
+  const handleAttemptDraftTabChange = (targetTab: 'info' | 'grades' | 'divisions' | 'departments' | 'positions') => {
+    if (canAccessDraftTab(targetTab)) {
+      setDraftActiveTab(targetTab);
+    } else {
+      if (!isDraftStep1Valid) {
+        showToast('Selesaikan Judul Usulan, Nomor SK, dan Tanggal Efektif pada Tahap 1 terlebih dahulu.');
+      } else if (!isDraftStep2Valid) {
+        showToast('Tentukan minimal 1 Grade Remunerasi pada Tahap 2 sebelum melanjutkan.');
+      } else if (!isDraftStep3Valid) {
+        showToast('Lengkapi minimal 1 Divisi (Kode & Nama) pada Tahap 3 terlebih dahulu.');
+      } else if (!isDraftStep4Valid) {
+        showToast('Lengkapi data Departemen pada Tahap 4 (atau pilih opsi Langsung ke Jabatan/Bypass).');
+      }
+    }
+  };
+
+  // Draft Storage Helpers for Saving & Continuing Later
+  const draftStorageKey = `nusahr_restructure_draft_${currentEntityId}`;
+
+  const checkSavedDraft = useCallback(() => {
+    try {
+      const saved = localStorage.getItem(draftStorageKey);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        setHasSavedDraft(true);
+        setSavedDraftTimestamp(parsed.savedAt || 'Sesi Terdahulu');
+      } else {
+        setHasSavedDraft(false);
+        setSavedDraftTimestamp(null);
+      }
+    } catch {
+      setHasSavedDraft(false);
+    }
+  }, [draftStorageKey]);
+
+  useEffect(() => {
+    checkSavedDraft();
+  }, [checkSavedDraft, currentEntityId]);
+
+  const handleSaveRestructureDraft = () => {
+    try {
+      const payload = {
+        restructureForm,
+        draftGradingScheme,
+        draftGradeSalaryRanges,
+        draftDivisions,
+        draftUseDeptLevel,
+        draftDepartments,
+        draftNodes,
+        draftActiveTab,
+        savedAt: new Date().toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' }),
+      };
+      localStorage.setItem(draftStorageKey, JSON.stringify(payload));
+      setHasSavedDraft(true);
+      setSavedDraftTimestamp(payload.savedAt);
+      showToast('Draf usulan restrukturisasi berhasil disimpan. Anda dapat melanjutkannya nanti.');
+    } catch {
+      showToast('Gagal menyimpan draf usulan.');
+    }
+  };
+
+  const handleLoadSavedDraft = () => {
+    try {
+      const saved = localStorage.getItem(draftStorageKey);
+      if (!saved) return;
+      const parsed = JSON.parse(saved);
+      if (parsed.restructureForm) setRestructureForm(parsed.restructureForm);
+      if (parsed.draftGradingScheme) setDraftGradingScheme(parsed.draftGradingScheme);
+      if (parsed.draftGradeSalaryRanges) setDraftGradeSalaryRanges(parsed.draftGradeSalaryRanges);
+      if (parsed.draftDivisions) setDraftDivisions(parsed.draftDivisions);
+      if (typeof parsed.draftUseDeptLevel === 'boolean') setDraftUseDeptLevel(parsed.draftUseDeptLevel);
+      if (parsed.draftDepartments) setDraftDepartments(parsed.draftDepartments);
+      if (parsed.draftNodes) setDraftNodes(parsed.draftNodes);
+      if (parsed.draftActiveTab && canAccessDraftTab(parsed.draftActiveTab)) {
+        setDraftActiveTab(parsed.draftActiveTab);
+      }
+      showToast('Draf usulan restrukturisasi tersimpan berhasil dimuat kembali.');
+    } catch {
+      showToast('Gagal memuat draf usulan.');
+    }
+  };
+
+  const handleDiscardSavedDraft = () => {
+    localStorage.removeItem(draftStorageKey);
+    setHasSavedDraft(false);
+    setSavedDraftTimestamp(null);
+    showToast('Draf usulan yang tersimpan telah dibersihkan.');
+  };
+
+  // Handlers for "Gunakan Data Lama / Sebelumnya" for each step
+  const handleCopyExistingGrades = () => {
+    setDraftGradingScheme(jobGradingScheme);
+    setDraftGradeSalaryRanges(gradeSalaryRanges.map((g) => ({ ...g })));
+    showToast(`Data skema & rentang gaji (${gradeSalaryRanges.length} grade) berhasil disalin.`);
+  };
+
+  const handleCopyExistingDivisions = () => {
+    setDraftDivisions(
+      entityDivisions.map((d) => ({
+        id: `draft-div-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+        entityId: d.entityId,
+        code: d.code,
+        name: d.name,
+        description: d.description || '',
+      }))
+    );
+    showToast(`Data ${entityDivisions.length} divisi aktif berhasil disalin ke dalam draf.`);
+  };
+
+  const handleCopyExistingDepartments = () => {
+    // Map to matching draft divisions if possible
+    setDraftDepartments(
+      entityDepartments.map((dept) => {
+        const matchingDraftDiv = draftDivisions.find((dd) => dd.name === dept.division || dd.code === dept.code);
+        return {
+          id: `draft-dept-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+          entityId: dept.entityId,
+          code: dept.code,
+          name: dept.name,
+          divisionId: matchingDraftDiv?.id || draftDivisions[0]?.id || dept.divisionId,
+          description: dept.description || '',
+        };
+      })
+    );
+    showToast(`Data ${entityDepartments.length} departemen aktif berhasil disalin ke dalam draf.`);
+  };
+
+  const handleCopyExistingPositions = () => {
+    setDraftNodes(
+      entityNodes.map((n) => ({
+        ...n,
+        id: `draft-node-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+        division: draftDivisions.some((d) => d.name === n.division) ? n.division : (draftDivisions[0]?.name || n.division),
+        department: draftUseDeptLevel ? n.department : 'Direct to Division',
+      }))
+    );
+    showToast(`Data ${entityNodes.length} posisi jabatan aktif berhasil disalin ke dalam draf.`);
+  };
+
+  // Swipe Navigation Setup for Modal Restrukturisasi Draft Tabs
+  const draftTabList: ('info' | 'grades' | 'divisions' | 'departments' | 'positions')[] = [
+    'info',
+    'grades',
+    'divisions',
+    'departments',
+    'positions',
+  ];
+
+  const handleDraftSwipeLeft = () => {
+    const idx = draftTabList.indexOf(draftActiveTab);
+    if (idx < draftTabList.length - 1) {
+      const nextTab = draftTabList[idx + 1];
+      if (canAccessDraftTab(nextTab)) {
+        setDraftActiveTab(nextTab);
+      } else {
+        handleAttemptDraftTabChange(nextTab);
+      }
+    }
+  };
+
+  const handleDraftSwipeRight = () => {
+    const idx = draftTabList.indexOf(draftActiveTab);
+    if (idx > 0) {
+      setDraftActiveTab(draftTabList[idx - 1]);
+    }
+  };
+
+  const draftSwipe = useTabSwipe({
+    tabs: draftTabList,
+    activeTab: draftActiveTab,
+    onTabChange: (tab) => {
+      if (canAccessDraftTab(tab)) setDraftActiveTab(tab);
+    },
+  });
 
   // Selected entity for previewing tree below corporate diagram
   const corpSelectedEntity = useMemo(() => {
@@ -568,7 +1120,11 @@ export const OrganizationManagement: React.FC = () => {
 
   // Open Restructuring modal with initialized draft
   const handleOpenRestructureModal = () => {
+    checkSavedDraft();
+    setDraftGradingScheme(jobGradingScheme);
+    setDraftGradeSalaryRanges(gradeSalaryRanges.map((g) => ({ ...g })));
     setDraftDivisions(entityDivisions.map((d) => ({ ...d })));
+    setDraftUseDeptLevel(useDeptLevel);
     setDraftDepartments(entityDepartments.map((d) => ({ ...d })));
     setDraftNodes(entityNodes.map((n) => ({ ...n })));
     setRestructureDraftMode('full');
@@ -673,6 +1229,13 @@ export const OrganizationManagement: React.FC = () => {
     e.preventDefault();
     if (!masterPositionFormData.title.trim()) return;
 
+    let computedJobGrade = masterPositionFormData.jobGrade;
+    if (jobGradingScheme === 'broadbanding') {
+      const minG = masterPositionFormData.minGrade || 'Grade 07';
+      const maxG = masterPositionFormData.maxGrade || 'Grade 09';
+      computedJobGrade = `${minG} - ${maxG}`;
+    }
+
     if (masterPositionFormData.id) {
       updateMasterJobPosition(masterPositionFormData.id, {
         code: masterPositionFormData.code.trim() || `JAB-${Date.now().toString().slice(-4)}`,
@@ -681,7 +1244,10 @@ export const OrganizationManagement: React.FC = () => {
         division: masterPositionFormData.division || undefined,
         department: masterPositionFormData.department || undefined,
         jobFamily: masterPositionFormData.jobFamily,
-        jobGrade: masterPositionFormData.jobGrade,
+        jobGrade: computedJobGrade,
+        minGrade: jobGradingScheme === 'broadbanding' ? masterPositionFormData.minGrade : undefined,
+        maxGrade: jobGradingScheme === 'broadbanding' ? masterPositionFormData.maxGrade : undefined,
+        gradingScheme: jobGradingScheme,
         description: masterPositionFormData.description.trim(),
         requirements: masterPositionFormData.requirements.trim(),
       });
@@ -695,13 +1261,98 @@ export const OrganizationManagement: React.FC = () => {
         division: masterPositionFormData.division || undefined,
         department: masterPositionFormData.department || undefined,
         jobFamily: masterPositionFormData.jobFamily,
-        jobGrade: masterPositionFormData.jobGrade,
+        jobGrade: computedJobGrade,
+        minGrade: jobGradingScheme === 'broadbanding' ? masterPositionFormData.minGrade : undefined,
+        maxGrade: jobGradingScheme === 'broadbanding' ? masterPositionFormData.maxGrade : undefined,
+        gradingScheme: jobGradingScheme,
         description: masterPositionFormData.description.trim(),
         requirements: masterPositionFormData.requirements.trim(),
       });
       showToast(`Master Jabatan baru ${masterPositionFormData.title} berhasil didaftarkan ke katalog.`);
     }
     setIsMasterPositionModalOpen(false);
+  };
+
+  // Handlers untuk Master Grade & Tabel Rentang Gaji
+  const handleOpenAddGrade = () => {
+    setGradeFormData({
+      id: '',
+      gradeCode: `Grade ${String(gradeSalaryRanges.length + 5).padStart(2, '0')}`,
+      gradeName: '',
+      minSalary: 8000000,
+      midSalary: 11000000,
+      maxSalary: 14000000,
+      effectiveDate: new Date().toISOString().split('T')[0],
+      notes: '',
+    });
+    setIsGradeModalOpen(true);
+  };
+
+  const handleOpenEditGrade = (grade: GradeSalaryRange) => {
+    setGradeFormData({
+      id: grade.id,
+      gradeCode: grade.gradeCode,
+      gradeName: grade.gradeName,
+      minSalary: grade.minSalary,
+      midSalary: grade.midSalary,
+      maxSalary: grade.maxSalary,
+      effectiveDate: grade.effectiveDate || new Date().toISOString().split('T')[0],
+      notes: grade.notes || '',
+    });
+    if (previewGrade) setPreviewGrade(null);
+    setIsGradeModalOpen(true);
+  };
+
+  const handleSubmitGrade = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!gradeFormData.gradeCode.trim() || !gradeFormData.gradeName.trim()) {
+      showToast('Kode Grade dan Nama Level wajib diisi.');
+      return;
+    }
+    if (gradeFormData.minSalary <= 0 || gradeFormData.maxSalary <= 0) {
+      showToast('Gaji minimum dan maksimum harus lebih dari 0.');
+      return;
+    }
+    if (gradeFormData.minSalary > gradeFormData.maxSalary) {
+      showToast('Gaji minimum tidak boleh lebih besar dari gaji maksimum.');
+      return;
+    }
+
+    const calculatedMid = Number(gradeFormData.midSalary) || Math.round((Number(gradeFormData.minSalary) + Number(gradeFormData.maxSalary)) / 2);
+
+    if (gradeFormData.id) {
+      updateGradeSalaryRange(gradeFormData.id, {
+        gradeCode: gradeFormData.gradeCode.trim(),
+        gradeName: gradeFormData.gradeName.trim(),
+        minSalary: Number(gradeFormData.minSalary),
+        midSalary: calculatedMid,
+        maxSalary: Number(gradeFormData.maxSalary),
+        effectiveDate: gradeFormData.effectiveDate,
+        notes: gradeFormData.notes.trim(),
+      });
+      showToast(`Master Grade ${gradeFormData.gradeCode} berhasil diperbarui.`);
+    } else {
+      addGradeSalaryRange({
+        gradeCode: gradeFormData.gradeCode.trim(),
+        gradeName: gradeFormData.gradeName.trim(),
+        minSalary: Number(gradeFormData.minSalary),
+        midSalary: calculatedMid,
+        maxSalary: Number(gradeFormData.maxSalary),
+        effectiveDate: gradeFormData.effectiveDate,
+        version: 1,
+        notes: gradeFormData.notes.trim(),
+      });
+      showToast(`Master Grade baru ${gradeFormData.gradeCode} berhasil ditambahkan.`);
+    }
+    setIsGradeModalOpen(false);
+  };
+
+  const handleDeleteGrade = (grade: GradeSalaryRange) => {
+    if (confirm(`Apakah Anda yakin ingin menghapus master grade "${grade.gradeCode} - ${grade.gradeName}"?`)) {
+      deleteGradeSalaryRange(grade.id);
+      if (previewGrade) setPreviewGrade(null);
+      showToast(`Master Grade ${grade.gradeCode} berhasil dihapus.`);
+    }
   };
 
   // Handler Quick Assign Karyawan ke Formasi Kursi
@@ -746,8 +1397,11 @@ export const OrganizationManagement: React.FC = () => {
     if (restructureDraftMode === 'full') {
       payload = {
         type: 'full_restructure',
+        newGradingScheme: draftGradingScheme,
+        newGradeSalaryRanges: draftGradeSalaryRanges,
         newDivisions: draftDivisions,
-        newDepartments: draftDepartments,
+        useDepartmentLevel: draftUseDeptLevel,
+        newDepartments: draftUseDeptLevel ? draftDepartments : [],
         newNodes: draftNodes,
       };
     } else if (restructureForm.targetType === 'position') {
@@ -807,6 +1461,9 @@ export const OrganizationManagement: React.FC = () => {
       payload,
     });
 
+    localStorage.removeItem(draftStorageKey);
+    setHasSavedDraft(false);
+    setSavedDraftTimestamp(null);
     setIsRestructureModalOpen(false);
     showToast(
       currentEntityLocked
@@ -1200,7 +1857,7 @@ export const OrganizationManagement: React.FC = () => {
             type="button"
             onClick={() => {
               setProposalCategory(activeTab === 'corporate' ? 'perusahaan' : 'organisasi');
-              setIsRestructureModalOpen(true);
+              handleOpenRestructureModal();
             }}
             className="flex items-center justify-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold shadow-xs transition-colors shrink-0 w-full sm:w-auto"
           >
@@ -1267,10 +1924,15 @@ export const OrganizationManagement: React.FC = () => {
       </div>
 
       {/* Tabs Sub-Menu Navigation Bar (Consistent with Other HRMS Modules) */}
-      <ScrollableTabNav>
+      <ScrollableTabNav
+        activeKey={activeTab}
+        onSwipeLeft={handleMainSwipeLeft}
+        onSwipeRight={handleMainSwipeRight}
+      >
         <button
           type="button"
           onClick={() => setActiveTab('chart')}
+          data-active={activeTab === 'chart'}
           className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
             activeTab === 'chart'
               ? 'border-indigo-600 text-indigo-700 font-bold'
@@ -1293,6 +1955,7 @@ export const OrganizationManagement: React.FC = () => {
         <button
           type="button"
           onClick={() => setActiveTab('corporate')}
+          data-active={activeTab === 'corporate'}
           className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
             activeTab === 'corporate'
               ? 'border-indigo-600 text-indigo-700 font-bold'
@@ -1315,6 +1978,7 @@ export const OrganizationManagement: React.FC = () => {
         <button
           type="button"
           onClick={() => setActiveTab('structure')}
+          data-active={activeTab === 'structure'}
           className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
             activeTab === 'structure'
               ? 'border-indigo-600 text-indigo-700 font-bold'
@@ -1322,7 +1986,7 @@ export const OrganizationManagement: React.FC = () => {
           }`}
         >
           <Layers className="w-3.5 h-3.5" />
-          <span>Master Divisi, Dept & Jabatan</span>
+          <span>Setup Divisi, Dept & Jabatan</span>
           <span
             className={`text-[10px] font-semibold px-2 py-0.5 rounded-full transition-colors ${
               activeTab === 'structure'
@@ -1334,31 +1998,35 @@ export const OrganizationManagement: React.FC = () => {
           </span>
         </button>
 
-        <button
-          type="button"
-          onClick={() => setActiveTab('positions')}
-          className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
-            activeTab === 'positions'
-              ? 'border-indigo-600 text-indigo-700 font-bold'
-              : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
-          }`}
-        >
-          <UserCheck className="w-3.5 h-3.5" />
-          <span>Assign Jabatan / Posisi</span>
-          <span
-            className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full transition-colors ${
+        {!currentEntityLocked && (
+          <button
+            type="button"
+            onClick={() => setActiveTab('positions')}
+            data-active={activeTab === 'positions'}
+            className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
               activeTab === 'positions'
-                ? 'bg-slate-900 text-white'
-                : 'bg-slate-100 text-slate-700'
+                ? 'border-indigo-600 text-indigo-700 font-bold'
+                : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
             }`}
           >
-            {entityNodes.length} Formasi
-          </span>
-        </button>
+            <UserCheck className="w-3.5 h-3.5" />
+            <span>Assign Jabatan</span>
+            <span
+              className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full transition-colors ${
+                activeTab === 'positions'
+                  ? 'bg-slate-900 text-white'
+                  : 'bg-slate-100 text-slate-700'
+              }`}
+            >
+              {entityNodes.length} Formasi
+            </span>
+          </button>
+        )}
 
         <button
           type="button"
           onClick={() => setActiveTab('history')}
+          data-active={activeTab === 'history'}
           className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
             activeTab === 'history'
               ? 'border-indigo-600 text-indigo-700 font-bold'
@@ -1379,6 +2047,8 @@ export const OrganizationManagement: React.FC = () => {
         </button>
       </ScrollableTabNav>
 
+      {/* Main Tab Content Panel with Horizontal Swipe Navigation */}
+      <div {...mainTabSwipe} className="w-full">
       {/* TAB 1: DIAGRAM ORGANISASI (PRESISI TANPA POTONG KIRI DENGAN EXPORT PDF/PNG) */}
       {activeTab === 'chart' && (
         <div className="bg-slate-100/70 rounded-2xl border border-slate-200 overflow-hidden flex flex-col min-h-[580px] shadow-xs">
@@ -1724,14 +2394,20 @@ export const OrganizationManagement: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 3: PENGATURAN MASTER DIVISI, DEPARTEMEN & MASTER JABATAN */}
+      {/* TAB 3: PENGATURAN SETUP DIVISI, DEPARTEMEN & SETUP JABATAN */}
       {activeTab === 'structure' && (
-        <div className="space-y-6">
-          {/* Sub-Tab Navigation for Master Data Organisasi */}
-          <ScrollableTabNav className="mb-2">
+        <div {...structureSubTabSwipe} className="space-y-6">
+          {/* Sub-Tab Navigation for Setup Data Organisasi */}
+          <ScrollableTabNav
+            activeKey={structureSubTab}
+            onSwipeLeft={handleStructureSwipeLeft}
+            onSwipeRight={handleStructureSwipeRight}
+            className="mb-2"
+          >
             <button
               type="button"
               onClick={() => setStructureSubTab('divisions')}
+              data-active={structureSubTab === 'divisions'}
               className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
                 structureSubTab === 'divisions'
                   ? 'border-indigo-600 text-indigo-700 font-bold'
@@ -1739,7 +2415,7 @@ export const OrganizationManagement: React.FC = () => {
               }`}
             >
               <Layers className="w-4 h-4" />
-              <span>Master Divisi</span>
+              <span>Setup Divisi</span>
               <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${
                 structureSubTab === 'divisions' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600'
               }`}>
@@ -1750,6 +2426,7 @@ export const OrganizationManagement: React.FC = () => {
             <button
               type="button"
               onClick={() => setStructureSubTab('departments')}
+              data-active={structureSubTab === 'departments'}
               className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
                 structureSubTab === 'departments'
                   ? 'border-emerald-600 text-emerald-700 font-bold'
@@ -1757,7 +2434,7 @@ export const OrganizationManagement: React.FC = () => {
               }`}
             >
               <Briefcase className="w-4 h-4" />
-              <span>Master Departemen</span>
+              <span>Setup Departemen</span>
               <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${
                 structureSubTab === 'departments' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'
               }`}>
@@ -1768,18 +2445,38 @@ export const OrganizationManagement: React.FC = () => {
             <button
               type="button"
               onClick={() => setStructureSubTab('master_positions')}
+              data-active={structureSubTab === 'master_positions'}
               className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
                 structureSubTab === 'master_positions'
-                  ? 'border-violet-600 text-violet-700 font-bold'
+                  ? 'border-slate-900 text-slate-900 font-bold'
                   : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
               }`}
             >
-              <Award className="w-4 h-4" />
-              <span>Master Jabatan</span>
+              <Award className="w-4 h-4 text-slate-700" />
+              <span>Setup Jabatan</span>
               <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${
-                structureSubTab === 'master_positions' ? 'bg-violet-100 text-violet-700' : 'bg-slate-100 text-slate-600'
+                structureSubTab === 'master_positions' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'
               }`}>
                 {entityMasterPositions.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setStructureSubTab('grades')}
+              data-active={structureSubTab === 'grades'}
+              className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
+                structureSubTab === 'grades'
+                  ? 'border-amber-600 text-amber-700 font-bold'
+                  : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+              }`}
+            >
+              <Sliders className="w-4 h-4" />
+              <span>Master Grade & Skema</span>
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${
+                structureSubTab === 'grades' ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600'
+              }`}>
+                {jobGradingScheme === 'broadbanding' ? 'Broadband' : 'Single'} ({gradeSalaryRanges.length})
               </span>
             </button>
           </ScrollableTabNav>
@@ -2040,17 +2737,17 @@ export const OrganizationManagement: React.FC = () => {
           {structureSubTab === 'master_positions' && (
             <div className="space-y-6">
               {/* Header Banner */}
-              <div className="bg-gradient-to-r from-violet-900 via-indigo-900 to-slate-900 text-white p-5 rounded-2xl shadow-sm">
+              <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 text-white p-5 rounded-2xl shadow-sm border border-slate-800">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
-                      <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-violet-800/80 text-violet-200 border border-violet-600">
+                      <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-800 text-slate-200 border border-slate-700">
                         Kamus Jabatan Resmi Perusahaan
                       </span>
-                      <span className="text-xs text-violet-300 font-medium">Entitas: {currentEntity.name}</span>
+                      <span className="text-xs text-slate-400 font-medium">Entitas: {currentEntity.name}</span>
                     </div>
                     <h3 className="text-base font-bold text-white flex items-center gap-2">
-                      <Award className="w-5 h-5 text-violet-400" />
+                      <Award className="w-5 h-5 text-slate-300" />
                       Katalog Master Jabatan & Spesifikasi Posisi
                     </h3>
                     <p className="text-xs text-slate-300 max-w-2xl leading-relaxed">
@@ -2062,6 +2759,9 @@ export const OrganizationManagement: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => {
+                        const defaultGrade = gradeSalaryRanges[3]?.gradeCode || gradeSalaryRanges[0]?.gradeCode || 'Grade 08';
+                        const defaultMinGrade = gradeSalaryRanges[2]?.gradeCode || gradeSalaryRanges[0]?.gradeCode || 'Grade 07';
+                        const defaultMaxGrade = gradeSalaryRanges[4]?.gradeCode || gradeSalaryRanges[1]?.gradeCode || 'Grade 09';
                         setMasterPositionFormData({
                           id: '',
                           code: `MJP-${String(entityMasterPositions.length + 1).padStart(3, '0')}`,
@@ -2070,13 +2770,16 @@ export const OrganizationManagement: React.FC = () => {
                           division: entityDivisions[0]?.name || '',
                           department: entityDepartments[0]?.name || 'Umum',
                           jobFamily: 'Teknologi & Engineering',
-                          jobGrade: 'Grade 08',
+                          jobGrade: jobGradingScheme === 'broadbanding' ? `${defaultMinGrade} - ${defaultMaxGrade}` : defaultGrade,
+                          minGrade: defaultMinGrade,
+                          maxGrade: defaultMaxGrade,
+                          gradingScheme: jobGradingScheme,
                           description: '',
                           requirements: '',
                         });
                         setIsMasterPositionModalOpen(true);
                       }}
-                      className="px-4 py-2 bg-violet-500 hover:bg-violet-400 text-white rounded-xl text-xs font-bold shadow-md flex items-center gap-2 shrink-0 transition-colors"
+                      className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold border border-slate-600 shadow-sm flex items-center gap-2 shrink-0 transition-colors"
                     >
                       <Plus className="w-4 h-4" />
                       <span>Tambah Master Jabatan</span>
@@ -2087,26 +2790,26 @@ export const OrganizationManagement: React.FC = () => {
                 {/* Quick Metrics */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 pt-4 border-t border-white/10">
                   <div className="bg-white/10 backdrop-blur-xs p-3 rounded-xl border border-white/10">
-                    <div className="text-[11px] text-violet-200">Total Master Jabatan</div>
+                    <div className="text-[11px] text-slate-300">Total Master Jabatan</div>
                     <div className="text-xl font-black text-white mt-0.5">{entityMasterPositions.length}</div>
-                    <div className="text-[10px] text-violet-300">Master judul terdaftar</div>
+                    <div className="text-[10px] text-slate-400">Master judul terdaftar</div>
                   </div>
                   <div className="bg-white/10 backdrop-blur-xs p-3 rounded-xl border border-white/10">
-                    <div className="text-[11px] text-violet-200">Tier Eksekutif & Head</div>
-                    <div className="text-xl font-black text-violet-300 mt-0.5">
+                    <div className="text-[11px] text-slate-300">Tier Eksekutif & Head</div>
+                    <div className="text-xl font-black text-slate-200 mt-0.5">
                       {entityMasterPositions.filter((p) => p.defaultLevel <= 2).length}
                     </div>
-                    <div className="text-[10px] text-violet-300">Level 1 (BOD) & Level 2 (VP)</div>
+                    <div className="text-[10px] text-slate-400">Level 1 (BOD) & Level 2 (VP)</div>
                   </div>
                   <div className="bg-white/10 backdrop-blur-xs p-3 rounded-xl border border-white/10">
-                    <div className="text-[11px] text-violet-200">Tier Manajerial & SPV</div>
+                    <div className="text-[11px] text-slate-300">Tier Manajerial & SPV</div>
                     <div className="text-xl font-black text-emerald-300 mt-0.5">
                       {entityMasterPositions.filter((p) => p.defaultLevel === 3 || p.defaultLevel === 4).length}
                     </div>
                     <div className="text-[10px] text-emerald-300">Level 3 (Mgr) & Level 4 (Lead)</div>
                   </div>
                   <div className="bg-white/10 backdrop-blur-xs p-3 rounded-xl border border-white/10">
-                    <div className="text-[11px] text-violet-200">Formasi Kursi Aktif</div>
+                    <div className="text-[11px] text-slate-300">Formasi Kursi Aktif</div>
                     <div className="text-xl font-black text-amber-300 mt-0.5">{entityNodes.length}</div>
                     <div className="text-[10px] text-amber-300">Kursi penetapan jabatan</div>
                   </div>
@@ -2122,7 +2825,7 @@ export const OrganizationManagement: React.FC = () => {
                     placeholder="Cari kode atau nama jabatan..."
                     value={masterPositionSearch}
                     onChange={(e) => setMasterPositionSearch(e.target.value)}
-                    className="w-full pl-9 pr-3 py-1.5 border border-slate-300 rounded-lg text-xs focus:outline-violet-600"
+                    className="w-full pl-9 pr-3 py-1.5 border border-slate-300 rounded-lg text-xs focus:outline-slate-800"
                   />
                 </div>
                 <div className="text-xs text-slate-500">
@@ -2153,19 +2856,26 @@ export const OrganizationManagement: React.FC = () => {
                       <div
                         key={pos.id}
                         onClick={() => setPreviewMasterJobPosition(pos)}
-                        className="bg-white rounded-xl border border-slate-200 hover:border-violet-400 p-4 shadow-xs hover:shadow-md transition-all cursor-pointer flex flex-col justify-between group active:scale-[0.99]"
+                        className="bg-white rounded-xl border border-slate-200 hover:border-slate-400 p-4 shadow-xs hover:shadow-md transition-all cursor-pointer flex flex-col justify-between group active:scale-[0.99]"
                       >
                         <div>
                           <div className="flex items-center justify-between gap-2 mb-2">
-                            <span className="font-mono text-xs font-bold px-2.5 py-0.5 bg-violet-50 text-violet-700 rounded border border-violet-200">
+                            <span className="font-mono text-xs font-bold px-2.5 py-0.5 bg-slate-100 text-slate-800 rounded border border-slate-300">
                               {pos.code}
                             </span>
-                            <span className="font-mono text-xs font-semibold px-2 py-0.5 bg-slate-100 text-slate-700 rounded border">
-                              {pos.jobGrade || 'Grade 08'}
-                            </span>
+                            {pos.jobGrade && (pos.jobGrade.includes('-') || pos.minGrade) ? (
+                              <span className="font-mono text-[11px] font-bold px-2 py-0.5 bg-amber-50 text-amber-800 rounded border border-amber-200 flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block" />
+                                {pos.jobGrade} (Band)
+                              </span>
+                            ) : (
+                              <span className="font-mono text-xs font-semibold px-2 py-0.5 bg-slate-100 text-slate-700 rounded border">
+                                {pos.jobGrade || 'Grade 08'}
+                              </span>
+                            )}
                           </div>
 
-                          <h4 className="font-bold text-slate-900 text-sm group-hover:text-violet-700 transition-colors">
+                          <h4 className="font-bold text-slate-900 text-sm group-hover:text-blue-900 transition-colors">
                             {pos.title}
                           </h4>
 
@@ -2191,7 +2901,254 @@ export const OrganizationManagement: React.FC = () => {
                             <UserCheck className="w-3.5 h-3.5 text-emerald-600" />
                             {matchingFormations.length} Formasi Kursi
                           </span>
-                          <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-violet-600 group-hover:translate-x-1 transition-all" />
+                          <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-slate-800 group-hover:translate-x-1 transition-all" />
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+          )}
+
+          {/* SUB-TAB 4: MASTER GRADE & SKEMA JENJANG */}
+          {structureSubTab === 'grades' && (
+            <div className="space-y-6">
+              {/* Scheme Setting Interactive Banner */}
+              <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 rounded-2xl p-5 text-white shadow-sm border border-slate-800">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-400 text-slate-950 uppercase tracking-wider">
+                        Konfigurasi Grading Jabatan
+                      </span>
+                      <span className="text-xs text-slate-300">
+                        Entitas: {currentEntity.name}
+                      </span>
+                    </div>
+                    <h3 className="text-base font-bold text-white flex items-center gap-2">
+                      <Sliders className="w-5 h-5 text-amber-400" />
+                      <span>Pengaturan Skema Grade Jabatan & Tabel Master Grade</span>
+                    </h3>
+                    <p className="text-xs text-slate-300 max-w-2xl leading-relaxed">
+                      Tentukan arsitektur sistem grade jabatan yang berlaku. Pengaturan ini secara dinamis menentukan perilaku form pembuatan jabatan: memilih satu tingkat definitif (Single Grade) atau rentang pita fleksibel (Broadbanding).
+                    </p>
+                  </div>
+
+                  {/* Scheme Selection Switcher Cards */}
+                  <div className="grid grid-cols-2 gap-3 shrink-0">
+                    {/* Single Grade Card */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setJobGradingScheme('single');
+                        showToast('Skema Grade Jabatan berhasil diubah ke: Single Grade (Peringkat Tunggal)');
+                      }}
+                      className={`p-3.5 rounded-xl border text-left transition-all relative ${
+                        jobGradingScheme === 'single'
+                          ? 'bg-indigo-600/30 border-indigo-400 ring-2 ring-indigo-400/50'
+                          : 'bg-white/5 border-white/10 hover:bg-white/10'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-bold text-xs text-white">Single Grade</span>
+                        {jobGradingScheme === 'single' ? (
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                        ) : (
+                          <span className="w-3.5 h-3.5 rounded-full border border-slate-500" />
+                        )}
+                      </div>
+                      <p className="text-[11px] text-slate-300 mt-1 leading-snug">
+                        1 Jabatan = 1 Peringkat Grade
+                      </p>
+                      <div className="mt-2.5">
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                          jobGradingScheme === 'single'
+                            ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/40'
+                            : 'text-slate-400 bg-white/5'
+                        }`}>
+                          {jobGradingScheme === 'single' ? '● Aktif Digunakan' : 'Pilih Skema Ini'}
+                        </span>
+                      </div>
+                    </button>
+
+                    {/* Broadbanding Card */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setJobGradingScheme('broadbanding');
+                        showToast('Skema Grade Jabatan berhasil diubah ke: Broadbanding (Rentang Pita Grade)');
+                      }}
+                      className={`p-3.5 rounded-xl border text-left transition-all relative ${
+                        jobGradingScheme === 'broadbanding'
+                          ? 'bg-amber-600/30 border-amber-400 ring-2 ring-amber-400/50'
+                          : 'bg-white/5 border-white/10 hover:bg-white/10'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-bold text-xs text-white">Broadbanding</span>
+                        {jobGradingScheme === 'broadbanding' ? (
+                          <CheckCircle2 className="w-4 h-4 text-amber-400" />
+                        ) : (
+                          <span className="w-3.5 h-3.5 rounded-full border border-slate-500" />
+                        )}
+                      </div>
+                      <p className="text-[11px] text-slate-300 mt-1 leading-snug">
+                        1 Jabatan = Rentang Pita (Min s/d Max)
+                      </p>
+                      <div className="mt-2.5">
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                          jobGradingScheme === 'broadbanding'
+                            ? 'bg-amber-500/20 text-amber-300 border border-amber-400/40'
+                            : 'text-slate-400 bg-white/5'
+                        }`}>
+                          {jobGradingScheme === 'broadbanding' ? '● Aktif Digunakan' : 'Pilih Skema Ini'}
+                        </span>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Status Notice Details */}
+                <div className="mt-4 pt-4 border-t border-white/10 grid grid-cols-1 md:grid-cols-2 gap-3 text-xs text-slate-300">
+                  <div className="p-3 bg-white/5 rounded-xl border border-white/5 flex items-start gap-2.5">
+                    <Info className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-bold text-white block text-xs">Perilaku Form Jabatan Saat Ini:</span>
+                      {jobGradingScheme === 'single' ? (
+                        <p className="text-[11px] text-slate-300 mt-0.5 leading-relaxed">
+                          Saat membuat/mengedit Master Jabatan, form akan <b className="text-emerald-300">hanya meminta 1 pilihan Grade saja</b> (misal: "Grade 08").
+                        </p>
+                      ) : (
+                        <p className="text-[11px] text-slate-300 mt-0.5 leading-relaxed">
+                          Saat membuat/mengedit Master Jabatan, form akan <b className="text-amber-300">menampilkan input rentang Grade Min s/d Grade Max</b> (misal: "Grade 07 - Grade 09").
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="p-3 bg-white/5 rounded-xl border border-white/5 flex items-start gap-2.5">
+                    <Scale className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-bold text-white block text-xs">Karakteristik & Manfaat Skema:</span>
+                      {jobGradingScheme === 'single' ? (
+                        <p className="text-[11px] text-slate-300 mt-0.5 leading-relaxed">
+                          Sederhana, standar BUMN/korporat konvensional, kepastian level dan batas remunerasi terstandar per titel jabatan.
+                        </p>
+                      ) : (
+                        <p className="text-[11px] text-slate-300 mt-0.5 leading-relaxed">
+                          Pita rentang lebar memberi fleksibilitas kenaikan kompensasi berkala berbasis kompetensi tanpa birokrasi penggantian nama jabatan.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Header Bar: Tabel Master Data Grade */}
+              <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 bg-amber-50 text-amber-700 rounded-lg">
+                    <Scale className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-sm text-slate-900">Tabel Master Data Grade Perusahaan</h4>
+                    <span className="text-[11px] text-slate-500">
+                      Total <b>{gradeSalaryRanges.length}</b> level grade baku terdaftar sebagai acuan jabatan & remunerasi
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 flex-wrap">
+                  <div className="relative">
+                    <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Cari kode grade / level..."
+                      value={gradeSearch}
+                      onChange={(e) => setGradeSearch(e.target.value)}
+                      className="pl-8 pr-3 py-1.5 border border-slate-200 rounded-lg text-xs bg-slate-50 focus:bg-white focus:outline-amber-600 w-44 sm:w-56"
+                    />
+                  </div>
+
+                  {!currentEntityLocked && (
+                    <button
+                      type="button"
+                      onClick={handleOpenAddGrade}
+                      className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors shrink-0"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Tambah Grade Baru</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Card Grid of Master Grades */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {gradeSalaryRanges
+                  .filter((g) => {
+                    if (!gradeSearch) return true;
+                    const q = gradeSearch.toLowerCase();
+                    return g.gradeCode.toLowerCase().includes(q) || g.gradeName.toLowerCase().includes(q) || (g.notes || '').toLowerCase().includes(q);
+                  })
+                  .map((grade) => {
+                    const spreadPercent = grade.minSalary > 0
+                      ? Math.round(((grade.maxSalary - grade.minSalary) / grade.minSalary) * 100)
+                      : 0;
+
+                    // Match master positions using this grade
+                    const usingPositions = entityMasterPositions.filter((pos) => {
+                      if (!pos.jobGrade) return false;
+                      return pos.jobGrade === grade.gradeCode || pos.jobGrade.includes(grade.gradeCode);
+                    });
+
+                    return (
+                      <div
+                        key={grade.id}
+                        onClick={() => setPreviewGrade(grade)}
+                        className="bg-white rounded-xl border border-slate-200 hover:border-amber-400 p-4 shadow-xs hover:shadow-md transition-all cursor-pointer flex flex-col justify-between group active:scale-[0.99]"
+                      >
+                        <div>
+                          <div className="flex items-center justify-between gap-2 mb-2">
+                            <span className="font-mono text-xs font-bold px-2.5 py-0.5 bg-amber-50 text-amber-800 rounded border border-amber-200">
+                              {grade.gradeCode}
+                            </span>
+                            <span className="text-[10px] font-semibold px-2 py-0.5 bg-slate-100 text-slate-600 rounded">
+                              Spread +{spreadPercent}%
+                            </span>
+                          </div>
+
+                          <h4 className="font-bold text-slate-900 text-sm group-hover:text-amber-700 transition-colors">
+                            {grade.gradeName}
+                          </h4>
+
+                          {/* Salary Range Summary */}
+                          <div className="mt-3 p-2.5 bg-slate-50 rounded-lg border border-slate-100 space-y-1.5">
+                            <div className="flex items-center justify-between text-[11px]">
+                              <span className="text-slate-500">Rentang Acuan:</span>
+                              <span className="font-mono font-bold text-slate-900">
+                                Rp {(grade.minSalary / 1000000).toFixed(1)}M – {(grade.maxSalary / 1000000).toFixed(1)}M
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between text-[10px] text-slate-400">
+                              <span>Midpoint: Rp {(grade.midSalary / 1000000).toFixed(1)}M</span>
+                              <span>SK Efektif: {grade.effectiveDate}</span>
+                            </div>
+                          </div>
+
+                          {grade.notes && (
+                            <p className="text-[11px] text-slate-500 mt-2 line-clamp-2 leading-relaxed">
+                              {grade.notes}
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-800 border border-slate-200">
+                            <Award className="w-3.5 h-3.5 text-slate-700" />
+                            {usingPositions.length} Master Jabatan
+                          </span>
+                          <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-amber-600 group-hover:translate-x-1 transition-all" />
                         </div>
                       </div>
                     );
@@ -2202,8 +3159,8 @@ export const OrganizationManagement: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 4: ASSIGN JABATAN & FORMASI POSISI (PENETAPAN KARYAWAN) */}
-      {activeTab === 'positions' && (
+      {/* TAB 4: ASSIGN JABATAN & FORMASI POSISI (HANYA AKTIF JIKA BELUM DIKUNCI) */}
+      {activeTab === 'positions' && !currentEntityLocked && (
         <div className="space-y-6">
           {/* Header Banner Assign Jabatan */}
           <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-5 rounded-2xl shadow-sm">
@@ -2618,7 +3575,7 @@ export const OrganizationManagement: React.FC = () => {
 
       {/* TAB 5: RIWAYAT RESTRUKTURISASI, SK & ARSIP HISTORI SNAPSHOT */}
       {activeTab === 'history' && (
-        <div className="space-y-4">
+        <div {...historySwipe} className="space-y-4">
           <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
             <div>
               <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
@@ -2635,6 +3592,7 @@ export const OrganizationManagement: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setHistorySubTab('proposals')}
+                  data-active={historySubTab === 'proposals'}
                   className={`px-3 py-1 rounded-md transition-colors ${
                     historySubTab === 'proposals' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'
                   }`}
@@ -2644,6 +3602,7 @@ export const OrganizationManagement: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setHistorySubTab('snapshots')}
+                  data-active={historySubTab === 'snapshots'}
                   className={`px-3 py-1 rounded-md transition-colors ${
                     historySubTab === 'snapshots' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'
                   }`}
@@ -2805,6 +3764,7 @@ export const OrganizationManagement: React.FC = () => {
           )}
         </div>
       )}
+      </div>
 
       {/* ======================================================== */}
       {/* MODAL 1: PREVIEW POSISI // JABATAN (PENGGANTI OPSI EDIT) */}
@@ -3078,15 +4038,17 @@ export const OrganizationManagement: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => {
+                        const targetTitle = previewPosition.title;
+                        const targetId = previewPosition.id;
                         setPreviewPosition(null);
                         setProposalCategory('organisasi');
+                        handleOpenRestructureModal();
                         setRestructureForm((prev) => ({
                           ...prev,
-                          title: `Restrukturisasi Posisi: ${previewPosition.title}`,
+                          title: `Restrukturisasi Posisi: ${targetTitle}`,
                           targetType: 'position',
-                          targetReportsToId: previewPosition.id,
+                          targetReportsToId: targetId,
                         }));
-                        setIsRestructureModalOpen(true);
                       }}
                       className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold shadow-xs flex items-center gap-1.5"
                     >
@@ -3595,14 +4557,14 @@ export const OrganizationManagement: React.FC = () => {
             className="bg-white rounded-2xl max-w-xl w-full border border-slate-200 shadow-2xl overflow-hidden max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] flex flex-col"
           >
             {/* Header */}
-            <div className="p-4 bg-gradient-to-r from-violet-900 to-indigo-900 text-white flex items-center justify-between shrink-0">
+            <div className="p-4 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 text-white flex items-center justify-between shrink-0 border-b border-slate-800">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-violet-800 text-violet-200 flex items-center justify-center font-bold text-xs border border-violet-700">
+                <div className="w-8 h-8 rounded-lg bg-slate-800 text-slate-200 flex items-center justify-center font-bold text-xs border border-slate-700">
                   L{previewMasterJobPosition.defaultLevel}
                 </div>
                 <div>
                   <h3 className="font-bold text-sm text-white">Preview Master Jabatan</h3>
-                  <span className="text-[11px] text-violet-300 font-mono">Kode: {previewMasterJobPosition.code}</span>
+                  <span className="text-[11px] text-slate-400 font-mono">Kode: {previewMasterJobPosition.code}</span>
                 </div>
               </div>
               <button
@@ -3617,15 +4579,22 @@ export const OrganizationManagement: React.FC = () => {
             <div className="p-5 space-y-4 text-xs overflow-y-auto flex-1">
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="px-2 py-0.5 rounded font-mono text-[10px] font-bold bg-violet-100 text-violet-800 border border-violet-200">
+                  <span className="px-2 py-0.5 rounded font-mono text-[10px] font-bold bg-slate-100 text-slate-800 border border-slate-300">
                     {previewMasterJobPosition.code}
                   </span>
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
                     {previewMasterJobPosition.jobFamily || 'General'}
                   </span>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
-                    {previewMasterJobPosition.jobGrade || 'Grade 08'}
-                  </span>
+                  {previewMasterJobPosition.jobGrade && (previewMasterJobPosition.jobGrade.includes('-') || previewMasterJobPosition.minGrade) ? (
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-300 flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block" />
+                      Pita Broadbanding: {previewMasterJobPosition.jobGrade}
+                    </span>
+                  ) : (
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+                      Single Grade: {previewMasterJobPosition.jobGrade || 'Grade 08'}
+                    </span>
+                  )}
                   <span className="px-2 py-0.5 rounded font-bold text-[10px] bg-purple-100 text-purple-800">
                     Level {previewMasterJobPosition.defaultLevel} · {previewMasterJobPosition.defaultLevel === 1 ? 'Direksi' : previewMasterJobPosition.defaultLevel === 2 ? 'VP / Head' : previewMasterJobPosition.defaultLevel === 3 ? 'Manager' : previewMasterJobPosition.defaultLevel === 4 ? 'Supervisor' : 'Staff'}
                   </span>
@@ -3724,6 +4693,11 @@ export const OrganizationManagement: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => {
+                      const parts = (previewMasterJobPosition.jobGrade || '').split('-').map(s => s.trim());
+                      const minG = previewMasterJobPosition.minGrade || parts[0] || 'Grade 07';
+                      const maxG = previewMasterJobPosition.maxGrade || parts[1] || 'Grade 09';
+                      const isBand = (previewMasterJobPosition.jobGrade || '').includes('-') || !!previewMasterJobPosition.minGrade;
+
                       setMasterPositionFormData({
                         id: previewMasterJobPosition.id,
                         code: previewMasterJobPosition.code,
@@ -3733,13 +4707,16 @@ export const OrganizationManagement: React.FC = () => {
                         department: previewMasterJobPosition.department || '',
                         jobFamily: previewMasterJobPosition.jobFamily || 'Teknologi & Engineering',
                         jobGrade: previewMasterJobPosition.jobGrade || 'Grade 08',
+                        minGrade: minG,
+                        maxGrade: maxG,
+                        gradingScheme: isBand ? 'broadbanding' : (previewMasterJobPosition.gradingScheme || jobGradingScheme),
                         description: previewMasterJobPosition.description || '',
                         requirements: previewMasterJobPosition.requirements || '',
                       });
                       setPreviewMasterJobPosition(null);
                       setIsMasterPositionModalOpen(true);
                     }}
-                    className="px-3.5 py-1.5 bg-violet-600 hover:bg-violet-700 text-white rounded-lg font-semibold text-xs flex items-center gap-1.5 transition-colors shadow-xs"
+                    className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg font-semibold text-xs flex items-center gap-1.5 transition-colors shadow-xs"
                   >
                     <Edit2 className="w-3.5 h-3.5" />
                     <span>Edit</span>
@@ -4317,13 +5294,13 @@ export const OrganizationManagement: React.FC = () => {
             <form onSubmit={handleSubmitPosition} className="flex flex-col flex-1 overflow-hidden min-h-0">
               <div className="p-4 sm:p-5 space-y-3.5 text-xs overflow-y-auto flex-1">
                 {/* Dropdown Utama: Nama Posisi / Formasi Jabatan dari Master Jabatan */}
-                <div className="space-y-2 p-3.5 bg-violet-50/70 rounded-xl border border-violet-200">
+                <div className="space-y-2 p-3.5 bg-slate-50 rounded-xl border border-slate-300">
                   <div className="flex items-center justify-between">
-                    <label className="font-bold text-violet-950 flex items-center gap-1.5 text-xs">
-                    <Award className="w-4 h-4 text-violet-600" />
+                    <label className="font-bold text-slate-900 flex items-center gap-1.5 text-xs">
+                    <Award className="w-4 h-4 text-slate-700" />
                     <span>Nama Posisi / Formasi Jabatan * (Pilih dari Master Jabatan)</span>
                   </label>
-                  <span className="text-[10px] bg-violet-200 text-violet-900 font-bold px-2 py-0.5 rounded">
+                  <span className="text-[10px] bg-slate-200 text-slate-800 font-bold px-2 py-0.5 rounded">
                     Kamus Resmi
                   </span>
                 </div>
@@ -4340,7 +5317,7 @@ export const OrganizationManagement: React.FC = () => {
                       handleSelectMasterJobForPosition(selected);
                     }
                   }}
-                  className="w-full px-3 py-2 border-2 border-violet-300 rounded-lg bg-white text-xs font-bold text-slate-900 focus:outline-violet-600 shadow-2xs"
+                  className="w-full px-3 py-2 border-2 border-slate-300 rounded-lg bg-white text-xs font-bold text-slate-900 focus:outline-slate-800 shadow-2xs"
                 >
                   <option value="">-- Pilih Judul Jabatan dari Master Jabatan --</option>
                   {entityMasterPositions.map((m) => (
@@ -4351,7 +5328,7 @@ export const OrganizationManagement: React.FC = () => {
                 </select>
 
                 {positionFormData.title ? (
-                  <div className="p-2.5 bg-white rounded-lg border border-violet-200/80 flex items-center justify-between gap-2 text-xs">
+                  <div className="p-2.5 bg-white rounded-lg border border-slate-200 flex items-center justify-between gap-2 text-xs">
                     <div>
                       <span className="font-bold text-slate-900 text-xs">{positionFormData.title}</span>
                       <div className="text-[10px] text-slate-500 mt-0.5">
@@ -4363,7 +5340,7 @@ export const OrganizationManagement: React.FC = () => {
                     </span>
                   </div>
                 ) : (
-                  <p className="text-[10px] text-violet-600">
+                  <p className="text-[10px] text-slate-500">
                     Memilih jabatan dari Master Jabatan akan otomatis menyinkronkan judul formasi, jenjang level tier, divisi, dan deskripsi baku.
                   </p>
                 )}
@@ -4515,29 +5492,19 @@ export const OrganizationManagement: React.FC = () => {
                 </div>
 
                 {!positionFormData.isVacant ? (
-                  <div>
-                    <label className="font-semibold text-slate-700 block mb-1">
-                      Pilih Karyawan Pemegang Jabatan (Definitif) *
-                    </label>
-                    <select
-                      value={positionFormData.currentEmployeeId}
-                      onChange={(e) =>
-                        setPositionFormData({
-                          ...positionFormData,
-                          currentEmployeeId: e.target.value,
-                          isVacant: !e.target.value,
-                        })
-                      }
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white font-medium"
-                    >
-                      <option value="">-- Pilih Karyawan Definitif ({employees.length} Karyawan Terdaftar) --</option>
-                      {employees.map((emp) => (
-                        <option key={emp.id} value={emp.id}>
-                          {emp.fullName} ({emp.nik}) · {emp.department || 'Divisi Umum'} · {emp.position || 'Karyawan'}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  <EmployeeDropdownSelect
+                    value={positionFormData.currentEmployeeId}
+                    onChange={(empId) =>
+                      setPositionFormData({
+                        ...positionFormData,
+                        currentEmployeeId: empId,
+                        isVacant: !empId,
+                      })
+                    }
+                    employees={employees}
+                    label="Pilih Karyawan Pemegang Jabatan (Definitif) *"
+                    allowVacant={false}
+                  />
                 ) : (
                   <div className="p-2.5 bg-rose-50/80 border border-rose-200 rounded-lg text-[11px] text-rose-700 flex items-center gap-2">
                     <span className="w-5 h-5 rounded-full bg-rose-200 text-rose-800 font-bold flex items-center justify-center shrink-0">
@@ -4595,9 +5562,9 @@ export const OrganizationManagement: React.FC = () => {
             onClick={(e) => e.stopPropagation()}
             className="bg-white rounded-2xl max-w-lg w-full border border-slate-200 shadow-2xl overflow-hidden max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] flex flex-col"
           >
-            <div className="p-4 bg-gradient-to-r from-violet-900 via-indigo-900 to-slate-900 text-white flex items-center justify-between shrink-0">
+            <div className="p-4 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 text-white flex items-center justify-between shrink-0 border-b border-slate-800">
               <h3 className="font-bold text-sm flex items-center gap-2">
-                <Award className="w-4 h-4 text-violet-400" />
+                <Award className="w-4 h-4 text-slate-300" />
                 <span>{masterPositionFormData.id ? 'Edit Master Jabatan' : 'Tambah Master Jabatan Baru'}</span>
               </h3>
               <button onClick={() => setIsMasterPositionModalOpen(false)} className="text-slate-400 hover:text-white">
@@ -4615,7 +5582,7 @@ export const OrganizationManagement: React.FC = () => {
                   placeholder="Contoh: Lead DevOps & Cloud Engineer"
                   value={masterPositionFormData.title}
                   onChange={(e) => setMasterPositionFormData({ ...masterPositionFormData, title: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg font-medium text-xs focus:outline-violet-600"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg font-medium text-xs focus:outline-slate-800"
                 />
               </div>
 
@@ -4638,7 +5605,7 @@ export const OrganizationManagement: React.FC = () => {
                         department: deptsInDiv[0]?.name || '',
                       });
                     }}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white text-xs font-medium focus:outline-violet-600"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white text-xs font-medium focus:outline-slate-800"
                   >
                     <option value="">Pilih Divisi...</option>
                     {entityDivisions.map((d) => (
@@ -4653,7 +5620,7 @@ export const OrganizationManagement: React.FC = () => {
                     <select
                       value={masterPositionFormData.department}
                       onChange={(e) => setMasterPositionFormData({ ...masterPositionFormData, department: e.target.value })}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white text-xs font-medium focus:outline-violet-600"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white text-xs font-medium focus:outline-slate-800"
                     >
                       <option value="">Pilih Departemen...</option>
                       {(() => {
@@ -4677,16 +5644,112 @@ export const OrganizationManagement: React.FC = () => {
                 )}
               </div>
 
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">Grade</label>
-                <input
-                  type="text"
-                  placeholder="Contoh: Grade 08, E-3, atau M-2"
-                  value={masterPositionFormData.jobGrade}
-                  onChange={(e) => setMasterPositionFormData({ ...masterPositionFormData, jobGrade: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono text-xs focus:outline-violet-600"
-                />
-              </div>
+              {/* Setting Grade Jabatan (Single Grade vs Broadbanding) */}
+              {jobGradingScheme === 'single' ? (
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="font-semibold text-slate-700 text-xs">Grade Jabatan (Single Grade) *</label>
+                    <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-200">
+                      Skema: Single Grade
+                    </span>
+                  </div>
+                  <select
+                    value={masterPositionFormData.jobGrade}
+                    onChange={(e) => setMasterPositionFormData({ ...masterPositionFormData, jobGrade: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white font-mono text-xs font-semibold focus:outline-slate-800"
+                    required
+                  >
+                    <option value="">Pilih Grade Jabatan...</option>
+                    {gradeSalaryRanges.map((g) => (
+                      <option key={g.id} value={g.gradeCode}>
+                        {g.gradeCode} — {g.gradeName} (Rp {(g.minSalary / 1000000).toFixed(1)}M - {(g.maxSalary / 1000000).toFixed(1)}M)
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    Setiap jabatan terikat pada satu grade peringkat definitif sesuai skema Single Grade yang aktif.
+                  </p>
+                </div>
+              ) : (
+                <div className="p-3.5 bg-amber-50/70 border border-amber-200 rounded-xl space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <label className="font-bold text-amber-900 text-xs flex items-center gap-1.5">
+                      <Scale className="w-4 h-4 text-amber-700" />
+                      <span>Rentang Pita Grade (Broadbanding Range) *</span>
+                    </label>
+                    <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-300">
+                      Skema: Broadbanding
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-amber-800 leading-relaxed">
+                    Sistem Broadbanding mengelompokkan beberapa grade menjadi satu pita lebar. Pilih batas minimum dan maksimum jabatan ini:
+                  </p>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                    <div>
+                      <label className="text-[11px] font-semibold text-slate-700 block mb-1">
+                        Grade Minimum (Batas Bawah) *
+                      </label>
+                      <select
+                        value={masterPositionFormData.minGrade}
+                        onChange={(e) => {
+                          const newMin = e.target.value;
+                          setMasterPositionFormData({
+                            ...masterPositionFormData,
+                            minGrade: newMin,
+                            jobGrade: `${newMin} - ${masterPositionFormData.maxGrade || newMin}`,
+                          });
+                        }}
+                        className="w-full px-3 py-2 border border-amber-300 rounded-lg bg-white font-mono text-xs font-semibold focus:outline-amber-600"
+                        required
+                      >
+                        <option value="">Pilih Grade Min...</option>
+                        {gradeSalaryRanges.map((g) => (
+                          <option key={g.id} value={g.gradeCode}>
+                            {g.gradeCode} — {g.gradeName}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-[11px] font-semibold text-slate-700 block mb-1">
+                        Grade Maksimum (Batas Atas) *
+                      </label>
+                      <select
+                        value={masterPositionFormData.maxGrade}
+                        onChange={(e) => {
+                          const newMax = e.target.value;
+                          setMasterPositionFormData({
+                            ...masterPositionFormData,
+                            maxGrade: newMax,
+                            jobGrade: `${masterPositionFormData.minGrade || newMax} - ${newMax}`,
+                          });
+                        }}
+                        className="w-full px-3 py-2 border border-amber-300 rounded-lg bg-white font-mono text-xs font-semibold focus:outline-amber-600"
+                        required
+                      >
+                        <option value="">Pilih Grade Max...</option>
+                        {gradeSalaryRanges.map((g) => (
+                          <option key={g.id} value={g.gradeCode}>
+                            {g.gradeCode} — {g.gradeName}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Preview Pita Grade */}
+                  <div className="p-2.5 bg-white rounded-lg border border-amber-200/90 flex items-center justify-between text-xs">
+                    <span className="text-slate-600 text-[11px]">Format Pita Broadbanding:</span>
+                    <div className="font-mono font-bold text-amber-900 bg-amber-100/80 px-2.5 py-1 rounded text-xs border border-amber-300 flex items-center gap-2">
+                      <span>{masterPositionFormData.minGrade || 'Grade Min'}</span>
+                      <ArrowRight className="w-3.5 h-3.5 text-amber-700" />
+                      <span>{masterPositionFormData.maxGrade || 'Grade Max'}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div>
                 <label className="font-semibold text-slate-700 block mb-1">Spesifikasi & Kualifikasi Minimum</label>
@@ -4695,7 +5758,7 @@ export const OrganizationManagement: React.FC = () => {
                   placeholder="Kualifikasi pendidikan, sertifikasi keahlian, pengalaman tahunan..."
                   value={masterPositionFormData.requirements}
                   onChange={(e) => setMasterPositionFormData({ ...masterPositionFormData, requirements: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:outline-violet-600 leading-relaxed"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:outline-slate-800 leading-relaxed"
                 />
               </div>
 
@@ -4706,7 +5769,7 @@ export const OrganizationManagement: React.FC = () => {
                   placeholder="Ringkasan tugas utama dan tanggung jawab jabatan..."
                   value={masterPositionFormData.description}
                   onChange={(e) => setMasterPositionFormData({ ...masterPositionFormData, description: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:outline-violet-600 leading-relaxed"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:outline-slate-800 leading-relaxed"
                 />
               </div>
 
@@ -4723,7 +5786,7 @@ export const OrganizationManagement: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 bg-violet-600 hover:bg-violet-500 text-white font-semibold rounded-lg shadow-xs text-xs transition-colors"
+                  className="px-4 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-lg shadow-xs text-xs transition-colors"
                 >
                   {masterPositionFormData.id ? 'Perbarui Master Jabatan' : 'Simpan Master Jabatan'}
                 </button>
@@ -4765,21 +5828,13 @@ export const OrganizationManagement: React.FC = () => {
               </div>
 
               <div>
-                <label className="font-semibold text-slate-700 block mb-1.5">
-                  Pilih Karyawan Aktif Perusahaan *
-                </label>
-                <select
+                <EmployeeDropdownSelect
                   value={selectedAssignEmployeeId}
-                  onChange={(e) => setSelectedAssignEmployeeId(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white text-xs font-medium focus:outline-indigo-600"
-                >
-                  <option value="">-- Kosongkan Kursi (Status Vacant) --</option>
-                  {employees.map((emp) => (
-                    <option key={emp.id} value={emp.id}>
-                      {emp.fullName} ({emp.nik}) - {emp.jobTitle}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(empId) => setSelectedAssignEmployeeId(empId)}
+                  employees={employees}
+                  label="Pilih Karyawan Aktif Perusahaan *"
+                  allowVacant={true}
+                />
                 <p className="text-[10px] text-slate-500 mt-1">
                   Karyawan yang dipilih akan tercatat sebagai pemegang resmi kursi formasi ini di seluruh sistem HRMS.
                 </p>
@@ -4818,450 +5873,1314 @@ export const OrganizationManagement: React.FC = () => {
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="bg-white rounded-2xl max-w-3xl w-full border border-slate-200 shadow-2xl overflow-hidden max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] flex flex-col"
+            className="bg-white rounded-2xl max-w-4xl w-full border border-slate-200 shadow-2xl overflow-hidden h-[88vh] sm:h-[84vh] max-h-[820px] min-h-[580px] flex flex-col animate-in fade-in zoom-in-95"
           >
             {/* Header */}
             <div className="p-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
-              <div className="flex items-center gap-2">
-                <FileCheck2 className="w-5 h-5 text-indigo-400" />
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-indigo-500/20 text-indigo-400 flex items-center justify-center border border-indigo-500/30">
+                  <FileCheck2 className="w-4 h-4" />
+                </div>
                 <div>
-                  <h3 className="font-bold text-sm">Perancang & Pengajuan Restrukturisasi Organisasi</h3>
-                  <span className="text-[11px] text-slate-400">Rancang draft divisi, departemen & posisi sebelum diberlakukan</span>
+                  <h3 className="font-bold text-sm text-white">Perancang & Pengajuan Restrukturisasi Organisasi</h3>
+                  <span className="text-[11px] text-slate-400">Rancang draft divisi, departemen & posisi resmi sebelum diberlakukan</span>
                 </div>
               </div>
-              <button onClick={() => setIsRestructureModalOpen(false)} className="text-slate-400 hover:text-white">
+              <button onClick={() => setIsRestructureModalOpen(false)} className="text-slate-400 hover:text-white p-1 rounded-lg transition-colors">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Sub-tab navigation inside restructure modal */}
-            <div className="bg-slate-100 px-4 pt-2 border-b border-slate-200 flex items-center gap-2 shrink-0 overflow-x-auto">
+            {/* Sub-tab navigation inside restructure modal using sub-menu concept */}
+            <ScrollableTabNav
+              activeKey={draftActiveTab}
+              onSwipeLeft={handleDraftSwipeLeft}
+              onSwipeRight={handleDraftSwipeRight}
+              className="px-4 border-b border-slate-200 bg-slate-50/80 shrink-0"
+            >
+              {/* TAB 1 */}
               <button
                 type="button"
-                onClick={() => setDraftActiveTab('info')}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-t-lg transition-colors border-t border-x shrink-0 ${
-                  draftActiveTab === 'info' ? 'bg-white text-indigo-700 border-slate-200' : 'text-slate-600 border-transparent hover:text-slate-900'
+                onClick={() => handleAttemptDraftTabChange('info')}
+                data-active={draftActiveTab === 'info'}
+                className={`pb-3 pt-2.5 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-1.5 shrink-0 border-b-2 -mb-px ${
+                  draftActiveTab === 'info'
+                    ? 'border-indigo-600 text-indigo-700 font-bold'
+                    : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
                 }`}
               >
-                1. Data SK & Efektif
+                {isDraftStep1Valid ? (
+                  <Check className="w-3.5 h-3.5 text-emerald-600" />
+                ) : (
+                  <FileText className="w-3.5 h-3.5" />
+                )}
+                <span>1. Data SK & Efektif</span>
               </button>
-              <button
-                type="button"
-                onClick={() => setDraftActiveTab('divisions')}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-t-lg transition-colors border-t border-x shrink-0 ${
-                  draftActiveTab === 'divisions' ? 'bg-white text-indigo-700 border-slate-200' : 'text-slate-600 border-transparent hover:text-slate-900'
-                }`}
-              >
-                2. Draf Divisi ({draftDivisions.length})
-              </button>
-              {useDeptLevel && (
-                <button
-                  type="button"
-                  onClick={() => setDraftActiveTab('departments')}
-                  className={`px-3 py-1.5 text-xs font-semibold rounded-t-lg transition-colors border-t border-x shrink-0 ${
-                    draftActiveTab === 'departments' ? 'bg-white text-indigo-700 border-slate-200' : 'text-slate-600 border-transparent hover:text-slate-900'
-                  }`}
-                >
-                  3. Draf Departemen ({draftDepartments.length})
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() => setDraftActiveTab('positions')}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-t-lg transition-colors border-t border-x shrink-0 ${
-                  draftActiveTab === 'positions' ? 'bg-white text-indigo-700 border-slate-200' : 'text-slate-600 border-transparent hover:text-slate-900'
-                }`}
-              >
-                4. Draf Posisi Jabatan ({draftNodes.length})
-              </button>
-            </div>
 
-            {/* Form */}
+              {/* TAB 2: GRADE */}
+              <button
+                type="button"
+                onClick={() => handleAttemptDraftTabChange('grades')}
+                data-active={draftActiveTab === 'grades'}
+                className={`pb-3 pt-2.5 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-1.5 shrink-0 border-b-2 -mb-px ${
+                  !canAccessDraftTab('grades')
+                    ? 'border-transparent text-slate-300 cursor-not-allowed opacity-60'
+                    : draftActiveTab === 'grades'
+                    ? 'border-amber-600 text-amber-800 font-bold'
+                    : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+                }`}
+              >
+                {!canAccessDraftTab('grades') ? (
+                  <Lock className="w-3.5 h-3.5 text-slate-300" />
+                ) : isDraftStep2Valid ? (
+                  <Check className="w-3.5 h-3.5 text-emerald-600" />
+                ) : (
+                  <Sliders className="w-3.5 h-3.5" />
+                )}
+                <span>2. Rancangan Grade</span>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${
+                  draftActiveTab === 'grades' ? 'bg-amber-100 text-amber-800' : 'bg-slate-200 text-slate-600'
+                }`}>
+                  {draftGradeSalaryRanges.length}
+                </span>
+              </button>
+
+              {/* TAB 3: DIVISI */}
+              <button
+                type="button"
+                onClick={() => handleAttemptDraftTabChange('divisions')}
+                data-active={draftActiveTab === 'divisions'}
+                className={`pb-3 pt-2.5 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-1.5 shrink-0 border-b-2 -mb-px ${
+                  !canAccessDraftTab('divisions')
+                    ? 'border-transparent text-slate-300 cursor-not-allowed opacity-60'
+                    : draftActiveTab === 'divisions'
+                    ? 'border-indigo-600 text-indigo-700 font-bold'
+                    : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+                }`}
+              >
+                {!canAccessDraftTab('divisions') ? (
+                  <Lock className="w-3.5 h-3.5 text-slate-300" />
+                ) : isDraftStep3Valid ? (
+                  <Check className="w-3.5 h-3.5 text-emerald-600" />
+                ) : (
+                  <Layers className="w-3.5 h-3.5" />
+                )}
+                <span>3. Rancangan Divisi</span>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${
+                  draftActiveTab === 'divisions' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-200 text-slate-600'
+                }`}>
+                  {draftDivisions.length}
+                </span>
+              </button>
+
+              {/* TAB 4: DEPARTEMEN */}
+              <button
+                type="button"
+                onClick={() => handleAttemptDraftTabChange('departments')}
+                data-active={draftActiveTab === 'departments'}
+                className={`pb-3 pt-2.5 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-1.5 shrink-0 border-b-2 -mb-px ${
+                  !canAccessDraftTab('departments')
+                    ? 'border-transparent text-slate-300 cursor-not-allowed opacity-60'
+                    : draftActiveTab === 'departments'
+                    ? 'border-emerald-600 text-emerald-700 font-bold'
+                    : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+                }`}
+              >
+                {!canAccessDraftTab('departments') ? (
+                  <Lock className="w-3.5 h-3.5 text-slate-300" />
+                ) : isDraftStep4Valid ? (
+                  <Check className="w-3.5 h-3.5 text-emerald-600" />
+                ) : (
+                  <Briefcase className="w-3.5 h-3.5" />
+                )}
+                <span>4. Rancangan Departemen</span>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${
+                  draftActiveTab === 'departments' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'
+                }`}>
+                  {draftUseDeptLevel ? draftDepartments.length : 'Bypass'}
+                </span>
+              </button>
+
+              {/* TAB 5: POSISI JABATAN */}
+              <button
+                type="button"
+                onClick={() => handleAttemptDraftTabChange('positions')}
+                data-active={draftActiveTab === 'positions'}
+                className={`pb-3 pt-2.5 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-1.5 shrink-0 border-b-2 -mb-px ${
+                  !canAccessDraftTab('positions')
+                    ? 'border-transparent text-slate-300 cursor-not-allowed opacity-60'
+                    : draftActiveTab === 'positions'
+                    ? 'border-slate-900 text-slate-900 font-bold'
+                    : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+                }`}
+              >
+                {!canAccessDraftTab('positions') ? (
+                  <Lock className="w-3.5 h-3.5 text-slate-300" />
+                ) : isDraftStep5Valid ? (
+                  <Check className="w-3.5 h-3.5 text-emerald-600" />
+                ) : (
+                  <Award className="w-3.5 h-3.5" />
+                )}
+                <span>5. Rancangan Jabatan & Posisi</span>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${
+                  draftActiveTab === 'positions' ? 'bg-slate-900 text-white' : 'bg-slate-200 text-slate-600'
+                }`}>
+                  {draftNodes.length}
+                </span>
+              </button>
+            </ScrollableTabNav>
+
+            {/* Form with Horizontal Swipe Tab Navigation on Modal Body */}
             <form onSubmit={handleSubmitRestructuring} className="flex flex-col flex-1 overflow-hidden min-h-0">
-              <div className="p-4 sm:p-5 space-y-4 text-xs overflow-y-auto flex-1">
+              <div {...draftSwipe} className="p-4 sm:p-5 space-y-4 text-xs overflow-y-auto flex-1">
                 {/* TAB 1: DATA SK & INFO */}
                 {draftActiveTab === 'info' && (
-                <div className="space-y-3.5">
-                  <div className="p-3 bg-indigo-50/70 rounded-xl border border-indigo-200 text-[11px] text-indigo-950 flex items-start gap-2">
-                    <Sparkles className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
-                    <span>
-                      <b>Fitur Perancang Draft Restrukturisasi:</b> Anda dapat merancang struktur baru di tab Draf Divisi, Draf Dept, dan Draf Posisi. Saat usulan SK disetujui, sistem akan <b>mereplace struktur aktif</b> dan struktur lama otomatis diarsipkan ke <b>Snapshot Histori</b>.
-                    </span>
-                  </div>
+                  <div className="space-y-4">
+                    {/* Saved Draft Alert Banner */}
+                    {hasSavedDraft && (
+                      <div className="p-3.5 bg-amber-50 border border-amber-300 rounded-xl text-amber-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs animate-in fade-in">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-lg bg-amber-200 text-amber-800 flex items-center justify-center shrink-0">
+                            <Clock className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <span className="font-bold text-xs block text-amber-900">Ditemukan Draf Usulan Tersimpan</span>
+                            <span className="text-[11px] text-amber-800">
+                              Draf terakhir disimpan pada <b>{savedDraftTimestamp}</b>. Anda dapat melanjutkan pengisian yang tertunda.
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                          <button
+                            type="button"
+                            onClick={handleLoadSavedDraft}
+                            className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold shadow-xs flex items-center gap-1.5 transition-colors"
+                          >
+                            <Clock className="w-3.5 h-3.5" />
+                            <span>Lanjutkan Draf Ini</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleDiscardSavedDraft}
+                            className="px-2.5 py-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg text-xs font-medium transition-colors"
+                          >
+                            Hapus Draf
+                          </button>
+                        </div>
+                      </div>
+                    )}
 
-                  <div>
-                    <label className="font-semibold text-slate-700 block mb-1">Judul Perubahan Restrukturisasi *</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="Contoh: Restrukturisasi Organisasi Semester I 2026"
-                      value={restructureForm.title}
-                      onChange={(e) => setRestructureForm({ ...restructureForm, title: e.target.value })}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg font-medium"
-                    />
-                  </div>
+                    <div className="p-3 bg-indigo-50/70 rounded-xl border border-indigo-200 text-[11px] text-indigo-950 flex items-start gap-2">
+                      <Sparkles className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+                      <span>
+                        <b>Panduan Step-by-Step Restrukturisasi:</b> Proses pengajuan dilakukan bertahap (1. Data SK &rarr; 2. Grade &rarr; 3. Divisi &rarr; 4. Departemen &rarr; 5. Jabatan). Setiap tahap wajib diselesaikan sebelum dapat melanjutkan ke tahap berikutnya. Anda dapat menyimpan draf kapan saja untuk dilanjutkan nanti.
+                      </span>
+                    </div>
 
-                  <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="font-semibold text-slate-700 block mb-1">Nomor Surat Keputusan (SK) *</label>
+                      <label className="font-semibold text-slate-700 block mb-1">Judul Perubahan Restrukturisasi *</label>
                       <input
                         type="text"
                         required
-                        placeholder="Contoh: SK-DIR/RESTRUCT/2026/045"
-                        value={restructureForm.skDocNumber}
-                        onChange={(e) => setRestructureForm({ ...restructureForm, skDocNumber: e.target.value })}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold text-slate-900"
+                        placeholder="Contoh: Restrukturisasi Organisasi Semester I 2026"
+                        value={restructureForm.title}
+                        onChange={(e) => setRestructureForm({ ...restructureForm, title: e.target.value })}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg font-medium text-xs focus:outline-indigo-600 bg-white"
                       />
                     </div>
 
-                    <ValidatedDateInput
-                      id="restructureEffectiveDate"
-                      label="Tanggal Efektif Berlaku *"
-                      value={restructureForm.effectiveDate}
-                      onChange={(val) => setRestructureForm({ ...restructureForm, effectiveDate: val })}
-                      required
-                      helperText="Format YYYY-MM-DD"
-                    />
-                  </div>
-
-                  {/* Upload Dokumen Bukti Restrukturisasi */}
-                  <div className="p-3 bg-slate-50 border border-slate-300 rounded-xl space-y-2">
-                    <label className="font-semibold text-slate-800 block text-xs flex items-center justify-between">
-                      <span>Upload Dokumen / Surat Bukti Restrukturisasi *</span>
-                      <span className="text-[10px] text-slate-400 font-normal">Format PDF / DOCX / Scan SK</span>
-                    </label>
-                    <div className="flex items-center gap-2">
-                      <div className="flex-1 px-3 py-2 bg-white border border-slate-300 rounded-lg font-mono text-xs text-slate-700 truncate">
-                        {restructureForm.skDocFileName}
-                      </div>
-                      <label className="px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold rounded-lg text-xs cursor-pointer flex items-center gap-1 shrink-0">
-                        <UploadCloud className="w-3.5 h-3.5" />
-                        <span>Upload File</span>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="font-semibold text-slate-700 block mb-1">Nomor Surat Keputusan (SK) *</label>
                         <input
-                          type="file"
-                          className="hidden"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) {
-                              setRestructureForm({
-                                ...restructureForm,
-                                skDocFileName: file.name,
-                                skDocUrl: URL.createObjectURL(file),
-                              });
-                            }
-                          }}
+                          type="text"
+                          required
+                          placeholder="Contoh: SK-DIR/RESTRUCT/2026/045"
+                          value={restructureForm.skDocNumber}
+                          onChange={(e) => setRestructureForm({ ...restructureForm, skDocNumber: e.target.value })}
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold text-slate-900 text-xs focus:outline-indigo-600 bg-white"
                         />
+                      </div>
+
+                      <ValidatedDateInput
+                        id="restructureEffectiveDate"
+                        label="Tanggal Efektif Berlaku *"
+                        value={restructureForm.effectiveDate}
+                        onChange={(val) => setRestructureForm({ ...restructureForm, effectiveDate: val })}
+                        required
+                        helperText="Format YYYY-MM-DD"
+                      />
+                    </div>
+
+                    {/* Upload Dokumen Bukti Restrukturisasi */}
+                    <div className="p-3 bg-slate-50 border border-slate-300 rounded-xl space-y-2">
+                      <label className="font-semibold text-slate-800 block text-xs flex items-center justify-between">
+                        <span>Upload Dokumen / Surat Bukti Restrukturisasi *</span>
+                        <span className="text-[10px] text-slate-400 font-normal">Format PDF / DOCX / Scan SK</span>
                       </label>
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 px-3 py-2 bg-white border border-slate-300 rounded-lg font-mono text-xs text-slate-700 truncate">
+                          {restructureForm.skDocFileName}
+                        </div>
+                        <label className="px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold rounded-lg text-xs cursor-pointer flex items-center gap-1 shrink-0">
+                          <UploadCloud className="w-3.5 h-3.5" />
+                          <span>Upload File</span>
+                          <input
+                            type="file"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                setRestructureForm({
+                                  ...restructureForm,
+                                  skDocFileName: file.name,
+                                  skDocUrl: URL.createObjectURL(file),
+                                });
+                              }
+                            }}
+                          />
+                        </label>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="font-semibold text-slate-700 block mb-1">Kajian Rasionalisasi Bisnis & Dasar Pertimbangan *</label>
+                      <textarea
+                        required
+                        rows={3}
+                        placeholder="Jelaskan dasar pertimbangan restrukturisasi, efisiensi operasional, dan beban kerja..."
+                        value={restructureForm.description}
+                        onChange={(e) => setRestructureForm({ ...restructureForm, description: e.target.value })}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:outline-indigo-600 bg-white"
+                      />
+                    </div>
+
+                    {/* Next step button */}
+                    <div className="pt-3 border-t border-slate-200 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => handleAttemptDraftTabChange('grades')}
+                        className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 shadow-xs transition-colors ${
+                          isDraftStep1Valid
+                            ? 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                            : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                        }`}
+                      >
+                        <span>Lanjut ke Tahap 2: Grade & Remunerasi</span>
+                        <ArrowRight className="w-4 h-4" />
+                      </button>
                     </div>
                   </div>
+                )}
 
-                  <div>
-                    <label className="font-semibold text-slate-700 block mb-1">Kajian Rasionalisasi Bisnis & Dasar Pertimbangan *</label>
-                    <textarea
-                      required
-                      rows={3}
-                      placeholder="Jelaskan dasar pertimbangan restrukturisasi, efisiensi, dan beban kerja..."
-                      value={restructureForm.description}
-                      onChange={(e) => setRestructureForm({ ...restructureForm, description: e.target.value })}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                    />
+                {/* TAB 2: PERANCANGAN GRADE DAN JENIS GRADE */}
+                {draftActiveTab === 'grades' && (
+                  <div className="space-y-4">
+                    {/* Section Header */}
+                    <div className="p-4 bg-gradient-to-r from-slate-900 to-amber-950 text-white rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/30 text-amber-200 border border-amber-400/30">
+                            Tahap 2 dari 5
+                          </span>
+                          <span className="text-xs text-amber-300 font-medium">
+                            Total {draftGradeSalaryRanges.length} Grade Terdaftar
+                          </span>
+                        </div>
+                        <h4 className="font-bold text-sm text-white mt-0.5">Perancangan Grade dan Jenis Grade</h4>
+                        <p className="text-[11px] text-slate-300 leading-relaxed mt-0.5 max-w-xl">
+                          Tentukan jenis skema grade remunerasi serta rentang kompensasi (min/mid/max) yang menjadi acuan standar seluruh posisi jabatan.
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-2 flex-wrap shrink-0">
+                        <button
+                          type="button"
+                          onClick={handleCopyExistingGrades}
+                          className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-amber-200 border border-amber-300/30 rounded-lg font-semibold text-xs flex items-center gap-1.5 transition-colors"
+                          title="Salin master grade dan skema yang saat ini aktif"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" />
+                          <span>Gunakan Data Lama</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newIdx = draftGradeSalaryRanges.length + 1;
+                            setDraftGradeSalaryRanges([
+                              ...draftGradeSalaryRanges,
+                              {
+                                id: `draft-grade-${Date.now()}`,
+                                entityId: currentEntityId,
+                                gradeCode: `GR-${String(newIdx).padStart(2, '0')}`,
+                                gradeName: `Grade Baru ${newIdx}`,
+                                minSalary: 6000000,
+                                midSalary: 9000000,
+                                maxSalary: 12000000,
+                                currency: 'IDR',
+                              },
+                            ]);
+                          }}
+                          className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded-lg font-bold text-xs flex items-center gap-1.5 shadow-xs transition-colors"
+                        >
+                          <Plus className="w-4 h-4" />
+                          <span>Tambah Draft Grade</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Skema Grading Selection */}
+                    <div className="p-3.5 bg-amber-50/70 border border-amber-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div>
+                        <span className="font-bold text-xs text-slate-800 block">Pilihan Jenis Skema Grading Jabatan:</span>
+                        <span className="text-[11px] text-slate-600">
+                          {draftGradingScheme === 'single'
+                            ? 'Single Grade: Setiap posisi merujuk ke satu grade tunggal yang presisi.'
+                            : 'Broadbanding: Posisi merujuk ke pita rentang grade yang fleksibel.'}
+                        </span>
+                      </div>
+                      <div className="flex items-center bg-white border border-amber-300 p-1 rounded-lg text-xs font-semibold shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setDraftGradingScheme('single')}
+                          className={`px-3 py-1 rounded-md transition-colors ${
+                            draftGradingScheme === 'single'
+                              ? 'bg-amber-600 text-white shadow-xs'
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          Single Grade
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDraftGradingScheme('broadbanding')}
+                          className={`px-3 py-1 rounded-md transition-colors ${
+                            draftGradingScheme === 'broadbanding'
+                              ? 'bg-amber-600 text-white shadow-xs'
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          Broadbanding
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* List of Draft Grade Cards */}
+                    <div className="space-y-3">
+                      {draftGradeSalaryRanges.map((grade, idx) => (
+                        <div key={grade.id} className="p-4 bg-white border border-slate-200 rounded-xl shadow-xs space-y-3 hover:border-amber-300 transition-colors">
+                          <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                            <div className="flex items-center gap-2">
+                              <span className="w-5 h-5 rounded-full bg-amber-100 text-amber-800 font-bold text-xs flex items-center justify-center">
+                                {idx + 1}
+                              </span>
+                              <span className="font-bold text-xs text-slate-800">
+                                Draft Grade #{idx + 1}
+                              </span>
+                              <span className="font-mono text-[11px] font-bold px-2 py-0.5 bg-amber-50 text-amber-800 rounded border border-amber-200">
+                                {grade.gradeCode || 'NO-CODE'}
+                              </span>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => setDraftGradeSalaryRanges(draftGradeSalaryRanges.filter((_, i) => i !== idx))}
+                              className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors flex items-center gap-1 text-[11px]"
+                              title="Hapus Grade dari Draf"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              <span>Hapus</span>
+                            </button>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
+                            <div className="sm:col-span-1">
+                              <label className="font-semibold text-slate-700 block mb-1">Kode Grade *</label>
+                              <input
+                                type="text"
+                                required
+                                placeholder="Contoh: GR-08"
+                                value={grade.gradeCode}
+                                onChange={(e) => {
+                                  const next = [...draftGradeSalaryRanges];
+                                  next[idx].gradeCode = e.target.value.toUpperCase();
+                                  setDraftGradeSalaryRanges(next);
+                                }}
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold text-xs focus:outline-amber-600 uppercase bg-white"
+                              />
+                            </div>
+
+                            <div className="sm:col-span-2">
+                              <label className="font-semibold text-slate-700 block mb-1">Nama / Golongan Grade *</label>
+                              <input
+                                type="text"
+                                required
+                                placeholder="Contoh: Manager Senior Specialist"
+                                value={grade.gradeName}
+                                onChange={(e) => {
+                                  const next = [...draftGradeSalaryRanges];
+                                  next[idx].gradeName = e.target.value;
+                                  setDraftGradeSalaryRanges(next);
+                                }}
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-semibold focus:outline-amber-600 bg-white"
+                              />
+                            </div>
+
+                            <div className="sm:col-span-2 grid grid-cols-3 gap-2">
+                              <div>
+                                <label className="font-semibold text-slate-700 block mb-1">Min Gaji</label>
+                                <input
+                                  type="number"
+                                  value={grade.minSalary}
+                                  onChange={(e) => {
+                                    const next = [...draftGradeSalaryRanges];
+                                    next[idx].minSalary = Number(e.target.value);
+                                    setDraftGradeSalaryRanges(next);
+                                  }}
+                                  className="w-full px-2 py-2 border border-slate-300 rounded-lg text-xs font-mono focus:outline-amber-600 bg-white"
+                                />
+                              </div>
+                              <div>
+                                <label className="font-semibold text-slate-700 block mb-1">Mid Gaji</label>
+                                <input
+                                  type="number"
+                                  value={grade.midSalary}
+                                  onChange={(e) => {
+                                    const next = [...draftGradeSalaryRanges];
+                                    next[idx].midSalary = Number(e.target.value);
+                                    setDraftGradeSalaryRanges(next);
+                                  }}
+                                  className="w-full px-2 py-2 border border-slate-300 rounded-lg text-xs font-mono focus:outline-amber-600 bg-white"
+                                />
+                              </div>
+                              <div>
+                                <label className="font-semibold text-slate-700 block mb-1">Max Gaji</label>
+                                <input
+                                  type="number"
+                                  value={grade.maxSalary}
+                                  onChange={(e) => {
+                                    const next = [...draftGradeSalaryRanges];
+                                    next[idx].maxSalary = Number(e.target.value);
+                                    setDraftGradeSalaryRanges(next);
+                                  }}
+                                  className="w-full px-2 py-2 border border-slate-300 rounded-lg text-xs font-mono focus:outline-amber-600 bg-white"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+
+                      {draftGradeSalaryRanges.length === 0 && (
+                        <div className="p-8 text-center bg-slate-50 border border-dashed border-slate-300 rounded-xl text-slate-500">
+                          <Sliders className="w-8 h-8 text-slate-400 mx-auto mb-2" />
+                          <p className="font-semibold text-xs">Belum ada usulan Grade dalam draft.</p>
+                          <p className="text-[11px] text-slate-400 mt-0.5">
+                            Klik "Gunakan Data Lama" untuk menyalin master grade aktif atau klik "+ Tambah Draft Grade".
+                          </p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Step Navigation Buttons */}
+                    <div className="pt-3 border-t border-slate-200 flex items-center justify-between">
+                      <button
+                        type="button"
+                        onClick={() => setDraftActiveTab('info')}
+                        className="px-3.5 py-2 text-slate-600 hover:bg-slate-100 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                      >
+                        <ArrowLeft className="w-4 h-4" />
+                        <span>Kembali ke Tahap 1</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleAttemptDraftTabChange('divisions')}
+                        className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 shadow-xs transition-colors ${
+                          isDraftStep2Valid
+                            ? 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                            : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                        }`}
+                      >
+                        <span>Lanjut ke Tahap 3: Rancangan Divisi</span>
+                        <ArrowRight className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              {/* TAB 2: DRAFT DIVISI */}
-              {draftActiveTab === 'divisions' && (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-slate-700">
-                      Rancangan Divisi Baru ({draftDivisions.length} Divisi):
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const newCode = `DIV-DRAFT-${Date.now().toString().slice(-3)}`;
-                        setDraftDivisions([
-                          ...draftDivisions,
-                          {
-                            id: `draft-div-${Date.now()}`,
-                            entityId: currentEntityId,
-                            name: `Divisi Baru ${draftDivisions.length + 1}`,
-                            code: newCode,
-                            headTitle: 'Head of Division',
-                            description: 'Draft unit kerja baru',
-                          },
-                        ]);
-                      }}
-                      className="px-2.5 py-1 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-md font-semibold text-xs flex items-center gap-1"
-                    >
-                      <Plus className="w-3 h-3" />
-                      <span>Tambah Draf Divisi</span>
-                    </button>
+                {/* TAB 3: RANCANGAN DRAFT DIVISI */}
+                {draftActiveTab === 'divisions' && (
+                  <div className="space-y-4">
+                    {/* Section Header */}
+                    <div className="p-4 bg-gradient-to-r from-slate-900 to-indigo-950 text-white rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-500/30 text-indigo-200 border border-indigo-400/30">
+                            Tahap 3 dari 5
+                          </span>
+                          <span className="text-xs text-indigo-300 font-medium">
+                            Total {draftDivisions.length} Divisi Terdaftar
+                          </span>
+                        </div>
+                        <h4 className="font-bold text-sm text-white mt-0.5">Rancangan Draft Divisi Baru</h4>
+                        <p className="text-[11px] text-slate-300 leading-relaxed mt-0.5 max-w-xl">
+                          Divisi wajib diisi. Daftar divisi ini akan secara otomatis menjadi pilihan dropdown Divisi pada tahap Departemen dan Jabatan.
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-2 flex-wrap shrink-0">
+                        <button
+                          type="button"
+                          onClick={handleCopyExistingDivisions}
+                          className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-indigo-200 border border-indigo-300/30 rounded-lg font-semibold text-xs flex items-center gap-1.5 transition-colors"
+                          title="Salin seluruh divisi yang saat ini aktif"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" />
+                          <span>Gunakan Data Lama</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newCode = `DIV-${String(draftDivisions.length + 1).padStart(2, '0')}`;
+                            setDraftDivisions([
+                              ...draftDivisions,
+                              {
+                                id: `draft-div-${Date.now()}`,
+                                entityId: currentEntityId,
+                                name: `Divisi Baru ${draftDivisions.length + 1}`,
+                                code: newCode,
+                                description: '',
+                              },
+                            ]);
+                          }}
+                          className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-bold text-xs flex items-center gap-1.5 shadow-xs transition-colors shrink-0"
+                        >
+                          <Plus className="w-4 h-4" />
+                          <span>Tambah Draft Divisi</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* List of Draft Divisi Cards - Exactly 3 fields matching Form Master Divisi */}
+                    <div className="space-y-3">
+                      {draftDivisions.map((div, idx) => (
+                        <div key={div.id} className="p-4 bg-white border border-slate-200 rounded-xl shadow-xs space-y-3 hover:border-indigo-300 transition-colors">
+                          <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                            <div className="flex items-center gap-2">
+                              <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 font-bold text-xs flex items-center justify-center">
+                                {idx + 1}
+                              </span>
+                              <span className="font-bold text-xs text-slate-800">
+                                Draft Divisi #{idx + 1}
+                              </span>
+                              <span className="font-mono text-[11px] font-bold px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded border border-indigo-200">
+                                {div.code || 'NO-CODE'}
+                              </span>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => setDraftDivisions(draftDivisions.filter((_, i) => i !== idx))}
+                              className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors flex items-center gap-1 text-[11px]"
+                              title="Hapus Divisi dari Draf"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              <span>Hapus</span>
+                            </button>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div>
+                              <label className="font-semibold text-slate-700 block mb-1">Kode Divisi *</label>
+                              <input
+                                type="text"
+                                required
+                                placeholder="Contoh: DIV-OPS"
+                                value={div.code}
+                                onChange={(e) => {
+                                  const next = [...draftDivisions];
+                                  next[idx].code = e.target.value.toUpperCase();
+                                  setDraftDivisions(next);
+                                }}
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold text-xs focus:outline-indigo-600 uppercase bg-white"
+                              />
+                            </div>
+
+                            <div className="sm:col-span-2">
+                              <label className="font-semibold text-slate-700 block mb-1">Nama Divisi *</label>
+                              <input
+                                type="text"
+                                required
+                                placeholder="Contoh: Operation & Supply Chain"
+                                value={div.name}
+                                onChange={(e) => {
+                                  const next = [...draftDivisions];
+                                  next[idx].name = e.target.value;
+                                  setDraftDivisions(next);
+                                }}
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-semibold focus:outline-indigo-600 bg-white"
+                              />
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="font-semibold text-slate-700 block mb-1">Keterangan / Deskripsi Divisi</label>
+                            <input
+                              type="text"
+                              placeholder="Fokus operasional dan ruang lingkup divisi..."
+                              value={div.description || ''}
+                              onChange={(e) => {
+                                const next = [...draftDivisions];
+                                next[idx].description = e.target.value;
+                                setDraftDivisions(next);
+                              }}
+                              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:outline-indigo-600 bg-white"
+                            />
+                          </div>
+                        </div>
+                      ))}
+
+                      {draftDivisions.length === 0 && (
+                        <div className="p-8 text-center bg-slate-50 border border-dashed border-slate-300 rounded-xl text-slate-500">
+                          <Layers className="w-8 h-8 text-slate-400 mx-auto mb-2" />
+                          <p className="font-semibold text-xs">Belum ada usulan Divisi dalam draft.</p>
+                          <p className="text-[11px] text-slate-400 mt-0.5">
+                            Divisi wajib diisi. Klik "Gunakan Data Lama" atau klik "+ Tambah Draft Divisi".
+                          </p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Step Navigation Buttons */}
+                    <div className="pt-3 border-t border-slate-200 flex items-center justify-between">
+                      <button
+                        type="button"
+                        onClick={() => setDraftActiveTab('grades')}
+                        className="px-3.5 py-2 text-slate-600 hover:bg-slate-100 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                      >
+                        <ArrowLeft className="w-4 h-4" />
+                        <span>Kembali ke Tahap 2</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleAttemptDraftTabChange('departments')}
+                        className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 shadow-xs transition-colors ${
+                          isDraftStep3Valid
+                            ? 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                            : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                        }`}
+                      >
+                        <span>Lanjut ke Tahap 4: Rancangan Departemen</span>
+                        <ArrowRight className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
+                )}
 
-                  <div className="space-y-2 max-h-64 overflow-y-auto">
-                    {draftDivisions.map((div, idx) => (
-                      <div key={div.id} className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between gap-3">
-                        <div className="flex-1 grid grid-cols-3 gap-2">
+                {/* TAB 4: RANCANGAN DRAFT DEPARTEMEN */}
+                {draftActiveTab === 'departments' && (
+                  <div className="space-y-4">
+                    {/* Department Option Selector Card */}
+                    <div className="p-4 bg-emerald-50/80 border border-emerald-300 rounded-xl space-y-2.5 shadow-xs">
+                      <span className="font-bold text-xs text-emerald-950 block">Pilihan Struktur Departemen:</span>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        <label
+                          className={`p-3 rounded-lg border cursor-pointer transition-all flex items-start gap-2.5 ${
+                            draftUseDeptLevel
+                              ? 'bg-white border-emerald-600 shadow-xs ring-1 ring-emerald-600'
+                              : 'bg-white/60 border-emerald-200 hover:bg-white'
+                          }`}
+                        >
                           <input
-                            type="text"
-                            value={div.name}
-                            onChange={(e) => {
-                              const next = [...draftDivisions];
-                              next[idx].name = e.target.value;
-                              setDraftDivisions(next);
-                            }}
-                            className="px-2.5 py-1.5 border border-slate-300 rounded-md bg-white font-semibold"
-                            placeholder="Nama Divisi"
+                            type="radio"
+                            name="draftUseDept"
+                            checked={draftUseDeptLevel}
+                            onChange={() => setDraftUseDeptLevel(true)}
+                            className="mt-0.5 text-emerald-600"
                           />
+                          <div>
+                            <span className="font-bold text-xs text-slate-900 block">Gunakan Opsi Departemen</span>
+                            <span className="text-[11px] text-slate-600">
+                              Organisasi memiliki unit kerja departemen di bawah divisi sebelum hierarki jabatan.
+                            </span>
+                          </div>
+                        </label>
+
+                        <label
+                          className={`p-3 rounded-lg border cursor-pointer transition-all flex items-start gap-2.5 ${
+                            !draftUseDeptLevel
+                              ? 'bg-white border-emerald-600 shadow-xs ring-1 ring-emerald-600'
+                              : 'bg-white/60 border-emerald-200 hover:bg-white'
+                          }`}
+                        >
                           <input
-                            type="text"
-                            value={div.code}
-                            onChange={(e) => {
-                              const next = [...draftDivisions];
-                              next[idx].code = e.target.value.toUpperCase();
-                              setDraftDivisions(next);
-                            }}
-                            className="px-2.5 py-1.5 border border-slate-300 rounded-md bg-white font-mono"
-                            placeholder="Kode Divisi"
+                            type="radio"
+                            name="draftUseDept"
+                            checked={!draftUseDeptLevel}
+                            onChange={() => setDraftUseDeptLevel(false)}
+                            className="mt-0.5 text-emerald-600"
                           />
-                          <input
-                            type="text"
-                            value={div.headTitle}
-                            onChange={(e) => {
-                              const next = [...draftDivisions];
-                              next[idx].headTitle = e.target.value;
-                              setDraftDivisions(next);
-                            }}
-                            className="px-2.5 py-1.5 border border-slate-300 rounded-md bg-white"
-                            placeholder="Head Title"
-                          />
+                          <div>
+                            <span className="font-bold text-xs text-slate-900 block">Langsung ke Jabatan (Bypass Departemen)</span>
+                            <span className="text-[11px] text-slate-600">
+                              Mode struktur ramping. Seluruh posisi jabatan langsung bernaung di bawah divisi.
+                            </span>
+                          </div>
+                        </label>
+                      </div>
+                    </div>
+
+                    {!draftUseDeptLevel ? (
+                      /* Mode Ramping (Disabled / Bypass Notice) */
+                      <div className="p-8 text-center bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+                        <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto">
+                          <Check className="w-6 h-6" />
+                        </div>
+                        <div className="max-w-md mx-auto">
+                          <h4 className="font-bold text-sm text-slate-900">Mode Ramping Aktif (Bypass Departemen)</h4>
+                          <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                            Level departemen dinonaktifkan pada rancangan struktur ini. Seluruh isian departemen diabaikan dan Anda dapat langsung melanjutkan ke tahap 5 perancangan jabatan & posisi.
+                          </p>
                         </div>
                         <button
                           type="button"
-                          onClick={() => setDraftDivisions(draftDivisions.filter((_, i) => i !== idx))}
-                          className="p-1.5 text-slate-400 hover:text-rose-600 rounded"
-                          title="Hapus dari Draf"
+                          onClick={() => setDraftActiveTab('positions')}
+                          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold inline-flex items-center gap-2 shadow-xs transition-colors"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <span>Lanjut ke Tahap 5: Jabatan dan Posisi</span>
+                          <ArrowRight className="w-4 h-4" />
                         </button>
                       </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+                    ) : (
+                      /* Active Department Form - Exactly 4 fields matching Form Master Departemen */
+                      <div className="space-y-4">
+                        {/* Section Header */}
+                        <div className="p-4 bg-gradient-to-r from-slate-900 to-emerald-950 text-white rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/30 text-emerald-200 border border-emerald-400/30">
+                                Tahap 4 dari 5
+                              </span>
+                              <span className="text-xs text-emerald-300 font-medium">
+                                Total {draftDepartments.length} Departemen Terdaftar
+                              </span>
+                            </div>
+                            <h4 className="font-bold text-sm text-white mt-0.5">Rancangan Draft Departemen Baru</h4>
+                            <p className="text-[11px] text-slate-300 leading-relaxed mt-0.5 max-w-xl">
+                              Definisikan departemen di bawah naungan divisi yang telah dibuat pada tahap 3. Pilihan divisi induk diambil langsung dari draf divisi.
+                            </p>
+                          </div>
 
-              {/* TAB 3: DRAFT DEPARTEMEN */}
-              {draftActiveTab === 'departments' && useDeptLevel && (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-slate-700">
-                      Rancangan Departemen Baru ({draftDepartments.length} Dept):
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setDraftDepartments([
-                          ...draftDepartments,
-                          {
-                            id: `draft-dept-${Date.now()}`,
-                            entityId: currentEntityId,
-                            divisionId: draftDivisions[0]?.id || '',
-                            name: `Departemen Baru ${draftDepartments.length + 1}`,
-                            code: `DEPT-${Date.now().toString().slice(-3)}`,
-                            headTitle: 'Department Head',
-                          },
-                        ]);
-                      }}
-                      className="px-2.5 py-1 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-md font-semibold text-xs flex items-center gap-1"
-                    >
-                      <Plus className="w-3 h-3" />
-                      <span>Tambah Draf Dept</span>
-                    </button>
-                  </div>
+                          <div className="flex items-center gap-2 flex-wrap shrink-0">
+                            <button
+                              type="button"
+                              onClick={handleCopyExistingDepartments}
+                              className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-emerald-200 border border-emerald-300/30 rounded-lg font-semibold text-xs flex items-center gap-1.5 transition-colors"
+                              title="Salin departemen aktif yang ada"
+                            >
+                              <RotateCcw className="w-3.5 h-3.5" />
+                              <span>Gunakan Data Lama</span>
+                            </button>
 
-                  <div className="space-y-2 max-h-64 overflow-y-auto">
-                    {draftDepartments.map((dept, idx) => (
-                      <div key={dept.id} className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between gap-3">
-                        <div className="flex-1 grid grid-cols-3 gap-2">
-                          <input
-                            type="text"
-                            value={dept.name}
-                            onChange={(e) => {
-                              const next = [...draftDepartments];
-                              next[idx].name = e.target.value;
-                              setDraftDepartments(next);
-                            }}
-                            className="px-2.5 py-1.5 border border-slate-300 rounded-md bg-white font-semibold"
-                            placeholder="Nama Departemen"
-                          />
-                          <input
-                            type="text"
-                            value={dept.code}
-                            onChange={(e) => {
-                              const next = [...draftDepartments];
-                              next[idx].code = e.target.value.toUpperCase();
-                              setDraftDepartments(next);
-                            }}
-                            className="px-2.5 py-1.5 border border-slate-300 rounded-md bg-white font-mono"
-                            placeholder="Kode Dept"
-                          />
-                          <select
-                            value={dept.divisionId}
-                            onChange={(e) => {
-                              const next = [...draftDepartments];
-                              next[idx].divisionId = e.target.value;
-                              setDraftDepartments(next);
-                            }}
-                            className="px-2.5 py-1.5 border border-slate-300 rounded-md bg-white"
-                          >
-                            {draftDivisions.map((d) => (
-                              <option key={d.id} value={d.id}>{d.name}</option>
-                            ))}
-                          </select>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const newCode = `DEPT-${String(draftDepartments.length + 1).padStart(2, '0')}`;
+                                const parentDivId = draftDivisions[0]?.id || '';
+                                setDraftDepartments([
+                                  ...draftDepartments,
+                                  {
+                                    id: `draft-dept-${Date.now()}`,
+                                    entityId: currentEntityId,
+                                    divisionId: parentDivId,
+                                    name: `Departemen Baru ${draftDepartments.length + 1}`,
+                                    code: newCode,
+                                    description: '',
+                                  },
+                                ]);
+                              }}
+                              className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-bold text-xs flex items-center gap-1.5 shadow-xs transition-colors shrink-0"
+                            >
+                              <Plus className="w-4 h-4" />
+                              <span>Tambah Draft Departemen</span>
+                            </button>
+                          </div>
                         </div>
+
+                        {/* List of Draft Departemen Cards - Exactly 4 fields matching Form Master Departemen */}
+                        <div className="space-y-3">
+                          {draftDepartments.map((dept, idx) => (
+                            <div key={dept.id} className="p-4 bg-white border border-slate-200 rounded-xl shadow-xs space-y-3 hover:border-emerald-300 transition-colors">
+                              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                                <div className="flex items-center gap-2">
+                                  <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 font-bold text-xs flex items-center justify-center">
+                                    {idx + 1}
+                                  </span>
+                                  <span className="font-bold text-xs text-slate-800">
+                                    Draft Departemen #{idx + 1}
+                                  </span>
+                                  <span className="font-mono text-[11px] font-bold px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded border border-emerald-200">
+                                    {dept.code || 'NO-CODE'}
+                                  </span>
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={() => setDraftDepartments(draftDepartments.filter((_, i) => i !== idx))}
+                                  className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors flex items-center gap-1 text-[11px]"
+                                  title="Hapus Departemen dari Draf"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                  <span>Hapus</span>
+                                </button>
+                              </div>
+
+                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                <div>
+                                  <label className="font-semibold text-slate-700 block mb-1">Kode Departemen *</label>
+                                  <input
+                                    type="text"
+                                    required
+                                    placeholder="Contoh: DEPT-LOG"
+                                    value={dept.code}
+                                    onChange={(e) => {
+                                      const next = [...draftDepartments];
+                                      next[idx].code = e.target.value.toUpperCase();
+                                      setDraftDepartments(next);
+                                    }}
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold text-xs focus:outline-emerald-600 uppercase bg-white"
+                                  />
+                                </div>
+
+                                <div>
+                                  <label className="font-semibold text-slate-700 block mb-1">Nama Departemen *</label>
+                                  <input
+                                    type="text"
+                                    required
+                                    placeholder="Contoh: Warehouse & Logistics"
+                                    value={dept.name}
+                                    onChange={(e) => {
+                                      const next = [...draftDepartments];
+                                      next[idx].name = e.target.value;
+                                      setDraftDepartments(next);
+                                    }}
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-semibold focus:outline-emerald-600 bg-white"
+                                  />
+                                </div>
+
+                                <div>
+                                  <label className="font-semibold text-slate-700 block mb-1">Divisi Induk *</label>
+                                  <select
+                                    value={dept.divisionId}
+                                    onChange={(e) => {
+                                      const next = [...draftDepartments];
+                                      next[idx].divisionId = e.target.value;
+                                      setDraftDepartments(next);
+                                    }}
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-semibold focus:outline-emerald-600 bg-white"
+                                  >
+                                    <option value="">Pilih Divisi Induk...</option>
+                                    {draftDivisions.map((d) => (
+                                      <option key={d.id} value={d.id}>{d.name} ({d.code})</option>
+                                    ))}
+                                  </select>
+                                </div>
+                              </div>
+
+                              <div>
+                                <label className="font-semibold text-slate-700 block mb-1">Keterangan / Deskripsi Departemen</label>
+                                <input
+                                  type="text"
+                                  placeholder="Uraian teknis operasional departemen..."
+                                  value={dept.description || ''}
+                                  onChange={(e) => {
+                                    const next = [...draftDepartments];
+                                    next[idx].description = e.target.value;
+                                    setDraftDepartments(next);
+                                  }}
+                                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:outline-emerald-600 bg-white"
+                                />
+                              </div>
+                            </div>
+                          ))}
+
+                          {draftDepartments.length === 0 && (
+                            <div className="p-8 text-center bg-slate-50 border border-dashed border-slate-300 rounded-xl text-slate-500">
+                              <Briefcase className="w-8 h-8 text-slate-400 mx-auto mb-2" />
+                              <p className="font-semibold text-xs">Belum ada usulan Departemen dalam draft.</p>
+                              <p className="text-[11px] text-slate-400 mt-0.5">
+                                Klik "Gunakan Data Lama" atau klik "+ Tambah Draft Departemen Baru".
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Step Navigation Buttons */}
+                    <div className="pt-3 border-t border-slate-200 flex items-center justify-between">
+                      <button
+                        type="button"
+                        onClick={() => setDraftActiveTab('divisions')}
+                        className="px-3.5 py-2 text-slate-600 hover:bg-slate-100 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                      >
+                        <ArrowLeft className="w-4 h-4" />
+                        <span>Kembali ke Tahap 3</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleAttemptDraftTabChange('positions')}
+                        className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 shadow-xs transition-colors ${
+                          isDraftStep4Valid
+                            ? 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                            : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                        }`}
+                      >
+                        <span>Lanjut ke Tahap 5: Jabatan & Posisi</span>
+                        <ArrowRight className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* TAB 5: RANCANGAN DRAFT POSISI JABATAN */}
+                {draftActiveTab === 'positions' && (
+                  <div className="space-y-4">
+                    {/* Section Header */}
+                    <div className="p-4 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 text-white rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs border border-slate-800">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-200 border border-slate-700">
+                            Tahap 5 dari 5 (Final)
+                          </span>
+                          <span className="text-xs text-slate-400 font-medium">
+                            Total {draftNodes.length} Posisi Jabatan Terdaftar
+                          </span>
+                        </div>
+                        <h4 className="font-bold text-sm text-white mt-0.5">Rancangan Draft Posisi Jabatan Baru</h4>
+                        <p className="text-[11px] text-slate-300 leading-relaxed mt-0.5 max-w-xl">
+                          Definisikan posisi struktural lengkap dengan divisi (dari tahap 3), departemen (dari tahap 4), grade remunerasi (dari tahap 2), kualifikasi minimum, dan uraian jabatan.
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-2 flex-wrap shrink-0">
                         <button
                           type="button"
-                          onClick={() => setDraftDepartments(draftDepartments.filter((_, i) => i !== idx))}
-                          className="p-1.5 text-slate-400 hover:text-rose-600 rounded"
-                          title="Hapus dari Draf"
+                          onClick={handleCopyExistingPositions}
+                          className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-slate-200 border border-slate-700 rounded-lg font-semibold text-xs flex items-center gap-1.5 transition-colors"
+                          title="Salin seluruh posisi jabatan aktif yang ada"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <RotateCcw className="w-3.5 h-3.5" />
+                          <span>Gunakan Data Lama</span>
                         </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
 
-              {/* TAB 4: DRAFT POSISI JABATAN */}
-              {draftActiveTab === 'positions' && (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-slate-700">
-                      Rancangan Posisi Jabatan Baru ({draftNodes.length} Posisi):
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setDraftNodes([
-                          ...draftNodes,
-                          {
-                            id: `draft-node-${Date.now()}`,
-                            entityId: currentEntityId,
-                            title: `Posisi Baru ${draftNodes.length + 1}`,
-                            level: 3,
-                            division: draftDivisions[0]?.name || currentEntity.name,
-                            department: useDeptLevel ? (draftDepartments[0]?.name || 'Umum') : 'Direct to Division',
-                            relationType: 'struktural',
-                            isVacant: true,
-                          },
-                        ]);
-                      }}
-                      className="px-2.5 py-1 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-md font-semibold text-xs flex items-center gap-1"
-                    >
-                      <Plus className="w-3 h-3" />
-                      <span>Tambah Draf Posisi</span>
-                    </button>
-                  </div>
-
-                  <div className="space-y-2 max-h-64 overflow-y-auto">
-                    {draftNodes.map((node, idx) => (
-                      <div key={node.id} className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between gap-2.5">
-                        <div className="flex-1 grid grid-cols-1 sm:grid-cols-6 gap-2">
-                          <input
-                            type="text"
-                            value={node.title}
-                            onChange={(e) => {
-                              const next = [...draftNodes];
-                              next[idx].title = e.target.value;
-                              setDraftNodes(next);
-                            }}
-                            className="col-span-1 sm:col-span-2 px-2.5 py-1.5 border border-slate-300 rounded-md bg-white font-semibold text-xs"
-                            placeholder="Nama Jabatan"
-                          />
-                          <select
-                            value={node.level}
-                            onChange={(e) => {
-                              const next = [...draftNodes];
-                              next[idx].level = Number(e.target.value);
-                              setDraftNodes(next);
-                            }}
-                            className="px-2 py-1.5 border border-slate-300 rounded-md bg-white font-mono text-xs"
-                          >
-                            <option value={1}>L1 - Direksi</option>
-                            <option value={2}>L2 - VP / Head</option>
-                            <option value={3}>L3 - Manager</option>
-                            <option value={4}>L4 - Supervisor</option>
-                            <option value={5}>L5 - Staff</option>
-                          </select>
-                          <select
-                            value={node.relationType || 'struktural'}
-                            onChange={(e) => {
-                              const next = [...draftNodes];
-                              next[idx].relationType = e.target.value as 'struktural' | 'administratif';
-                              setDraftNodes(next);
-                            }}
-                            className="px-2 py-1.5 border border-slate-300 rounded-md bg-white font-medium text-[11px]"
-                            title="Tipe Garis Komando"
-                          >
-                            <option value="struktural">Solid: Struktural</option>
-                            <option value="administratif">Dotted: Administratif</option>
-                          </select>
-                          <select
-                            value={node.reportsToId || ''}
-                            onChange={(e) => {
-                              const next = [...draftNodes];
-                              next[idx].reportsToId = e.target.value || undefined;
-                              setDraftNodes(next);
-                            }}
-                            className="px-2 py-1.5 border border-slate-300 rounded-md bg-white text-[11px]"
-                            title="Lapor Ke"
-                          >
-                            <option value="">Atasan: Puncak</option>
-                            {draftNodes.filter((_, i) => i !== idx).map((n) => (
-                              <option key={n.id} value={n.id}>{n.title}</option>
-                            ))}
-                          </select>
-                          <select
-                            value={node.isVacant ? 'vacant' : 'filled'}
-                            onChange={(e) => {
-                              const next = [...draftNodes];
-                              next[idx].isVacant = e.target.value === 'vacant';
-                              setDraftNodes(next);
-                            }}
-                            className={`px-2 py-1.5 border rounded-md font-semibold text-[11px] ${
-                              node.isVacant ? 'bg-rose-50 text-rose-700 border-rose-300' : 'bg-emerald-50 text-emerald-800 border-emerald-300'
-                            }`}
-                            title="Status Formasi"
-                          >
-                            <option value="vacant">Posisi Kosong</option>
-                            <option value="filled">Terisi</option>
-                          </select>
-                        </div>
                         <button
                           type="button"
-                          onClick={() => setDraftNodes(draftNodes.filter((_, i) => i !== idx))}
-                          className="p-1.5 text-slate-400 hover:text-rose-600 rounded"
-                          title="Hapus dari Draf"
+                          onClick={() => {
+                            const defaultDiv = draftDivisions[0]?.name || currentEntity.name;
+                            const matchingDivObj = draftDivisions.find(d => d.name === defaultDiv);
+                            const availableDepts = matchingDivObj
+                              ? draftDepartments.filter(dept => dept.divisionId === matchingDivObj.id)
+                              : draftDepartments;
+                            setDraftNodes([
+                              ...draftNodes,
+                              {
+                                id: `draft-node-${Date.now()}`,
+                                entityId: currentEntityId,
+                                title: `Posisi Baru ${draftNodes.length + 1}`,
+                                level: 3,
+                                division: defaultDiv,
+                                department: draftUseDeptLevel ? (availableDepts[0]?.name || 'Umum') : 'Direct to Division',
+                                relationType: 'struktural',
+                                jobGrade: draftGradeSalaryRanges[0]?.gradeCode || 'Grade 08',
+                                isVacant: true,
+                                requirements: '',
+                                description: '',
+                              },
+                            ]);
+                          }}
+                          className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg font-bold text-xs flex items-center gap-1.5 shadow-xs border border-slate-600 transition-colors shrink-0"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <Plus className="w-4 h-4" />
+                          <span>Tambah Draft Posisi</span>
                         </button>
                       </div>
-                    ))}
+                    </div>
+
+                    {/* List of Draft Posisi Cards - Matching Master Jabatan + Hierarchy & Seat Formation */}
+                    <div className="space-y-3">
+                      {draftNodes.map((node, idx) => (
+                        <div key={node.id} className="p-4 bg-white border border-slate-200 rounded-xl shadow-xs space-y-3 hover:border-slate-400 transition-colors">
+                          <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="w-5 h-5 rounded-full bg-slate-100 text-slate-800 font-bold text-xs flex items-center justify-center">
+                                {idx + 1}
+                              </span>
+                              <span className="font-bold text-xs text-slate-800">
+                                Draft Posisi Jabatan #{idx + 1}
+                              </span>
+                              <span className="font-mono text-[10px] font-bold px-2 py-0.5 bg-slate-100 text-slate-800 rounded border border-slate-200">
+                                Tier L{node.level}
+                              </span>
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                node.isVacant ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              }`}>
+                                {node.isVacant ? 'Vacant (Formasi Kosong)' : 'Terisi'}
+                              </span>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => setDraftNodes(draftNodes.filter((_, i) => i !== idx))}
+                              className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors flex items-center gap-1 text-[11px]"
+                              title="Hapus Posisi dari Draf"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              <span>Hapus</span>
+                            </button>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div className="sm:col-span-2">
+                              <label className="font-semibold text-slate-700 block mb-1">Nama Jabatan *</label>
+                              <input
+                                type="text"
+                                required
+                                placeholder="Contoh: Lead DevOps & Cloud Engineer"
+                                value={node.title}
+                                onChange={(e) => {
+                                  const next = [...draftNodes];
+                                  next[idx].title = e.target.value;
+                                  setDraftNodes(next);
+                                }}
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-semibold focus:outline-violet-600 bg-white"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="font-semibold text-slate-700 block mb-1">Tier Level Hierarki *</label>
+                              <select
+                                value={node.level}
+                                onChange={(e) => {
+                                  const next = [...draftNodes];
+                                  next[idx].level = Number(e.target.value);
+                                  setDraftNodes(next);
+                                }}
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-semibold focus:outline-violet-600 bg-white"
+                              >
+                                <option value={1}>L1 - Direksi</option>
+                                <option value={2}>L2 - VP / Head of Division</option>
+                                <option value={3}>L3 - Manager / Department Head</option>
+                                <option value={4}>L4 - Supervisor / Lead</option>
+                                <option value={5}>L5 - Officer / Staff</option>
+                              </select>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                              <label className="font-semibold text-slate-700 block mb-1">Divisi (Sesuai Tahap 3) *</label>
+                              <select
+                                value={node.division || ''}
+                                onChange={(e) => {
+                                  const next = [...draftNodes];
+                                  const selDivName = e.target.value;
+                                  next[idx].division = selDivName;
+                                  const matchingDiv = draftDivisions.find(d => d.name === selDivName);
+                                  const depts = matchingDiv
+                                    ? draftDepartments.filter(d => d.divisionId === matchingDiv.id)
+                                    : [];
+                                  next[idx].department = draftUseDeptLevel ? (depts[0]?.name || 'Umum') : 'Direct to Division';
+                                  setDraftNodes(next);
+                                }}
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-medium focus:outline-violet-600 bg-white"
+                              >
+                                <option value="">Pilih Divisi...</option>
+                                {draftDivisions.map((d) => (
+                                  <option key={d.id} value={d.name}>{d.name} ({d.code})</option>
+                                ))}
+                              </select>
+                            </div>
+
+                            {draftUseDeptLevel ? (
+                              <div>
+                                <label className="font-semibold text-slate-700 block mb-1">Departemen (Sesuai Tahap 4) *</label>
+                                <select
+                                  value={node.department || ''}
+                                  onChange={(e) => {
+                                    const next = [...draftNodes];
+                                    next[idx].department = e.target.value;
+                                    setDraftNodes(next);
+                                  }}
+                                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-medium focus:outline-violet-600 bg-white"
+                                >
+                                  <option value="">Pilih Departemen...</option>
+                                  {(() => {
+                                    const activeDivObj = draftDivisions.find(d => d.name === node.division);
+                                    const availableDepts = activeDivObj
+                                      ? draftDepartments.filter(dept => dept.divisionId === activeDivObj.id)
+                                      : draftDepartments;
+                                    return (availableDepts.length > 0 ? availableDepts : draftDepartments).map(dept => (
+                                      <option key={dept.id} value={dept.name}>{dept.name} ({dept.code})</option>
+                                    ));
+                                  })()}
+                                </select>
+                              </div>
+                            ) : (
+                              <div>
+                                <label className="font-semibold text-slate-700 block mb-1">Struktur Departemen</label>
+                                <div className="px-3 py-2 bg-slate-100 border border-slate-200 rounded-lg text-slate-500 text-[11px] font-medium">
+                                  Mode Ramping (Direct to Division)
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div>
+                              <label className="font-semibold text-slate-700 block mb-1">
+                                Grade Jabatan (Sesuai Tahap 2) *
+                              </label>
+                              <select
+                                value={node.jobGrade || ''}
+                                onChange={(e) => {
+                                  const next = [...draftNodes];
+                                  next[idx].jobGrade = e.target.value;
+                                  setDraftNodes(next);
+                                }}
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-mono font-semibold focus:outline-violet-600 bg-white"
+                              >
+                                <option value="">Pilih Grade...</option>
+                                {draftGradeSalaryRanges.map((g) => (
+                                  <option key={g.id} value={g.gradeCode}>{g.gradeCode} — {g.gradeName}</option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="font-semibold text-slate-700 block mb-1">Garis Komando *</label>
+                              <select
+                                value={node.relationType || 'struktural'}
+                                onChange={(e) => {
+                                  const next = [...draftNodes];
+                                  next[idx].relationType = e.target.value as 'struktural' | 'administratif';
+                                  setDraftNodes(next);
+                                }}
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-semibold focus:outline-violet-600 bg-white"
+                              >
+                                <option value="struktural">Solid: Garis Komando Struktural</option>
+                                <option value="administratif">Dotted: Garis Koordinasi Administratif</option>
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="font-semibold text-slate-700 block mb-1">Lapor Ke (Atasan Langsung)</label>
+                              <select
+                                value={node.reportsToId || ''}
+                                onChange={(e) => {
+                                  const next = [...draftNodes];
+                                  next[idx].reportsToId = e.target.value || undefined;
+                                  setDraftNodes(next);
+                                }}
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:outline-violet-600 bg-white"
+                              >
+                                <option value="">Puncak Struktur (Tanpa Atasan)</option>
+                                {draftNodes.filter((_, i) => i !== idx).map((n) => (
+                                  <option key={n.id} value={n.id}>{n.title} (L{n.level})</option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                              <label className="font-semibold text-slate-700 block mb-1">Spesifikasi & Kualifikasi Minimum</label>
+                              <textarea
+                                rows={2}
+                                placeholder="Pendidikan minimal, pengalaman kerja, sertifikasi wajib..."
+                                value={node.requirements || ''}
+                                onChange={(e) => {
+                                  const next = [...draftNodes];
+                                  next[idx].requirements = e.target.value;
+                                  setDraftNodes(next);
+                                }}
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:outline-violet-600 bg-white"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="font-semibold text-slate-700 block mb-1">Uraian / Deskripsi Jabatan Ringkas</label>
+                              <textarea
+                                rows={2}
+                                placeholder="Fokus tanggung jawab jabatan dan KPI utama..."
+                                value={node.description || ''}
+                                onChange={(e) => {
+                                  const next = [...draftNodes];
+                                  next[idx].description = e.target.value;
+                                  setDraftNodes(next);
+                                }}
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:outline-violet-600 bg-white"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+
+                      {draftNodes.length === 0 && (
+                        <div className="p-8 text-center bg-slate-50 border border-dashed border-slate-300 rounded-xl text-slate-500">
+                          <Award className="w-8 h-8 text-slate-400 mx-auto mb-2" />
+                          <p className="font-semibold text-xs">Belum ada usulan Posisi Jabatan dalam draft.</p>
+                          <p className="text-[11px] text-slate-400 mt-0.5">
+                            Klik "Gunakan Data Lama" atau klik "+ Tambah Draft Posisi Baru".
+                          </p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Step Navigation Buttons */}
+                    <div className="pt-3 border-t border-slate-200 flex items-center justify-between">
+                      <button
+                        type="button"
+                        onClick={() => setDraftActiveTab('departments')}
+                        className="px-3.5 py-2 text-slate-600 hover:bg-slate-100 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                      >
+                        <ArrowLeft className="w-4 h-4" />
+                        <span>Kembali ke Tahap 4</span>
+                      </button>
+
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] text-slate-400 hidden sm:inline">
+                          Langkah terakhir: periksa kelengkapan dan ajukan SK
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
               </div>
 
               {/* Pinned Bottom Summary & Actions */}
               <div className="p-3 sm:p-4 bg-slate-50 border-t border-slate-200 shrink-0 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="text-xs text-slate-600">
-                  Total Draf: <b>{draftDivisions.length}</b> Divisi • <b>{draftDepartments.length}</b> Dept • <b>{draftNodes.length}</b> Posisi
+                  Total Draf: <b>{draftGradeSalaryRanges.length}</b> Grade • <b>{draftDivisions.length}</b> Divisi • <b>{draftUseDeptLevel ? draftDepartments.length : 'Bypass'}</b> Dept • <b>{draftNodes.length}</b> Posisi
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={handleSaveRestructureDraft}
+                    className="px-3.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 font-semibold rounded-lg text-xs flex items-center gap-1.5 shadow-2xs transition-colors"
+                    title="Simpan draf sekarang dan lanjutkan pengisian nanti"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    <span>Simpan Draf (Lanjutkan Nanti)</span>
+                  </button>
+
                   <button
                     type="button"
                     onClick={() => setIsRestructureModalOpen(false)}
@@ -5269,9 +7188,15 @@ export const OrganizationManagement: React.FC = () => {
                   >
                     Batal
                   </button>
+
                   <button
                     type="submit"
-                    className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-lg shadow-xs flex items-center gap-1.5 text-xs transition-colors"
+                    disabled={!isDraftStep5Valid}
+                    className={`px-4 py-1.5 font-semibold rounded-lg shadow-xs flex items-center gap-1.5 text-xs transition-colors ${
+                      isDraftStep5Valid
+                        ? 'bg-indigo-600 hover:bg-indigo-500 text-white cursor-pointer'
+                        : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                    }`}
                   >
                     <FileCheck2 className="w-3.5 h-3.5" />
                     <span>Kirim Pengajuan (Ber-SK)</span>
@@ -5350,6 +7275,337 @@ export const OrganizationManagement: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* ======================================================== */}
+      {/* MODAL: TAMBAH / EDIT MASTER GRADE                        */}
+      {/* ======================================================== */}
+      {isGradeModalOpen && (
+        <div
+          onClick={() => setIsGradeModalOpen(false)}
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-2xl max-w-lg w-full border border-slate-200 shadow-2xl overflow-hidden max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] flex flex-col"
+          >
+            <div className="p-4 bg-gradient-to-r from-amber-900 via-slate-900 to-amber-950 text-white flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-300 flex items-center justify-center font-bold text-xs border border-amber-400/30">
+                  <Scale className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm text-white">
+                    {gradeFormData.id ? 'Edit Master Grade' : 'Tambah Master Grade Baru'}
+                  </h3>
+                  <span className="text-[11px] text-amber-200/80">Kamus Level Peringkat & Bracket Remunerasi</span>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsGradeModalOpen(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmitGrade} className="flex flex-col flex-1 overflow-hidden min-h-0">
+              <div className="p-5 space-y-4 text-xs overflow-y-auto flex-1">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="font-semibold text-slate-700 block mb-1">Kode Grade *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Contoh: Grade 08, L3, M1"
+                      value={gradeFormData.gradeCode}
+                      onChange={(e) => setGradeFormData({ ...gradeFormData, gradeCode: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold text-xs focus:outline-amber-600 uppercase"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-semibold text-slate-700 block mb-1">SK Efektif Mulai</label>
+                    <input
+                      type="date"
+                      value={gradeFormData.effectiveDate}
+                      onChange={(e) => setGradeFormData({ ...gradeFormData, effectiveDate: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:outline-amber-600 font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Nama Level / Posisi Acuan *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Contoh: Senior Specialist / Expert Officer"
+                    value={gradeFormData.gradeName}
+                    onChange={(e) => setGradeFormData({ ...gradeFormData, gradeName: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-semibold focus:outline-amber-600"
+                  />
+                </div>
+
+                {/* Gaji Acuan Bracket */}
+                <div className="p-3.5 bg-amber-50/60 rounded-xl border border-amber-200 space-y-3">
+                  <div className="font-bold text-amber-950 text-xs flex items-center gap-1.5">
+                    <Scale className="w-3.5 h-3.5 text-amber-700" />
+                    <span>Rentang Bracket Remunerasi Acuan (Rupiah)</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    <div>
+                      <label className="text-[11px] font-semibold text-slate-700 block mb-1">Minimum (Rp) *</label>
+                      <input
+                        type="number"
+                        required
+                        min={0}
+                        step={500000}
+                        value={gradeFormData.minSalary}
+                        onChange={(e) => {
+                          const min = Number(e.target.value);
+                          const max = Number(gradeFormData.maxSalary) || min;
+                          setGradeFormData({
+                            ...gradeFormData,
+                            minSalary: min,
+                            midSalary: Math.round((min + max) / 2),
+                          });
+                        }}
+                        className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg font-mono text-xs focus:outline-amber-600"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[11px] font-semibold text-slate-700 block mb-1">Midpoint (Rp)</label>
+                      <input
+                        type="number"
+                        min={0}
+                        step={500000}
+                        value={gradeFormData.midSalary}
+                        onChange={(e) => setGradeFormData({ ...gradeFormData, midSalary: Number(e.target.value) })}
+                        className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg font-mono text-xs focus:outline-amber-600"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[11px] font-semibold text-slate-700 block mb-1">Maksimum (Rp) *</label>
+                      <input
+                        type="number"
+                        required
+                        min={0}
+                        step={500000}
+                        value={gradeFormData.maxSalary}
+                        onChange={(e) => {
+                          const max = Number(e.target.value);
+                          const min = Number(gradeFormData.minSalary) || 0;
+                          setGradeFormData({
+                            ...gradeFormData,
+                            maxSalary: max,
+                            midSalary: Math.round((min + max) / 2),
+                          });
+                        }}
+                        className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg font-mono text-xs focus:outline-amber-600"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="text-[11px] text-amber-900 bg-white/80 p-2 rounded-lg border border-amber-200/80 flex items-center justify-between">
+                    <span>Rentang Acuan Terbentuk:</span>
+                    <span className="font-mono font-bold text-amber-950">
+                      Rp {Number(gradeFormData.minSalary).toLocaleString('id-ID')} — Rp {Number(gradeFormData.maxSalary).toLocaleString('id-ID')}
+                    </span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Catatan Kualifikasi & Uraian Jenjang</label>
+                  <textarea
+                    rows={2}
+                    placeholder="Contoh: Kualifikasi pengalaman 3-5 tahun, sertifikasi kompetensi madya..."
+                    value={gradeFormData.notes}
+                    onChange={(e) => setGradeFormData({ ...gradeFormData, notes: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:outline-amber-600 leading-relaxed"
+                  />
+                </div>
+              </div>
+
+              {/* Pinned Bottom Footer Actions */}
+              <div className="p-3 sm:p-4 bg-slate-50 border-t border-slate-200 shrink-0 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsGradeModalOpen(false)}
+                  className="px-3.5 py-1.5 text-slate-600 hover:bg-slate-100 rounded-lg font-medium text-xs transition-colors"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-1.5 bg-amber-600 hover:bg-amber-500 text-white font-semibold rounded-lg shadow-xs text-xs transition-colors flex items-center gap-1.5"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  <span>{gradeFormData.id ? 'Simpan Perubahan Grade' : 'Simpan Grade Baru'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* MODAL: PREVIEW DETAIL MASTER GRADE                       */}
+      {/* ======================================================== */}
+      {previewGrade && (
+        <div
+          onClick={() => setPreviewGrade(null)}
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-2xl max-w-lg w-full border border-slate-200 shadow-2xl overflow-hidden max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] flex flex-col"
+          >
+            {/* Header */}
+            <div className="p-4 bg-gradient-to-r from-amber-950 via-slate-900 to-amber-900 text-white flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-300 flex items-center justify-center font-mono font-bold text-sm border border-amber-400/40">
+                  {previewGrade.gradeCode}
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm text-white">Detail Master Grade</h3>
+                  <span className="text-[11px] text-amber-200/80 font-mono">Kode: {previewGrade.gradeCode}</span>
+                </div>
+              </div>
+              <button
+                onClick={() => setPreviewGrade(null)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-5 space-y-4 text-xs overflow-y-auto flex-1">
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="px-2.5 py-0.5 rounded font-mono text-xs font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                    {previewGrade.gradeCode}
+                  </span>
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+                    SK Efektif: {previewGrade.effectiveDate}
+                  </span>
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    Spread Remunerasi: +{Math.round(((previewGrade.maxSalary - previewGrade.minSalary) / (previewGrade.minSalary || 1)) * 100)}%
+                  </span>
+                </div>
+                <h4 className="text-base font-bold text-slate-900 mt-2">{previewGrade.gradeName}</h4>
+                {previewGrade.notes && (
+                  <p className="text-slate-600 mt-1 leading-relaxed text-xs">
+                    {previewGrade.notes}
+                  </p>
+                )}
+              </div>
+
+              {/* Bracket Cards */}
+              <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                <span className="text-[11px] font-bold text-slate-700 block">Rentang Remunerasi Baku:</span>
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className="p-2 bg-white rounded-lg border border-slate-200">
+                    <span className="text-[10px] text-slate-400 block">Minimum</span>
+                    <span className="font-mono font-bold text-slate-900 text-xs">
+                      Rp {(previewGrade.minSalary / 1000000).toFixed(1)} Juta
+                    </span>
+                  </div>
+                  <div className="p-2 bg-white rounded-lg border border-amber-200 bg-amber-50/30">
+                    <span className="text-[10px] text-amber-700 block font-semibold">Midpoint</span>
+                    <span className="font-mono font-bold text-amber-900 text-xs">
+                      Rp {(previewGrade.midSalary / 1000000).toFixed(1)} Juta
+                    </span>
+                  </div>
+                  <div className="p-2 bg-white rounded-lg border border-slate-200">
+                    <span className="text-[10px] text-slate-400 block">Maksimum</span>
+                    <span className="font-mono font-bold text-slate-900 text-xs">
+                      Rp {(previewGrade.maxSalary / 1000000).toFixed(1)} Juta
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Master Jabatan yang Terdaftar Menggunakan Grade ini */}
+              <div className="space-y-2">
+                {(() => {
+                  const matchingJobs = entityMasterPositions.filter((pos) => {
+                    if (!pos.jobGrade) return false;
+                    return pos.jobGrade === previewGrade.gradeCode || pos.jobGrade.includes(previewGrade.gradeCode);
+                  });
+
+                  return (
+                    <>
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-bold text-slate-800">
+                          Master Jabatan Terdaftar ({matchingJobs.length})
+                        </span>
+                        <span className="text-[11px] text-slate-500">
+                          {jobGradingScheme === 'broadbanding' ? 'Termasuk Dalam Pita Band' : 'Grade Definitif'}
+                        </span>
+                      </div>
+
+                      {matchingJobs.length > 0 ? (
+                        <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                          {matchingJobs.map((j) => (
+                            <div key={j.id} className="p-2 bg-slate-50 border border-slate-200 rounded-lg flex items-center justify-between text-xs">
+                              <div>
+                                <div className="font-semibold text-slate-900">{j.title}</div>
+                                <div className="text-[10px] text-slate-500 font-mono">{j.code} · {j.division || 'Umum'}</div>
+                              </div>
+                              <span className="font-mono text-[10px] font-bold px-2 py-0.5 bg-amber-100 text-amber-800 rounded border border-amber-300">
+                                {j.jobGrade}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="p-3 text-center text-slate-400 bg-slate-50 border border-slate-200 rounded-lg text-xs">
+                          Belum ada Master Jabatan yang menggunakan grade ini.
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
+              </div>
+            </div>
+
+            {/* Pinned Bottom Footer Actions */}
+            <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-2 shrink-0">
+              {!currentEntityLocked && (
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteGrade(previewGrade)}
+                    className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg font-semibold text-xs flex items-center gap-1.5 transition-colors"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Hapus</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleOpenEditGrade(previewGrade)}
+                    className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-semibold text-xs flex items-center gap-1.5 transition-colors shadow-xs"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" />
+                    <span>Edit Grade</span>
+                  </button>
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setPreviewGrade(null)}
+                className="px-4 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg font-semibold text-xs ml-auto transition-colors"
+              >
+                Tutup
+              </button>
+            </div>
           </div>
         </div>
       )}
