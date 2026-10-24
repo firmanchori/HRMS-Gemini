@@ -440,23 +440,55 @@ export interface ComplianceRecord {
 }
 
 // 1. Permintaan Karyawan Baru (FPTK / Job Requisition)
+export type FptkPositionReason =
+  | 'Posisi Baru (New Position)'
+  | 'Penggantian Karyawan Resign'
+  | 'Penggantian Mutasi / Dipindahkan'
+  | 'Penggantian Promosi Jabatan'
+  | 'Kebutuhan Proyek Khusus'
+  | 'Penambahan Headcount'
+  | 'Ekspansi Bisnis'
+  | 'Lainnya';
+
 export interface JobRequisition {
   id: string;
   tenantId: string;
   reqNumber: string;
-  position: string;
-  grade: string; // e.g. 'Grade 1 - Staff' | 'Grade 2 - Officer/Senior' | 'Grade 3 - Lead/Supervisor' | 'Grade 4 - Manager' | 'Grade 5 - Head/VP'
+  position: string; // Nama Posisi / Jabatan
   department: string;
-  headcount: number;
-  reason: 'Penambahan Headcount' | 'Penggantian Karyawan Resign' | 'Proyek Baru' | 'Ekspansi Bisnis';
-  requirements: string;
-  targetJoinDate: string;
+  grade: string; // Tampilan Grade (e.g. 'Grade 2 s/d Grade 3')
+  gradeMin?: string; // Grade Opsi Dari (e.g. 'Grade 1 - Staff')
+  gradeMax?: string; // Grade Opsi Sampai (e.g. 'Grade 3 - Lead / Supervisor')
+  headcount: number; // Jumlah yang dibutuhkan
+  reason: FptkPositionReason | string; // Alasan: Posisi baru / Resign / Dipindah / Promosi
+  replacementFor?: string; // Nama karyawan sebelumnya jika penggantian
+  isBudgeted?: boolean; // Dianggarkan atau tidak (Budgeted vs Unbudgeted)
+  justification?: string; // Penjelasan kebutuhan deskriptif (justifikasi)
+  targetJoinDate: string; // Tanggal dibutuhkan (Target Masuk)
+  
+  // Struktur Organisasi & Supervisi
+  reportingToDepartment?: string; // Bertanggung jawab ke divisi / departemen apa
+  reportingToTitle?: string; // Bertanggung jawab ke jabatan/posisi apa
+  supervisedStaffCount?: number; // Jumlah staff yang disupervisi (0 jika IC)
+  mainResponsibilities?: string; // Tugas utama / deskripsi tanggung jawab
+
+  // Kualifikasi
+  educationMin?: string; // Pendidikan (D3, S1, S2, dsb.)
+  minExperience?: string; // Lama pengalaman kerja
+  skills?: string; // Keterampilan / Keahlian teknis & soft skills
+  otherRequirements?: string; // Kualifikasi lainnya / sertifikasi
+  requirements: string; // Ringkasan requirement lengkap
+
+  // Pengajuan & Persetujuan
+  requesterName: string; // Yang mengajukan siapa (Nama & Jabatan)
+  requesterTitle?: string;
+  approvedBy?: string; // Yang menyetujui atas pengajuan siapa
+  approverTitle?: string;
+  approvalDate?: string;
+  approvalNotes?: string;
+
   status: 'Disetujui' | 'Menunggu Approval' | 'Draft' | 'Ditolak';
-  requesterName: string;
-  approvedBy?: string;
   createdAt: string;
-  minExperience?: string;
-  educationMin?: string;
 }
 
 // 2. Sourcing & Multi-Channel Job Posting
