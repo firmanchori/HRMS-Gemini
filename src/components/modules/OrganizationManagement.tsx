@@ -2812,11 +2812,11 @@ export const OrganizationManagement: React.FC = () => {
       {previewPosition && (
         <div
           onClick={() => setPreviewPosition(null)}
-          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in"
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="bg-white rounded-2xl max-w-xl w-full border border-slate-200 shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
+            className="bg-white rounded-2xl max-w-xl w-full border border-slate-200 shadow-2xl overflow-hidden max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] flex flex-col"
           >
             {/* Modal Header */}
             <div className="p-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
@@ -3001,100 +3001,109 @@ export const OrganizationManagement: React.FC = () => {
                 </p>
               </div>
 
-              {/* Governance Notice & Action Buttons */}
-              <div className="pt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100">
-                {!currentEntityLocked ? (
-                  <>
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[10px] text-amber-700 font-semibold bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
-                        Mode Setup / Belum Dikunci
-                      </span>
-                    </div>
+            </div>
 
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (confirm(`Hapus posisi jabatan "${previewPosition.title}"?`)) {
-                            deleteOrgNode(previewPosition.id);
-                            setPreviewPosition(null);
-                            showToast(`Posisi "${previewPosition.title}" telah dihapus.`);
-                          }
-                        }}
-                        className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                        <span>Hapus</span>
-                      </button>
+            {/* Pinned Bottom Footer Actions */}
+            <div className="p-3 sm:p-4 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-2 shrink-0">
+              {!currentEntityLocked ? (
+                <>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] text-amber-700 font-semibold bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                      Mode Setup
+                    </span>
+                  </div>
 
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setPositionFormData({
-                            id: previewPosition.id,
-                            title: previewPosition.title,
-                            level: previewPosition.level,
-                            division: previewPosition.division || entityDivisions[0]?.name || currentEntity.name,
-                            department: previewPosition.department || 'Direct to Division',
-                            reportsToId: previewPosition.reportsToId || '',
-                            relationType: previewPosition.relationType || 'struktural',
-                            currentEmployeeId: previewPosition.currentEmployeeId || '',
-                            isVacant: previewPosition.isVacant,
-                            description: previewPosition.description || '',
-                          });
-                          setPreviewPosition(null);
-                          setIsPositionModalOpen(true);
-                        }}
-                        className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-colors"
-                      >
-                        <Edit2 className="w-3.5 h-3.5" />
-                        <span>Edit</span>
-                      </button>
-                    </div>
-                  </>
-                ) : (
-                  <>
+                  <div className="flex items-center gap-2">
                     <button
                       type="button"
                       onClick={() => {
-                        setCorrectionForm({
-                          targetId: previewPosition.id,
-                          targetType: 'position',
-                          fieldToCorrect: 'title',
-                          correctedValue: previewPosition.title,
-                          notes: 'Perbaikan ejaan penulisan gelar / jabatan administratif',
-                        });
-                        setIsCorrectionModalOpen(true);
+                        if (confirm(`Hapus posisi jabatan "${previewPosition.title}"?`)) {
+                          deleteOrgNode(previewPosition.id);
+                          setPreviewPosition(null);
+                          showToast(`Posisi "${previewPosition.title}" telah dihapus.`);
+                        }
                       }}
-                      className="px-3 py-1.5 text-slate-600 hover:bg-slate-100 rounded-lg text-xs font-semibold flex items-center gap-1.5"
+                      className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
                     >
-                      <Edit2 className="w-3.5 h-3.5 text-amber-600" />
-                      <span>Koreksi Typo Ringan</span>
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Hapus</span>
                     </button>
 
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setPreviewPosition(null);
-                          setProposalCategory('organisasi');
-                          setRestructureForm((prev) => ({
-                            ...prev,
-                            title: `Restrukturisasi Posisi: ${previewPosition.title}`,
-                            targetType: 'position',
-                            targetReportsToId: previewPosition.id,
-                          }));
-                          setIsRestructureModalOpen(true);
-                        }}
-                        className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold shadow-xs flex items-center gap-1.5"
-                      >
-                        <FileCheck2 className="w-3.5 h-3.5" />
-                        <span>Ajukan Perubahan Ber-SK</span>
-                      </button>
-                    </div>
-                  </>
-                )}
-              </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPositionFormData({
+                          id: previewPosition.id,
+                          title: previewPosition.title,
+                          level: previewPosition.level,
+                          division: previewPosition.division || entityDivisions[0]?.name || currentEntity.name,
+                          department: previewPosition.department || 'Direct to Division',
+                          reportsToId: previewPosition.reportsToId || '',
+                          relationType: previewPosition.relationType || 'struktural',
+                          currentEmployeeId: previewPosition.currentEmployeeId || '',
+                          isVacant: previewPosition.isVacant,
+                          description: previewPosition.description || '',
+                        });
+                        setPreviewPosition(null);
+                        setIsPositionModalOpen(true);
+                      }}
+                      className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-colors"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                      <span>Edit</span>
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCorrectionForm({
+                        targetId: previewPosition.id,
+                        targetType: 'position',
+                        fieldToCorrect: 'title',
+                        correctedValue: previewPosition.title,
+                        notes: 'Perbaikan ejaan penulisan gelar / jabatan administratif',
+                      });
+                      setIsCorrectionModalOpen(true);
+                    }}
+                    className="px-3 py-1.5 text-slate-600 hover:bg-slate-100 rounded-lg text-xs font-semibold flex items-center gap-1.5"
+                  >
+                    <Edit2 className="w-3.5 h-3.5 text-amber-600" />
+                    <span>Koreksi</span>
+                  </button>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPreviewPosition(null);
+                        setProposalCategory('organisasi');
+                        setRestructureForm((prev) => ({
+                          ...prev,
+                          title: `Restrukturisasi Posisi: ${previewPosition.title}`,
+                          targetType: 'position',
+                          targetReportsToId: previewPosition.id,
+                        }));
+                        setIsRestructureModalOpen(true);
+                      }}
+                      className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold shadow-xs flex items-center gap-1.5"
+                    >
+                      <FileCheck2 className="w-3.5 h-3.5" />
+                      <span>Ajukan SK</span>
+                    </button>
+                  </div>
+                </>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setPreviewPosition(null)}
+                className="px-4 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg font-semibold text-xs ml-auto transition-colors"
+              >
+                Tutup
+              </button>
             </div>
           </div>
         </div>
@@ -3106,13 +3115,13 @@ export const OrganizationManagement: React.FC = () => {
       {previewEntity && (
         <div
           onClick={() => setPreviewEntity(null)}
-          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in"
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="bg-white rounded-2xl max-w-md w-full border border-slate-200 shadow-2xl overflow-hidden"
+            className="bg-white rounded-2xl max-w-md w-full border border-slate-200 shadow-2xl overflow-hidden max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] flex flex-col"
           >
-            <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
+            <div className="p-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
               <h3 className="font-bold text-sm flex items-center gap-2">
                 <Building className="w-4 h-4 text-indigo-400" />
                 <span>Detail Entitas Perusahaan</span>
@@ -3122,7 +3131,7 @@ export const OrganizationManagement: React.FC = () => {
               </button>
             </div>
 
-            <div className="p-5 space-y-3.5 text-xs">
+            <div className="p-4 sm:p-5 space-y-3.5 text-xs overflow-y-auto flex-1">
               <div>
                 <span className="text-[10px] text-slate-400 font-bold uppercase">Nama Badan Hukum Resmi</span>
                 <div className="text-sm font-bold text-slate-900">{previewEntity.name}</div>
@@ -3189,16 +3198,17 @@ export const OrganizationManagement: React.FC = () => {
                   </div>
                 </div>
               </div>
+            </div>
 
-              <div className="pt-3 flex justify-end gap-2 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setPreviewEntity(null)}
-                  className="px-4 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-semibold text-xs"
-                >
-                  Tutup
-                </button>
-              </div>
+            {/* Pinned Bottom Footer Actions */}
+            <div className="p-3 sm:p-4 bg-slate-50 border-t border-slate-200 shrink-0 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setPreviewEntity(null)}
+                className="px-4 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg font-semibold text-xs transition-colors"
+              >
+                Tutup
+              </button>
             </div>
           </div>
         </div>
@@ -3210,11 +3220,11 @@ export const OrganizationManagement: React.FC = () => {
       {previewDivision && (
         <div
           onClick={() => setPreviewDivision(null)}
-          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in"
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="bg-white rounded-2xl max-w-lg w-full border border-slate-200 shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
+            className="bg-white rounded-2xl max-w-lg w-full border border-slate-200 shadow-2xl overflow-hidden max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] flex flex-col"
           >
             <div className="p-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2.5 min-w-0 flex-1 mr-3">
@@ -3239,7 +3249,8 @@ export const OrganizationManagement: React.FC = () => {
               </button>
             </div>
 
-            <div className="p-5 space-y-4 text-xs overflow-y-auto flex-1">
+            {/* Scrollable Content Body */}
+            <div className="p-4 sm:p-5 space-y-4 text-xs overflow-y-auto flex-1">
               <div className="p-4 bg-indigo-50/70 rounded-xl border border-indigo-200 space-y-2.5">
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-1.5 flex-wrap">
@@ -3344,59 +3355,59 @@ export const OrganizationManagement: React.FC = () => {
                   </>
                 );
               })()}
+            </div>
 
-              {/* Actions */}
-              <div className="pt-3 flex items-center justify-between border-t border-slate-100">
-                {!currentEntityLocked ? (
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (confirm(`Hapus divisi ${previewDivision.name}?`)) {
-                          deleteDivision(previewDivision.id);
-                          setPreviewDivision(null);
-                          showToast(`Divisi ${previewDivision.name} telah dihapus.`);
-                        }
-                      }}
-                      className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                      <span>Hapus</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setDivisionFormData({
-                          id: previewDivision.id,
-                          name: previewDivision.name,
-                          code: previewDivision.code,
-                          headTitle: previewDivision.headTitle || '',
-                          description: previewDivision.description || '',
-                        });
+            {/* Pinned Bottom Footer Actions */}
+            <div className="p-3 sm:p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-2 shrink-0">
+              {!currentEntityLocked ? (
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (confirm(`Hapus divisi ${previewDivision.name}?`)) {
+                        deleteDivision(previewDivision.id);
                         setPreviewDivision(null);
-                        setIsDivisionModalOpen(true);
-                      }}
-                      className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-colors"
-                    >
-                      <Edit2 className="w-3.5 h-3.5" />
-                      <span>Edit</span>
-                    </button>
-                  </div>
-                ) : (
-                  <span className="text-[11px] text-slate-500 flex items-center gap-1">
-                    <Lock className="w-3 h-3 text-slate-400" />
-                    <span>Terkunci oleh Tata Kelola Resmi</span>
-                  </span>
-                )}
+                        showToast(`Divisi ${previewDivision.name} telah dihapus.`);
+                      }
+                    }}
+                    className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Hapus</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDivisionFormData({
+                        id: previewDivision.id,
+                        name: previewDivision.name,
+                        code: previewDivision.code,
+                        headTitle: previewDivision.headTitle || '',
+                        description: previewDivision.description || '',
+                      });
+                      setPreviewDivision(null);
+                      setIsDivisionModalOpen(true);
+                    }}
+                    className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-colors"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" />
+                    <span>Edit</span>
+                  </button>
+                </div>
+              ) : (
+                <span className="text-[11px] text-slate-500 flex items-center gap-1">
+                  <Lock className="w-3 h-3 text-slate-400" />
+                  <span>Terkunci</span>
+                </span>
+              )}
 
-                <button
-                  type="button"
-                  onClick={() => setPreviewDivision(null)}
-                  className="px-4 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-semibold text-xs ml-auto"
-                >
-                  Tutup
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => setPreviewDivision(null)}
+                className="px-4 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg font-semibold text-xs ml-auto transition-colors"
+              >
+                Tutup
+              </button>
             </div>
           </div>
         </div>
@@ -3408,11 +3419,11 @@ export const OrganizationManagement: React.FC = () => {
       {previewDepartment && (
         <div
           onClick={() => setPreviewDepartment(null)}
-          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in"
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="bg-white rounded-2xl max-w-lg w-full border border-slate-200 shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
+            className="bg-white rounded-2xl max-w-lg w-full border border-slate-200 shadow-2xl overflow-hidden max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] flex flex-col"
           >
             <div className="p-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2.5 min-w-0 flex-1 mr-3">
@@ -3437,7 +3448,8 @@ export const OrganizationManagement: React.FC = () => {
               </button>
             </div>
 
-            <div className="p-5 space-y-4 text-xs overflow-y-auto flex-1">
+            {/* Scrollable Content Body */}
+            <div className="p-4 sm:p-5 space-y-4 text-xs overflow-y-auto flex-1">
               <div className="p-4 bg-emerald-50/70 rounded-xl border border-emerald-200 space-y-2.5">
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-1.5 flex-wrap">
@@ -3511,60 +3523,60 @@ export const OrganizationManagement: React.FC = () => {
                   </div>
                 );
               })()}
+            </div>
 
-              {/* Actions */}
-              <div className="pt-3 flex items-center justify-between border-t border-slate-100">
-                {!currentEntityLocked ? (
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (confirm(`Hapus departemen ${previewDepartment.name}?`)) {
-                          deleteDepartment(previewDepartment.id);
-                          setPreviewDepartment(null);
-                          showToast(`Departemen ${previewDepartment.name} telah dihapus.`);
-                        }
-                      }}
-                      className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                      <span>Hapus</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setDepartmentFormData({
-                          id: previewDepartment.id,
-                          name: previewDepartment.name,
-                          code: previewDepartment.code,
-                          divisionId: previewDepartment.divisionId,
-                          headTitle: previewDepartment.headTitle || '',
-                          description: previewDepartment.description || '',
-                        });
+            {/* Pinned Bottom Footer Actions */}
+            <div className="p-3 sm:p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-2 shrink-0">
+              {!currentEntityLocked ? (
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (confirm(`Hapus departemen ${previewDepartment.name}?`)) {
+                        deleteDepartment(previewDepartment.id);
                         setPreviewDepartment(null);
-                        setIsDepartmentModalOpen(true);
-                      }}
-                      className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-colors"
-                    >
-                      <Edit2 className="w-3.5 h-3.5" />
-                      <span>Edit</span>
-                    </button>
-                  </div>
-                ) : (
-                  <span className="text-[11px] text-slate-500 flex items-center gap-1">
-                    <Lock className="w-3 h-3 text-slate-400" />
-                    <span>Terkunci oleh Tata Kelola Resmi</span>
-                  </span>
-                )}
+                        showToast(`Departemen ${previewDepartment.name} telah dihapus.`);
+                      }
+                    }}
+                    className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Hapus</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDepartmentFormData({
+                        id: previewDepartment.id,
+                        name: previewDepartment.name,
+                        code: previewDepartment.code,
+                        divisionId: previewDepartment.divisionId,
+                        headTitle: previewDepartment.headTitle || '',
+                        description: previewDepartment.description || '',
+                      });
+                      setPreviewDepartment(null);
+                      setIsDepartmentModalOpen(true);
+                    }}
+                    className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-colors"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" />
+                    <span>Edit</span>
+                  </button>
+                </div>
+              ) : (
+                <span className="text-[11px] text-slate-500 flex items-center gap-1">
+                  <Lock className="w-3 h-3 text-slate-400" />
+                  <span>Terkunci</span>
+                </span>
+              )}
 
-                <button
-                  type="button"
-                  onClick={() => setPreviewDepartment(null)}
-                  className="px-4 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-semibold text-xs ml-auto"
-                >
-                  Tutup
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => setPreviewDepartment(null)}
+                className="px-4 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg font-semibold text-xs ml-auto transition-colors"
+              >
+                Tutup
+              </button>
             </div>
           </div>
         </div>
@@ -3576,11 +3588,11 @@ export const OrganizationManagement: React.FC = () => {
       {previewMasterJobPosition && (
         <div
           onClick={() => setPreviewMasterJobPosition(null)}
-          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in"
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="bg-white rounded-2xl max-w-xl w-full border border-slate-200 shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
+            className="bg-white rounded-2xl max-w-xl w-full border border-slate-200 shadow-2xl overflow-hidden max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] flex flex-col"
           >
             {/* Header */}
             <div className="p-4 bg-gradient-to-r from-violet-900 to-indigo-900 text-white flex items-center justify-between shrink-0">
@@ -4001,11 +4013,11 @@ export const OrganizationManagement: React.FC = () => {
       {previewSnapshot && (
         <div
           onClick={() => setPreviewSnapshot(null)}
-          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in"
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="bg-white rounded-2xl max-w-2xl w-full border border-slate-200 shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
+            className="bg-white rounded-2xl max-w-2xl w-full border border-slate-200 shadow-2xl overflow-hidden max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] flex flex-col"
           >
             <div className="p-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2">
@@ -4020,7 +4032,7 @@ export const OrganizationManagement: React.FC = () => {
               </button>
             </div>
 
-            <div className="p-5 space-y-4 text-xs overflow-y-auto flex-1">
+            <div className="p-4 sm:p-5 space-y-4 text-xs overflow-y-auto flex-1">
               <div className="p-4 bg-amber-50 rounded-xl border border-amber-200 space-y-1">
                 <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wider block">
                   Snapshot Arsip Versi Struktur Organisasi (Read-Only)
@@ -4088,16 +4100,17 @@ export const OrganizationManagement: React.FC = () => {
                   })}
                 </div>
               </div>
+            </div>
 
-              <div className="pt-3 flex justify-end border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setPreviewSnapshot(null)}
-                  className="px-4 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-semibold text-xs"
-                >
-                  Tutup
-                </button>
-              </div>
+            {/* Pinned Bottom Footer Actions */}
+            <div className="p-3 sm:p-4 bg-slate-50 border-t border-slate-200 shrink-0 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setPreviewSnapshot(null)}
+                className="px-4 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg font-semibold text-xs transition-colors"
+              >
+                Tutup
+              </button>
             </div>
           </div>
         </div>
@@ -4109,13 +4122,13 @@ export const OrganizationManagement: React.FC = () => {
       {isDivisionModalOpen && (
         <div
           onClick={() => setIsDivisionModalOpen(false)}
-          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in"
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="bg-white rounded-2xl max-w-md w-full border border-slate-200 shadow-2xl overflow-hidden"
+            className="bg-white rounded-2xl max-w-md w-full border border-slate-200 shadow-2xl overflow-hidden max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] flex flex-col"
           >
-            <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
+            <div className="p-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
               <h3 className="font-bold text-sm flex items-center gap-2">
                 <Layers className="w-4 h-4 text-indigo-400" />
                 <span>{divisionFormData.id ? 'Edit Divisi' : 'Tambah Divisi Baru'}</span>
@@ -4125,53 +4138,56 @@ export const OrganizationManagement: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleSubmitDivision} className="p-5 space-y-3.5 text-xs">
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">Nama Divisi *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Contoh: Operation & Supply Chain"
-                  value={divisionFormData.name}
-                  onChange={(e) => setDivisionFormData({ ...divisionFormData, name: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg font-medium"
-                />
+            <form onSubmit={handleSubmitDivision} className="flex flex-col flex-1 overflow-hidden min-h-0">
+              <div className="p-4 sm:p-5 space-y-3.5 text-xs overflow-y-auto flex-1">
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Nama Divisi *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Contoh: Operation & Supply Chain"
+                    value={divisionFormData.name}
+                    onChange={(e) => setDivisionFormData({ ...divisionFormData, name: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-medium"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Kode Divisi *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Contoh: DIV-OPS"
+                    value={divisionFormData.code}
+                    onChange={(e) => setDivisionFormData({ ...divisionFormData, code: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Deskripsi Ruang Lingkup Divisi</label>
+                  <textarea
+                    rows={2}
+                    placeholder="Fokus operasional..."
+                    value={divisionFormData.description}
+                    onChange={(e) => setDivisionFormData({ ...divisionFormData, description: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                  />
+                </div>
               </div>
 
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">Kode Divisi *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Contoh: DIV-OPS"
-                  value={divisionFormData.code}
-                  onChange={(e) => setDivisionFormData({ ...divisionFormData, code: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold"
-                />
-              </div>
-
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">Deskripsi Ruang Lingkup Divisi</label>
-                <textarea
-                  rows={2}
-                  placeholder="Fokus operasional..."
-                  value={divisionFormData.description}
-                  onChange={(e) => setDivisionFormData({ ...divisionFormData, description: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                />
-              </div>
-
-              <div className="pt-2 flex justify-end gap-2 border-t border-slate-100">
+              {/* Pinned Bottom Footer Actions */}
+              <div className="p-3 sm:p-4 bg-slate-50 border-t border-slate-200 shrink-0 flex justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setIsDivisionModalOpen(false)}
-                  className="px-3.5 py-1.5 text-slate-600 hover:bg-slate-100 rounded-lg font-medium"
+                  className="px-3.5 py-1.5 text-slate-600 hover:bg-slate-100 rounded-lg font-medium text-xs transition-colors"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-lg shadow-xs"
+                  className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-lg shadow-xs text-xs transition-colors"
                 >
                   {divisionFormData.id ? 'Perbarui Divisi' : 'Simpan Divisi'}
                 </button>
@@ -4187,13 +4203,13 @@ export const OrganizationManagement: React.FC = () => {
       {isDepartmentModalOpen && (
         <div
           onClick={() => setIsDepartmentModalOpen(false)}
-          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in"
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="bg-white rounded-2xl max-w-md w-full border border-slate-200 shadow-2xl overflow-hidden"
+            className="bg-white rounded-2xl max-w-md w-full border border-slate-200 shadow-2xl overflow-hidden max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] flex flex-col"
           >
-            <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
+            <div className="p-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
               <h3 className="font-bold text-sm flex items-center gap-2">
                 <Briefcase className="w-4 h-4 text-emerald-400" />
                 <span>{departmentFormData.id ? 'Edit Departemen' : 'Tambah Departemen Baru'}</span>
@@ -4203,69 +4219,70 @@ export const OrganizationManagement: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleSubmitDepartment} className="p-5 space-y-3.5 text-xs">
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">Nama Departemen *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Contoh: Warehouse & Logistics"
-                  value={departmentFormData.name}
-                  onChange={(e) => setDepartmentFormData({ ...departmentFormData, name: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg font-medium"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
+            <form onSubmit={handleSubmitDepartment} className="flex flex-col flex-1 overflow-hidden min-h-0">
+              <div className="p-4 sm:p-5 space-y-3.5 text-xs overflow-y-auto flex-1">
                 <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Kode Departemen *</label>
+                  <label className="font-semibold text-slate-700 block mb-1">Nama Departemen *</label>
                   <input
                     type="text"
                     required
-                    placeholder="DEPT-LOG"
-                    value={departmentFormData.code}
-                    onChange={(e) => setDepartmentFormData({ ...departmentFormData, code: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold"
+                    placeholder="Contoh: Warehouse & Logistics"
+                    value={departmentFormData.name}
+                    onChange={(e) => setDepartmentFormData({ ...departmentFormData, name: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-medium"
                   />
                 </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="font-semibold text-slate-700 block mb-1">Kode Departemen *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="DEPT-LOG"
+                      value={departmentFormData.code}
+                      onChange={(e) => setDepartmentFormData({ ...departmentFormData, code: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-semibold text-slate-700 block mb-1">Divisi Induk *</label>
+                    <select
+                      value={departmentFormData.divisionId}
+                      onChange={(e) => setDepartmentFormData({ ...departmentFormData, divisionId: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white"
+                    >
+                      {entityDivisions.map((d) => (
+                        <option key={d.id} value={d.id}>{d.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
                 <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Divisi Induk *</label>
-                  <select
-                    value={departmentFormData.divisionId}
-                    onChange={(e) => setDepartmentFormData({ ...departmentFormData, divisionId: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white"
-                  >
-                    {entityDivisions.map((d) => (
-                      <option key={d.id} value={d.id}>{d.name}</option>
-                    ))}
-                  </select>
+                  <label className="font-semibold text-slate-700 block mb-1">Deskripsi Departemen</label>
+                  <textarea
+                    rows={2}
+                    placeholder="Uraian teknis operasional..."
+                    value={departmentFormData.description}
+                    onChange={(e) => setDepartmentFormData({ ...departmentFormData, description: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                  />
                 </div>
               </div>
 
-
-
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">Deskripsi Departemen</label>
-                <textarea
-                  rows={2}
-                  placeholder="Uraian teknis operasional..."
-                  value={departmentFormData.description}
-                  onChange={(e) => setDepartmentFormData({ ...departmentFormData, description: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                />
-              </div>
-
-              <div className="pt-2 flex justify-end gap-2 border-t border-slate-100">
+              {/* Pinned Bottom Footer Actions */}
+              <div className="p-3 sm:p-4 bg-slate-50 border-t border-slate-200 shrink-0 flex justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setIsDepartmentModalOpen(false)}
-                  className="px-3.5 py-1.5 text-slate-600 hover:bg-slate-100 rounded-lg font-medium"
+                  className="px-3.5 py-1.5 text-slate-600 hover:bg-slate-100 rounded-lg font-medium text-xs transition-colors"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-lg shadow-xs"
+                  className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-lg shadow-xs text-xs transition-colors"
                 >
                   {departmentFormData.id ? 'Perbarui Departemen' : 'Simpan Departemen'}
                 </button>
@@ -4281,11 +4298,11 @@ export const OrganizationManagement: React.FC = () => {
       {isPositionModalOpen && (
         <div
           onClick={() => setIsPositionModalOpen(false)}
-          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in"
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="bg-white rounded-2xl max-w-lg w-full border border-slate-200 shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
+            className="bg-white rounded-2xl max-w-lg w-full border border-slate-200 shadow-2xl overflow-hidden max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] flex flex-col"
           >
             <div className="p-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
               <h3 className="font-bold text-sm flex items-center gap-2">
@@ -4297,11 +4314,12 @@ export const OrganizationManagement: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleSubmitPosition} className="p-5 space-y-3.5 text-xs overflow-y-auto flex-1">
-              {/* Dropdown Utama: Nama Posisi / Formasi Jabatan dari Master Jabatan */}
-              <div className="space-y-2 p-3.5 bg-violet-50/70 rounded-xl border border-violet-200">
-                <div className="flex items-center justify-between">
-                  <label className="font-bold text-violet-950 flex items-center gap-1.5 text-xs">
+            <form onSubmit={handleSubmitPosition} className="flex flex-col flex-1 overflow-hidden min-h-0">
+              <div className="p-4 sm:p-5 space-y-3.5 text-xs overflow-y-auto flex-1">
+                {/* Dropdown Utama: Nama Posisi / Formasi Jabatan dari Master Jabatan */}
+                <div className="space-y-2 p-3.5 bg-violet-50/70 rounded-xl border border-violet-200">
+                  <div className="flex items-center justify-between">
+                    <label className="font-bold text-violet-950 flex items-center gap-1.5 text-xs">
                     <Award className="w-4 h-4 text-violet-600" />
                     <span>Nama Posisi / Formasi Jabatan * (Pilih dari Master Jabatan)</span>
                   </label>
@@ -4542,18 +4560,20 @@ export const OrganizationManagement: React.FC = () => {
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg"
                 />
               </div>
+            </div>
 
-              <div className="pt-2 flex justify-end gap-2 border-t border-slate-100">
+            {/* Pinned Bottom Footer Actions */}
+              <div className="p-3 sm:p-4 bg-slate-50 border-t border-slate-200 shrink-0 flex justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setIsPositionModalOpen(false)}
-                  className="px-3.5 py-1.5 text-slate-600 hover:bg-slate-100 rounded-lg font-medium"
+                  className="px-3.5 py-1.5 text-slate-600 hover:bg-slate-100 rounded-lg font-medium text-xs transition-colors"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-lg shadow-xs"
+                  className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-lg shadow-xs text-xs transition-colors"
                 >
                   {positionFormData.id ? 'Perbarui Posisi' : 'Simpan Posisi'}
                 </button>
@@ -4569,11 +4589,11 @@ export const OrganizationManagement: React.FC = () => {
       {isMasterPositionModalOpen && (
         <div
           onClick={() => setIsMasterPositionModalOpen(false)}
-          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in"
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="bg-white rounded-2xl max-w-lg w-full border border-slate-200 shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
+            className="bg-white rounded-2xl max-w-lg w-full border border-slate-200 shadow-2xl overflow-hidden max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] flex flex-col"
           >
             <div className="p-4 bg-gradient-to-r from-violet-900 via-indigo-900 to-slate-900 text-white flex items-center justify-between shrink-0">
               <h3 className="font-bold text-sm flex items-center gap-2">
@@ -4585,9 +4605,10 @@ export const OrganizationManagement: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleSubmitMasterPosition} className="p-5 space-y-3.5 text-xs overflow-y-auto flex-1">
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">Nama Jabatan *</label>
+            <form onSubmit={handleSubmitMasterPosition} className="flex flex-col flex-1 overflow-hidden min-h-0">
+              <div className="p-4 sm:p-5 space-y-3.5 text-xs overflow-y-auto flex-1">
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Nama Jabatan *</label>
                 <input
                   type="text"
                   required
@@ -4689,17 +4710,20 @@ export const OrganizationManagement: React.FC = () => {
                 />
               </div>
 
-              <div className="pt-2 flex justify-end gap-2 border-t border-slate-100">
+              </div>
+
+              {/* Pinned Bottom Footer Actions */}
+              <div className="p-3 sm:p-4 bg-slate-50 border-t border-slate-200 shrink-0 flex justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setIsMasterPositionModalOpen(false)}
-                  className="px-3.5 py-1.5 text-slate-600 hover:bg-slate-100 rounded-lg font-medium"
+                  className="px-3.5 py-1.5 text-slate-600 hover:bg-slate-100 rounded-lg font-medium text-xs transition-colors"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 bg-violet-600 hover:bg-violet-500 text-white font-semibold rounded-lg shadow-xs"
+                  className="px-4 py-1.5 bg-violet-600 hover:bg-violet-500 text-white font-semibold rounded-lg shadow-xs text-xs transition-colors"
                 >
                   {masterPositionFormData.id ? 'Perbarui Master Jabatan' : 'Simpan Master Jabatan'}
                 </button>
@@ -4715,13 +4739,13 @@ export const OrganizationManagement: React.FC = () => {
       {assigningPosition && (
         <div
           onClick={() => setAssigningPosition(null)}
-          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in"
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="bg-white rounded-2xl max-w-md w-full border border-slate-200 shadow-2xl overflow-hidden"
+            className="bg-white rounded-2xl max-w-md w-full border border-slate-200 shadow-2xl overflow-hidden max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] flex flex-col"
           >
-            <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
+            <div className="p-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2">
                 <UserCheck className="w-4 h-4 text-indigo-400" />
                 <h3 className="font-bold text-sm">Penetapan Pemegang Jabatan</h3>
@@ -4731,7 +4755,7 @@ export const OrganizationManagement: React.FC = () => {
               </button>
             </div>
 
-            <div className="p-5 space-y-4 text-xs">
+            <div className="p-4 sm:p-5 space-y-4 text-xs overflow-y-auto flex-1">
               <div className="p-3 bg-indigo-50/70 border border-indigo-200 rounded-xl space-y-1">
                 <div className="text-[10px] text-indigo-600 font-bold uppercase tracking-wider">Formasi Kursi:</div>
                 <div className="text-sm font-bold text-slate-900">{assigningPosition.title}</div>
@@ -4760,24 +4784,25 @@ export const OrganizationManagement: React.FC = () => {
                   Karyawan yang dipilih akan tercatat sebagai pemegang resmi kursi formasi ini di seluruh sistem HRMS.
                 </p>
               </div>
+            </div>
 
-              <div className="pt-2 flex justify-end gap-2 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setAssigningPosition(null)}
-                  className="px-3.5 py-1.5 text-slate-600 hover:bg-slate-100 rounded-lg font-medium"
-                >
-                  Batal
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSaveQuickAssignment}
-                  className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-lg shadow-xs flex items-center gap-1.5"
-                >
-                  <Check className="w-3.5 h-3.5" />
-                  <span>Simpan Penetapan</span>
-                </button>
-              </div>
+            {/* Pinned Bottom Footer Actions */}
+            <div className="p-3 sm:p-4 bg-slate-50 border-t border-slate-200 shrink-0 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setAssigningPosition(null)}
+                className="px-3.5 py-1.5 text-slate-600 hover:bg-slate-100 rounded-lg font-medium text-xs transition-colors"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveQuickAssignment}
+                className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-lg shadow-xs text-xs flex items-center gap-1.5 transition-colors"
+              >
+                <Check className="w-3.5 h-3.5" />
+                <span>Simpan Penetapan</span>
+              </button>
             </div>
           </div>
         </div>
@@ -4789,11 +4814,11 @@ export const OrganizationManagement: React.FC = () => {
       {isRestructureModalOpen && (
         <div
           onClick={() => setIsRestructureModalOpen(false)}
-          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in"
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="bg-white rounded-2xl max-w-3xl w-full border border-slate-200 shadow-2xl overflow-hidden max-h-[92vh] flex flex-col"
+            className="bg-white rounded-2xl max-w-3xl w-full border border-slate-200 shadow-2xl overflow-hidden max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] flex flex-col"
           >
             {/* Header */}
             <div className="p-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
@@ -4810,11 +4835,11 @@ export const OrganizationManagement: React.FC = () => {
             </div>
 
             {/* Sub-tab navigation inside restructure modal */}
-            <div className="bg-slate-100 px-4 pt-2 border-b border-slate-200 flex items-center gap-2 shrink-0">
+            <div className="bg-slate-100 px-4 pt-2 border-b border-slate-200 flex items-center gap-2 shrink-0 overflow-x-auto">
               <button
                 type="button"
                 onClick={() => setDraftActiveTab('info')}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-t-lg transition-colors border-t border-x ${
+                className={`px-3 py-1.5 text-xs font-semibold rounded-t-lg transition-colors border-t border-x shrink-0 ${
                   draftActiveTab === 'info' ? 'bg-white text-indigo-700 border-slate-200' : 'text-slate-600 border-transparent hover:text-slate-900'
                 }`}
               >
@@ -4823,7 +4848,7 @@ export const OrganizationManagement: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setDraftActiveTab('divisions')}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-t-lg transition-colors border-t border-x ${
+                className={`px-3 py-1.5 text-xs font-semibold rounded-t-lg transition-colors border-t border-x shrink-0 ${
                   draftActiveTab === 'divisions' ? 'bg-white text-indigo-700 border-slate-200' : 'text-slate-600 border-transparent hover:text-slate-900'
                 }`}
               >
@@ -4833,7 +4858,7 @@ export const OrganizationManagement: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setDraftActiveTab('departments')}
-                  className={`px-3 py-1.5 text-xs font-semibold rounded-t-lg transition-colors border-t border-x ${
+                  className={`px-3 py-1.5 text-xs font-semibold rounded-t-lg transition-colors border-t border-x shrink-0 ${
                     draftActiveTab === 'departments' ? 'bg-white text-indigo-700 border-slate-200' : 'text-slate-600 border-transparent hover:text-slate-900'
                   }`}
                 >
@@ -4843,7 +4868,7 @@ export const OrganizationManagement: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setDraftActiveTab('positions')}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-t-lg transition-colors border-t border-x ${
+                className={`px-3 py-1.5 text-xs font-semibold rounded-t-lg transition-colors border-t border-x shrink-0 ${
                   draftActiveTab === 'positions' ? 'bg-white text-indigo-700 border-slate-200' : 'text-slate-600 border-transparent hover:text-slate-900'
                 }`}
               >
@@ -4852,9 +4877,10 @@ export const OrganizationManagement: React.FC = () => {
             </div>
 
             {/* Form */}
-            <form onSubmit={handleSubmitRestructuring} className="p-5 space-y-4 text-xs overflow-y-auto flex-1">
-              {/* TAB 1: DATA SK & INFO */}
-              {draftActiveTab === 'info' && (
+            <form onSubmit={handleSubmitRestructuring} className="flex flex-col flex-1 overflow-hidden min-h-0">
+              <div className="p-4 sm:p-5 space-y-4 text-xs overflow-y-auto flex-1">
+                {/* TAB 1: DATA SK & INFO */}
+                {draftActiveTab === 'info' && (
                 <div className="space-y-3.5">
                   <div className="p-3 bg-indigo-50/70 rounded-xl border border-indigo-200 text-[11px] text-indigo-950 flex items-start gap-2">
                     <Sparkles className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
@@ -5227,8 +5253,10 @@ export const OrganizationManagement: React.FC = () => {
                 </div>
               )}
 
-              {/* Bottom Summary & Actions */}
-              <div className="pt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-t border-slate-200">
+              </div>
+
+              {/* Pinned Bottom Summary & Actions */}
+              <div className="p-3 sm:p-4 bg-slate-50 border-t border-slate-200 shrink-0 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="text-xs text-slate-600">
                   Total Draf: <b>{draftDivisions.length}</b> Divisi • <b>{draftDepartments.length}</b> Dept • <b>{draftNodes.length}</b> Posisi
                 </div>
@@ -5237,16 +5265,16 @@ export const OrganizationManagement: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setIsRestructureModalOpen(false)}
-                    className="px-3.5 py-1.5 text-slate-600 hover:bg-slate-100 rounded-lg font-medium"
+                    className="px-3.5 py-1.5 text-slate-600 hover:bg-slate-100 rounded-lg font-medium text-xs transition-colors"
                   >
                     Batal
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-lg shadow-xs flex items-center gap-1.5"
+                    className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-lg shadow-xs flex items-center gap-1.5 text-xs transition-colors"
                   >
                     <FileCheck2 className="w-3.5 h-3.5" />
-                    <span>Kirim Pengajuan Restrukturisasi (Ber-SK)</span>
+                    <span>Kirim Pengajuan (Ber-SK)</span>
                   </button>
                 </div>
               </div>
@@ -5261,13 +5289,13 @@ export const OrganizationManagement: React.FC = () => {
       {isCorrectionModalOpen && (
         <div
           onClick={() => setIsCorrectionModalOpen(false)}
-          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in"
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="bg-white rounded-2xl max-w-md w-full border border-slate-200 shadow-2xl overflow-hidden"
+            className="bg-white rounded-2xl max-w-md w-full border border-slate-200 shadow-2xl overflow-hidden max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] flex flex-col"
           >
-            <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
+            <div className="p-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
               <h3 className="font-bold text-sm flex items-center gap-2">
                 <Edit2 className="w-4 h-4 text-amber-400" />
                 <span>Koreksi Typo / Perbaikan Administratif Ringan</span>
@@ -5277,43 +5305,46 @@ export const OrganizationManagement: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleSubmitCorrection} className="p-5 space-y-3.5 text-xs">
-              <p className="text-slate-600 leading-relaxed text-[11px]">
-                Fitur ini digunakan hanya untuk memperbaiki kesalahan ketik (typo) ejaan nama jabatan tanpa mengubah garis hierarki atau restrukturisasi organisasi.
-              </p>
+            <form onSubmit={handleSubmitCorrection} className="flex flex-col flex-1 overflow-hidden min-h-0">
+              <div className="p-4 sm:p-5 space-y-3.5 text-xs overflow-y-auto flex-1">
+                <p className="text-slate-600 leading-relaxed text-[11px]">
+                  Fitur ini digunakan hanya untuk memperbaiki kesalahan ketik (typo) ejaan nama jabatan tanpa mengubah garis hierarki atau restrukturisasi organisasi.
+                </p>
 
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">Ejaan Nama Jabatan Baru *</label>
-                <input
-                  type="text"
-                  required
-                  value={correctionForm.correctedValue}
-                  onChange={(e) => setCorrectionForm({ ...correctionForm, correctedValue: e.target.value })}
-                  className="w-full px-3 py-2 border-2 border-indigo-300 rounded-lg font-bold"
-                />
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Ejaan Nama Jabatan Baru *</label>
+                  <input
+                    type="text"
+                    required
+                    value={correctionForm.correctedValue}
+                    onChange={(e) => setCorrectionForm({ ...correctionForm, correctedValue: e.target.value })}
+                    className="w-full px-3 py-2 border-2 border-indigo-300 rounded-lg font-bold"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Catatan Koreksi Administratif</label>
+                  <textarea
+                    rows={2}
+                    value={correctionForm.notes}
+                    onChange={(e) => setCorrectionForm({ ...correctionForm, notes: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                  />
+                </div>
               </div>
 
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">Catatan Koreksi Administratif</label>
-                <textarea
-                  rows={2}
-                  value={correctionForm.notes}
-                  onChange={(e) => setCorrectionForm({ ...correctionForm, notes: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                />
-              </div>
-
-              <div className="pt-2 flex justify-end gap-2 border-t border-slate-100">
+              {/* Pinned Bottom Footer Actions */}
+              <div className="p-3 sm:p-4 bg-slate-50 border-t border-slate-200 shrink-0 flex justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setIsCorrectionModalOpen(false)}
-                  className="px-3.5 py-1.5 text-slate-600 hover:bg-slate-100 rounded-lg font-medium"
+                  className="px-3.5 py-1.5 text-slate-600 hover:bg-slate-100 rounded-lg font-medium text-xs transition-colors"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 bg-amber-600 hover:bg-amber-500 text-white font-semibold rounded-lg shadow-xs"
+                  className="px-4 py-1.5 bg-amber-600 hover:bg-amber-500 text-white font-semibold rounded-lg shadow-xs text-xs transition-colors"
                 >
                   Terapkan Koreksi Typo
                 </button>
