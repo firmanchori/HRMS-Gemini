@@ -2242,10 +2242,11 @@ export const OrganizationManagement: React.FC = () => {
                     });
                     setIsPositionModalOpen(true);
                   }}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold shadow-md flex items-center gap-2 shrink-0 transition-colors"
+                  className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold shadow-md flex items-center gap-1.5 shrink-0 transition-colors"
+                  title="Tambah Formasi Posisi Baru"
                 >
                   <Plus className="w-4 h-4" />
-                  <span>Tambah Formasi Posisi</span>
+                  <span>Tambah Formasi</span>
                 </button>
               ) : (
                 <span className="px-3 py-1.5 bg-slate-800/80 text-slate-300 border border-slate-700 rounded-xl text-xs font-semibold flex items-center gap-1.5 shrink-0">
@@ -3740,9 +3741,10 @@ export const OrganizationManagement: React.FC = () => {
                       setIsPositionModalOpen(true);
                     }}
                     className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-semibold text-xs flex items-center gap-1.5 transition-colors shadow-xs"
+                    title="Buat Formasi Kursi dari Master ini"
                   >
                     <Plus className="w-3.5 h-3.5" />
-                    <span>Buat Formasi</span>
+                    <span>Formasi</span>
                   </button>
                 </div>
               )}
