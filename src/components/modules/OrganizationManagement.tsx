@@ -3023,7 +3023,7 @@ export const OrganizationManagement: React.FC = () => {
                         className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
-                        <span>Hapus Jabatan</span>
+                        <span>Hapus</span>
                       </button>
 
                       <button
@@ -3047,7 +3047,7 @@ export const OrganizationManagement: React.FC = () => {
                         className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-colors"
                       >
                         <Edit2 className="w-3.5 h-3.5" />
-                        <span>Edit Jabatan</span>
+                        <span>Edit</span>
                       </button>
                     </div>
                   </>
@@ -3360,7 +3360,7 @@ export const OrganizationManagement: React.FC = () => {
                       className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
-                      <span>Hapus Divisi</span>
+                      <span>Hapus</span>
                     </button>
                     <button
                       type="button"
@@ -3378,7 +3378,7 @@ export const OrganizationManagement: React.FC = () => {
                       className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-colors"
                     >
                       <Edit2 className="w-3.5 h-3.5" />
-                      <span>Edit Divisi</span>
+                      <span>Edit</span>
                     </button>
                   </div>
                 ) : (
@@ -3527,7 +3527,7 @@ export const OrganizationManagement: React.FC = () => {
                       className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
-                      <span>Hapus Departemen</span>
+                      <span>Hapus</span>
                     </button>
                     <button
                       type="button"
@@ -3546,7 +3546,7 @@ export const OrganizationManagement: React.FC = () => {
                       className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-colors"
                     >
                       <Edit2 className="w-3.5 h-3.5" />
-                      <span>Edit Departemen</span>
+                      <span>Edit</span>
                     </button>
                   </div>
                 ) : (
@@ -3729,7 +3729,7 @@ export const OrganizationManagement: React.FC = () => {
                     className="px-3.5 py-1.5 bg-violet-600 hover:bg-violet-700 text-white rounded-lg font-semibold text-xs flex items-center gap-1.5 transition-colors shadow-xs"
                   >
                     <Edit2 className="w-3.5 h-3.5" />
-                    <span>Edit Jabatan</span>
+                    <span>Edit</span>
                   </button>
 
                   <button
@@ -3742,7 +3742,7 @@ export const OrganizationManagement: React.FC = () => {
                     className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-semibold text-xs flex items-center gap-1.5 transition-colors shadow-xs"
                   >
                     <Plus className="w-3.5 h-3.5" />
-                    <span>Buat Formasi Kursi</span>
+                    <span>Buat Formasi</span>
                   </button>
                 </div>
               )}
