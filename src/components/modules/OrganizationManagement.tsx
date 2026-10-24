@@ -3216,35 +3216,49 @@ export const OrganizationManagement: React.FC = () => {
             className="bg-white rounded-2xl max-w-lg w-full border border-slate-200 shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
           >
             <div className="p-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
-              <div className="flex items-center gap-2">
-                <Layers className="w-5 h-5 text-indigo-400" />
-                <div>
-                  <h3 className="font-bold text-sm">Preview Master Divisi: {previewDivision.name}</h3>
-                  <span className="text-[11px] text-slate-400">Kode: {previewDivision.code}</span>
+              <div className="flex items-center gap-2.5 min-w-0 flex-1 mr-3">
+                <div className="w-8 h-8 rounded-lg bg-indigo-500/20 text-indigo-400 flex items-center justify-center shrink-0 border border-indigo-500/30">
+                  <Layers className="w-4 h-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h3 className="font-bold text-sm truncate">{previewDivision.name}</h3>
+                  <div className="flex items-center gap-2 text-[11px] text-slate-400">
+                    <span className="font-mono text-indigo-400 font-bold">{previewDivision.code}</span>
+                    <span>•</span>
+                    <span>Master Divisi</span>
+                  </div>
                 </div>
               </div>
-              <button onClick={() => setPreviewDivision(null)} className="text-slate-400 hover:text-white">
+              <button
+                type="button"
+                onClick={() => setPreviewDivision(null)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors shrink-0"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <div className="p-5 space-y-4 text-xs overflow-y-auto flex-1">
-              <div className="p-4 bg-indigo-50/70 rounded-xl border border-indigo-200">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-indigo-100">
-                  <div className="flex items-center gap-2">
+              <div className="p-4 bg-indigo-50/70 rounded-xl border border-indigo-200 space-y-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 flex-wrap">
                     <span className="font-mono font-bold text-indigo-800 bg-indigo-100 px-2.5 py-0.5 rounded border border-indigo-300 text-xs">
                       {previewDivision.code}
                     </span>
-                    <span className="text-[10px] uppercase font-bold text-indigo-600 bg-white/80 px-1.5 py-0.5 rounded">
+                    <span className="text-[10px] uppercase font-bold text-indigo-700 bg-white px-2 py-0.5 rounded border border-indigo-200">
                       Divisi
                     </span>
                   </div>
-                  <span className="text-slate-500 text-[11px] truncate">
+                  <span className="text-slate-500 text-[11px] truncate max-w-[150px] text-right">
                     Entitas: <b className="text-slate-800">{currentEntity.name}</b>
                   </span>
                 </div>
-                <h4 className="text-base font-bold text-slate-900 mt-2.5">{previewDivision.name}</h4>
-                <p className="text-slate-600 text-xs mt-1.5 leading-relaxed">
+
+                <div>
+                  <h4 className="text-base font-bold text-slate-900 leading-snug">{previewDivision.name}</h4>
+                </div>
+
+                <p className="text-slate-600 text-xs pt-1.5 leading-relaxed border-t border-indigo-200/50">
                   {previewDivision.description || 'Divisi operasional utama di bawah koordinasi Direksi korporasi.'}
                 </p>
               </div>
@@ -3272,12 +3286,12 @@ export const OrganizationManagement: React.FC = () => {
                         </label>
                         <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden bg-slate-50/50">
                           {childDepts.map((dept) => (
-                            <div key={dept.id} className="p-2.5 flex items-center justify-between">
-                              <div>
-                                <span className="font-bold text-slate-900">{dept.name}</span>
-                                <span className="text-[10px] text-slate-400 font-mono ml-2">[{dept.code}]</span>
+                            <div key={dept.id} className="p-2.5 flex items-center justify-between gap-2 bg-white">
+                              <div className="min-w-0 flex-1">
+                                <span className="font-bold text-slate-900 block truncate">{dept.name}</span>
+                                <span className="text-[10px] text-slate-400 font-mono">[{dept.code}]</span>
                               </div>
-                              <span className="text-[11px] text-slate-600 font-medium">
+                              <span className="text-[11px] text-slate-600 font-medium shrink-0 whitespace-nowrap">
                                 {entityNodes.filter((n) => n.department?.toLowerCase() === dept.name.toLowerCase() || n.department?.toLowerCase().includes(dept.name.toLowerCase())).length} Posisi
                               </span>
                             </div>
@@ -3294,22 +3308,28 @@ export const OrganizationManagement: React.FC = () => {
                       <label className="font-bold text-slate-800 block text-xs uppercase tracking-wider">
                         Daftar Jabatan Struktural Terdaftar ({childPositions.length}):
                       </label>
-                      <div className="max-h-48 overflow-y-auto divide-y divide-slate-100 border border-slate-200 rounded-xl bg-slate-50/50">
+                      <div className="max-h-52 overflow-y-auto divide-y divide-slate-100 border border-slate-200 rounded-xl bg-slate-50/50">
                         {childPositions.map((node) => {
                           const emp = employees.find((e) => e.id === node.currentEmployeeId);
                           return (
-                            <div key={node.id} className="p-2.5 flex items-center justify-between">
-                              <div>
-                                <div className="font-semibold text-slate-900">{node.title}</div>
+                            <div key={node.id} className="p-2.5 flex items-center justify-between gap-2.5 bg-white text-xs hover:bg-slate-50/80 transition-colors">
+                              <div className="min-w-0 flex-1">
+                                <div className="font-semibold text-slate-900 leading-tight truncate">{node.title}</div>
                                 <div className="text-[10px] text-slate-400">
                                   Level L{node.level} • {useDeptLevel ? node.department : 'Direct to Division'}
                                 </div>
                               </div>
-                              <div className="text-right">
+                              <div className="shrink-0">
                                 {node.isVacant ? (
-                                  <span className="text-[10px] text-rose-600 font-semibold px-2 py-0.5 bg-rose-50 rounded border border-rose-200">Kosong</span>
+                                  <span className="inline-flex items-center gap-1 text-[10px] text-rose-600 font-semibold px-2 py-0.5 bg-rose-50 rounded border border-rose-200 whitespace-nowrap">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                                    Kosong
+                                  </span>
                                 ) : (
-                                  <span className="text-[11px] text-indigo-700 font-medium">{emp?.fullName || 'Terisi'}</span>
+                                  <span className="inline-flex items-center gap-1 text-[10px] text-indigo-700 font-semibold px-2 py-0.5 bg-indigo-50 rounded border border-indigo-200 whitespace-nowrap max-w-[140px] sm:max-w-[180px] truncate" title={emp?.fullName}>
+                                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0" />
+                                    <span className="truncate">{emp?.fullName || 'Terisi'}</span>
+                                  </span>
                                 )}
                               </div>
                             </div>
@@ -3394,38 +3414,55 @@ export const OrganizationManagement: React.FC = () => {
             className="bg-white rounded-2xl max-w-lg w-full border border-slate-200 shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
           >
             <div className="p-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
-              <div className="flex items-center gap-2">
-                <Briefcase className="w-5 h-5 text-emerald-400" />
-                <div>
-                  <h3 className="font-bold text-sm">Preview Master Departemen: {previewDepartment.name}</h3>
-                  <span className="text-[11px] text-slate-400">Kode: {previewDepartment.code}</span>
+              <div className="flex items-center gap-2.5 min-w-0 flex-1 mr-3">
+                <div className="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-500/30">
+                  <Briefcase className="w-4 h-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h3 className="font-bold text-sm truncate">{previewDepartment.name}</h3>
+                  <div className="flex items-center gap-2 text-[11px] text-slate-400">
+                    <span className="font-mono text-emerald-400 font-bold">{previewDepartment.code}</span>
+                    <span>•</span>
+                    <span>Master Departemen</span>
+                  </div>
                 </div>
               </div>
-              <button onClick={() => setPreviewDepartment(null)} className="text-slate-400 hover:text-white">
+              <button
+                type="button"
+                onClick={() => setPreviewDepartment(null)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors shrink-0"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <div className="p-5 space-y-4 text-xs overflow-y-auto flex-1">
-              <div className="p-4 bg-emerald-50/70 rounded-xl border border-emerald-200">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-emerald-100">
-                  <div className="flex items-center gap-2">
+              <div className="p-4 bg-emerald-50/70 rounded-xl border border-emerald-200 space-y-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 flex-wrap">
                     <span className="font-mono font-bold text-emerald-800 bg-emerald-100 px-2.5 py-0.5 rounded border border-emerald-300 text-xs">
                       {previewDepartment.code}
                     </span>
-                    <span className="text-[10px] uppercase font-bold text-emerald-600 bg-white/80 px-1.5 py-0.5 rounded">
+                    <span className="text-[10px] uppercase font-bold text-emerald-700 bg-white px-2 py-0.5 rounded border border-emerald-200">
                       Departemen
                     </span>
                   </div>
-                  <span className="text-slate-500 text-[11px] truncate">
+                  <span className="text-slate-500 text-[11px] truncate max-w-[150px] text-right">
                     Entitas: <b className="text-slate-800">{currentEntity.name}</b>
                   </span>
                 </div>
-                <h4 className="text-base font-bold text-slate-900 mt-2.5">{previewDepartment.name}</h4>
-                <div className="text-slate-600 text-xs mt-1.5">
-                  Divisi Induk: <b className="text-indigo-700">{divisions.find(d => d.id === previewDepartment.divisionId || d.name === previewDepartment.division)?.name || 'Divisi Terkait'}</b>
+
+                <div>
+                  <h4 className="text-base font-bold text-slate-900 leading-snug">{previewDepartment.name}</h4>
+                  <div className="text-slate-600 text-xs mt-1.5 flex items-center gap-1.5 flex-wrap">
+                    <span className="text-slate-500">Divisi Induk:</span>
+                    <span className="font-semibold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">
+                      {divisions.find(d => d.id === previewDepartment.divisionId || d.name === previewDepartment.division)?.name || 'Divisi Terkait'}
+                    </span>
+                  </div>
                 </div>
-                <p className="text-slate-600 text-xs mt-1.5 leading-relaxed">
+
+                <p className="text-slate-600 text-xs pt-1.5 leading-relaxed border-t border-emerald-200/50">
                   {previewDepartment.description || 'Unit operasional teknis di bawah naungan Divisi.'}
                 </p>
               </div>
@@ -3441,23 +3478,25 @@ export const OrganizationManagement: React.FC = () => {
                     <label className="font-bold text-slate-800 block text-xs uppercase tracking-wider">
                       Daftar Jabatan Struktural Terdaftar ({deptPositions.length}):
                     </label>
-                    <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden bg-slate-50/50 max-h-48 overflow-y-auto">
+                    <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden bg-slate-50/50 max-h-52 overflow-y-auto">
                       {deptPositions.map((node) => {
                         const emp = employees.find((e) => e.id === node.currentEmployeeId);
                         return (
-                          <div key={node.id} className="p-2.5 flex items-center justify-between bg-white text-xs">
-                            <div>
-                              <span className="font-semibold text-slate-900">{node.title}</span>
-                              <span className="text-[10px] text-slate-400 block font-mono">Tier L{node.level}</span>
+                          <div key={node.id} className="p-2.5 flex items-center justify-between gap-2.5 bg-white text-xs hover:bg-slate-50/80 transition-colors">
+                            <div className="min-w-0 flex-1">
+                              <span className="font-semibold text-slate-900 block truncate">{node.title}</span>
+                              <span className="text-[10px] text-slate-400 font-mono">Tier L{node.level}</span>
                             </div>
-                            <div>
+                            <div className="shrink-0">
                               {node.isVacant ? (
-                                <span className="text-[10px] text-rose-600 font-semibold px-2 py-0.5 bg-rose-50 rounded border border-rose-200">
+                                <span className="inline-flex items-center gap-1 text-[10px] text-rose-600 font-semibold px-2 py-0.5 bg-rose-50 rounded border border-rose-200 whitespace-nowrap">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
                                   Vacant
                                 </span>
                               ) : (
-                                <span className="text-[10px] text-emerald-700 font-semibold px-2 py-0.5 bg-emerald-50 rounded border border-emerald-200">
-                                  {emp?.fullName || 'Terisi'}
+                                <span className="inline-flex items-center gap-1 text-[10px] text-emerald-700 font-semibold px-2 py-0.5 bg-emerald-50 rounded border border-emerald-200 whitespace-nowrap max-w-[140px] sm:max-w-[180px] truncate" title={emp?.fullName}>
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                                  <span className="truncate">{emp?.fullName || 'Terisi'}</span>
                                 </span>
                               )}
                             </div>
