@@ -45,6 +45,8 @@ import {
   ChevronRight,
   LayoutGrid,
   List,
+  ThumbsUp,
+  ThumbsDown,
 } from 'lucide-react';
 import {
   RecruitmentStage,
@@ -73,6 +75,8 @@ export const RecruitmentManagement: React.FC = () => {
     updateCandidateStage,
     currentTenant,
     addOnboardingProcess,
+    onboardingProcesses = [],
+    updateOnboardingTask,
     setActiveModule,
   } = useHrms();
 
@@ -90,13 +94,20 @@ export const RecruitmentManagement: React.FC = () => {
     planTier: 'Enterprise' as const,
   };
 
-  // Main Symmetrical Operational Tabs (Clean, Standard Enterprise)
+  // 7 Explicit Tabs per User Architecture:
+  // 1. Permintaan FPTK
+  // 2. Lowongan & Sourcing
+  // 3. Pipeline Seleksi (Incoming, Screening, Assessment, Interview)
+  // 4. Offering (Kalkulator Offering & Kirim Offering)
+  // 5. Hired / Disqualified (Penentuan diterima atau ditolak)
+  // 6. On Boarding
+  // 7. Talent Pool
   const [activeTab, setActiveTab] = useState<
-    'kanban' | 'permintaan' | 'sourcing' | 'talent_pool' | 'onboarding' | 'pengaturan'
-  >('kanban');
+    'fptk' | 'sourcing' | 'pipeline' | 'offering' | 'decision' | 'onboarding' | 'talent_pool'
+  >('fptk');
 
-  // Kanban view mode toggle (Board View vs Table View)
-  const [kanbanViewMode, setKanbanViewMode] = useState<'board' | 'table'>('board');
+  // Pipeline sub-view mode: Board vs Table
+  const [pipelineViewMode, setPipelineViewMode] = useState<'board' | 'table'>('board');
 
   // Filters
   const [selectedVacancyId, setSelectedVacancyId] = useState<string>('all');
@@ -116,6 +127,10 @@ export const RecruitmentManagement: React.FC = () => {
   // Active items for modals
   const [activeCandidate, setActiveCandidate] = useState<Candidate | null>(null);
   const [activeRequisition, setActiveRequisition] = useState<JobRequisition | null>(null);
+
+  // Rejection note state
+  const [rejectionReasonInput, setRejectionReasonInput] = useState('');
+  const [candidateToDisqualify, setCandidateToDisqualify] = useState<Candidate | null>(null);
 
   // ===================== 1. FORM FPTK (PERMINTAAN KARYAWAN BARU) =====================
   const [fptkPosition, setFptkPosition] = useState('');
@@ -211,11 +226,56 @@ export const RecruitmentManagement: React.FC = () => {
     fasilitasLaptop: true,
   });
 
-  // Settings State
-  const [offeringValidityDays, setOfferingValidityDays] = useState(7);
-  const [requireDirectorAboveSalary, setRequireDirectorAboveSalary] = useState(25000000);
+  // Candidate stage filter helper
+  const isCandidateInStage = (c: Candidate, stageKey: RecruitmentStage) => {
+    if (stageKey === 'Incoming') return c.stage === 'Incoming' || c.stage === 'Applied';
+    return c.stage === stageKey;
+  };
 
-  // ===================== FILTERED CANDIDATES =====================
+  // 4 Core Selection Stages inside Pipeline (as requested by user)
+  const selectionStages: {
+    stage: RecruitmentStage;
+    number: string;
+    title: string;
+    subtitle: string;
+    badgeColor: string;
+    headerAccent: string;
+  }[] = [
+    {
+      stage: 'Incoming',
+      number: '1',
+      title: 'Incoming',
+      subtitle: 'Lamaran Masuk & CV Parsing Otomatis',
+      badgeColor: 'bg-blue-100 text-blue-900',
+      headerAccent: 'border-blue-600',
+    },
+    {
+      stage: 'Screening',
+      number: '2',
+      title: 'Screening',
+      subtitle: 'Penyaringan Kualifikasi & Keyword Match',
+      badgeColor: 'bg-sky-100 text-sky-900',
+      headerAccent: 'border-sky-600',
+    },
+    {
+      stage: 'Assessment',
+      number: '3',
+      title: 'Assessment',
+      subtitle: 'Tes Kompetensi Teknis & Skoring',
+      badgeColor: 'bg-amber-100 text-amber-900',
+      headerAccent: 'border-amber-600',
+    },
+    {
+      stage: 'Interview',
+      number: '4',
+      title: 'Interview (User)',
+      subtitle: 'Wawancara Kalender & Scorecard',
+      badgeColor: 'bg-emerald-100 text-emerald-900',
+      headerAccent: 'border-emerald-600',
+    },
+  ];
+
+  // Candidates filtering
   const filteredCandidates = candidates.filter((c) => {
     const matchesVacancy = selectedVacancyId === 'all' || c.jobVacancyId === selectedVacancyId;
     const matchesSearch =
@@ -226,78 +286,22 @@ export const RecruitmentManagement: React.FC = () => {
     return matchesVacancy && matchesSearch;
   });
 
-  // Helper matching candidate stages with backward-compatibility
-  const isCandidateInStage = (c: Candidate, stageKey: RecruitmentStage) => {
-    if (stageKey === 'Incoming') return c.stage === 'Incoming' || c.stage === 'Applied';
-    return c.stage === stageKey;
-  };
+  // Grouped candidates for 7 tabs
+  const pipelineCandidates = filteredCandidates.filter(
+    (c) =>
+      c.stage === 'Incoming' ||
+      c.stage === 'Applied' ||
+      c.stage === 'Screening' ||
+      c.stage === 'Assessment' ||
+      c.stage === 'Interview'
+  );
 
-  // 7 Generous Horizontal Kanban Columns (Including Talent Pool for zero-fragmentation)
-  const kanbanStages: {
-    stage: RecruitmentStage;
-    number: string;
-    title: string;
-    subtitle: string;
-    badgeColor: string;
-    headerAccent: string;
-  }[] = [
-    {
-      stage: 'Incoming',
-      number: '3',
-      title: 'Incoming',
-      subtitle: 'Lamaran & CV Parsing',
-      badgeColor: 'bg-blue-100 text-blue-900',
-      headerAccent: 'border-blue-600',
-    },
-    {
-      stage: 'Screening',
-      number: '4',
-      title: 'Screening',
-      subtitle: 'Keyword Match & Shortlist',
-      badgeColor: 'bg-sky-100 text-sky-900',
-      headerAccent: 'border-sky-600',
-    },
-    {
-      stage: 'Assessment',
-      number: '5',
-      title: 'Assessment',
-      subtitle: 'Tes Kompetensi & Skoring',
-      badgeColor: 'bg-amber-100 text-amber-900',
-      headerAccent: 'border-amber-600',
-    },
-    {
-      stage: 'Interview',
-      number: '6',
-      title: 'Interview',
-      subtitle: 'Kalender & Scorecard',
-      badgeColor: 'bg-emerald-100 text-emerald-900',
-      headerAccent: 'border-emerald-600',
-    },
-    {
-      stage: 'Offered',
-      number: '7',
-      title: 'Offering',
-      subtitle: 'Kalkulator THP & SK QR',
-      badgeColor: 'bg-blue-100 text-blue-900',
-      headerAccent: 'border-blue-700',
-    },
-    {
-      stage: 'Hired',
-      number: '8a',
-      title: 'Diterima (Hired)',
-      subtitle: 'Transisi ke Onboarding',
-      badgeColor: 'bg-teal-100 text-teal-900',
-      headerAccent: 'border-teal-600',
-    },
-    {
-      stage: 'TalentPool',
-      number: '8b',
-      title: 'Talent Pool',
-      subtitle: 'Basis Data Cadangan',
-      badgeColor: 'bg-slate-200 text-slate-800',
-      headerAccent: 'border-slate-400',
-    },
-  ];
+  const offeringCandidates = filteredCandidates.filter((c) => c.stage === 'Offered');
+  const decisionCandidates = filteredCandidates.filter(
+    (c) => c.stage === 'Offered' || c.stage === 'Hired' || c.stage === 'Rejected'
+  );
+  const hiredCandidates = filteredCandidates.filter((c) => c.stage === 'Hired');
+  const talentPoolCandidates = filteredCandidates.filter((c) => c.stage === 'TalentPool' || c.stage === 'Rejected');
 
   // Calculation Logic for Offering Calculator
   const activeAllowances =
@@ -438,6 +442,10 @@ export const RecruitmentManagement: React.FC = () => {
     setIsInterviewModalOpen(false);
   };
 
+  const handlePromoteToOffering = (candidate: Candidate) => {
+    handleOpenOfferingModal(candidate);
+  };
+
   const handleSendOffering = () => {
     if (!activeCandidate) return;
     setOfferingFormError(null);
@@ -465,26 +473,23 @@ export const RecruitmentManagement: React.FC = () => {
     setIsOfferingDocPreviewOpen(true);
   };
 
-  const handlePushToOnboarding = (candidateToHire?: Candidate) => {
-    const target = candidateToHire || activeCandidate;
-    if (!target) return;
-
-    const vac = vacancies.find((v) => v.id === target.jobVacancyId);
+  const handleConfirmHired = (candidate: Candidate) => {
+    const vac = vacancies.find((v) => v.id === candidate.jobVacancyId);
     const pos = vac?.title || 'Senior Specialist';
     const dept = vac?.department || 'Engineering';
 
     addOnboardingProcess({
       type: 'via_recruitment',
-      candidateId: target.id,
-      employeeName: target.name,
-      email: target.email,
-      phone: target.phone,
+      candidateId: candidate.id,
+      employeeName: candidate.name,
+      email: candidate.email,
+      phone: candidate.phone,
       position: pos,
       department: dept,
       employmentType: vac?.employmentType || 'Kontrak',
-      joinDate: target.joinedDate || targetJoinDate || '2026-11-01',
-      basicSalary: components.basicSalary,
-      contractDocNumber: target.offeringDocNumber || docNumber,
+      joinDate: candidate.joinedDate || targetJoinDate || '2026-11-01',
+      basicSalary: candidate.offeredSalary ? Math.round(candidate.offeredSalary * 0.75) : components.basicSalary,
+      contractDocNumber: candidate.offeringDocNumber || docNumber,
       tasks: [
         { id: 't1', title: 'Verifikasi KTP, NPWP & Dokumen Ijazah', category: 'Legalitas & Dokumen', isCompleted: true, completedAt: new Date().toISOString().split('T')[0], assignedRole: 'hr_admin' },
         { id: 't2', title: 'Tanda Tangan Kontrak Digital QR (PKWT/PKWTT)', category: 'Legalitas & Dokumen', isCompleted: false, assignedRole: 'hr_admin' },
@@ -494,43 +499,44 @@ export const RecruitmentManagement: React.FC = () => {
       ],
     });
 
-    updateCandidateStage(target.id, 'Hired', {
-      joinedDate: target.joinedDate || targetJoinDate || '2026-11-01',
+    updateCandidateStage(candidate.id, 'Hired', {
+      joinedDate: candidate.joinedDate || targetJoinDate || '2026-11-01',
     });
-    setIsOfferingDocPreviewOpen(false);
-    alert(`Kandidat ${target.name} resmi diterima (Hired)! Berkas langsung ditransfer ke Modul Onboarding.`);
+    alert(`Keputusan Resmi: ${candidate.name} DITERIMA (HIRED)! Data ditransfer ke Tab On Boarding.`);
+    setActiveTab('onboarding');
   };
 
-  const handleMoveToTalentPool = (candidate: Candidate, reason?: string) => {
+  const handleConfirmDisqualified = (candidate: Candidate, reason: string) => {
     const vac = vacancies.find((v) => v.id === candidate.jobVacancyId);
     updateCandidateStage(candidate.id, 'TalentPool', {
-      disqualificationReason: reason || 'Disimpan di Talent Pool untuk kebutuhan pembukaan posisi serupa di masa depan.',
+      disqualificationReason: reason || 'Kandidat belum sesuai dengan kuota formasi saat ini. Disimpan di Talent Pool untuk masa depan.',
       talentPoolCategory: vac?.department || 'General Talent',
       talentPoolTags: candidate.parsedData?.topSkills || ['Potensial', 'Disimpan'],
     });
-    setIsScreeningModalOpen(false);
-    setIsResumeParserModalOpen(false);
-    alert(`${candidate.name} telah dipindahkan ke Basis Data Cadangan (Talent Pool).`);
+    setCandidateToDisqualify(null);
+    setRejectionReasonInput('');
+    alert(`Keputusan: ${candidate.name} DITOLAK pada posisi ini dan dipindahkan ke Tab Talent Pool.`);
   };
 
   const handleReengageTalent = (candidate: Candidate) => {
     updateCandidateStage(candidate.id, 'Screening', {
       screeningNotes: 'Kandidat dipanggil ulang dari Talent Pool untuk proses seleksi aktif.',
     });
-    alert(`${candidate.name} berhasil diaktifkan kembali ke Pipeline Seleksi Aktif (Tahap Screening)!`);
+    alert(`${candidate.name} berhasil diaktifkan kembali ke Tab Pipeline Seleksi (Tahap Screening)!`);
+    setActiveTab('pipeline');
   };
 
   return (
     <div className="space-y-4">
-      {/* ===================== ROW 1: HEADER & ACTION BUTTONS ===================== */}
+      {/* ===================== HEADER ===================== */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
         <div>
           <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
             <UserPlus className="w-5 h-5 text-blue-700" />
-            <span>Rekrutmen & Onboarding</span>
+            <span>Manajemen Rekrutmen, Seleksi & Onboarding</span>
           </h2>
           <p className="text-xs text-slate-500">
-            Siklus rekrutmen 8 tahap: Permintaan FPTK ➔ Sourcing ➔ Incoming ➔ Screening ➔ Assessment ➔ Interview ➔ Offering ➔ Onboarding & Talent Pool.
+            Tata kelola alur rekrutmen terpisah: Permintaan FPTK, Lowongan Sourcing, Pipeline Seleksi, Offering Letter, Keputusan Hired/Disqualified, On Boarding, & Talent Pool.
           </p>
         </div>
 
@@ -540,7 +546,7 @@ export const RecruitmentManagement: React.FC = () => {
             className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-800 rounded-lg text-xs font-semibold shadow-2xs border border-slate-300 transition-colors"
           >
             <Plus className="w-3.5 h-3.5 text-blue-700" />
-            <span>+ Buat FPTK</span>
+            <span>+ Ajukan FPTK</span>
           </button>
           <button
             onClick={() => setIsVacancyModalOpen(true)}
@@ -559,181 +565,21 @@ export const RecruitmentManagement: React.FC = () => {
         </div>
       </div>
 
-      {/* ===================== ROW 2: MASTER 8-STAGE RECRUITMENT JOURNEY STEPPER ===================== */}
-      <div className="bg-white border border-slate-200 rounded-xl p-3 shadow-2xs">
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2">
-            <Layers className="w-4 h-4 text-blue-700" />
-            <span className="text-xs font-bold text-slate-900">Alur Standar 8 Tahap Rekrutmen:</span>
-          </div>
-          <span className="text-[11px] text-slate-400">Klik tahap untuk navigasi langsung</span>
-        </div>
-
-        {/* Horizontal Breadcrumb Chain with Live Counters */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
-          {/* Step 1: FPTK */}
-          <button
-            onClick={() => setActiveTab('permintaan')}
-            className={`p-2 rounded-lg border text-left transition-all ${
-              activeTab === 'permintaan'
-                ? 'bg-blue-50 border-blue-600 shadow-2xs'
-                : 'bg-slate-50 hover:bg-slate-100 border-slate-200'
-            }`}
-          >
-            <div className="text-[10px] text-slate-500 font-semibold">Tahap 1</div>
-            <div className="font-bold text-slate-900 text-xs truncate">Permintaan FPTK</div>
-            <div className="text-[10px] font-mono font-bold text-blue-700 mt-0.5">
-              {jobRequisitions.length} Diajukan
-            </div>
-          </button>
-
-          {/* Step 2: Sourcing */}
-          <button
-            onClick={() => setActiveTab('sourcing')}
-            className={`p-2 rounded-lg border text-left transition-all ${
-              activeTab === 'sourcing'
-                ? 'bg-blue-50 border-blue-600 shadow-2xs'
-                : 'bg-slate-50 hover:bg-slate-100 border-slate-200'
-            }`}
-          >
-            <div className="text-[10px] text-slate-500 font-semibold">Tahap 2</div>
-            <div className="font-bold text-slate-900 text-xs truncate">Sourcing & Posting</div>
-            <div className="text-[10px] font-mono font-bold text-blue-700 mt-0.5">
-              {vacancies.length} Lowongan
-            </div>
-          </button>
-
-          {/* Step 3: Incoming */}
-          <button
-            onClick={() => {
-              setActiveTab('kanban');
-              setKanbanViewMode('board');
-            }}
-            className={`p-2 rounded-lg border text-left transition-all ${
-              activeTab === 'kanban'
-                ? 'bg-blue-50/70 border-blue-400'
-                : 'bg-slate-50 hover:bg-slate-100 border-slate-200'
-            }`}
-          >
-            <div className="text-[10px] text-slate-500 font-semibold">Tahap 3</div>
-            <div className="font-bold text-slate-900 text-xs truncate">Incoming & CV</div>
-            <div className="text-[10px] font-mono font-bold text-blue-700 mt-0.5">
-              {candidates.filter((c) => c.stage === 'Incoming' || c.stage === 'Applied').length} Pelamar
-            </div>
-          </button>
-
-          {/* Step 4: Screening */}
-          <button
-            onClick={() => {
-              setActiveTab('kanban');
-              setKanbanViewMode('board');
-            }}
-            className="p-2 rounded-lg border bg-slate-50 hover:bg-slate-100 border-slate-200 text-left transition-all"
-          >
-            <div className="text-[10px] text-slate-500 font-semibold">Tahap 4</div>
-            <div className="font-bold text-slate-900 text-xs truncate">Screening AI</div>
-            <div className="text-[10px] font-mono font-bold text-sky-700 mt-0.5">
-              {candidates.filter((c) => c.stage === 'Screening').length} Match
-            </div>
-          </button>
-
-          {/* Step 5: Assessment */}
-          <button
-            onClick={() => {
-              setActiveTab('kanban');
-              setKanbanViewMode('board');
-            }}
-            className="p-2 rounded-lg border bg-slate-50 hover:bg-slate-100 border-slate-200 text-left transition-all"
-          >
-            <div className="text-[10px] text-slate-500 font-semibold">Tahap 5</div>
-            <div className="font-bold text-slate-900 text-xs truncate">Tes Kompetensi</div>
-            <div className="text-[10px] font-mono font-bold text-amber-700 mt-0.5">
-              {candidates.filter((c) => c.stage === 'Assessment').length} Diuji
-            </div>
-          </button>
-
-          {/* Step 6: Interview */}
-          <button
-            onClick={() => {
-              setActiveTab('kanban');
-              setKanbanViewMode('board');
-            }}
-            className="p-2 rounded-lg border bg-slate-50 hover:bg-slate-100 border-slate-200 text-left transition-all"
-          >
-            <div className="text-[10px] text-slate-500 font-semibold">Tahap 6</div>
-            <div className="font-bold text-slate-900 text-xs truncate">Wawancara</div>
-            <div className="text-[10px] font-mono font-bold text-emerald-700 mt-0.5">
-              {candidates.filter((c) => c.stage === 'Interview').length} Jadwal
-            </div>
-          </button>
-
-          {/* Step 7: Offering */}
-          <button
-            onClick={() => {
-              setActiveTab('kanban');
-              setKanbanViewMode('board');
-            }}
-            className="p-2 rounded-lg border bg-slate-50 hover:bg-slate-100 border-slate-200 text-left transition-all"
-          >
-            <div className="text-[10px] text-slate-500 font-semibold">Tahap 7</div>
-            <div className="font-bold text-slate-900 text-xs truncate">Offering Letter</div>
-            <div className="text-[10px] font-mono font-bold text-blue-700 mt-0.5">
-              {candidates.filter((c) => c.stage === 'Offered').length} Ditawarkan
-            </div>
-          </button>
-
-          {/* Step 8: Hired / Talent Pool */}
-          <button
-            onClick={() => setActiveTab('talent_pool')}
-            className={`p-2 rounded-lg border text-left transition-all ${
-              activeTab === 'talent_pool' || activeTab === 'onboarding'
-                ? 'bg-blue-50 border-blue-600 shadow-2xs'
-                : 'bg-slate-50 hover:bg-slate-100 border-slate-200'
-            }`}
-          >
-            <div className="text-[10px] text-slate-500 font-semibold">Tahap 8</div>
-            <div className="font-bold text-slate-900 text-xs truncate">Hired / Talent Pool</div>
-            <div className="text-[10px] font-mono font-bold text-teal-700 mt-0.5">
-              {candidates.filter((c) => c.stage === 'Hired').length} Hired · {candidates.filter((c) => c.stage === 'TalentPool').length} Pool
-            </div>
-          </button>
-        </div>
-      </div>
-
-      {/* ===================== ROW 3: CLEAN SUB-MENU TABS (STANDARDIZED & TIDY) ===================== */}
+      {/* ===================== ROW 2: 7 EXPLICIT SEPARATED TABS PER USER ARCHITECTURE ===================== */}
       <ScrollableTabNav className="border-b border-slate-200" containerClassName="pt-1">
         <button
-          onClick={() => setActiveTab('kanban')}
+          onClick={() => setActiveTab('fptk')}
           className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
-            activeTab === 'kanban'
-              ? 'border-blue-700 text-blue-900 font-bold'
-              : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
-          }`}
-        >
-          <Users className="w-3.5 h-3.5" />
-          <span>Pipeline Seleksi ATS</span>
-          <span
-            className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full transition-colors ${
-              activeTab === 'kanban' ? 'bg-blue-700 text-white' : 'bg-slate-100 text-slate-600'
-            }`}
-          >
-            {candidates.length}
-          </span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('permintaan')}
-          className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
-            activeTab === 'permintaan'
+            activeTab === 'fptk'
               ? 'border-blue-700 text-blue-900 font-bold'
               : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
           }`}
         >
           <FileCheck className="w-3.5 h-3.5" />
-          <span>Permintaan Karyawan (FPTK)</span>
+          <span>1. Permintaan FPTK</span>
           <span
             className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full transition-colors ${
-              activeTab === 'permintaan' ? 'bg-blue-700 text-white' : 'bg-slate-100 text-slate-600'
+              activeTab === 'fptk' ? 'bg-blue-700 text-white' : 'bg-slate-100 text-slate-600'
             }`}
           >
             {jobRequisitions.length}
@@ -749,7 +595,7 @@ export const RecruitmentManagement: React.FC = () => {
           }`}
         >
           <Globe className="w-3.5 h-3.5" />
-          <span>Lowongan & Sourcing</span>
+          <span>2. Lowongan & Sourcing</span>
           <span
             className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full transition-colors ${
               activeTab === 'sourcing' ? 'bg-blue-700 text-white' : 'bg-slate-100 text-slate-600'
@@ -760,21 +606,59 @@ export const RecruitmentManagement: React.FC = () => {
         </button>
 
         <button
-          onClick={() => setActiveTab('talent_pool')}
+          onClick={() => setActiveTab('pipeline')}
           className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
-            activeTab === 'talent_pool'
+            activeTab === 'pipeline'
               ? 'border-blue-700 text-blue-900 font-bold'
               : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
           }`}
         >
-          <Archive className="w-3.5 h-3.5" />
-          <span>Talent Pool</span>
+          <Users className="w-3.5 h-3.5" />
+          <span>3. Pipeline Seleksi</span>
           <span
             className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full transition-colors ${
-              activeTab === 'talent_pool' ? 'bg-blue-700 text-white' : 'bg-slate-100 text-slate-600'
+              activeTab === 'pipeline' ? 'bg-blue-700 text-white' : 'bg-slate-100 text-slate-600'
             }`}
           >
-            {candidates.filter((c) => c.stage === 'TalentPool').length}
+            {pipelineCandidates.length}
+          </span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('offering')}
+          className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
+            activeTab === 'offering'
+              ? 'border-blue-700 text-blue-900 font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+          }`}
+        >
+          <Calculator className="w-3.5 h-3.5" />
+          <span>4. Offering</span>
+          <span
+            className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full transition-colors ${
+              activeTab === 'offering' ? 'bg-blue-700 text-white' : 'bg-slate-100 text-slate-600'
+            }`}
+          >
+            {offeringCandidates.length}
+          </span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('decision')}
+          className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
+            activeTab === 'decision'
+              ? 'border-blue-700 text-blue-900 font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+          }`}
+        >
+          <CheckCircle className="w-3.5 h-3.5" />
+          <span>5. Hired / Disqualified</span>
+          <span
+            className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full transition-colors ${
+              activeTab === 'decision' ? 'bg-blue-700 text-white' : 'bg-slate-100 text-slate-600'
+            }`}
+          >
+            {decisionCandidates.length}
           </span>
         </button>
 
@@ -787,585 +671,47 @@ export const RecruitmentManagement: React.FC = () => {
           }`}
         >
           <UserPlus className="w-3.5 h-3.5" />
-          <span>Onboarding Tracker</span>
+          <span>6. On Boarding</span>
           <span
             className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full transition-colors ${
-              activeTab === 'onboarding'
-                ? 'bg-emerald-700 text-white'
-                : 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+              activeTab === 'onboarding' ? 'bg-emerald-700 text-white' : 'bg-emerald-50 text-emerald-800 border border-emerald-200'
             }`}
           >
-            {candidates.filter((c) => c.stage === 'Hired' || c.stage === 'Offered').length}
+            {hiredCandidates.length}
           </span>
         </button>
 
         <button
-          onClick={() => setActiveTab('pengaturan')}
+          onClick={() => setActiveTab('talent_pool')}
           className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
-            activeTab === 'pengaturan'
+            activeTab === 'talent_pool'
               ? 'border-blue-700 text-blue-900 font-bold'
               : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
           }`}
         >
-          <Settings className="w-3.5 h-3.5" />
-          <span>Kriteria & Scoring</span>
+          <Archive className="w-3.5 h-3.5" />
+          <span>7. Talent Pool</span>
+          <span
+            className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full transition-colors ${
+              activeTab === 'talent_pool' ? 'bg-blue-700 text-white' : 'bg-slate-100 text-slate-600'
+            }`}
+          >
+            {talentPoolCandidates.length}
+          </span>
         </button>
       </ScrollableTabNav>
 
-      {/* ===================== TAB 1: PIPELINE SELEKSI ATS (UNIFIED HORIZONTAL KANBAN & TABLE) ===================== */}
-      {activeTab === 'kanban' && (
-        <div className="space-y-3.5">
-          {/* Controls Bar: Filter, Search, and View Mode Switcher */}
-          <div className="bg-white p-3 border border-slate-200 rounded-xl shadow-2xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
-            <div className="flex flex-col sm:flex-row sm:items-center gap-2 text-xs flex-1">
-              <div className="flex items-center gap-2 shrink-0">
-                <Filter className="w-3.5 h-3.5 text-slate-500" />
-                <span className="font-semibold text-slate-700">Filter Lowongan:</span>
-              </div>
-              <select
-                id="recruitment-filter-posisi"
-                value={selectedVacancyId}
-                onChange={(e) => setSelectedVacancyId(e.target.value)}
-                className="py-1.5 px-3 border border-slate-300 rounded-lg bg-white text-slate-800 font-medium text-xs focus:ring-2 focus:ring-blue-600 focus:outline-hidden w-full sm:max-w-xs shadow-2xs"
-              >
-                <option value="all">Semua Lowongan Kerja ({vacancies.length})</option>
-                {vacancies.map((v) => (
-                  <option key={v.id} value={v.id}>
-                    {v.title} ({v.department})
-                  </option>
-                ))}
-              </select>
-
-              <div className="relative flex-1 sm:max-w-xs">
-                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  placeholder="Cari pelamar, keahlian, kampus..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-8 pr-3 py-1.5 border border-slate-300 rounded-lg text-xs bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-600 shadow-2xs"
-                />
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 shrink-0 justify-between sm:justify-end">
-              <span className="text-[11px] text-slate-500 font-medium">
-                Menampilkan: <strong className="text-slate-800">{filteredCandidates.length}</strong> Kandidat
-              </span>
-
-              {/* View Mode Switcher */}
-              <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-0.5">
-                <button
-                  type="button"
-                  onClick={() => setKanbanViewMode('board')}
-                  className={`px-2.5 py-1 rounded text-xs font-semibold flex items-center gap-1 transition-colors ${
-                    kanbanViewMode === 'board' ? 'bg-white text-blue-900 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                  title="Papan Kanban Horizontal"
-                >
-                  <LayoutGrid className="w-3.5 h-3.5" />
-                  <span>Papan</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setKanbanViewMode('table')}
-                  className={`px-2.5 py-1 rounded text-xs font-semibold flex items-center gap-1 transition-colors ${
-                    kanbanViewMode === 'table' ? 'bg-white text-blue-900 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                  title="Tabel Ringkasan"
-                >
-                  <List className="w-3.5 h-3.5" />
-                  <span>Tabel</span>
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* VIEW MODE 1: HORIZONTAL SCROLLING KANBAN BOARD */}
-          {kanbanViewMode === 'board' ? (
-            <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-100/60 p-3">
-              <div className="flex gap-3.5 overflow-x-auto pb-4 pt-1 items-start min-w-0 scroll-smooth">
-                {kanbanStages.map((stg) => {
-                  const stageCandidates = filteredCandidates.filter((c) => isCandidateInStage(c, stg.stage));
-
-                  return (
-                    <div
-                      key={stg.stage}
-                      className="w-[295px] shrink-0 bg-white rounded-xl border border-slate-200 shadow-2xs flex flex-col min-h-[500px]"
-                    >
-                      {/* Column Header */}
-                      <div className={`p-3 border-b-2 ${stg.headerAccent} bg-slate-50/80 rounded-t-xl`}>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-1.5">
-                            <span className="w-5 h-5 rounded-full bg-slate-200 text-slate-800 text-[10px] font-bold flex items-center justify-center font-mono">
-                              {stg.number}
-                            </span>
-                            <span className="font-bold text-slate-900 text-xs">{stg.title}</span>
-                          </div>
-                          <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full ${stg.badgeColor}`}>
-                            {stageCandidates.length}
-                          </span>
-                        </div>
-                        <span className="text-[10px] text-slate-500 block mt-1 leading-tight">
-                          {stg.subtitle}
-                        </span>
-                      </div>
-
-                      {/* Candidate Cards in Column */}
-                      <div className="p-2.5 space-y-2 flex-1 bg-slate-50/40">
-                        {stageCandidates.length === 0 ? (
-                          <div className="h-32 rounded-lg border border-dashed border-slate-200 flex flex-col items-center justify-center p-3 text-center text-slate-400 text-[11px]">
-                            <span>Tidak ada pelamar</span>
-                          </div>
-                        ) : (
-                          stageCandidates.map((candidate) => {
-                            const vac = vacancies.find((v) => v.id === candidate.jobVacancyId);
-
-                            return (
-                              <div
-                                key={candidate.id}
-                                className="p-3 bg-white border border-slate-200 rounded-lg shadow-2xs hover:shadow-xs transition-shadow space-y-2.5"
-                              >
-                                {/* Row 1: Candidate Name & Portal Badge */}
-                                <div className="flex items-start justify-between gap-1">
-                                  <div>
-                                    <span className="font-bold text-slate-900 text-xs block leading-tight">
-                                      {candidate.name}
-                                    </span>
-                                    <span className="text-[10px] text-slate-500 block truncate max-w-[160px]">
-                                      {candidate.lastCompany}
-                                    </span>
-                                  </div>
-                                  {candidate.sourcePortal && (
-                                    <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200 shrink-0">
-                                      {candidate.sourcePortal}
-                                    </span>
-                                  )}
-                                </div>
-
-                                {/* Row 2: Target Position & Expected Salary */}
-                                <div className="text-[11px] space-y-0.5 bg-slate-50 p-2 rounded border border-slate-100">
-                                  <div className="font-semibold text-blue-950 truncate">
-                                    {vac?.title || 'Posisi'}
-                                  </div>
-                                  <div className="text-slate-500 text-[10px]">
-                                    Ekspektasi: <span className="font-mono font-bold text-slate-800">{formatRupiah(candidate.expectedSalary)}</span>
-                                  </div>
-                                </div>
-
-                                {/* Stage-Specific Visual Highlights */}
-                                {stg.stage === 'Incoming' && (
-                                  <div className="space-y-1.5 pt-0.5">
-                                    <div className="flex items-center justify-between text-[10px]">
-                                      <span className="text-emerald-700 font-semibold flex items-center gap-1">
-                                        <Sparkles className="w-3 h-3 text-emerald-600" />
-                                        <span>AI Resume Parsed</span>
-                                      </span>
-                                      <span className="font-mono text-slate-600 font-bold">
-                                        {candidate.parsedData?.extractionScore || 95}%
-                                      </span>
-                                    </div>
-                                    {candidate.parsedData && (
-                                      <div className="flex flex-wrap gap-1">
-                                        {candidate.parsedData.topSkills.slice(0, 3).map((skill, idx) => (
-                                          <span key={idx} className="text-[9px] bg-slate-100 text-slate-700 px-1.5 py-0.2 rounded font-medium">
-                                            {skill}
-                                          </span>
-                                        ))}
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-
-                                {stg.stage === 'Screening' && (
-                                  <div className="space-y-1.5 pt-0.5">
-                                    <div className="flex items-center justify-between text-[10px]">
-                                      <span className="text-slate-600 font-medium">Kesesuaian Kualifikasi:</span>
-                                      <span className="font-mono font-bold px-1.5 py-0.2 rounded bg-sky-50 text-sky-800 border border-sky-200">
-                                        {candidate.aiMatchScore || 85}% Match
-                                      </span>
-                                    </div>
-                                    <div className="text-[10px] text-slate-500 line-clamp-2">
-                                      {candidate.screeningNotes || 'Kualifikasi cocok dengan requirement lowongan.'}
-                                    </div>
-                                  </div>
-                                )}
-
-                                {stg.stage === 'Assessment' && (
-                                  <div className="space-y-1.5 pt-0.5">
-                                    <div className="flex items-center justify-between text-[10px]">
-                                      <span className="text-slate-600 font-medium truncate max-w-[110px]">
-                                        {candidate.testType || 'Tes Teknis'}
-                                      </span>
-                                      <span className="font-mono font-bold px-1.5 py-0.2 rounded bg-amber-50 text-amber-800 border border-amber-200">
-                                        Skor: {candidate.testScore || 0}/100
-                                      </span>
-                                    </div>
-                                    <div className="text-[10px] font-semibold flex items-center gap-1">
-                                      <span className="text-slate-500">Status:</span>
-                                      <span className={candidate.testStatus === 'Lulus' ? 'text-emerald-700' : 'text-slate-700'}>
-                                        {candidate.testStatus || 'Belum Ditugaskan'}
-                                      </span>
-                                    </div>
-                                  </div>
-                                )}
-
-                                {stg.stage === 'Interview' && (
-                                  <div className="space-y-1 pt-0.5 text-[10px]">
-                                    <div className="flex items-center justify-between font-semibold">
-                                      <span className="text-slate-700 flex items-center gap-1">
-                                        <Calendar className="w-3 h-3 text-slate-500" />
-                                        <span>{candidate.interviewDate?.split(' ')[0] || 'Terjadwal'}</span>
-                                      </span>
-                                      {candidate.interviewScore && (
-                                        <span className="text-emerald-700 font-mono font-bold">
-                                          ★ {candidate.interviewScore}/100
-                                        </span>
-                                      )}
-                                    </div>
-                                    {candidate.meetingLink && (
-                                      <a
-                                        href={candidate.meetingLink}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="text-blue-700 hover:underline flex items-center gap-1 font-medium text-[10px]"
-                                      >
-                                        <Video className="w-3 h-3 text-blue-600" />
-                                        <span>Google Meet Link</span>
-                                      </a>
-                                    )}
-                                  </div>
-                                )}
-
-                                {stg.stage === 'Offered' && (
-                                  <div className="space-y-1 pt-0.5 text-[10px]">
-                                    <div className="text-slate-600">
-                                      Gaji Ditawarkan:{' '}
-                                      <span className="font-mono font-bold text-slate-900">
-                                        {formatRupiah(candidate.offeredSalary || candidate.expectedSalary)}
-                                      </span>
-                                    </div>
-                                    <div className="text-[9px] font-mono text-slate-500 truncate">
-                                      SK: {candidate.offeringDocNumber || 'Draft'}
-                                    </div>
-                                  </div>
-                                )}
-
-                                {stg.stage === 'Hired' && (
-                                  <div className="space-y-1 pt-0.5 text-[10px]">
-                                    <div className="p-1.5 bg-emerald-50 text-emerald-800 rounded border border-emerald-200 font-semibold flex items-center gap-1">
-                                      <CheckCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                                      <span>Diterima · Join: {candidate.joinedDate || '2026-11-01'}</span>
-                                    </div>
-                                  </div>
-                                )}
-
-                                {stg.stage === 'TalentPool' && (
-                                  <div className="space-y-1 pt-0.5 text-[10px]">
-                                    <span className="text-slate-500 block truncate">
-                                      {candidate.disqualificationReason || 'Disimpan untuk kebutuhan masa depan'}
-                                    </span>
-                                  </div>
-                                )}
-
-                                {/* Action Buttons */}
-                                <div className="pt-2 border-t border-slate-100 flex flex-col gap-1.5">
-                                  {stg.stage === 'Incoming' && (
-                                    <>
-                                      <button
-                                        onClick={() => {
-                                          setActiveCandidate(candidate);
-                                          setIsResumeParserModalOpen(true);
-                                        }}
-                                        className="w-full py-1 px-2 text-[11px] font-semibold bg-blue-50 text-blue-700 hover:bg-blue-100 rounded flex items-center justify-center gap-1 transition-colors"
-                                      >
-                                        <FileText className="w-3 h-3" />
-                                        <span>Lihat Hasil Parsing CV</span>
-                                      </button>
-                                      <div className="flex items-center gap-1">
-                                        <button
-                                          onClick={() => updateCandidateStage(candidate.id, 'Screening')}
-                                          className="flex-1 py-1 text-[10px] font-semibold bg-slate-100 hover:bg-slate-200 text-slate-800 rounded text-center transition-colors"
-                                        >
-                                          Lolos Screening →
-                                        </button>
-                                        <button
-                                          onClick={() => handleMoveToTalentPool(candidate)}
-                                          title="Pindahkan ke Talent Pool"
-                                          className="p-1 text-slate-400 hover:text-slate-700 rounded hover:bg-slate-100"
-                                        >
-                                          <Archive className="w-3.5 h-3.5" />
-                                        </button>
-                                      </div>
-                                    </>
-                                  )}
-
-                                  {stg.stage === 'Screening' && (
-                                    <>
-                                      <button
-                                        onClick={() => {
-                                          setActiveCandidate(candidate);
-                                          setIsScreeningModalOpen(true);
-                                        }}
-                                        className="w-full py-1 text-[11px] font-semibold bg-sky-50 text-sky-800 hover:bg-sky-100 rounded flex items-center justify-center gap-1 transition-colors"
-                                      >
-                                        <Sparkles className="w-3 h-3 text-sky-600" />
-                                        <span>Detail Screening AI</span>
-                                      </button>
-                                      <button
-                                        onClick={() => updateCandidateStage(candidate.id, 'Assessment')}
-                                        className="w-full py-1 text-[10px] font-semibold bg-blue-700 text-white hover:bg-blue-800 rounded text-center transition-colors"
-                                      >
-                                        Shortlist ke Tes Kompetensi →
-                                      </button>
-                                    </>
-                                  )}
-
-                                  {stg.stage === 'Assessment' && (
-                                    <>
-                                      <button
-                                        onClick={() => handleOpenAssessmentModal(candidate)}
-                                        className="w-full py-1 text-[11px] font-semibold bg-amber-50 text-amber-800 hover:bg-amber-100 rounded flex items-center justify-center gap-1 transition-colors"
-                                      >
-                                        <Award className="w-3 h-3 text-amber-600" />
-                                        <span>Input / Evaluasi Nilai Tes</span>
-                                      </button>
-                                      <button
-                                        onClick={() => updateCandidateStage(candidate.id, 'Interview')}
-                                        className="w-full py-1 text-[10px] font-semibold bg-slate-900 text-white hover:bg-slate-800 rounded text-center transition-colors"
-                                      >
-                                        Loloskan ke Wawancara →
-                                      </button>
-                                    </>
-                                  )}
-
-                                  {stg.stage === 'Interview' && (
-                                    <>
-                                      <button
-                                        onClick={() => handleOpenInterviewModal(candidate)}
-                                        className="w-full py-1 text-[11px] font-semibold bg-emerald-50 text-emerald-800 hover:bg-emerald-100 rounded flex items-center justify-center gap-1 transition-colors"
-                                      >
-                                        <Calendar className="w-3 h-3 text-emerald-600" />
-                                        <span>Jadwal & Scorecard</span>
-                                      </button>
-                                      <button
-                                        onClick={() => handleOpenOfferingModal(candidate)}
-                                        className="w-full py-1 text-[10px] font-semibold bg-blue-700 text-white hover:bg-blue-800 rounded text-center transition-colors"
-                                      >
-                                        Kalkulator Offering Letter →
-                                      </button>
-                                    </>
-                                  )}
-
-                                  {stg.stage === 'Offered' && (
-                                    <>
-                                      <button
-                                        onClick={() => handleOpenOfferingModal(candidate)}
-                                        className="w-full py-1 text-[11px] font-semibold bg-blue-50 text-blue-800 hover:bg-blue-100 rounded flex items-center justify-center gap-1 transition-colors"
-                                      >
-                                        <Calculator className="w-3 h-3" />
-                                        <span>Kalkulator & SK Penawaran</span>
-                                      </button>
-                                      <button
-                                        onClick={() => handlePushToOnboarding(candidate)}
-                                        className="w-full py-1 text-[10px] font-semibold bg-emerald-700 text-white hover:bg-emerald-800 rounded text-center transition-colors"
-                                      >
-                                        Kandidat Terima & Hired →
-                                      </button>
-                                    </>
-                                  )}
-
-                                  {stg.stage === 'Hired' && (
-                                    <button
-                                      onClick={() => handlePushToOnboarding(candidate)}
-                                      className="w-full py-1 text-[10px] font-semibold bg-slate-100 text-slate-800 hover:bg-slate-200 rounded text-center transition-colors flex items-center justify-center gap-1"
-                                    >
-                                      <UserPlus className="w-3 h-3 text-blue-700" />
-                                      <span>Kelola Onboarding</span>
-                                    </button>
-                                  )}
-
-                                  {stg.stage === 'TalentPool' && (
-                                    <button
-                                      onClick={() => handleReengageTalent(candidate)}
-                                      className="w-full py-1 text-[10px] font-semibold bg-blue-700 text-white hover:bg-blue-800 rounded text-center transition-colors flex items-center justify-center gap-1"
-                                    >
-                                      <RefreshCw className="w-3 h-3" />
-                                      <span>Hubungi Kembali</span>
-                                    </button>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ) : (
-            /* VIEW MODE 2: DENSE RESPONSIVE TABLE VIEW */
-            <div className="bg-white border border-slate-200 rounded-xl shadow-2xs overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
-                    <tr>
-                      <th className="py-3 px-4">Nama Pelamar</th>
-                      <th className="py-3 px-4">Posisi & Dept</th>
-                      <th className="py-3 px-4">Sumber Portal</th>
-                      <th className="py-3 px-4 text-center">Tahap Seleksi</th>
-                      <th className="py-3 px-4">Hasil / Skor</th>
-                      <th className="py-3 px-4">Ekspektasi Upah</th>
-                      <th className="py-3 px-4 text-right">Aksi</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {filteredCandidates.length === 0 ? (
-                      <tr>
-                        <td colSpan={7} className="py-8 text-center text-slate-400">
-                          Tidak ada data pelamar yang sesuai dengan filter pencarian.
-                        </td>
-                      </tr>
-                    ) : (
-                      filteredCandidates.map((cand) => {
-                        const vac = vacancies.find((v) => v.id === cand.jobVacancyId);
-                        return (
-                          <tr key={cand.id} className="hover:bg-slate-50/70 transition-colors">
-                            <td className="py-3 px-4">
-                              <div className="font-bold text-slate-900">{cand.name}</div>
-                              <span className="text-[10px] text-slate-500">{cand.lastCompany} · {cand.phone}</span>
-                            </td>
-                            <td className="py-3 px-4">
-                              <div className="font-semibold text-slate-800">{vac?.title || 'Posisi'}</div>
-                              <span className="text-[10px] text-slate-500">{vac?.department}</span>
-                            </td>
-                            <td className="py-3 px-4">
-                              <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-semibold text-[10px] border border-slate-200">
-                                {cand.sourcePortal || 'LinkedIn'}
-                              </span>
-                            </td>
-                            <td className="py-3 px-4 text-center">
-                              <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-800 border border-blue-200">
-                                {cand.stage === 'Applied' ? 'Incoming' : cand.stage}
-                              </span>
-                            </td>
-                            <td className="py-3 px-4">
-                              {cand.stage === 'Screening' && (
-                                <span className="font-mono font-bold text-sky-800 text-[11px]">{cand.aiMatchScore || 88}% Match</span>
-                              )}
-                              {cand.stage === 'Assessment' && (
-                                <span className="font-mono font-bold text-amber-800 text-[11px]">Skor: {cand.testScore || 0}/100</span>
-                              )}
-                              {cand.stage === 'Interview' && (
-                                <span className="font-mono font-bold text-emerald-800 text-[11px]">★ {cand.interviewScore || 90}/100</span>
-                              )}
-                              {cand.stage === 'Offered' && (
-                                <span className="font-mono text-blue-900 font-semibold text-[11px]">{cand.offeringDocNumber || 'Draft'}</span>
-                              )}
-                              {cand.stage === 'Hired' && (
-                                <span className="text-emerald-700 font-bold text-[11px]">Join: {cand.joinedDate || '2026-11-01'}</span>
-                              )}
-                              {cand.stage === 'TalentPool' && (
-                                <span className="text-slate-500 text-[11px]">Cadangan Talenta</span>
-                              )}
-                              {cand.stage === 'Incoming' && (
-                                <span className="text-emerald-700 font-medium text-[11px]">Resume Parsed ({cand.parsedData?.extractionScore || 98}%)</span>
-                              )}
-                            </td>
-                            <td className="py-3 px-4 font-mono font-bold text-slate-800">
-                              {formatRupiah(cand.expectedSalary)}
-                            </td>
-                            <td className="py-3 px-4 text-right">
-                              <div className="flex items-center justify-end gap-1.5">
-                                {cand.stage === 'Incoming' && (
-                                  <button
-                                    onClick={() => {
-                                      setActiveCandidate(cand);
-                                      setIsResumeParserModalOpen(true);
-                                    }}
-                                    className="px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-800 rounded font-semibold text-[11px]"
-                                  >
-                                    Parsing CV
-                                  </button>
-                                )}
-                                {cand.stage === 'Screening' && (
-                                  <button
-                                    onClick={() => {
-                                      setActiveCandidate(cand);
-                                      setIsScreeningModalOpen(true);
-                                    }}
-                                    className="px-2 py-1 bg-sky-50 hover:bg-sky-100 text-sky-800 rounded font-semibold text-[11px]"
-                                  >
-                                    Screening
-                                  </button>
-                                )}
-                                {cand.stage === 'Assessment' && (
-                                  <button
-                                    onClick={() => handleOpenAssessmentModal(cand)}
-                                    className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded font-semibold text-[11px]"
-                                  >
-                                    Nilai Tes
-                                  </button>
-                                )}
-                                {cand.stage === 'Interview' && (
-                                  <button
-                                    onClick={() => handleOpenInterviewModal(cand)}
-                                    className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded font-semibold text-[11px]"
-                                  >
-                                    Scorecard
-                                  </button>
-                                )}
-                                {cand.stage === 'Offered' && (
-                                  <button
-                                    onClick={() => handleOpenOfferingModal(cand)}
-                                    className="px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-800 rounded font-semibold text-[11px]"
-                                  >
-                                    Offering
-                                  </button>
-                                )}
-                                {cand.stage === 'Hired' && (
-                                  <button
-                                    onClick={() => handlePushToOnboarding(cand)}
-                                    className="px-2 py-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded font-semibold text-[11px]"
-                                  >
-                                    Onboarding
-                                  </button>
-                                )}
-                                {cand.stage === 'TalentPool' && (
-                                  <button
-                                    onClick={() => handleReengageTalent(cand)}
-                                    className="px-2 py-1 bg-blue-700 hover:bg-blue-800 text-white rounded font-semibold text-[11px]"
-                                  >
-                                    Hubungi
-                                  </button>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ===================== TAB 2: PERMINTAAN KARYAWAN (FPTK) ===================== */}
-      {activeTab === 'permintaan' && (
+      {/* ===================== TAB 1: PERMINTAAN FPTK ===================== */}
+      {activeTab === 'fptk' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between gap-4 flex-wrap bg-white p-4 border border-slate-200 rounded-xl shadow-2xs">
             <div>
               <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                 <FileCheck className="w-4 h-4 text-blue-700" />
-                <span>Formulir Permintaan Tenaga Kerja (FPTK / Job Requisition)</span>
+                <span>Tab 1: Formulir Permintaan Tenaga Kerja (FPTK / Job Requisition)</span>
               </h3>
               <p className="text-xs text-slate-500 mt-0.5">
-                Tahap 1 inisiasi rekrutmen: Usulan formasi posisi, jenjang grade, kualifikasi requirement, dan persetujuan anggaran headcount.
+                Pengajuan kebutuhan posisi baru: penetapan posisi, jenjang grade, requirement kualifikasi, jumlah formasi, dan persetujuan atasan.
               </p>
             </div>
             <button
@@ -1377,7 +723,6 @@ export const RecruitmentManagement: React.FC = () => {
             </button>
           </div>
 
-          {/* Table FPTK */}
           <div className="bg-white border border-slate-200 rounded-xl shadow-2xs overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
@@ -1472,17 +817,17 @@ export const RecruitmentManagement: React.FC = () => {
         </div>
       )}
 
-      {/* ===================== TAB 3: LOWONGAN & SOURCING ===================== */}
+      {/* ===================== TAB 2: LOWONGAN & SOURCING ===================== */}
       {activeTab === 'sourcing' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between gap-4 flex-wrap bg-white p-4 border border-slate-200 rounded-xl shadow-2xs">
             <div>
               <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                 <Globe className="w-4 h-4 text-blue-700" />
-                <span>Distribusi Sourcing & Multi-Channel Job Posting</span>
+                <span>Tab 2: Lowongan & Sourcing (Penyebaran Lowongan)</span>
               </h3>
               <p className="text-xs text-slate-500 mt-0.5">
-                Tahap 2: Buat deskripsi pekerjaan, syarat kualifikasi, dan sebar otomatis ke berbagai portal kerja (Jobstreet, LinkedIn, Glints, Kalibrr, Website Karir).
+                Pembuatan deskripsi pekerjaan dan publikasi otomatis ke multi-channel: Jobstreet, LinkedIn, Glints, Kalibrr, dan Website Karir.
               </p>
             </div>
             <button
@@ -1494,7 +839,6 @@ export const RecruitmentManagement: React.FC = () => {
             </button>
           </div>
 
-          {/* Cards of Vacancies with Multi-Channel Controls */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {vacancies.map((vac) => {
               const vacCandidates = candidates.filter((c) => c.jobVacancyId === vac.id);
@@ -1508,9 +852,7 @@ export const RecruitmentManagement: React.FC = () => {
                   <div className="space-y-2">
                     <div className="flex items-start justify-between gap-2">
                       <div>
-                        <span className="font-bold text-slate-900 text-sm block">
-                          {vac.title}
-                        </span>
+                        <span className="font-bold text-slate-900 text-sm block">{vac.title}</span>
                         <div className="flex items-center gap-2 text-xs text-slate-500 mt-0.5">
                           <span>{vac.department}</span>
                           <span>·</span>
@@ -1534,7 +876,7 @@ export const RecruitmentManagement: React.FC = () => {
                       {vac.description || 'Bertanggung jawab atas operasional dan implementasi proyek korporat.'}
                     </p>
 
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px] bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                    <div className="grid grid-cols-3 gap-2 text-[11px] bg-slate-50 p-2.5 rounded-lg border border-slate-100">
                       <div>
                         <span className="text-slate-400 block text-[10px]">Headcount</span>
                         <span className="font-bold text-slate-800">{vac.openings} Formasi</span>
@@ -1549,7 +891,6 @@ export const RecruitmentManagement: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Sourcing Channels Distribution Badges */}
                     <div className="space-y-1.5 pt-1">
                       <span className="text-[11px] font-semibold text-slate-700 block">
                         Kanal Penyebaran Otomatis (Job Portals):
@@ -1584,7 +925,6 @@ export const RecruitmentManagement: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Summary Footer */}
                   <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
                     <span className="text-slate-500 text-[11px]">
                       Total Masuk: <strong className="text-slate-900 font-mono">{vacCandidates.length}</strong> Pelamar
@@ -1593,11 +933,11 @@ export const RecruitmentManagement: React.FC = () => {
                       <button
                         onClick={() => {
                           setSelectedVacancyId(vac.id);
-                          setActiveTab('kanban');
+                          setActiveTab('pipeline');
                         }}
                         className="px-2.5 py-1 text-blue-700 hover:bg-blue-50 rounded text-xs font-semibold"
                       >
-                        Lihat Pelamar →
+                        Buka di Pipeline Seleksi →
                       </button>
                       <button
                         onClick={() => {
@@ -1619,95 +959,622 @@ export const RecruitmentManagement: React.FC = () => {
         </div>
       )}
 
-      {/* ===================== TAB 4: TALENT POOL & CADANGAN ===================== */}
-      {activeTab === 'talent_pool' && (
+      {/* ===================== TAB 3: PIPELINE SELEKSI (HANYA: INCOMING, SCREENING, ASSESSMENT, INTERVIEW) ===================== */}
+      {activeTab === 'pipeline' && (
+        <div className="space-y-4">
+          <div className="bg-white p-3.5 border border-slate-200 rounded-xl shadow-2xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <Users className="w-4 h-4 text-blue-700" />
+                <span>Tab 3: Pipeline Seleksi Pelamar</span>
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Alur seleksi teknis: 1. Incoming (Parsing CV) ➔ 2. Screening (Keyword Match) ➔ 3. Assessment (Tes) ➔ 4. Interview (User).
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 text-xs flex-wrap">
+              <select
+                value={selectedVacancyId}
+                onChange={(e) => setSelectedVacancyId(e.target.value)}
+                className="py-1.5 px-3 border border-slate-300 rounded-lg bg-white text-slate-800 font-medium text-xs shadow-2xs"
+              >
+                <option value="all">Semua Lowongan ({vacancies.length})</option>
+                {vacancies.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.title}
+                  </option>
+                ))}
+              </select>
+
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Cari kandidat..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-8 pr-3 py-1.5 border border-slate-300 rounded-lg text-xs bg-white shadow-2xs w-44"
+                />
+              </div>
+
+              <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-0.5">
+                <button
+                  type="button"
+                  onClick={() => setPipelineViewMode('board')}
+                  className={`px-2.5 py-1 rounded text-xs font-semibold flex items-center gap-1 ${
+                    pipelineViewMode === 'board' ? 'bg-white text-blue-900 shadow-2xs' : 'text-slate-600'
+                  }`}
+                >
+                  <LayoutGrid className="w-3.5 h-3.5" />
+                  <span>Papan</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPipelineViewMode('table')}
+                  className={`px-2.5 py-1 rounded text-xs font-semibold flex items-center gap-1 ${
+                    pipelineViewMode === 'table' ? 'bg-white text-blue-900 shadow-2xs' : 'text-slate-600'
+                  }`}
+                >
+                  <List className="w-3.5 h-3.5" />
+                  <span>Tabel</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* 4 Clean Columns: Incoming -> Screening -> Assessment -> Interview */}
+          {pipelineViewMode === 'board' ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-start">
+              {selectionStages.map((stg) => {
+                const stageCandidates = pipelineCandidates.filter((c) => isCandidateInStage(c, stg.stage));
+
+                return (
+                  <div
+                    key={stg.stage}
+                    className="bg-white rounded-xl border border-slate-200 shadow-2xs flex flex-col min-h-[520px]"
+                  >
+                    <div className={`p-3 border-b-2 ${stg.headerAccent} bg-slate-50/80 rounded-t-xl`}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <span className="w-5 h-5 rounded-full bg-slate-200 text-slate-800 text-[10px] font-bold flex items-center justify-center font-mono">
+                            {stg.number}
+                          </span>
+                          <span className="font-bold text-slate-900 text-xs">{stg.title}</span>
+                        </div>
+                        <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full ${stg.badgeColor}`}>
+                          {stageCandidates.length}
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-slate-500 block mt-1 leading-tight">
+                        {stg.subtitle}
+                      </span>
+                    </div>
+
+                    <div className="p-2.5 space-y-2.5 flex-1 bg-slate-50/40">
+                      {stageCandidates.length === 0 ? (
+                        <div className="h-32 rounded-lg border border-dashed border-slate-200 flex flex-col items-center justify-center p-3 text-center text-slate-400 text-[11px]">
+                          <span>Tidak ada pelamar</span>
+                        </div>
+                      ) : (
+                        stageCandidates.map((candidate) => {
+                          const vac = vacancies.find((v) => v.id === candidate.jobVacancyId);
+
+                          return (
+                            <div
+                              key={candidate.id}
+                              className="p-3 bg-white border border-slate-200 rounded-lg shadow-2xs hover:shadow-xs transition-shadow space-y-2.5"
+                            >
+                              <div className="flex items-start justify-between gap-1">
+                                <div>
+                                  <span className="font-bold text-slate-900 text-xs block leading-tight">
+                                    {candidate.name}
+                                  </span>
+                                  <span className="text-[10px] text-slate-500 block truncate max-w-[160px]">
+                                    {candidate.lastCompany}
+                                  </span>
+                                </div>
+                                {candidate.sourcePortal && (
+                                  <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200 shrink-0">
+                                    {candidate.sourcePortal}
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="text-[11px] space-y-0.5 bg-slate-50 p-2 rounded border border-slate-100">
+                                <div className="font-semibold text-blue-950 truncate">{vac?.title || 'Posisi'}</div>
+                                <div className="text-slate-500 text-[10px]">
+                                  Ekspektasi: <span className="font-mono font-bold text-slate-800">{formatRupiah(candidate.expectedSalary)}</span>
+                                </div>
+                              </div>
+
+                              {stg.stage === 'Incoming' && (
+                                <div className="space-y-1.5 pt-0.5">
+                                  <div className="flex items-center justify-between text-[10px]">
+                                    <span className="text-emerald-700 font-semibold flex items-center gap-1">
+                                      <Sparkles className="w-3 h-3 text-emerald-600" />
+                                      <span>AI Resume Parsed</span>
+                                    </span>
+                                    <span className="font-mono text-slate-600 font-bold">
+                                      {candidate.parsedData?.extractionScore || 95}%
+                                    </span>
+                                  </div>
+                                  {candidate.parsedData && (
+                                    <div className="flex flex-wrap gap-1">
+                                      {candidate.parsedData.topSkills.slice(0, 3).map((skill, idx) => (
+                                        <span key={idx} className="text-[9px] bg-slate-100 text-slate-700 px-1.5 py-0.2 rounded font-medium">
+                                          {skill}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
+                              {stg.stage === 'Screening' && (
+                                <div className="space-y-1.5 pt-0.5">
+                                  <div className="flex items-center justify-between text-[10px]">
+                                    <span className="text-slate-600 font-medium">Kesesuaian Kualifikasi:</span>
+                                    <span className="font-mono font-bold px-1.5 py-0.2 rounded bg-sky-50 text-sky-800 border border-sky-200">
+                                      {candidate.aiMatchScore || 85}% Match
+                                    </span>
+                                  </div>
+                                  <div className="text-[10px] text-slate-500 line-clamp-2">
+                                    {candidate.screeningNotes || 'Kualifikasi cocok dengan requirement lowongan.'}
+                                  </div>
+                                </div>
+                              )}
+
+                              {stg.stage === 'Assessment' && (
+                                <div className="space-y-1.5 pt-0.5">
+                                  <div className="flex items-center justify-between text-[10px]">
+                                    <span className="text-slate-600 font-medium truncate max-w-[110px]">
+                                      {candidate.testType || 'Tes Teknis'}
+                                    </span>
+                                    <span className="font-mono font-bold px-1.5 py-0.2 rounded bg-amber-50 text-amber-800 border border-amber-200">
+                                      Skor: {candidate.testScore || 0}/100
+                                    </span>
+                                  </div>
+                                  <div className="text-[10px] font-semibold flex items-center gap-1">
+                                    <span className="text-slate-500">Status:</span>
+                                    <span className={candidate.testStatus === 'Lulus' ? 'text-emerald-700' : 'text-slate-700'}>
+                                      {candidate.testStatus || 'Belum Ditugaskan'}
+                                    </span>
+                                  </div>
+                                </div>
+                              )}
+
+                              {stg.stage === 'Interview' && (
+                                <div className="space-y-1 pt-0.5 text-[10px]">
+                                  <div className="flex items-center justify-between font-semibold">
+                                    <span className="text-slate-700 flex items-center gap-1">
+                                      <Calendar className="w-3 h-3 text-slate-500" />
+                                      <span>{candidate.interviewDate?.split(' ')[0] || 'Terjadwal'}</span>
+                                    </span>
+                                    {candidate.interviewScore && (
+                                      <span className="text-emerald-700 font-mono font-bold">
+                                        ★ {candidate.interviewScore}/100
+                                      </span>
+                                    )}
+                                  </div>
+                                  {candidate.meetingLink && (
+                                    <a
+                                      href={candidate.meetingLink}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="text-blue-700 hover:underline flex items-center gap-1 font-medium text-[10px]"
+                                    >
+                                      <Video className="w-3 h-3 text-blue-600" />
+                                      <span>Link Google Meet User</span>
+                                    </a>
+                                  )}
+                                </div>
+                              )}
+
+                              {/* Action Buttons */}
+                              <div className="pt-2 border-t border-slate-100 flex flex-col gap-1.5">
+                                {stg.stage === 'Incoming' && (
+                                  <>
+                                    <button
+                                      onClick={() => {
+                                        setActiveCandidate(candidate);
+                                        setIsResumeParserModalOpen(true);
+                                      }}
+                                      className="w-full py-1 px-2 text-[11px] font-semibold bg-blue-50 text-blue-700 hover:bg-blue-100 rounded flex items-center justify-center gap-1"
+                                    >
+                                      <FileText className="w-3 h-3" />
+                                      <span>Lihat Hasil Parsing CV</span>
+                                    </button>
+                                    <button
+                                      onClick={() => updateCandidateStage(candidate.id, 'Screening')}
+                                      className="w-full py-1 text-[10px] font-semibold bg-blue-700 hover:bg-blue-800 text-white rounded text-center"
+                                    >
+                                      Loloskan ke Screening →
+                                    </button>
+                                  </>
+                                )}
+
+                                {stg.stage === 'Screening' && (
+                                  <>
+                                    <button
+                                      onClick={() => {
+                                        setActiveCandidate(candidate);
+                                        setIsScreeningModalOpen(true);
+                                      }}
+                                      className="w-full py-1 text-[11px] font-semibold bg-sky-50 text-sky-800 hover:bg-sky-100 rounded flex items-center justify-center gap-1"
+                                    >
+                                      <Sparkles className="w-3 h-3 text-sky-600" />
+                                      <span>Detail Screening AI</span>
+                                    </button>
+                                    <button
+                                      onClick={() => updateCandidateStage(candidate.id, 'Assessment')}
+                                      className="w-full py-1 text-[10px] font-semibold bg-blue-700 text-white hover:bg-blue-800 rounded text-center"
+                                    >
+                                      Shortlist ke Tes Kompetensi →
+                                    </button>
+                                  </>
+                                )}
+
+                                {stg.stage === 'Assessment' && (
+                                  <>
+                                    <button
+                                      onClick={() => handleOpenAssessmentModal(candidate)}
+                                      className="w-full py-1 text-[11px] font-semibold bg-amber-50 text-amber-800 hover:bg-amber-100 rounded flex items-center justify-center gap-1"
+                                    >
+                                      <Award className="w-3 h-3 text-amber-600" />
+                                      <span>Input / Evaluasi Nilai Tes</span>
+                                    </button>
+                                    <button
+                                      onClick={() => updateCandidateStage(candidate.id, 'Interview')}
+                                      className="w-full py-1 text-[10px] font-semibold bg-slate-900 text-white hover:bg-slate-800 rounded text-center"
+                                    >
+                                      Loloskan ke Wawancara (User) →
+                                    </button>
+                                  </>
+                                )}
+
+                                {stg.stage === 'Interview' && (
+                                  <>
+                                    <button
+                                      onClick={() => handleOpenInterviewModal(candidate)}
+                                      className="w-full py-1 text-[11px] font-semibold bg-emerald-50 text-emerald-800 hover:bg-emerald-100 rounded flex items-center justify-center gap-1"
+                                    >
+                                      <Calendar className="w-3 h-3 text-emerald-600" />
+                                      <span>Scorecard & Jadwal User</span>
+                                    </button>
+                                    <button
+                                      onClick={() => handlePromoteToOffering(candidate)}
+                                      className="w-full py-1 text-[10px] font-semibold bg-blue-700 text-white hover:bg-blue-800 rounded text-center font-bold"
+                                    >
+                                      Lanjut ke Tahap Offering →
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="bg-white border border-slate-200 rounded-xl shadow-2xs overflow-hidden">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
+                  <tr>
+                    <th className="py-3 px-4">Nama Pelamar</th>
+                    <th className="py-3 px-4">Posisi Lowongan</th>
+                    <th className="py-3 px-4">Tahap Seleksi</th>
+                    <th className="py-3 px-4">Hasil / Evaluasi</th>
+                    <th className="py-3 px-4">Ekspektasi Upah</th>
+                    <th className="py-3 px-4 text-right">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {pipelineCandidates.map((c) => (
+                    <tr key={c.id} className="hover:bg-slate-50/70">
+                      <td className="py-3 px-4">
+                        <div className="font-bold text-slate-900">{c.name}</div>
+                        <span className="text-[10px] text-slate-500">{c.lastCompany}</span>
+                      </td>
+                      <td className="py-3 px-4 font-semibold text-slate-800">
+                        {vacancies.find((v) => v.id === c.jobVacancyId)?.title}
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-800 border border-blue-200">
+                          {c.stage === 'Applied' ? 'Incoming' : c.stage}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-slate-700">
+                        {c.stage === 'Screening' && `${c.aiMatchScore || 85}% Match`}
+                        {c.stage === 'Assessment' && `Skor: ${c.testScore || 0}/100`}
+                        {c.stage === 'Interview' && `★ ${c.interviewScore || 90}/100`}
+                        {(c.stage === 'Incoming' || c.stage === 'Applied') && 'Resume Parsed'}
+                      </td>
+                      <td className="py-3 px-4 font-mono font-bold text-slate-800">
+                        {formatRupiah(c.expectedSalary)}
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        <button
+                          onClick={() => {
+                            if (c.stage === 'Interview') handlePromoteToOffering(c);
+                            else if (c.stage === 'Assessment') handleOpenAssessmentModal(c);
+                            else if (c.stage === 'Screening') {
+                              setActiveCandidate(c);
+                              setIsScreeningModalOpen(true);
+                            } else {
+                              setActiveCandidate(c);
+                              setIsResumeParserModalOpen(true);
+                            }
+                          }}
+                          className="px-2.5 py-1 bg-blue-700 hover:bg-blue-800 text-white rounded text-[11px] font-semibold"
+                        >
+                          Proses →
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ===================== TAB 4: OFFERING (KALKULATOR OFFERING & KIRIM OFFERING) ===================== */}
+      {activeTab === 'offering' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between gap-4 flex-wrap bg-white p-4 border border-slate-200 rounded-xl shadow-2xs">
             <div>
               <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                <Archive className="w-4 h-4 text-blue-700" />
-                <span>Basis Data Cadangan Talenta (Talent Pool)</span>
+                <Calculator className="w-4 h-4 text-blue-700" />
+                <span>Tab 4: Offering (Kalkulator Offering & Kirim Offering Resmi)</span>
               </h3>
               <p className="text-xs text-slate-500 mt-0.5">
-                Kandidat yang belum lolos pada posisi tertentu dipindahkan ke talent pool untuk kebutuhan rekrutmen masa depan tanpa perlu seleksi awal kembali.
+                Simulasi gaji kotor/bersih (Gross vs Nett THP), perhitungan resmi PPh 21 TER 2024, breakdown BPJS, dan penerbitan surat penawaran resmi berkop QR.
               </p>
             </div>
+            {pipelineCandidates.find((c) => c.stage === 'Interview') && (
+              <button
+                onClick={() => {
+                  const target = pipelineCandidates.find((c) => c.stage === 'Interview');
+                  if (target) handleOpenOfferingModal(target);
+                }}
+                className="px-3.5 py-2 bg-blue-700 hover:bg-blue-800 text-white rounded-lg text-xs font-semibold shadow-2xs flex items-center gap-1.5"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>+ Buat Offering Baru</span>
+              </button>
+            )}
           </div>
 
-          {/* Talent Pool Grid Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
-            {candidates.filter((c) => c.stage === 'TalentPool').length === 0 ? (
-              <div className="col-span-full py-12 text-center text-slate-400 bg-white rounded-xl border border-slate-200">
-                Belum ada kandidat di dalam basis data cadangan (Talent Pool).
-              </div>
-            ) : (
-              candidates
-                .filter((c) => c.stage === 'TalentPool')
-                .map((cand) => (
-                  <div
-                    key={cand.id}
-                    className="p-4 bg-white border border-slate-200 rounded-xl shadow-2xs space-y-3 flex flex-col justify-between"
-                  >
-                    <div className="space-y-2">
-                      <div className="flex items-start justify-between gap-1">
-                        <div>
-                          <span className="font-bold text-slate-900 text-sm block">{cand.name}</span>
-                          <span className="text-xs text-slate-500">{cand.lastCompany}</span>
-                        </div>
-                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-700">
-                          {cand.talentPoolCategory || 'Engineering'}
-                        </span>
-                      </div>
-
-                      <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-100 text-xs space-y-1">
-                        <span className="font-semibold text-slate-700 block text-[11px]">Catatan Evaluasi / Alasan:</span>
-                        <p className="text-slate-600 text-[11px] leading-relaxed">
-                          {cand.disqualificationReason || 'Kandidat sangat kompeten, disimpan untuk proyek atau posisi berikutnya.'}
-                        </p>
-                      </div>
-
-                      <div className="space-y-1">
-                        <span className="text-[10px] text-slate-400 font-semibold block">Tags Keahlian:</span>
-                        <div className="flex flex-wrap gap-1">
-                          {(cand.talentPoolTags || ['Cloud', 'Kubernetes', 'High Potential']).map((tag, idx) => (
-                            <span key={idx} className="text-[10px] bg-blue-50 text-blue-800 px-2 py-0.5 rounded font-medium border border-blue-100">
-                              {tag}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
-                      <span className="font-mono text-slate-500 text-[11px]">
-                        {cand.email}
-                      </span>
-                      <button
-                        onClick={() => handleReengageTalent(cand)}
-                        className="px-3 py-1 bg-blue-700 hover:bg-blue-800 text-white rounded font-semibold text-xs flex items-center gap-1 shadow-2xs"
-                      >
-                        <RefreshCw className="w-3 h-3" />
-                        <span>Hubungi Kembali</span>
-                      </button>
-                    </div>
-                  </div>
-                ))
-            )}
+          {/* Table of Candidates in Offering Stage */}
+          <div className="bg-white border border-slate-200 rounded-xl shadow-2xs overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
+                  <tr>
+                    <th className="py-3 px-4">Nama Kandidat</th>
+                    <th className="py-3 px-4">Posisi Ditawarkan</th>
+                    <th className="py-3 px-4">No. Dokumen Offering Letter</th>
+                    <th className="py-3 px-4">Gaji Ditawarkan (Gross)</th>
+                    <th className="py-3 px-4">Tanggal Dikirim</th>
+                    <th className="py-3 px-4 text-center">Status Surat</th>
+                    <th className="py-3 px-4 text-right">Aksi Dokumen</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {offeringCandidates.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="py-8 text-center text-slate-400">
+                        Belum ada kandidat di tahap Offering. Silakan promosikan kandidat yang lolos tahap Interview (User).
+                      </td>
+                    </tr>
+                  ) : (
+                    offeringCandidates.map((c) => (
+                      <tr key={c.id} className="hover:bg-slate-50/70 transition-colors">
+                        <td className="py-3 px-4">
+                          <div className="font-bold text-slate-900">{c.name}</div>
+                          <span className="text-[10px] text-slate-500 font-mono">{c.email}</span>
+                        </td>
+                        <td className="py-3 px-4 font-semibold text-slate-800">
+                          {vacancies.find((v) => v.id === c.jobVacancyId)?.title}
+                        </td>
+                        <td className="py-3 px-4 font-mono font-bold text-blue-900">
+                          {c.offeringDocNumber || '001/OL-HRD/NTM/X/2026'}
+                        </td>
+                        <td className="py-3 px-4 font-mono font-bold text-slate-800">
+                          {formatRupiah(c.offeredSalary || c.expectedSalary)}
+                        </td>
+                        <td className="py-3 px-4 font-mono text-slate-600">
+                          {c.offeringSentDate || '2026-10-18'}
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-800 border border-blue-200">
+                            Terkirim · Menunggu Respon
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={() => handleOpenOfferingModal(c)}
+                              className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded font-semibold text-[11px] flex items-center gap-1"
+                            >
+                              <Calculator className="w-3 h-3 text-blue-700" />
+                              <span>Kalkulator</span>
+                            </button>
+                            <button
+                              onClick={() => {
+                                setActiveCandidate(c);
+                                setDocNumber(c.offeringDocNumber || '001/OL-HRD/NTM/X/2026');
+                                setIsOfferingDocPreviewOpen(true);
+                              }}
+                              className="px-2.5 py-1 bg-blue-700 hover:bg-blue-800 text-white rounded font-semibold text-[11px] flex items-center gap-1 shadow-2xs"
+                            >
+                              <FileText className="w-3 h-3" />
+                              <span>Lihat SK QR</span>
+                            </button>
+                            <button
+                              onClick={() => {
+                                setActiveTab('decision');
+                              }}
+                              className="px-2.5 py-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded font-semibold text-[11px]"
+                            >
+                              Keputusan →
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
 
-      {/* ===================== TAB 5: ONBOARDING TRACKER ===================== */}
+      {/* ===================== TAB 5: HIRED / DISQUALIFIED (PENENTUAN DITERIMA ATAU DITOLAK) ===================== */}
+      {activeTab === 'decision' && (
+        <div className="space-y-4">
+          <div className="bg-white p-4 border border-slate-200 rounded-xl shadow-2xs">
+            <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+              <CheckCircle className="w-4 h-4 text-blue-700" />
+              <span>Tab 5: Hired / Disqualified (Penentuan Diterima atau Ditolak)</span>
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Keputusan akhir calon karyawan: jika <strong>Diterima (Hired)</strong> akan masuk ke Tab On Boarding; jika <strong>Ditolak (Disqualified)</strong> dipindahkan ke Tab Talent Pool.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {/* Section A: Menunggu Keputusan Akhir */}
+            <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs space-y-3">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                <span className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
+                  <Clock className="w-4 h-4 text-amber-600" />
+                  <span>Kandidat Menunggu Keputusan ({offeringCandidates.length})</span>
+                </span>
+                <span className="text-[10px] text-slate-400 font-medium">Pasca-Offering Letter</span>
+              </div>
+
+              <div className="space-y-3">
+                {offeringCandidates.length === 0 ? (
+                  <div className="py-8 text-center text-slate-400 text-xs">
+                    Semua kandidat offering telah diproses keputusannya.
+                  </div>
+                ) : (
+                  offeringCandidates.map((cand) => (
+                    <div
+                      key={cand.id}
+                      className="p-3.5 bg-slate-50 border border-slate-200 rounded-lg space-y-3"
+                    >
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <span className="font-bold text-slate-900 text-xs block">{cand.name}</span>
+                          <span className="text-[10px] text-slate-500">
+                            {vacancies.find((v) => v.id === cand.jobVacancyId)?.title}
+                          </span>
+                        </div>
+                        <span className="font-mono font-bold text-blue-900 text-xs">
+                          {formatRupiah(cand.offeredSalary || cand.expectedSalary)}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-end gap-2 pt-1 border-t border-slate-200">
+                        <button
+                          onClick={() => {
+                            setCandidateToDisqualify(cand);
+                          }}
+                          className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200 rounded text-xs font-semibold flex items-center gap-1"
+                        >
+                          <ThumbsDown className="w-3.5 h-3.5 text-rose-600" />
+                          <span>Tolak (Disqualified)</span>
+                        </button>
+                        <button
+                          onClick={() => handleConfirmHired(cand)}
+                          className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded text-xs font-semibold flex items-center gap-1 shadow-2xs"
+                        >
+                          <ThumbsUp className="w-3.5 h-3.5" />
+                          <span>Terima (Hired & Onboard)</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* Section B: Riwayat Keputusan Akhir */}
+            <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs space-y-3">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                <span className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
+                  <CheckCircle className="w-4 h-4 text-emerald-600" />
+                  <span>Riwayat Keputusan Akhir Rekrutmen</span>
+                </span>
+                <span className="text-[10px] text-slate-400 font-medium">Hired & Disqualified</span>
+              </div>
+
+              <div className="space-y-2.5 max-h-[380px] overflow-y-auto">
+                {hiredCandidates.map((c) => (
+                  <div
+                    key={c.id}
+                    className="p-3 bg-emerald-50/60 border border-emerald-200 rounded-lg flex items-center justify-between text-xs"
+                  >
+                    <div>
+                      <span className="font-bold text-emerald-950 block">{c.name}</span>
+                      <span className="text-[10px] text-emerald-800">
+                        DITERIMA (HIRED) · Join Date: {c.joinedDate || '2026-11-01'}
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => setActiveTab('onboarding')}
+                      className="px-2 py-1 bg-emerald-700 text-white rounded text-[10px] font-semibold"
+                    >
+                      Lihat Onboarding →
+                    </button>
+                  </div>
+                ))}
+
+                {talentPoolCandidates.map((c) => (
+                  <div
+                    key={c.id}
+                    className="p-3 bg-slate-50 border border-slate-200 rounded-lg flex items-center justify-between text-xs"
+                  >
+                    <div>
+                      <span className="font-bold text-slate-900 block">{c.name}</span>
+                      <span className="text-[10px] text-slate-500">
+                        DISQUALIFIED ➔ Masuk ke Talent Pool
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => setActiveTab('talent_pool')}
+                      className="px-2 py-1 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded text-[10px] font-semibold"
+                    >
+                      Buka Talent Pool →
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===================== TAB 6: ON BOARDING ===================== */}
       {activeTab === 'onboarding' && (
         <div className="space-y-4">
           <div className="bg-white p-4 border border-slate-200 rounded-xl shadow-2xs flex items-center justify-between gap-4 flex-wrap">
             <div>
               <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                 <UserPlus className="w-4 h-4 text-emerald-700" />
-                <span>Transisi Kandidat Diterima (Hired) ke Onboarding & Master Karyawan</span>
+                <span>Tab 6: On Boarding Karyawan Baru</span>
               </h3>
               <p className="text-xs text-slate-500 mt-0.5">
-                Kandidat yang telah menyetujui surat penawaran kerja (Offering Letter) langsung ditransfer ke checklist orientasi, kontrak digital, dan pembuatan akun.
+                Kandidat yang telah resmi berstatus <strong>Hired</strong> masuk ke checklist orientasi, pembuatan akun, dan kontrak digital.
               </p>
             </div>
             <button
@@ -1718,152 +1585,197 @@ export const RecruitmentManagement: React.FC = () => {
             </button>
           </div>
 
-          {/* Table Candidates in Onboarding Transition */}
-          <div className="bg-white border border-slate-200 rounded-xl shadow-2xs overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
-                  <tr>
-                    <th className="py-3 px-4">Nama Calon Karyawan</th>
-                    <th className="py-3 px-4">Posisi & Departemen</th>
-                    <th className="py-3 px-4">Nomor Offering Letter</th>
-                    <th className="py-3 px-4">Gaji Penawaran (Gross)</th>
-                    <th className="py-3 px-4">Tanggal Mulai (Join Date)</th>
-                    <th className="py-3 px-4 text-center">Status Transisi</th>
-                    <th className="py-3 px-4 text-right">Aksi</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {candidates.filter((c) => c.stage === 'Hired' || c.stage === 'Offered').length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="py-8 text-center text-slate-400">
-                        Belum ada kandidat di tahap Offering atau Hired.
-                      </td>
-                    </tr>
-                  ) : (
-                    candidates
-                      .filter((c) => c.stage === 'Hired' || c.stage === 'Offered')
-                      .map((c) => {
-                        const vac = vacancies.find((v) => v.id === c.jobVacancyId);
-                        const isHired = c.stage === 'Hired';
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {hiredCandidates.map((cand) => {
+              const vac = vacancies.find((v) => v.id === cand.jobVacancyId);
+              const process = onboardingProcesses.find((p) => p.candidateId === cand.id);
 
-                        return (
-                          <tr key={c.id} className="hover:bg-slate-50/70 transition-colors">
-                            <td className="py-3 px-4">
-                              <div className="font-bold text-slate-900">{c.name}</div>
-                              <span className="text-[10px] text-slate-500 font-mono">{c.email}</span>
-                            </td>
-                            <td className="py-3 px-4">
-                              <div className="font-semibold text-slate-800">{vac?.title || 'Posisi'}</div>
-                              <span className="text-[10px] text-slate-500">{vac?.department}</span>
-                            </td>
-                            <td className="py-3 px-4 font-mono text-blue-900 font-semibold">
-                              {c.offeringDocNumber || '001/OL-HRD/NTM/X/2026'}
-                            </td>
-                            <td className="py-3 px-4 font-mono font-bold text-slate-800">
-                              {formatRupiah(c.offeredSalary || c.expectedSalary)}
-                            </td>
-                            <td className="py-3 px-4 font-mono text-slate-700">
-                              {c.joinedDate || '2026-11-01'}
-                            </td>
-                            <td className="py-3 px-4 text-center">
-                              <span
-                                className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
-                                  isHired
-                                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                                    : 'bg-blue-50 text-blue-800 border border-blue-200'
-                                }`}
-                              >
-                                {isHired ? '✓ Siap Onboarding' : 'Menunggu Konfirmasi'}
-                              </span>
-                            </td>
-                            <td className="py-3 px-4 text-right">
-                              <button
-                                onClick={() => handlePushToOnboarding(c)}
-                                className="px-3 py-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded font-semibold text-xs shadow-2xs"
-                              >
-                                Transfer ke Onboarding →
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })
-                  )}
-                </tbody>
-              </table>
-            </div>
+              return (
+                <div
+                  key={cand.id}
+                  className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs space-y-3"
+                >
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <span className="font-bold text-slate-900 text-sm block">{cand.name}</span>
+                      <span className="text-xs text-slate-500">{vac?.title} · {vac?.department}</span>
+                    </div>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                      ✓ Status: Hired
+                    </span>
+                  </div>
+
+                  <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-100 text-xs space-y-1">
+                    <div className="flex justify-between text-[11px]">
+                      <span className="text-slate-500">Tanggal Mulai Bertugas:</span>
+                      <span className="font-mono font-bold text-slate-900">{cand.joinedDate || '2026-11-01'}</span>
+                    </div>
+                    <div className="flex justify-between text-[11px]">
+                      <span className="text-slate-500">Nomor Kontrak:</span>
+                      <span className="font-mono text-blue-900 font-semibold">{cand.offeringDocNumber || '001/PKWT/NTM/2026'}</span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 pt-1">
+                    <span className="text-xs font-bold text-slate-800 block">Checklist Orientasi & Onboarding:</span>
+                    <div className="space-y-1.5 text-xs">
+                      {(process?.tasks || [
+                        { id: '1', title: 'Verifikasi KTP, NPWP & Dokumen Ijazah', isCompleted: true },
+                        { id: '2', title: 'Tanda Tangan Kontrak Digital QR (PKWT)', isCompleted: true },
+                        { id: '3', title: 'Penyediaan Laptop, Email Korporat & Akses IT', isCompleted: false },
+                        { id: '4', title: 'Pendaftaran BPJS Ketenagakerjaan & PPh 21 TER', isCompleted: false },
+                        { id: '5', title: 'Sesi Orientasi Budaya Kerja Perusahaan', isCompleted: false },
+                      ]).map((task) => (
+                        <label key={task.id} className="flex items-center gap-2 p-1.5 hover:bg-slate-50 rounded cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={task.isCompleted}
+                            onChange={() => {
+                              if (process) updateOnboardingTask(process.id, task.id, !task.isCompleted);
+                            }}
+                            className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                          />
+                          <span className={task.isCompleted ? 'line-through text-slate-400 text-[11px]' : 'text-slate-700 text-[11px] font-medium'}>
+                            {task.title}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
 
-      {/* ===================== TAB 6: KRITERIA & SCORING ===================== */}
-      {activeTab === 'pengaturan' && (
-        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-2xs space-y-5 max-w-3xl">
-          <div className="border-b border-slate-200 pb-3">
-            <h3 className="text-sm font-bold text-slate-900 mb-1">
-              Pengaturan Kriteria & Bobot Scoring ATS
-            </h3>
-            <p className="text-xs text-slate-500">
-              Konfigurasi ambang batas kelulusan tes teknis, bobot penilaian wawancara, dan masa berlaku dokumen offering letter resmi.
-            </p>
+      {/* ===================== TAB 7: TALENT POOL ===================== */}
+      {activeTab === 'talent_pool' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between gap-4 flex-wrap bg-white p-4 border border-slate-200 rounded-xl shadow-2xs">
+            <div>
+              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <Archive className="w-4 h-4 text-blue-700" />
+                <span>Tab 7: Talent Pool (Basis Data Cadangan)</span>
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Kandidat yang belum lolos pada posisi saat ini disimpan di talent pool untuk kebutuhan rekrutmen masa depan tanpa perlu seleksi awal kembali.
+              </p>
+            </div>
           </div>
 
-          <div className="space-y-4 text-xs">
-            <div className="p-4 bg-slate-50 rounded-lg border border-slate-200 space-y-3">
-              <label className="font-semibold text-slate-800 block">
-                Masa Berlaku Dokumen Offering Letter (Hari Kalender)
-              </label>
-              <div className="flex items-center gap-3">
-                <input
-                  type="number"
-                  min={1}
-                  value={offeringValidityDays}
-                  onChange={(e) => setOfferingValidityDays(Number(e.target.value))}
-                  className="w-24 px-3 py-1.5 border border-slate-300 rounded font-mono text-slate-900 bg-white"
-                />
-                <span className="text-slate-500">Hari sejak tanggal penerbitan surat penawaran</span>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+            {talentPoolCandidates.length === 0 ? (
+              <div className="col-span-full py-12 text-center text-slate-400 bg-white rounded-xl border border-slate-200">
+                Belum ada kandidat di dalam basis data cadangan (Talent Pool).
               </div>
-            </div>
+            ) : (
+              talentPoolCandidates.map((cand) => (
+                <div
+                  key={cand.id}
+                  className="p-4 bg-white border border-slate-200 rounded-xl shadow-2xs space-y-3 flex flex-col justify-between"
+                >
+                  <div className="space-y-2">
+                    <div className="flex items-start justify-between gap-1">
+                      <div>
+                        <span className="font-bold text-slate-900 text-sm block">{cand.name}</span>
+                        <span className="text-xs text-slate-500">{cand.lastCompany}</span>
+                      </div>
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-700">
+                        {cand.talentPoolCategory || 'Engineering'}
+                      </span>
+                    </div>
 
-            <div className="p-4 bg-slate-50 rounded-lg border border-slate-200 space-y-3">
-              <label className="font-semibold text-slate-800 block">
-                Ambang Batas Gaji Wajib Approval Direktur Utama (IDR)
-              </label>
-              <div className="flex items-center gap-3">
-                <input
-                  type="number"
-                  value={requireDirectorAboveSalary}
-                  onChange={(e) => setRequireDirectorAboveSalary(Number(e.target.value))}
-                  className="w-48 px-3 py-1.5 border border-slate-300 rounded font-mono font-bold text-slate-900 bg-white"
-                />
-                <span className="text-slate-500">Gaji di atas nominal ini mewajibkan tanda tangan direksi</span>
-              </div>
-            </div>
+                    <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-100 text-xs space-y-1">
+                      <span className="font-semibold text-slate-700 block text-[11px]">Catatan Disqualified / Alasan:</span>
+                      <p className="text-slate-600 text-[11px] leading-relaxed">
+                        {cand.disqualificationReason || 'Kandidat sangat kompeten, disimpan untuk proyek atau posisi berikutnya.'}
+                      </p>
+                    </div>
 
-            <div className="p-4 bg-slate-50 rounded-lg border border-slate-200 space-y-3">
-              <label className="font-semibold text-slate-800 block">
-                Passing Grade Minimum Tes Kompetensi (0 - 100)
-              </label>
-              <div className="flex items-center gap-3">
-                <input
-                  type="number"
-                  defaultValue={75}
-                  min={50}
-                  max={100}
-                  className="w-24 px-3 py-1.5 border border-slate-300 rounded font-mono font-bold text-slate-900 bg-white"
-                />
-                <span className="text-slate-500">Kandidat dengan skor di bawah nilai ini otomatis disarankan ke Talent Pool</span>
-              </div>
-            </div>
+                    <div className="space-y-1">
+                      <span className="text-[10px] text-slate-400 font-semibold block">Tags Keahlian:</span>
+                      <div className="flex flex-wrap gap-1">
+                        {(cand.talentPoolTags || ['Cloud', 'Kubernetes', 'High Potential']).map((tag, idx) => (
+                          <span key={idx} className="text-[10px] bg-blue-50 text-blue-800 px-2 py-0.5 rounded font-medium border border-blue-100">
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
 
-            <div className="pt-3 border-t border-slate-200 flex justify-end">
-              <button
-                type="button"
-                onClick={() => alert('Pengaturan kriteria dan scoring rekrutmen berhasil disimpan!')}
-                className="px-4 py-2 bg-blue-700 hover:bg-blue-800 text-white rounded-lg font-semibold text-xs shadow-2xs"
-              >
-                Simpan Konfigurasi ATS
+                  <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+                    <span className="font-mono text-slate-500 text-[11px]">
+                      {cand.email}
+                    </span>
+                    <button
+                      onClick={() => handleReengageTalent(cand)}
+                      className="px-3 py-1 bg-blue-700 hover:bg-blue-800 text-white rounded font-semibold text-xs flex items-center gap-1 shadow-2xs"
+                    >
+                      <RefreshCw className="w-3 h-3" />
+                      <span>Hubungi Kembali</span>
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ===================== MODAL DISQUALIFY REASON ===================== */}
+      {candidateToDisqualify && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
+          onClick={() => setCandidateToDisqualify(null)}
+        >
+          <div
+            className="bg-white rounded-xl shadow-xl max-w-md w-full border border-slate-200 overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-5 py-4 bg-slate-950 text-white flex items-center justify-between">
+              <h3 className="text-sm font-bold flex items-center gap-2">
+                <ThumbsDown className="w-4 h-4 text-rose-400" />
+                <span>Penolakan & Pemindahan ke Talent Pool</span>
+              </h3>
+              <button onClick={() => setCandidateToDisqualify(null)}>
+                <X className="w-4 h-4 text-slate-400 hover:text-white" />
               </button>
+            </div>
+
+            <div className="p-5 space-y-4 text-xs">
+              <p className="text-slate-700 leading-relaxed">
+                Tentukan alasan mengapa kandidat <strong>{candidateToDisqualify.name}</strong> tidak lolos. Data kandidat akan otomatis disimpan ke <strong>Tab 7: Talent Pool</strong> untuk kebutuhan posisi mendatang.
+              </p>
+
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">Alasan Penolakan / Evaluasi:</label>
+                <textarea
+                  rows={3}
+                  value={rejectionReasonInput}
+                  onChange={(e) => setRejectionReasonInput(e.target.value)}
+                  placeholder="Contoh: Ekspektasi gaji di atas budget formasi saat ini. Disimpan untuk level Lead Architect Q1."
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-900 text-xs"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-slate-200 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setCandidateToDisqualify(null)}
+                  className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-semibold"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleConfirmDisqualified(candidateToDisqualify, rejectionReasonInput)}
+                  className="px-4 py-2 bg-rose-700 hover:bg-rose-800 text-white rounded-lg font-semibold shadow-2xs"
+                >
+                  Simpan & Pindahkan ke Talent Pool
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -1887,7 +1799,7 @@ export const RecruitmentManagement: React.FC = () => {
                   <FileCheck className="w-4 h-4 text-blue-400" />
                   <span>Pengajuan Permintaan Karyawan Baru (FPTK)</span>
                 </h3>
-                <span className="text-xs text-slate-400">Tahap 1: Inisiasi formasi & grade posisi</span>
+                <span className="text-xs text-slate-400">Tab 1: Formasi, grade & requirement</span>
               </div>
               <button onClick={() => setIsRequisitionModalOpen(false)}>
                 <X className="w-4 h-4 text-slate-400 hover:text-white" />
@@ -2033,7 +1945,7 @@ export const RecruitmentManagement: React.FC = () => {
                   <Globe className="w-4 h-4 text-blue-400" />
                   <span>Sourcing & Publikasi Lowongan Multi-Portal</span>
                 </h3>
-                <span className="text-xs text-slate-400">Tahap 2: Auto-broadcast ke portal kerja & medsos</span>
+                <span className="text-xs text-slate-400">Tab 2: Auto-broadcast ke portal kerja & medsos</span>
               </div>
               <button onClick={() => setIsVacancyModalOpen(false)}>
                 <X className="w-4 h-4 text-slate-400 hover:text-white" />
@@ -2147,7 +2059,6 @@ export const RecruitmentManagement: React.FC = () => {
                 />
               </div>
 
-              {/* Multi-Channel Distribution Checkboxes */}
               <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-2">
                 <label className="font-bold text-slate-800 block text-[11px]">
                   Pilih Channel Distribusi Publikasi Otomatis:
@@ -2209,7 +2120,7 @@ export const RecruitmentManagement: React.FC = () => {
                   <Sparkles className="w-4 h-4 text-emerald-400" />
                   <span>Hasil Ekstraksi Resume Parsing Otomatis (AI ATS)</span>
                 </h3>
-                <span className="text-xs text-slate-400">Tahap 3: Ekstraksi data penting CV pelamar</span>
+                <span className="text-xs text-slate-400">Incoming Stage: Ekstraksi data penting CV pelamar</span>
               </div>
               <button onClick={() => setIsResumeParserModalOpen(false)}>
                 <X className="w-4 h-4 text-slate-400 hover:text-white" />
@@ -2227,7 +2138,6 @@ export const RecruitmentManagement: React.FC = () => {
                 </span>
               </div>
 
-              {/* File Info */}
               <div className="flex items-center justify-between text-slate-500 text-[11px] bg-slate-50 p-2.5 rounded-lg border border-slate-200">
                 <div className="flex items-center gap-2">
                   <FileText className="w-4 h-4 text-slate-600" />
@@ -2236,7 +2146,6 @@ export const RecruitmentManagement: React.FC = () => {
                 <span>{activeCandidate.cvFileSize || '1.2 MB'} · Sumber: <strong>{activeCandidate.sourcePortal || 'LinkedIn'}</strong></span>
               </div>
 
-              {/* Extracted Details */}
               <div className="space-y-3">
                 <div className="grid grid-cols-2 gap-3">
                   <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-100">
@@ -2287,13 +2196,6 @@ export const RecruitmentManagement: React.FC = () => {
               <div className="pt-3 border-t border-slate-200 flex justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => handleMoveToTalentPool(activeCandidate)}
-                  className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-semibold"
-                >
-                  Pindahkan ke Talent Pool
-                </button>
-                <button
-                  type="button"
                   onClick={() => {
                     updateCandidateStage(activeCandidate.id, 'Screening');
                     setIsResumeParserModalOpen(false);
@@ -2326,7 +2228,7 @@ export const RecruitmentManagement: React.FC = () => {
                   <Sparkles className="w-4 h-4 text-sky-400" />
                   <span>Screening Kualifikasi & Keyword Match</span>
                 </h3>
-                <span className="text-xs text-slate-400">Tahap 4: Pencocokan syarat & shortlist</span>
+                <span className="text-xs text-slate-400">Pencocokan syarat & shortlist</span>
               </div>
               <button onClick={() => setIsScreeningModalOpen(false)}>
                 <X className="w-4 h-4 text-slate-400 hover:text-white" />
@@ -2377,13 +2279,6 @@ export const RecruitmentManagement: React.FC = () => {
               <div className="pt-3 border-t border-slate-200 flex justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => handleMoveToTalentPool(activeCandidate)}
-                  className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-semibold"
-                >
-                  Simpan ke Talent Pool
-                </button>
-                <button
-                  type="button"
                   onClick={() => {
                     updateCandidateStage(activeCandidate.id, 'Assessment');
                     setIsScreeningModalOpen(false);
@@ -2416,7 +2311,7 @@ export const RecruitmentManagement: React.FC = () => {
                   <Award className="w-4 h-4 text-amber-400" />
                   <span>Input Nilai Tes Kompetensi & Skoring</span>
                 </h3>
-                <span className="text-xs text-slate-400">{activeCandidate.name} · Tahap 5</span>
+                <span className="text-xs text-slate-400">{activeCandidate.name}</span>
               </div>
               <button onClick={() => setIsAssessmentModalOpen(false)}>
                 <X className="w-4 h-4 text-slate-400 hover:text-white" />
@@ -2528,7 +2423,7 @@ export const RecruitmentManagement: React.FC = () => {
                   <Calendar className="w-4 h-4 text-emerald-400" />
                   <span>Penjadwalan Wawancara & Scorecard Evaluasi</span>
                 </h3>
-                <span className="text-xs text-slate-400">{activeCandidate.name} · Tahap 6</span>
+                <span className="text-xs text-slate-400">{activeCandidate.name} · Tahap Interview (User)</span>
               </div>
               <button onClick={() => setIsInterviewModalOpen(false)}>
                 <X className="w-4 h-4 text-slate-400 hover:text-white" />
@@ -2547,7 +2442,7 @@ export const RecruitmentManagement: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Pewawancara (Hiring Team) *</label>
+                  <label className="font-semibold text-slate-700 block mb-1">Pewawancara (Hiring Team / User) *</label>
                   <input
                     type="text"
                     value={interviewerName}
@@ -2914,7 +2809,6 @@ export const RecruitmentManagement: React.FC = () => {
             </div>
 
             <div className="p-8 overflow-y-auto space-y-5 text-slate-900 font-serif leading-relaxed text-xs">
-              {/* Kop Dokumen */}
               <div className="border-b-2 border-slate-900 pb-4 flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
                   {safeTenant.documentLogoUrl ? (
@@ -2942,7 +2836,6 @@ export const RecruitmentManagement: React.FC = () => {
                 </div>
               </div>
 
-              {/* Title & Number */}
               <div className="text-center space-y-0.5">
                 <h2 className="text-sm font-bold uppercase underline tracking-wide font-sans">
                   SURAT PENAWARAN KERJA RESMI (JOB OFFERING LETTER)
@@ -2952,7 +2845,6 @@ export const RecruitmentManagement: React.FC = () => {
                 </div>
               </div>
 
-              {/* Content */}
               <div className="space-y-3 font-sans text-xs">
                 <p>Kepada Yth. <strong>{activeCandidate.name}</strong>,</p>
                 <p className="leading-normal">
@@ -2990,7 +2882,6 @@ export const RecruitmentManagement: React.FC = () => {
                 </p>
               </div>
 
-              {/* QR Verification Signatures */}
               <div className="pt-6 border-t border-slate-200 grid grid-cols-2 gap-8 font-sans items-end">
                 <div className="space-y-2">
                   <span className="text-[10px] text-slate-500 block">Diterbitkan oleh:</span>
@@ -3032,11 +2923,14 @@ export const RecruitmentManagement: React.FC = () => {
                 </button>
                 <button
                   type="button"
-                  onClick={() => handlePushToOnboarding(activeCandidate)}
+                  onClick={() => {
+                    handleConfirmHired(activeCandidate);
+                    setIsOfferingDocPreviewOpen(false);
+                  }}
                   className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg font-semibold shadow-2xs flex items-center gap-1.5"
                 >
                   <CheckCircle className="w-3.5 h-3.5" />
-                  <span>Kandidat Konfirmasi & Transfer Onboarding</span>
+                  <span>Konfirmasi Terima (Hired)</span>
                 </button>
               </div>
             </div>
@@ -3062,7 +2956,7 @@ export const RecruitmentManagement: React.FC = () => {
                   <UserPlus className="w-4 h-4 text-blue-400" />
                   <span>Input Data Pelamar Baru</span>
                 </h3>
-                <span className="text-xs text-slate-400">Masuk ke Tahap 3 (Incoming) ATS</span>
+                <span className="text-xs text-slate-400">Masuk ke Pipeline Seleksi (Incoming)</span>
               </div>
               <button onClick={() => setIsCandidateModalOpen(false)}>
                 <X className="w-4 h-4 text-slate-400 hover:text-white" />
