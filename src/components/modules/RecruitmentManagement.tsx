@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useHrms } from '../../context/HrmsContext';
 import {
   UserPlus,
@@ -483,6 +483,37 @@ export const RecruitmentManagement: React.FC = () => {
   // Rejection note state
   const [rejectionReasonInput, setRejectionReasonInput] = useState('');
   const [candidateToDisqualify, setCandidateToDisqualify] = useState<Candidate | null>(null);
+
+  // Close any active modal on Escape key press
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (isOfferingDocPreviewOpen) setIsOfferingDocPreviewOpen(false);
+        else if (isOfferingModalOpen) setIsOfferingModalOpen(false);
+        else if (isCandidateModalOpen) setIsCandidateModalOpen(false);
+        else if (isResumeParserModalOpen) setIsResumeParserModalOpen(false);
+        else if (isScreeningModalOpen) setIsScreeningModalOpen(false);
+        else if (isAssessmentModalOpen) setIsAssessmentModalOpen(false);
+        else if (isInterviewModalOpen) setIsInterviewModalOpen(false);
+        else if (isVacancyModalOpen) setIsVacancyModalOpen(false);
+        else if (isRequisitionModalOpen) setIsRequisitionModalOpen(false);
+        else if (candidateToDisqualify) setCandidateToDisqualify(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [
+    isOfferingDocPreviewOpen,
+    isOfferingModalOpen,
+    isCandidateModalOpen,
+    isResumeParserModalOpen,
+    isScreeningModalOpen,
+    isAssessmentModalOpen,
+    isInterviewModalOpen,
+    isVacancyModalOpen,
+    isRequisitionModalOpen,
+    candidateToDisqualify,
+  ]);
 
   // ===================== 1. FORM FPTK (PERMINTAAN KARYAWAN BARU) =====================
   const [fptkPosition, setFptkPosition] = useState('');

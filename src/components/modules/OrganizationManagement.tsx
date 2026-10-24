@@ -253,26 +253,62 @@ export const OrganizationManagement: React.FC = () => {
     setTimeout(() => setToastMessage(null), 3500);
   };
 
+  // Close any active modal on Escape key press
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (previewMasterJobPosition) setPreviewMasterJobPosition(null);
+        else if (previewPosition) setPreviewPosition(null);
+        else if (previewDivision) setPreviewDivision(null);
+        else if (previewDepartment) setPreviewDepartment(null);
+        else if (isMasterPositionModalOpen) setIsMasterPositionModalOpen(false);
+        else if (isPositionModalOpen) setIsPositionModalOpen(false);
+        else if (isDivisionModalOpen) setIsDivisionModalOpen(false);
+        else if (isDepartmentModalOpen) setIsDepartmentModalOpen(false);
+        else if (isRestructureModalOpen) setIsRestructureModalOpen(false);
+        else if (assigningPosition) setAssigningPosition(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [
+    previewMasterJobPosition,
+    previewPosition,
+    previewDivision,
+    previewDepartment,
+    isMasterPositionModalOpen,
+    isPositionModalOpen,
+    isDivisionModalOpen,
+    isDepartmentModalOpen,
+    isRestructureModalOpen,
+    assigningPosition,
+  ]);
+
   // Scoped active entity data
   const entityNodes = useMemo(() => {
-    return orgNodes.filter((n) => n.entityId === currentEntityId);
+    const direct = orgNodes.filter((n) => n.entityId === currentEntityId);
+    return direct.length > 0 ? direct : orgNodes;
   }, [orgNodes, currentEntityId]);
 
   const entityDivisions = useMemo(() => {
-    return divisions.filter((d) => d.entityId === currentEntityId);
+    const direct = divisions.filter((d) => d.entityId === currentEntityId);
+    return direct.length > 0 ? direct : divisions;
   }, [divisions, currentEntityId]);
 
   const entityDepartments = useMemo(() => {
-    return departments.filter((d) => d.entityId === currentEntityId);
+    const direct = departments.filter((d) => d.entityId === currentEntityId);
+    return direct.length > 0 ? direct : departments;
   }, [departments, currentEntityId]);
 
   const entityMasterPositions = useMemo(() => {
-    return masterJobPositions.filter((mjp) => mjp.entityId === currentEntityId);
+    const direct = masterJobPositions.filter((mjp) => mjp.entityId === currentEntityId);
+    return direct.length > 0 ? direct : masterJobPositions;
   }, [masterJobPositions, currentEntityId]);
 
   const occupiedPositions = useMemo(() => entityNodes.filter((n) => !n.isVacant), [entityNodes]);
-  const structuralPositions = useMemo(() => entityNodes.filter((n) => n.relationType !== 'administratif'), [entityNodes]);
-  const adminPositions = useMemo(() => entityNodes.filter((n) => n.relationType === 'administratif'), [entityNodes]);
+  const occupiedCount = useMemo(() => entityNodes.filter((n) => !n.isVacant).length, [entityNodes]);
+  const structuralCount = useMemo(() => entityNodes.filter((n) => n.relationType !== 'administratif').length, [entityNodes]);
+  const adminCount = useMemo(() => entityNodes.filter((n) => n.relationType === 'administratif').length, [entityNodes]);
 
   // Root node org tree
   const rootOrgNodes = useMemo(() => {
@@ -370,33 +406,131 @@ export const OrganizationManagement: React.FC = () => {
     }
   };
 
-  // Center horizontal scroll on initial tab render or entity switch
+  // Zoom Scale References for fast 60fps touch gestures
+  const orgZoomScaleRef = useRef(orgZoomScale);
   useEffect(() => {
-    if (activeTab === 'chart' && orgScrollContainerRef.current) {
-      const timer = setTimeout(() => {
-        const el = orgScrollContainerRef.current;
-        if (!el) return;
-        const maxScroll = el.scrollWidth - el.clientWidth;
-        if (maxScroll > 0) {
-          el.scrollLeft = maxScroll / 2;
-        }
-      }, 100);
-      return () => clearTimeout(timer);
-    }
-  }, [activeTab, currentEntityId]);
+    orgZoomScaleRef.current = orgZoomScale;
+  }, [orgZoomScale]);
 
+  const corpZoomScaleRef = useRef(corpZoomScale);
   useEffect(() => {
-    if (activeTab === 'corporate' && corpScrollContainerRef.current) {
-      const timer = setTimeout(() => {
-        const el = corpScrollContainerRef.current;
-        if (!el) return;
-        const maxScroll = el.scrollWidth - el.clientWidth;
-        if (maxScroll > 0) {
-          el.scrollLeft = maxScroll / 2;
-        }
-      }, 100);
-      return () => clearTimeout(timer);
-    }
+    corpZoomScaleRef.current = corpZoomScale;
+  }, [corpZoomScale]);
+
+  // Touch Pinch-to-Zoom & Trackpad Zoom for Diagram Organisasi
+  useEffect(() => {
+    const el = orgScrollContainerRef.current;
+    if (!el || activeTab !== 'chart') return;
+
+    let touchStartDist = 0;
+    let touchStartScale = orgZoomScaleRef.current;
+
+    const handleTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 2) {
+        touchStartDist = Math.hypot(
+          e.touches[0].clientX - e.touches[1].clientX,
+          e.touches[0].clientY - e.touches[1].clientY
+        );
+        touchStartScale = orgZoomScaleRef.current;
+      }
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (e.touches.length === 2 && touchStartDist > 0) {
+        if (e.cancelable) e.preventDefault(); // Prevent full page browser scaling
+        const currentDist = Math.hypot(
+          e.touches[0].clientX - e.touches[1].clientX,
+          e.touches[0].clientY - e.touches[1].clientY
+        );
+        const factor = currentDist / touchStartDist;
+        const newScale = Math.min(2.0, Math.max(0.35, Number((touchStartScale * factor).toFixed(2))));
+        setOrgZoomScale(newScale);
+      }
+    };
+
+    const handleTouchEnd = (e: TouchEvent) => {
+      if (e.touches.length < 2) {
+        touchStartDist = 0;
+      }
+    };
+
+    const handleWheel = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        if (e.cancelable) e.preventDefault();
+        const delta = -e.deltaY * 0.005;
+        setOrgZoomScale((z) => Math.min(2.0, Math.max(0.35, Number((z + delta).toFixed(2)))));
+      }
+    };
+
+    el.addEventListener('touchstart', handleTouchStart, { passive: true });
+    el.addEventListener('touchmove', handleTouchMove, { passive: false });
+    el.addEventListener('touchend', handleTouchEnd, { passive: true });
+    el.addEventListener('wheel', handleWheel, { passive: false });
+
+    return () => {
+      el.removeEventListener('touchstart', handleTouchStart);
+      el.removeEventListener('touchmove', handleTouchMove);
+      el.removeEventListener('touchend', handleTouchEnd);
+      el.removeEventListener('wheel', handleWheel);
+    };
+  }, [activeTab]);
+
+  // Touch Pinch-to-Zoom & Trackpad Zoom for Diagram Perusahaan
+  useEffect(() => {
+    const el = corpScrollContainerRef.current;
+    if (!el || activeTab !== 'corporate') return;
+
+    let touchStartDist = 0;
+    let touchStartScale = corpZoomScaleRef.current;
+
+    const handleTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 2) {
+        touchStartDist = Math.hypot(
+          e.touches[0].clientX - e.touches[1].clientX,
+          e.touches[0].clientY - e.touches[1].clientY
+        );
+        touchStartScale = corpZoomScaleRef.current;
+      }
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (e.touches.length === 2 && touchStartDist > 0) {
+        if (e.cancelable) e.preventDefault(); // Prevent full page browser scaling
+        const currentDist = Math.hypot(
+          e.touches[0].clientX - e.touches[1].clientX,
+          e.touches[0].clientY - e.touches[1].clientY
+        );
+        const factor = currentDist / touchStartDist;
+        const newScale = Math.min(2.0, Math.max(0.35, Number((touchStartScale * factor).toFixed(2))));
+        setCorpZoomScale(newScale);
+      }
+    };
+
+    const handleTouchEnd = (e: TouchEvent) => {
+      if (e.touches.length < 2) {
+        touchStartDist = 0;
+      }
+    };
+
+    const handleWheel = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        if (e.cancelable) e.preventDefault();
+        const delta = -e.deltaY * 0.005;
+        setCorpZoomScale((z) => Math.min(2.0, Math.max(0.35, Number((z + delta).toFixed(2)))));
+      }
+    };
+
+    el.addEventListener('touchstart', handleTouchStart, { passive: true });
+    el.addEventListener('touchmove', handleTouchMove, { passive: false });
+    el.addEventListener('touchend', handleTouchEnd, { passive: true });
+    el.addEventListener('wheel', handleWheel, { passive: false });
+
+    return () => {
+      el.removeEventListener('touchstart', handleTouchStart);
+      el.removeEventListener('touchmove', handleTouchMove);
+      el.removeEventListener('touchend', handleTouchEnd);
+      el.removeEventListener('wheel', handleWheel);
+    };
   }, [activeTab]);
 
   // Export handlers
@@ -1328,7 +1462,7 @@ export const OrganizationManagement: React.FC = () => {
               <div
                 ref={orgChartContainerRef}
                 style={{ transform: `scale(${orgZoomScale})`, transformOrigin: 'top center' }}
-                className="transition-transform duration-200 flex flex-col items-center"
+                className="transition-transform duration-75 ease-out flex flex-col items-center select-none"
               >
                 {rootOrgNodes.length > 0 ? (
                   <div className="flex items-start gap-12 pb-16">
@@ -1459,7 +1593,7 @@ export const OrganizationManagement: React.FC = () => {
                 <div
                   ref={corpChartContainerRef}
                   style={{ transform: `scale(${corpZoomScale})`, transformOrigin: 'top center' }}
-                  className="transition-transform duration-200 flex flex-col items-center"
+                  className="transition-transform duration-75 ease-out flex flex-col items-center select-none"
                 >
                   {rootEntities.length > 0 ? (
                     <div className="flex items-start gap-12 pb-16">
@@ -1594,67 +1728,61 @@ export const OrganizationManagement: React.FC = () => {
       {activeTab === 'structure' && (
         <div className="space-y-6">
           {/* Sub-Tab Navigation for Master Data Organisasi */}
-          <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-slate-200 shadow-xs">
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setStructureSubTab('divisions')}
-                className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all ${
-                  structureSubTab === 'divisions'
-                    ? 'bg-indigo-600 text-white shadow-xs'
-                    : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200'
-                }`}
-              >
-                <Layers className="w-3.5 h-3.5" />
-                <span>Master Divisi</span>
-                <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${
-                  structureSubTab === 'divisions' ? 'bg-indigo-700 text-white' : 'bg-slate-200 text-slate-700'
-                }`}>
-                  {entityDivisions.length}
-                </span>
-              </button>
+          <ScrollableTabNav className="mb-2">
+            <button
+              type="button"
+              onClick={() => setStructureSubTab('divisions')}
+              className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
+                structureSubTab === 'divisions'
+                  ? 'border-indigo-600 text-indigo-700 font-bold'
+                  : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+              }`}
+            >
+              <Layers className="w-4 h-4" />
+              <span>Master Divisi</span>
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${
+                structureSubTab === 'divisions' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600'
+              }`}>
+                {entityDivisions.length}
+              </span>
+            </button>
 
-              <button
-                type="button"
-                onClick={() => setStructureSubTab('departments')}
-                className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all ${
-                  structureSubTab === 'departments'
-                    ? 'bg-emerald-600 text-white shadow-xs'
-                    : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200'
-                }`}
-              >
-                <Briefcase className="w-3.5 h-3.5" />
-                <span>Master Departemen</span>
-                <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${
-                  structureSubTab === 'departments' ? 'bg-emerald-700 text-white' : 'bg-slate-200 text-slate-700'
-                }`}>
-                  {useDeptLevel ? entityDepartments.length : 'Bypass'}
-                </span>
-              </button>
+            <button
+              type="button"
+              onClick={() => setStructureSubTab('departments')}
+              className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
+                structureSubTab === 'departments'
+                  ? 'border-emerald-600 text-emerald-700 font-bold'
+                  : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+              }`}
+            >
+              <Briefcase className="w-4 h-4" />
+              <span>Master Departemen</span>
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${
+                structureSubTab === 'departments' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'
+              }`}>
+                {useDeptLevel ? entityDepartments.length : 'Bypass'}
+              </span>
+            </button>
 
-              <button
-                type="button"
-                onClick={() => setStructureSubTab('master_positions')}
-                className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all ${
-                  structureSubTab === 'master_positions'
-                    ? 'bg-violet-600 text-white shadow-xs'
-                    : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200'
-                }`}
-              >
-                <Award className="w-3.5 h-3.5" />
-                <span>Master Jabatan</span>
-                <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${
-                  structureSubTab === 'master_positions' ? 'bg-violet-700 text-white' : 'bg-slate-200 text-slate-700'
-                }`}>
-                  {entityMasterPositions.length}
-                </span>
-              </button>
-            </div>
-
-            <div className="text-[11px] text-slate-500 hidden lg:block">
-              Entitas Aktif: <b className="text-slate-800">{currentEntity.name}</b>
-            </div>
-          </div>
+            <button
+              type="button"
+              onClick={() => setStructureSubTab('master_positions')}
+              className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
+                structureSubTab === 'master_positions'
+                  ? 'border-violet-600 text-violet-700 font-bold'
+                  : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+              }`}
+            >
+              <Award className="w-4 h-4" />
+              <span>Master Jabatan</span>
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${
+                structureSubTab === 'master_positions' ? 'bg-violet-100 text-violet-700' : 'bg-slate-100 text-slate-600'
+              }`}>
+                {entityMasterPositions.length}
+              </span>
+            </button>
+          </ScrollableTabNav>
 
           {/* SUB-TAB 1: MASTER DIVISI */}
           {structureSubTab === 'divisions' && (
@@ -1714,15 +1842,15 @@ export const OrganizationManagement: React.FC = () => {
               </div>
 
               {/* Master Divisi Section */}
-              <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-                <div className="p-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+              <div className="space-y-4">
+                <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
                     <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
                       <Layers className="w-4 h-4 text-indigo-600" />
                       Daftar Master Divisi ({entityDivisions.length} Divisi Aktif)
                     </h3>
                     <span className="text-[11px] text-slate-500">
-                      Unit kerja tingkat pertama di bawah Direksi. <b>Klik baris untuk preview detail divisi.</b>
+                      Unit kerja tingkat pertama di bawah Direksi. Klik kartu untuk melihat preview detail divisi.
                     </span>
                   </div>
 
@@ -1739,7 +1867,7 @@ export const OrganizationManagement: React.FC = () => {
                         });
                         setIsDivisionModalOpen(true);
                       }}
-                      className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-colors"
+                      className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-colors shrink-0"
                     >
                       <Plus className="w-3.5 h-3.5" />
                       <span>Tambah Divisi</span>
@@ -1747,52 +1875,52 @@ export const OrganizationManagement: React.FC = () => {
                   )}
                 </div>
 
-                <div className="divide-y divide-slate-100">
+                {/* Card Grid View */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {entityDivisions.map((div) => {
-                    const childDepts = departments.filter((d) => d.divisionId === div.id);
-                    const childPositions = entityNodes.filter((n) => n.division === div.name);
+                    const childDepts = departments.filter((d) => d.divisionId === div.id || d.division === div.name || d.divisionId === div.code);
+                    const childDeptNames = new Set(childDepts.map((d) => d.name.toLowerCase()));
+                    const childPositions = entityNodes.filter((n) => 
+                      (n.division && n.division.toLowerCase() === div.name.toLowerCase()) ||
+                      (n.department && childDeptNames.has(n.department.toLowerCase())) ||
+                      (div.name.toLowerCase().includes('direksi') && n.level === 1)
+                    );
 
                     return (
                       <div
                         key={div.id}
                         onClick={() => setPreviewDivision(div)}
-                        className="p-4 hover:bg-indigo-50/70 cursor-pointer transition-colors flex items-center justify-between gap-4 group"
+                        className="bg-white rounded-xl border border-slate-200 hover:border-indigo-400 p-4 shadow-xs hover:shadow-md transition-all cursor-pointer flex flex-col justify-between group active:scale-[0.99]"
                       >
-                        <div className="flex items-start gap-3">
-                          <div className="w-9 h-9 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-xs shrink-0 mt-0.5 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-                            {div.code.slice(-3)}
+                        <div>
+                          <div className="flex items-center justify-between gap-2 mb-2">
+                            <span className="font-mono text-xs font-bold px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded border border-indigo-200">
+                              {div.code}
+                            </span>
+                            <span className="text-[10px] text-slate-400 font-medium">Divisi Utama</span>
                           </div>
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <span className="font-bold text-slate-900 text-sm group-hover:text-indigo-600 transition-colors flex items-center gap-1.5">
-                                <span>{div.name}</span>
-                                <ChevronRight className="w-3.5 h-3.5 text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity" />
-                              </span>
-                              <span className="text-[10px] font-mono font-semibold px-2 py-0.5 bg-slate-100 text-slate-700 rounded border">
-                                {div.code}
-                              </span>
-                            </div>
-                            <div className="text-xs text-slate-500 mt-0.5">
-                              Pimpinan: <b>{div.headTitle || 'Head of Division'}</b>
-                            </div>
-                            <div className="text-[11px] text-slate-400 mt-1 line-clamp-1">
-                              {div.description}
-                            </div>
-                          </div>
+                          <h4 className="font-bold text-slate-900 text-sm group-hover:text-indigo-600 transition-colors">
+                            {div.name}
+                          </h4>
+                          <p className="text-xs text-slate-500 mt-1 line-clamp-2 leading-relaxed">
+                            {div.description || 'Unit divisi operasional perusahaan.'}
+                          </p>
                         </div>
 
-                        <div className="flex items-center gap-3 shrink-0">
-                          <div className="text-right text-xs">
+                        <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+                          <div className="flex items-center gap-3">
                             {useDeptLevel && (
-                              <span className="block font-semibold text-slate-700">
-                                {childDepts.length} Departemen
+                              <span className="text-slate-600 font-medium flex items-center gap-1">
+                                <Briefcase className="w-3.5 h-3.5 text-emerald-600" />
+                                {childDepts.length} Dept
                               </span>
                             )}
-                            <span className="text-[11px] text-indigo-600 font-medium">
-                              {childPositions.length} Posisi Jabatan
+                            <span className="text-indigo-700 font-semibold flex items-center gap-1">
+                              <UserCheck className="w-3.5 h-3.5 text-indigo-600" />
+                              {childPositions.length} Posisi
                             </span>
                           </div>
-                          <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-indigo-600 group-hover:translate-x-1 transition-all" />
+                          <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-indigo-600 group-hover:translate-x-1 transition-all" />
                         </div>
                       </div>
                     );
@@ -1806,14 +1934,14 @@ export const OrganizationManagement: React.FC = () => {
           {structureSubTab === 'departments' && (
             <div className="space-y-6">
               {useDeptLevel ? (
-                <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-                  <div className="p-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+                <div className="space-y-4">
+                  <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div>
                       <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
                         <Briefcase className="w-4 h-4 text-emerald-600" />
                         Daftar Master Departemen ({entityDepartments.length} Departemen Aktif)
                       </h3>
-                      <span className="text-[11px] text-slate-500">Unit operasional teknis di bawah naungan Divisi. <b>Klik baris untuk preview detail departemen.</b></span>
+                      <span className="text-[11px] text-slate-500">Unit operasional teknis di bawah naungan Divisi. Klik kartu untuk preview detail departemen.</span>
                     </div>
 
                     {!currentEntityLocked && (
@@ -1830,7 +1958,7 @@ export const OrganizationManagement: React.FC = () => {
                           });
                           setIsDepartmentModalOpen(true);
                         }}
-                        className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-colors"
+                        className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-colors shrink-0"
                       >
                         <Plus className="w-3.5 h-3.5" />
                         <span>Tambah Departemen</span>
@@ -1838,42 +1966,44 @@ export const OrganizationManagement: React.FC = () => {
                     )}
                   </div>
 
-                  <div className="divide-y divide-slate-100">
+                  {/* Card Grid View */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {entityDepartments.map((dept) => {
-                      const parentDiv = divisions.find((d) => d.id === dept.divisionId);
-                      const deptPositions = entityNodes.filter((n) => n.department === dept.name);
+                      const parentDiv = divisions.find((d) => d.id === dept.divisionId || d.name === dept.division || d.code === dept.divisionId);
+                      const deptPositions = entityNodes.filter((n) => 
+                        (n.department && n.department.toLowerCase() === dept.name.toLowerCase()) ||
+                        (n.department && (n.department.toLowerCase().includes(dept.name.toLowerCase()) || dept.name.toLowerCase().includes(n.department.toLowerCase())))
+                      );
 
                       return (
                         <div
                           key={dept.id}
                           onClick={() => setPreviewDepartment(dept)}
-                          className="p-4 hover:bg-emerald-50/70 cursor-pointer transition-colors flex items-center justify-between gap-4 group"
+                          className="bg-white rounded-xl border border-slate-200 hover:border-emerald-400 p-4 shadow-xs hover:shadow-md transition-all cursor-pointer flex flex-col justify-between group active:scale-[0.99]"
                         >
                           <div>
-                            <div className="flex items-center gap-2">
-                              <span className="font-bold text-slate-900 text-sm group-hover:text-emerald-700 transition-colors flex items-center gap-1.5">
-                                <span>{dept.name}</span>
-                                <ChevronRight className="w-3.5 h-3.5 text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity" />
-                              </span>
-                              <span className="text-[10px] font-mono font-semibold px-2 py-0.5 bg-slate-100 text-slate-700 rounded border">
+                            <div className="flex items-center justify-between gap-2 mb-2">
+                              <span className="font-mono text-xs font-bold px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded border border-emerald-200">
                                 {dept.code}
                               </span>
-                            </div>
-                            <div className="text-xs text-slate-500 mt-0.5">
-                              Divisi Induk: <b className="text-indigo-700">{parentDiv?.name || 'Divisi Umum'}</b> • Lead: {dept.headTitle || 'Dept Head'}
-                            </div>
-                            <div className="text-[11px] text-slate-400 mt-1 line-clamp-1">
-                              {dept.description}
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-3 shrink-0">
-                            <div className="text-right text-xs">
-                              <span className="font-semibold text-slate-700">
-                                {deptPositions.length} Posisi Jabatan
+                              <span className="text-[11px] text-indigo-700 font-semibold bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100 truncate max-w-[150px]">
+                                {parentDiv?.name || 'Divisi'}
                               </span>
                             </div>
-                            <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-emerald-600 group-hover:translate-x-1 transition-all" />
+                            <h4 className="font-bold text-slate-900 text-sm group-hover:text-emerald-700 transition-colors">
+                              {dept.name}
+                            </h4>
+                            <p className="text-xs text-slate-500 mt-1 line-clamp-2 leading-relaxed">
+                              {dept.description || 'Unit operasional teknis di bawah naungan Divisi.'}
+                            </p>
+                          </div>
+
+                          <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+                            <span className="text-emerald-700 font-semibold flex items-center gap-1">
+                              <UserCheck className="w-3.5 h-3.5 text-emerald-600" />
+                              {deptPositions.length} Posisi Struktural
+                            </span>
+                            <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-emerald-600 group-hover:translate-x-1 transition-all" />
                           </div>
                         </div>
                       );
@@ -1984,194 +2114,88 @@ export const OrganizationManagement: React.FC = () => {
               </div>
 
               {/* Search & Filter Bar */}
-              <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+              <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
                 <div className="relative flex-1 max-w-md">
                   <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
                   <input
                     type="text"
-                    placeholder="Cari kode jabatan, judul, deskripsi..."
+                    placeholder="Cari kode atau nama jabatan..."
                     value={masterPositionSearch}
                     onChange={(e) => setMasterPositionSearch(e.target.value)}
                     className="w-full pl-9 pr-3 py-1.5 border border-slate-300 rounded-lg text-xs focus:outline-violet-600"
                   />
                 </div>
-
-                <div className="flex flex-wrap items-center gap-2">
-                  <div className="flex items-center gap-1.5 text-xs text-slate-600">
-                    <Filter className="w-3.5 h-3.5 text-slate-400" />
-                    <span>Rumpun:</span>
-                    <select
-                      value={masterPositionFamilyFilter}
-                      onChange={(e) => setMasterPositionFamilyFilter(e.target.value)}
-                      className="px-2.5 py-1 border border-slate-300 rounded-lg text-xs bg-white focus:outline-violet-600"
-                    >
-                      <option value="ALL">Semua Rumpun Profesi</option>
-                      <option value="Executive & Leadership">Executive & Leadership</option>
-                      <option value="Human Resources & People">Human Resources & People</option>
-                      <option value="Finance & Accounting">Finance & Accounting</option>
-                      <option value="Teknologi & Engineering">Teknologi & Engineering</option>
-                      <option value="Commercial & Sales">Commercial & Sales</option>
-                      <option value="General Affairs & Legal">General Affairs & Legal</option>
-                    </select>
-                  </div>
-
-                  <div className="flex items-center gap-1.5 text-xs text-slate-600">
-                    <span>Level:</span>
-                    <select
-                      value={masterPositionLevelFilter}
-                      onChange={(e) => setMasterPositionLevelFilter(e.target.value === 'ALL' ? 'ALL' : Number(e.target.value))}
-                      className="px-2.5 py-1 border border-slate-300 rounded-lg text-xs bg-white focus:outline-violet-600"
-                    >
-                      <option value="ALL">Semua Level</option>
-                      <option value={1}>L1 - Direksi</option>
-                      <option value={2}>L2 - VP / Head</option>
-                      <option value={3}>L3 - Manager</option>
-                      <option value={4}>L4 - Supervisor / Lead</option>
-                      <option value={5}>L5 - Officer / Staff</option>
-                    </select>
-                  </div>
+                <div className="text-xs text-slate-500">
+                  Total Terdaftar: <b className="text-slate-800">{entityMasterPositions.length} Master Jabatan</b>
                 </div>
               </div>
 
-              {/* Master Job Position Table */}
-              <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
-                      <tr>
-                        <th className="py-3 px-4">Kode & Judul Jabatan</th>
-                        <th className="py-3 px-4">Rumpun Profesi (Family)</th>
-                        <th className="py-3 px-4">Jenjang & Grade</th>
-                        <th className="py-3 px-4">Divisi & Dept Default</th>
-                        <th className="py-3 px-4">Kualifikasi Minimum</th>
-                        <th className="py-3 px-4">Formasi Terpakai</th>
-                        <th className="py-3 px-4 text-center"></th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {entityMasterPositions
-                        .filter((p) => {
-                          const matchesSearch =
-                            p.title.toLowerCase().includes(masterPositionSearch.toLowerCase()) ||
-                            p.code.toLowerCase().includes(masterPositionSearch.toLowerCase()) ||
-                            (p.description || '').toLowerCase().includes(masterPositionSearch.toLowerCase());
-                          const matchesFamily =
-                            masterPositionFamilyFilter === 'ALL' || p.jobFamily === masterPositionFamilyFilter;
-                          const matchesLevel =
-                            masterPositionLevelFilter === 'ALL' || p.defaultLevel === masterPositionLevelFilter;
-                          return matchesSearch && matchesFamily && matchesLevel;
-                        })
-                        .map((pos) => {
-                          const matchingFormations = entityNodes.filter(
-                            (node) =>
-                              node.masterJobPositionId === pos.id ||
-                              node.title.toLowerCase() === pos.title.toLowerCase()
-                          );
+              {/* Master Job Position Card Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {entityMasterPositions
+                  .filter((p) => {
+                    const matchesSearch =
+                      p.title.toLowerCase().includes(masterPositionSearch.toLowerCase()) ||
+                      p.code.toLowerCase().includes(masterPositionSearch.toLowerCase()) ||
+                      (p.description || '').toLowerCase().includes(masterPositionSearch.toLowerCase()) ||
+                      (p.division || '').toLowerCase().includes(masterPositionSearch.toLowerCase()) ||
+                      (p.department || '').toLowerCase().includes(masterPositionSearch.toLowerCase());
+                    return matchesSearch;
+                  })
+                  .map((pos) => {
+                    const matchingFormations = entityNodes.filter(
+                      (node) =>
+                        node.masterJobPositionId === pos.id ||
+                        node.title.toLowerCase() === pos.title.toLowerCase()
+                    );
 
-                          // Color-coded badge for job family
-                          const familyColor =
-                            pos.jobFamily === 'Executive & Leadership'
-                              ? 'bg-purple-50 text-purple-700 border-purple-200'
-                              : pos.jobFamily === 'Teknologi & Engineering'
-                              ? 'bg-violet-50 text-violet-700 border-violet-200'
-                              : pos.jobFamily === 'Human Resources & People'
-                              ? 'bg-blue-50 text-blue-700 border-blue-200'
-                              : pos.jobFamily === 'Finance & Accounting'
-                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                              : pos.jobFamily === 'Commercial & Sales'
-                              ? 'bg-amber-50 text-amber-700 border-amber-200'
-                              : 'bg-slate-50 text-slate-700 border-slate-200';
+                    return (
+                      <div
+                        key={pos.id}
+                        onClick={() => setPreviewMasterJobPosition(pos)}
+                        className="bg-white rounded-xl border border-slate-200 hover:border-violet-400 p-4 shadow-xs hover:shadow-md transition-all cursor-pointer flex flex-col justify-between group active:scale-[0.99]"
+                      >
+                        <div>
+                          <div className="flex items-center justify-between gap-2 mb-2">
+                            <span className="font-mono text-xs font-bold px-2.5 py-0.5 bg-violet-50 text-violet-700 rounded border border-violet-200">
+                              {pos.code}
+                            </span>
+                            <span className="font-mono text-xs font-semibold px-2 py-0.5 bg-slate-100 text-slate-700 rounded border">
+                              {pos.jobGrade || 'Grade 08'}
+                            </span>
+                          </div>
 
-                          return (
-                            <tr
-                              key={pos.id}
-                              onClick={() => setPreviewMasterJobPosition(pos)}
-                              className="hover:bg-violet-50/70 cursor-pointer transition-colors group"
-                            >
-                              <td className="py-3.5 px-4">
-                                <div className="flex items-start gap-2.5">
-                                  <div className={`w-8 h-8 rounded-lg font-bold text-[11px] flex items-center justify-center shrink-0 mt-0.5 ${
-                                    pos.defaultLevel === 1
-                                      ? 'bg-purple-100 text-purple-800 border border-purple-200'
-                                      : pos.defaultLevel === 2
-                                      ? 'bg-indigo-100 text-indigo-800 border border-indigo-200'
-                                      : pos.defaultLevel === 3
-                                      ? 'bg-blue-100 text-blue-800 border border-blue-200'
-                                      : pos.defaultLevel === 4
-                                      ? 'bg-amber-100 text-amber-800 border border-amber-200'
-                                      : 'bg-slate-100 text-slate-700 border border-slate-200'
-                                  }`}>
-                                    L{pos.defaultLevel}
-                                  </div>
-                                  <div>
-                                    <div className="font-bold text-slate-900 text-sm group-hover:text-violet-700 transition-colors flex items-center gap-1.5">
-                                      <span>{pos.title}</span>
-                                    </div>
-                                    <div className="flex items-center gap-1.5 mt-0.5">
-                                      <span className="font-mono text-[10px] font-bold bg-slate-100 text-slate-700 px-2 py-0.5 rounded border border-slate-200">
-                                        {pos.code}
-                                      </span>
-                                      {pos.description && (
-                                        <span className="text-[11px] text-slate-400 line-clamp-1 max-w-xs">
-                                          {pos.description}
-                                        </span>
-                                      )}
-                                    </div>
-                                  </div>
-                                </div>
-                              </td>
+                          <h4 className="font-bold text-slate-900 text-sm group-hover:text-violet-700 transition-colors">
+                            {pos.title}
+                          </h4>
 
-                              <td className="py-3.5 px-4">
-                                <span className={`inline-flex items-center gap-1 font-semibold px-2.5 py-0.5 rounded-full text-[11px] border ${familyColor}`}>
-                                  {pos.jobFamily || 'General'}
-                                </span>
-                              </td>
+                          <div className="text-xs text-slate-500 mt-1.5 flex items-center gap-1.5 flex-wrap">
+                            <span className="font-medium text-slate-700">{pos.division || 'Divisi Umum'}</span>
+                            {useDeptLevel && pos.department && (
+                              <>
+                                <span className="text-slate-300">•</span>
+                                <span className="text-slate-500">{pos.department}</span>
+                              </>
+                            )}
+                          </div>
 
-                              <td className="py-3.5 px-4">
-                                <div>
-                                  <span className="font-semibold text-slate-800">
-                                    {pos.defaultLevel === 1 && 'L1 - Direksi'}
-                                    {pos.defaultLevel === 2 && 'L2 - VP / Head'}
-                                    {pos.defaultLevel === 3 && 'L3 - Manager'}
-                                    {pos.defaultLevel === 4 && 'L4 - Supervisor'}
-                                    {pos.defaultLevel === 5 && 'L5 - Staff'}
-                                  </span>
-                                  <div className="text-[10px] text-slate-500 font-mono">
-                                    {pos.jobGrade || 'Grade Standard'}
-                                  </div>
-                                </div>
-                              </td>
+                          {pos.description && (
+                            <p className="text-xs text-slate-500 mt-2 line-clamp-2 leading-relaxed">
+                              {pos.description}
+                            </p>
+                          )}
+                        </div>
 
-                              <td className="py-3.5 px-4">
-                                <div className="font-medium text-slate-800">{pos.division || '-'}</div>
-                                <div className="text-[11px] text-slate-500">{pos.department || '-'}</div>
-                              </td>
-
-                              <td className="py-3.5 px-4 max-w-xs">
-                                <span className="text-[11px] text-slate-600 line-clamp-2">
-                                  {pos.requirements || '-'}
-                                </span>
-                              </td>
-
-                              <td className="py-3.5 px-4">
-                                <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
-                                  matchingFormations.length > 0
-                                    ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
-                                    : 'bg-slate-100 text-slate-500 border-slate-200'
-                                }`}>
-                                  {matchingFormations.length} Formasi
-                                </span>
-                              </td>
-
-                              <td className="py-3.5 px-4 text-center">
-                                <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-violet-600 transition-colors ml-auto" />
-                              </td>
-                            </tr>
-                          );
-                        })}
-                    </tbody>
-                  </table>
-                </div>
+                        <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <UserCheck className="w-3.5 h-3.5 text-emerald-600" />
+                            {matchingFormations.length} Formasi Kursi
+                          </span>
+                          <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-violet-600 group-hover:translate-x-1 transition-all" />
+                        </div>
+                      </div>
+                    );
+                  })}
               </div>
             </div>
           )}
@@ -2240,219 +2264,354 @@ export const OrganizationManagement: React.FC = () => {
               </div>
               <div className="bg-white/10 backdrop-blur-xs p-3 rounded-xl border border-white/10">
                 <div className="text-[11px] text-indigo-200">Kursi Terisi (Occupied)</div>
-                <div className="text-xl font-black text-emerald-300 mt-0.5">{occupiedPositions}</div>
+                <div className="text-xl font-black text-emerald-300 mt-0.5">{occupiedCount}</div>
                 <div className="text-[10px] text-emerald-300">
-                  {Math.round((occupiedPositions / (entityNodes.length || 1)) * 100)}% Okupansi
+                  {Math.round((occupiedCount / (entityNodes.length || 1)) * 100)}% Okupansi
                 </div>
               </div>
               <div className="bg-white/10 backdrop-blur-xs p-3 rounded-xl border border-white/10">
                 <div className="text-[11px] text-indigo-200">Kursi Kosong (Vacant)</div>
-                <div className="text-xl font-black text-rose-300 mt-0.5">{entityNodes.length - occupiedPositions}</div>
+                <div className="text-xl font-black text-rose-300 mt-0.5">{entityNodes.length - occupiedCount}</div>
                 <div className="text-[10px] text-rose-300">Butuh penetapan karyawan</div>
               </div>
               <div className="bg-white/10 backdrop-blur-xs p-3 rounded-xl border border-white/10">
                 <div className="text-[11px] text-indigo-200">Komando Struktural</div>
-                <div className="text-xl font-black text-slate-200 mt-0.5">{structuralPositions}</div>
+                <div className="text-xl font-black text-slate-200 mt-0.5">{structuralCount}</div>
                 <div className="text-[10px] text-slate-300">Garis lurus resmi</div>
               </div>
               <div className="bg-white/10 backdrop-blur-xs p-3 rounded-xl border border-white/10">
                 <div className="text-[11px] text-indigo-200">Koordinasi Administratif</div>
-                <div className="text-xl font-black text-amber-300 mt-0.5">{adminPositions}</div>
+                <div className="text-xl font-black text-amber-300 mt-0.5">{adminCount}</div>
                 <div className="text-[10px] text-amber-300">Garis koordinasi putus-putus</div>
               </div>
             </div>
           </div>
 
-          {/* Filter & Search Controls */}
-          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-            <div className="relative flex-1 max-w-md">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-              <input
-                type="text"
-                placeholder="Cari posisi, nama karyawan, NIK, divisi..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-3 py-1.5 border border-slate-300 rounded-lg text-xs focus:outline-indigo-600"
-              />
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="flex items-center gap-1.5 text-xs text-slate-600">
-                <Filter className="w-3.5 h-3.5 text-slate-400" />
-                <span>Okupansi:</span>
-                <select
-                  value={assignStatusFilter}
-                  onChange={(e) => setAssignStatusFilter(e.target.value as 'ALL' | 'occupied' | 'vacant')}
-                  className="px-2.5 py-1 border border-slate-300 rounded-lg text-xs bg-white focus:outline-indigo-600 font-medium"
-                >
-                  <option value="ALL">Semua Formasi ({entityNodes.length})</option>
-                  <option value="occupied">Terisi Karyawan ({occupiedPositions})</option>
-                  <option value="vacant">Posisi Kosong / Vacant ({entityNodes.length - occupiedPositions})</option>
-                </select>
+          {/* Filter & Search Controls (Responsive Mobile & Tablet) */}
+          <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-xs space-y-3">
+            <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3">
+              <div className="relative flex-1 w-full xl:max-w-md">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                <input
+                  type="text"
+                  placeholder="Cari posisi, nama karyawan, NIK, divisi..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-xs focus:outline-indigo-600 shadow-2xs"
+                />
               </div>
 
-              <div className="flex items-center gap-1.5 text-xs text-slate-600">
-                <span>Jalur Komando:</span>
-                <select
-                  value={assignRelationFilter}
-                  onChange={(e) => setAssignRelationFilter(e.target.value as 'ALL' | 'struktural' | 'administratif')}
-                  className="px-2.5 py-1 border border-slate-300 rounded-lg text-xs bg-white focus:outline-indigo-600 font-medium"
-                >
-                  <option value="ALL">Semua Jalur</option>
-                  <option value="struktural">Komando Struktural ({structuralPositions})</option>
-                  <option value="administratif">Koordinasi Administratif ({adminPositions})</option>
-                </select>
-              </div>
+              {/* Filter Dropdowns Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 w-full xl:w-auto xl:flex xl:items-center">
+                <div className="relative">
+                  <select
+                    value={assignStatusFilter}
+                    onChange={(e) => setAssignStatusFilter(e.target.value as 'ALL' | 'occupied' | 'vacant')}
+                    className="w-full lg:w-auto pl-3 pr-8 py-2 border border-slate-300 rounded-lg text-xs bg-white text-slate-700 font-medium appearance-none cursor-pointer focus:border-indigo-500 focus:outline-none shadow-2xs"
+                  >
+                    <option value="ALL">Semua Okupansi ({entityNodes.length})</option>
+                    <option value="occupied">Terisi ({occupiedCount})</option>
+                    <option value="vacant">Kosong / Vacant ({entityNodes.length - occupiedCount})</option>
+                  </select>
+                  <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-3 pointer-events-none" />
+                </div>
 
-              <div className="flex items-center gap-1.5 text-xs text-slate-600">
-                <span>Divisi:</span>
-                <select
-                  value={assignDivisionFilter}
-                  onChange={(e) => setAssignDivisionFilter(e.target.value)}
-                  className="px-2.5 py-1 border border-slate-300 rounded-lg text-xs bg-white focus:outline-indigo-600 font-medium"
-                >
-                  <option value="ALL">Semua Divisi</option>
-                  {entityDivisions.map((div) => (
-                    <option key={div.id} value={div.name}>{div.name}</option>
-                  ))}
-                </select>
+                <div className="relative">
+                  <select
+                    value={assignRelationFilter}
+                    onChange={(e) => setAssignRelationFilter(e.target.value as 'ALL' | 'struktural' | 'administratif')}
+                    className="w-full lg:w-auto pl-3 pr-8 py-2 border border-slate-300 rounded-lg text-xs bg-white text-slate-700 font-medium appearance-none cursor-pointer focus:border-indigo-500 focus:outline-none shadow-2xs"
+                  >
+                    <option value="ALL">Semua Jalur Komando</option>
+                    <option value="struktural">Komando Struktural ({structuralCount})</option>
+                    <option value="administratif">Koordinasi Admin ({adminCount})</option>
+                  </select>
+                  <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-3 pointer-events-none" />
+                </div>
+
+                <div className="relative">
+                  <select
+                    value={assignDivisionFilter}
+                    onChange={(e) => setAssignDivisionFilter(e.target.value)}
+                    className="w-full lg:w-auto pl-3 pr-8 py-2 border border-slate-300 rounded-lg text-xs bg-white text-slate-700 font-medium appearance-none cursor-pointer focus:border-indigo-500 focus:outline-none shadow-2xs"
+                  >
+                    <option value="ALL">Semua Divisi</option>
+                    {entityDivisions.map((div) => (
+                      <option key={div.id} value={div.name}>{div.name}</option>
+                    ))}
+                  </select>
+                  <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-3 pointer-events-none" />
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Table: Assign Jabatan & Formasi Posisi */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
-                  <tr>
-                    <th className="py-3 px-4">Formasi Kursi & ID</th>
-                    <th className="py-3 px-4">Tipe Jalur Komando</th>
-                    <th className="py-3 px-4">Level Tier</th>
-                    <th className="py-3 px-4">Divisi & Departemen</th>
-                    <th className="py-3 px-4">Lapor Ke (Atasan)</th>
-                    <th className="py-3 px-4">Penetapan Karyawan (Assign Jabatan)</th>
-                    <th className="py-3 px-4 text-center"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {entityNodes
-                    .filter((pos) => {
-                      const occupant = employees.find((e) => e.id === pos.currentEmployeeId);
-                      const matchesSearch =
-                        pos.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                        pos.department.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                        (pos.division || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-                        (occupant?.fullName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-                        (occupant?.nik || '').toLowerCase().includes(searchQuery.toLowerCase());
+          {/* VIEW A: MOBILE & TABLET CARD CONCEPT VIEW (Hidden on Desktop lg+) */}
+          {(() => {
+            const filteredPositions = entityNodes.filter((pos) => {
+              const occupant = employees.find((e) => e.id === pos.currentEmployeeId);
+              const matchesSearch =
+                pos.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                pos.department.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                (pos.division || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+                (occupant?.fullName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+                (occupant?.nik || '').toLowerCase().includes(searchQuery.toLowerCase());
 
-                      const matchesOccupancy =
-                        assignStatusFilter === 'ALL' ||
-                        (assignStatusFilter === 'occupied' && !pos.isVacant && pos.currentEmployeeId) ||
-                        (assignStatusFilter === 'vacant' && (pos.isVacant || !pos.currentEmployeeId));
+              const matchesOccupancy =
+                assignStatusFilter === 'ALL' ||
+                (assignStatusFilter === 'occupied' && !pos.isVacant && pos.currentEmployeeId) ||
+                (assignStatusFilter === 'vacant' && (pos.isVacant || !pos.currentEmployeeId));
 
-                      const matchesRelation =
-                        assignRelationFilter === 'ALL' || pos.relationType === assignRelationFilter;
+              const matchesRelation =
+                assignRelationFilter === 'ALL' || pos.relationType === assignRelationFilter;
 
-                      const matchesDivision =
-                        assignDivisionFilter === 'ALL' || pos.division === assignDivisionFilter;
+              const matchesDivision =
+                assignDivisionFilter === 'ALL' || pos.division === assignDivisionFilter;
 
-                      return matchesSearch && matchesOccupancy && matchesRelation && matchesDivision;
-                    })
-                    .map((pos) => {
-                      const occupant = employees.find((e) => e.id === pos.currentEmployeeId);
-                      const supervisor = entityNodes.find((n) => n.id === pos.reportsToId);
+              return matchesSearch && matchesOccupancy && matchesRelation && matchesDivision;
+            });
 
-                      return (
-                        <tr
-                          key={pos.id}
-                          onClick={() => setPreviewPosition(pos)}
-                          className="hover:bg-indigo-50/70 cursor-pointer transition-colors group"
-                        >
-                          {/* Nama Posisi & Preview */}
-                          <td className="py-3.5 px-4">
+            return (
+              <>
+                {/* Mobile & Tablet Card View (Shown on all Mobile and Tablet screens < xl) */}
+                <div className="block xl:hidden space-y-3">
+                  {filteredPositions.length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                      {filteredPositions.map((pos) => {
+                        const occupant = employees.find((e) => e.id === pos.currentEmployeeId);
+                        const supervisor = entityNodes.find((n) => n.id === pos.reportsToId);
+
+                        return (
+                          <div
+                            key={pos.id}
+                            onClick={() => setPreviewPosition(pos)}
+                            className="bg-white rounded-xl border border-slate-200 hover:border-indigo-400 p-4 shadow-xs hover:shadow-md transition-all cursor-pointer flex flex-col justify-between group active:scale-[0.99]"
+                          >
                             <div>
-                              <div className="font-bold text-slate-900 group-hover:text-indigo-600 transition-colors flex items-center gap-1.5">
-                                <span>{pos.title}</span>
-                              </div>
-                              <span className="text-[10px] text-slate-400 font-mono">ID: {pos.id}</span>
-                            </div>
-                          </td>
-
-                          {/* Jalur Komando */}
-                          <td className="py-3.5 px-4">
-                            {pos.relationType === 'administratif' ? (
-                              <span className="inline-flex items-center gap-1.5 font-semibold px-2 py-0.5 rounded border border-amber-300 bg-amber-50 text-amber-800 text-[11px]">
-                                <span className="w-2.5 h-0.5 border-t-2 border-dashed border-amber-600 inline-block" />
-                                Koordinasi Administratif
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1.5 font-semibold px-2 py-0.5 rounded border border-slate-200 bg-slate-50 text-slate-700 text-[11px]">
-                                <span className="w-2.5 h-0.5 bg-slate-500 inline-block" />
-                                Komando Struktural
-                              </span>
-                            )}
-                          </td>
-
-                          {/* Level Tier */}
-                          <td className="py-3.5 px-4">
-                            <span className="font-mono font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-700 border text-[11px]">
-                              L{pos.level}
-                            </span>
-                          </td>
-
-                          {/* Divisi & Dept */}
-                          <td className="py-3.5 px-4">
-                            <div className="font-medium text-slate-800">{pos.division || currentEntity.name}</div>
-                            <div className="text-[11px] text-slate-500">
-                              {useDeptLevel ? pos.department : <span className="text-amber-700 font-semibold">Direct to Division</span>}
-                            </div>
-                          </td>
-
-                          {/* Lapor Ke (Atasan) */}
-                          <td className="py-3.5 px-4">
-                            {supervisor ? (
-                              <div>
-                                <div className="font-medium text-slate-800">{supervisor.title}</div>
-                                <span className="text-[10px] text-slate-400 font-mono">Tier L{supervisor.level}</span>
-                              </div>
-                            ) : (
-                              <span className="text-slate-400 italic">Puncak Hierarki</span>
-                            )}
-                          </td>
-
-                          {/* Penetapan Karyawan (Assign Jabatan / Pemegang) */}
-                          <td className="py-3.5 px-4">
-                            {pos.isVacant || !pos.currentEmployeeId ? (
-                              <div className="flex items-center gap-2">
-                                <span className="px-2.5 py-1 bg-rose-50 text-rose-700 rounded-md border border-rose-200 text-[11px] font-semibold shrink-0">
-                                  Posisi Kosong (Vacant)
-                                </span>
-                              </div>
-                            ) : (
-                              <div className="flex items-center gap-2.5">
-                                <div className="w-7 h-7 rounded-full bg-indigo-600 text-white font-bold text-[10px] flex items-center justify-center shrink-0">
-                                  {occupant?.fullName.charAt(0) || 'K'}
+                              {/* Header: Title, ID & Status Pill */}
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0 flex-1">
+                                  <div className="font-bold text-slate-900 group-hover:text-indigo-600 transition-colors text-sm line-clamp-1">
+                                    {pos.title}
+                                  </div>
+                                  <div className="flex items-center gap-1.5 mt-1">
+                                    <span className="font-mono text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                                      ID: {pos.id}
+                                    </span>
+                                    <span className="font-mono font-bold text-[10px] text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                                      Tier L{pos.level}
+                                    </span>
+                                  </div>
                                 </div>
-                                <div>
-                                  <div className="font-semibold text-slate-900">{occupant?.fullName || 'Karyawan Aktif'}</div>
-                                  <div className="text-[10px] text-slate-400 font-mono">{occupant?.nik || 'NIK-HRMS'}</div>
+
+                                {pos.isVacant || !pos.currentEmployeeId ? (
+                                  <span className="px-2 py-0.5 bg-rose-50 text-rose-700 rounded-md border border-rose-200 text-[10px] font-bold shrink-0">
+                                    Vacant
+                                  </span>
+                                ) : (
+                                  <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded-md border border-emerald-200 text-[10px] font-bold shrink-0">
+                                    Occupied
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Middle Details */}
+                              <div className="mt-3 pt-3 border-t border-slate-100 space-y-1.5 text-xs">
+                                <div className="flex items-center justify-between text-[11px]">
+                                  <span className="text-slate-400">Divisi:</span>
+                                  <span className="font-medium text-slate-800 truncate max-w-[180px]">
+                                    {pos.division || currentEntity.name}
+                                  </span>
+                                </div>
+                                <div className="flex items-center justify-between text-[11px]">
+                                  <span className="text-slate-400">Departemen:</span>
+                                  <span className="text-slate-700 truncate max-w-[180px]">
+                                    {useDeptLevel ? pos.department : <span className="text-amber-700 font-semibold">Direct to Division</span>}
+                                  </span>
+                                </div>
+                                <div className="flex items-center justify-between text-[11px]">
+                                  <span className="text-slate-400">Jalur:</span>
+                                  {pos.relationType === 'administratif' ? (
+                                    <span className="inline-flex items-center gap-1 font-semibold text-[10px] text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                                      <span className="w-2 h-0.5 border-t-2 border-dashed border-amber-600 inline-block" />
+                                      Koordinasi Administratif
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 font-semibold text-[10px] text-slate-700 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-200">
+                                      <span className="w-2 h-0.5 bg-slate-500 inline-block" />
+                                      Komando Struktural
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex items-center justify-between text-[11px]">
+                                  <span className="text-slate-400">Lapor Ke:</span>
+                                  <span className="font-medium text-slate-800 truncate max-w-[180px]">
+                                    {supervisor ? supervisor.title : <span className="text-slate-400 italic">Puncak Hierarki</span>}
+                                  </span>
                                 </div>
                               </div>
-                            )}
-                          </td>
+                            </div>
 
-                          {/* Aksi Formasi: Chevron only */}
-                          <td className="py-3.5 px-4 text-center">
-                            <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-indigo-600 transition-colors ml-auto" />
-                          </td>
+                            {/* Bottom Card Footer: Assigned Employee or Empty Notice */}
+                            <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between">
+                              {pos.isVacant || !pos.currentEmployeeId ? (
+                                <div className="flex items-center gap-2">
+                                  <div className="w-7 h-7 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center shrink-0 border border-slate-200">
+                                    <UserCheck className="w-3.5 h-3.5" />
+                                  </div>
+                                  <span className="text-xs text-rose-600 font-medium">Belum ada penetapan</span>
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <div className="w-7 h-7 rounded-full bg-indigo-600 text-white font-bold text-[10px] flex items-center justify-center shrink-0 shadow-2xs">
+                                    {occupant?.fullName.charAt(0) || 'K'}
+                                  </div>
+                                  <div className="min-w-0">
+                                    <div className="font-bold text-slate-900 text-xs truncate max-w-[150px]">{occupant?.fullName}</div>
+                                    <div className="text-[10px] text-slate-400 font-mono">{occupant?.nik || 'NIK-HRMS'}</div>
+                                  </div>
+                                </div>
+                              )}
+                              <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-indigo-600 group-hover:translate-x-1 transition-all shrink-0 ml-2" />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="p-8 text-center bg-white rounded-2xl border border-slate-200 space-y-2">
+                      <UserCheck className="w-8 h-8 text-slate-300 mx-auto" />
+                      <p className="font-semibold text-sm text-slate-700">Tidak ada formasi posisi yang sesuai kriteria</p>
+                      <p className="text-xs text-slate-400">Silakan sesuaikan kata kunci pencarian atau filter status okupansi.</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* VIEW B: DESKTOP TABLE VIEW (Shown only on large desktop screens >= xl) */}
+                <div className="hidden xl:block bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
+                        <tr>
+                          <th className="py-3 px-4">Formasi Kursi & ID</th>
+                          <th className="py-3 px-4">Tipe Jalur Komando</th>
+                          <th className="py-3 px-4">Level Tier</th>
+                          <th className="py-3 px-4">Divisi & Departemen</th>
+                          <th className="py-3 px-4">Lapor Ke (Atasan)</th>
+                          <th className="py-3 px-4">Penetapan Karyawan (Assign Jabatan)</th>
+                          <th className="py-3 px-4 text-center"></th>
                         </tr>
-                      );
-                    })}
-                </tbody>
-              </table>
-            </div>
-          </div>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {filteredPositions.length > 0 ? (
+                          filteredPositions.map((pos) => {
+                            const occupant = employees.find((e) => e.id === pos.currentEmployeeId);
+                            const supervisor = entityNodes.find((n) => n.id === pos.reportsToId);
+
+                            return (
+                              <tr
+                                key={pos.id}
+                                onClick={() => setPreviewPosition(pos)}
+                                className="hover:bg-indigo-50/70 cursor-pointer transition-colors group"
+                              >
+                                {/* Nama Posisi & Preview */}
+                                <td className="py-3.5 px-4">
+                                  <div>
+                                    <div className="font-bold text-slate-900 group-hover:text-indigo-600 transition-colors flex items-center gap-1.5">
+                                      <span>{pos.title}</span>
+                                    </div>
+                                    <span className="text-[10px] text-slate-400 font-mono">ID: {pos.id}</span>
+                                  </div>
+                                </td>
+
+                                {/* Jalur Komando */}
+                                <td className="py-3.5 px-4">
+                                  {pos.relationType === 'administratif' ? (
+                                    <span className="inline-flex items-center gap-1.5 font-semibold px-2 py-0.5 rounded border border-amber-300 bg-amber-50 text-amber-800 text-[11px]">
+                                      <span className="w-2.5 h-0.5 border-t-2 border-dashed border-amber-600 inline-block" />
+                                      Koordinasi Administratif
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1.5 font-semibold px-2 py-0.5 rounded border border-slate-200 bg-slate-50 text-slate-700 text-[11px]">
+                                      <span className="w-2.5 h-0.5 bg-slate-500 inline-block" />
+                                      Komando Struktural
+                                    </span>
+                                  )}
+                                </td>
+
+                                {/* Level Tier */}
+                                <td className="py-3.5 px-4">
+                                  <span className="font-mono font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-700 border text-[11px]">
+                                    L{pos.level}
+                                  </span>
+                                </td>
+
+                                {/* Divisi & Dept */}
+                                <td className="py-3.5 px-4">
+                                  <div className="font-medium text-slate-800">{pos.division || currentEntity.name}</div>
+                                  <div className="text-[11px] text-slate-500">
+                                    {useDeptLevel ? pos.department : <span className="text-amber-700 font-semibold">Direct to Division</span>}
+                                  </div>
+                                </td>
+
+                                {/* Lapor Ke (Atasan) */}
+                                <td className="py-3.5 px-4">
+                                  {supervisor ? (
+                                    <div>
+                                      <div className="font-medium text-slate-800">{supervisor.title}</div>
+                                      <span className="text-[10px] text-slate-400 font-mono">Tier L{supervisor.level}</span>
+                                    </div>
+                                  ) : (
+                                    <span className="text-slate-400 italic">Puncak Hierarki</span>
+                                  )}
+                                </td>
+
+                                {/* Penetapan Karyawan (Assign Jabatan / Pemegang) */}
+                                <td className="py-3.5 px-4">
+                                  {pos.isVacant || !pos.currentEmployeeId ? (
+                                    <div className="flex items-center gap-2">
+                                      <span className="px-2.5 py-1 bg-rose-50 text-rose-700 rounded-md border border-rose-200 text-[11px] font-semibold shrink-0">
+                                        Posisi Kosong (Vacant)
+                                      </span>
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center gap-2.5">
+                                      <div className="w-7 h-7 rounded-full bg-indigo-600 text-white font-bold text-[10px] flex items-center justify-center shrink-0">
+                                        {occupant?.fullName.charAt(0) || 'K'}
+                                      </div>
+                                      <div>
+                                        <div className="font-semibold text-slate-900">{occupant?.fullName || 'Karyawan Aktif'}</div>
+                                        <div className="text-[10px] text-slate-400 font-mono">{occupant?.nik || 'NIK-HRMS'}</div>
+                                      </div>
+                                    </div>
+                                  )}
+                                </td>
+
+                                {/* Aksi Formasi: Chevron only */}
+                                <td className="py-3.5 px-4 text-center">
+                                  <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-indigo-600 transition-colors ml-auto" />
+                                </td>
+                              </tr>
+                            );
+                          })
+                        ) : (
+                          <tr>
+                            <td colSpan={7} className="py-12 text-center text-slate-500">
+                              <div className="flex flex-col items-center justify-center space-y-2">
+                                <UserCheck className="w-8 h-8 text-slate-300" />
+                                <p className="font-semibold text-sm text-slate-700">Tidak ada formasi posisi yang sesuai kriteria</p>
+                                <p className="text-xs text-slate-400">Silakan sesuaikan kata kunci pencarian atau filter status okupansi.</p>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </>
+            );
+          })()}
         </div>
       )}
 
@@ -3071,78 +3230,99 @@ export const OrganizationManagement: React.FC = () => {
 
             <div className="p-5 space-y-4 text-xs overflow-y-auto flex-1">
               <div className="p-4 bg-indigo-50/70 rounded-xl border border-indigo-200">
-                <div className="flex items-center justify-between">
-                  <span className="font-mono font-bold text-indigo-800 bg-indigo-100 px-2 py-0.5 rounded border border-indigo-300 text-[11px]">
-                    {previewDivision.code}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-indigo-100">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono font-bold text-indigo-800 bg-indigo-100 px-2.5 py-0.5 rounded border border-indigo-300 text-xs">
+                      {previewDivision.code}
+                    </span>
+                    <span className="text-[10px] uppercase font-bold text-indigo-600 bg-white/80 px-1.5 py-0.5 rounded">
+                      Divisi
+                    </span>
+                  </div>
+                  <span className="text-slate-500 text-[11px] truncate">
+                    Entitas: <b className="text-slate-800">{currentEntity.name}</b>
                   </span>
-                  <span className="text-slate-500 text-[11px]">Entitas: <b>{currentEntity.name}</b></span>
                 </div>
-                <h4 className="text-base font-bold text-slate-900 mt-2">{previewDivision.name}</h4>
-                <div className="text-slate-600 text-xs mt-0.5">
-                  Pimpinan / Head: <b>{previewDivision.headTitle || 'Head of Division'}</b>
-                </div>
-                <p className="text-slate-500 text-[11px] mt-2 leading-relaxed">
+                <h4 className="text-base font-bold text-slate-900 mt-2.5">{previewDivision.name}</h4>
+                <p className="text-slate-600 text-xs mt-1.5 leading-relaxed">
                   {previewDivision.description || 'Divisi operasional utama di bawah koordinasi Direksi korporasi.'}
                 </p>
               </div>
 
-              {/* Departemen di bawah divisi */}
-              {useDeptLevel && (
-                <div className="space-y-2">
-                  <label className="font-bold text-slate-800 block text-xs uppercase tracking-wider">
-                    Departemen di Bawah Naungan Divisi Ini ({departments.filter((d) => d.divisionId === previewDivision.id).length}):
-                  </label>
-                  <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden bg-slate-50/50">
-                    {departments.filter((d) => d.divisionId === previewDivision.id).map((dept) => (
-                      <div key={dept.id} className="p-2.5 flex items-center justify-between">
-                        <div>
-                          <span className="font-bold text-slate-900">{dept.name}</span>
-                          <span className="text-[10px] text-slate-400 font-mono ml-2">[{dept.code}]</span>
-                          <div className="text-[11px] text-slate-500">Lead: {dept.headTitle || 'Dept Head'}</div>
-                        </div>
-                        <span className="text-[11px] text-slate-600 font-medium">
-                          {orgNodes.filter((n) => n.department === dept.name).length} Posisi
-                        </span>
-                      </div>
-                    ))}
-                    {departments.filter((d) => d.divisionId === previewDivision.id).length === 0 && (
-                      <div className="p-3 text-center text-slate-400 italic">Belum ada departemen di bawah divisi ini.</div>
-                    )}
-                  </div>
-                </div>
-              )}
+              {/* Departemen & Posisi di bawah divisi */}
+              {(() => {
+                const childDepts = departments.filter((d) => 
+                  d.divisionId === previewDivision.id || 
+                  d.division === previewDivision.name || 
+                  (d.divisionId && d.divisionId.toLowerCase() === previewDivision.id.toLowerCase())
+                );
+                const childDeptNames = new Set(childDepts.map((d) => d.name.toLowerCase()));
+                const childPositions = entityNodes.filter((n) => 
+                  (n.division && n.division.toLowerCase() === previewDivision.name.toLowerCase()) ||
+                  (n.department && childDeptNames.has(n.department.toLowerCase())) ||
+                  (previewDivision.name.toLowerCase().includes('direksi') && n.level === 1)
+                );
 
-              {/* Posisi Jabatan di bawah divisi */}
-              <div className="space-y-2">
-                <label className="font-bold text-slate-800 block text-xs uppercase tracking-wider">
-                  Daftar Jabatan Struktural Terdaftar ({orgNodes.filter((n) => n.division === previewDivision.name).length}):
-                </label>
-                <div className="max-h-48 overflow-y-auto divide-y divide-slate-100 border border-slate-200 rounded-xl bg-slate-50/50">
-                  {orgNodes.filter((n) => n.division === previewDivision.name).map((node) => {
-                    const emp = employees.find((e) => e.id === node.currentEmployeeId);
-                    return (
-                      <div key={node.id} className="p-2.5 flex items-center justify-between">
-                        <div>
-                          <div className="font-semibold text-slate-900">{node.title}</div>
-                          <div className="text-[10px] text-slate-400">
-                            Level L{node.level} • {useDeptLevel ? node.department : 'Direct to Division'}
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          {node.isVacant ? (
-                            <span className="text-[10px] text-rose-600 font-semibold">Kosong</span>
-                          ) : (
-                            <span className="text-[11px] text-indigo-700 font-medium">{emp?.fullName || 'Terisi'}</span>
+                return (
+                  <>
+                    {useDeptLevel && (
+                      <div className="space-y-2">
+                        <label className="font-bold text-slate-800 block text-xs uppercase tracking-wider">
+                          Departemen di Bawah Naungan Divisi Ini ({childDepts.length}):
+                        </label>
+                        <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden bg-slate-50/50">
+                          {childDepts.map((dept) => (
+                            <div key={dept.id} className="p-2.5 flex items-center justify-between">
+                              <div>
+                                <span className="font-bold text-slate-900">{dept.name}</span>
+                                <span className="text-[10px] text-slate-400 font-mono ml-2">[{dept.code}]</span>
+                              </div>
+                              <span className="text-[11px] text-slate-600 font-medium">
+                                {entityNodes.filter((n) => n.department?.toLowerCase() === dept.name.toLowerCase() || n.department?.toLowerCase().includes(dept.name.toLowerCase())).length} Posisi
+                              </span>
+                            </div>
+                          ))}
+                          {childDepts.length === 0 && (
+                            <div className="p-3 text-center text-slate-400 italic">Belum ada departemen di bawah divisi ini.</div>
                           )}
                         </div>
                       </div>
-                    );
-                  })}
-                  {orgNodes.filter((n) => n.division === previewDivision.name).length === 0 && (
-                    <div className="p-3 text-center text-slate-400 italic">Belum ada posisi jabatan di divisi ini.</div>
-                  )}
-                </div>
-              </div>
+                    )}
+
+                    {/* Posisi Jabatan di bawah divisi */}
+                    <div className="space-y-2">
+                      <label className="font-bold text-slate-800 block text-xs uppercase tracking-wider">
+                        Daftar Jabatan Struktural Terdaftar ({childPositions.length}):
+                      </label>
+                      <div className="max-h-48 overflow-y-auto divide-y divide-slate-100 border border-slate-200 rounded-xl bg-slate-50/50">
+                        {childPositions.map((node) => {
+                          const emp = employees.find((e) => e.id === node.currentEmployeeId);
+                          return (
+                            <div key={node.id} className="p-2.5 flex items-center justify-between">
+                              <div>
+                                <div className="font-semibold text-slate-900">{node.title}</div>
+                                <div className="text-[10px] text-slate-400">
+                                  Level L{node.level} • {useDeptLevel ? node.department : 'Direct to Division'}
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                {node.isVacant ? (
+                                  <span className="text-[10px] text-rose-600 font-semibold px-2 py-0.5 bg-rose-50 rounded border border-rose-200">Kosong</span>
+                                ) : (
+                                  <span className="text-[11px] text-indigo-700 font-medium">{emp?.fullName || 'Terisi'}</span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                        {childPositions.length === 0 && (
+                          <div className="p-3 text-center text-slate-400 italic">Belum ada posisi jabatan di divisi ini.</div>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
 
               {/* Actions */}
               <div className="pt-3 flex items-center justify-between border-t border-slate-100">
@@ -3228,59 +3408,69 @@ export const OrganizationManagement: React.FC = () => {
 
             <div className="p-5 space-y-4 text-xs overflow-y-auto flex-1">
               <div className="p-4 bg-emerald-50/70 rounded-xl border border-emerald-200">
-                <div className="flex items-center justify-between">
-                  <span className="font-mono font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded border border-emerald-300 text-[11px]">
-                    {previewDepartment.code}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-emerald-100">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono font-bold text-emerald-800 bg-emerald-100 px-2.5 py-0.5 rounded border border-emerald-300 text-xs">
+                      {previewDepartment.code}
+                    </span>
+                    <span className="text-[10px] uppercase font-bold text-emerald-600 bg-white/80 px-1.5 py-0.5 rounded">
+                      Departemen
+                    </span>
+                  </div>
+                  <span className="text-slate-500 text-[11px] truncate">
+                    Entitas: <b className="text-slate-800">{currentEntity.name}</b>
                   </span>
-                  <span className="text-slate-500 text-[11px]">Entitas: <b>{currentEntity.name}</b></span>
                 </div>
-                <h4 className="text-base font-bold text-slate-900 mt-2">{previewDepartment.name}</h4>
-                <div className="text-slate-600 text-xs mt-1">
-                  Divisi Induk: <b className="text-indigo-700">{divisions.find(d => d.id === previewDepartment.divisionId)?.name || 'Divisi Umum'}</b>
+                <h4 className="text-base font-bold text-slate-900 mt-2.5">{previewDepartment.name}</h4>
+                <div className="text-slate-600 text-xs mt-1.5">
+                  Divisi Induk: <b className="text-indigo-700">{divisions.find(d => d.id === previewDepartment.divisionId || d.name === previewDepartment.division)?.name || 'Divisi Terkait'}</b>
                 </div>
-                <div className="text-slate-600 text-xs mt-0.5">
-                  Pimpinan / Head: <b>{previewDepartment.headTitle || 'Department Head'}</b>
-                </div>
-                <p className="text-slate-500 text-[11px] mt-2 leading-relaxed">
+                <p className="text-slate-600 text-xs mt-1.5 leading-relaxed">
                   {previewDepartment.description || 'Unit operasional teknis di bawah naungan Divisi.'}
                 </p>
               </div>
 
               {/* Posisi Jabatan di Departemen ini */}
-              <div className="space-y-2">
-                <label className="font-bold text-slate-800 block text-xs uppercase tracking-wider">
-                  Daftar Jabatan Struktural Terdaftar ({entityNodes.filter((n) => n.department === previewDepartment.name).length}):
-                </label>
-                <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden bg-slate-50/50">
-                  {entityNodes
-                    .filter((n) => n.department === previewDepartment.name)
-                    .map((node) => {
-                      const emp = employees.find((e) => e.id === node.currentEmployeeId);
-                      return (
-                        <div key={node.id} className="p-2.5 flex items-center justify-between bg-white text-xs">
-                          <div>
-                            <span className="font-semibold text-slate-900">{node.title}</span>
-                            <span className="text-[10px] text-slate-400 block font-mono">Tier L{node.level}</span>
+              {(() => {
+                const deptPositions = entityNodes.filter((n) => 
+                  (n.department && n.department.toLowerCase() === previewDepartment.name.toLowerCase()) ||
+                  (n.department && (n.department.toLowerCase().includes(previewDepartment.name.toLowerCase()) || previewDepartment.name.toLowerCase().includes(n.department.toLowerCase())))
+                );
+                return (
+                  <div className="space-y-2">
+                    <label className="font-bold text-slate-800 block text-xs uppercase tracking-wider">
+                      Daftar Jabatan Struktural Terdaftar ({deptPositions.length}):
+                    </label>
+                    <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden bg-slate-50/50 max-h-48 overflow-y-auto">
+                      {deptPositions.map((node) => {
+                        const emp = employees.find((e) => e.id === node.currentEmployeeId);
+                        return (
+                          <div key={node.id} className="p-2.5 flex items-center justify-between bg-white text-xs">
+                            <div>
+                              <span className="font-semibold text-slate-900">{node.title}</span>
+                              <span className="text-[10px] text-slate-400 block font-mono">Tier L{node.level}</span>
+                            </div>
+                            <div>
+                              {node.isVacant ? (
+                                <span className="text-[10px] text-rose-600 font-semibold px-2 py-0.5 bg-rose-50 rounded border border-rose-200">
+                                  Vacant
+                                </span>
+                              ) : (
+                                <span className="text-[10px] text-emerald-700 font-semibold px-2 py-0.5 bg-emerald-50 rounded border border-emerald-200">
+                                  {emp?.fullName || 'Terisi'}
+                                </span>
+                              )}
+                            </div>
                           </div>
-                          <div>
-                            {node.isVacant ? (
-                              <span className="text-[10px] text-rose-600 font-semibold px-2 py-0.5 bg-rose-50 rounded border border-rose-200">
-                                Vacant
-                              </span>
-                            ) : (
-                              <span className="text-[10px] text-emerald-700 font-semibold px-2 py-0.5 bg-emerald-50 rounded border border-emerald-200">
-                                {emp?.fullName || 'Terisi'}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  {entityNodes.filter((n) => n.department === previewDepartment.name).length === 0 && (
-                    <div className="p-3 text-center text-slate-400 italic">Belum ada posisi jabatan di departemen ini.</div>
-                  )}
-                </div>
-              </div>
+                        );
+                      })}
+                      {deptPositions.length === 0 && (
+                        <div className="p-3 text-center text-slate-400 italic">Belum ada posisi jabatan di departemen ini.</div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Actions */}
               <div className="pt-3 flex items-center justify-between border-t border-slate-100">
@@ -3907,29 +4097,16 @@ export const OrganizationManagement: React.FC = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Kode Divisi *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="DIV-OPS"
-                    value={divisionFormData.code}
-                    onChange={(e) => setDivisionFormData({ ...divisionFormData, code: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold"
-                  />
-                </div>
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Pimpinan Jabatan *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Head of Operations"
-                    value={divisionFormData.headTitle}
-                    onChange={(e) => setDivisionFormData({ ...divisionFormData, headTitle: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                  />
-                </div>
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">Kode Divisi *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Contoh: DIV-OPS"
+                  value={divisionFormData.code}
+                  onChange={(e) => setDivisionFormData({ ...divisionFormData, code: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold"
+                />
               </div>
 
               <div>
@@ -4024,16 +4201,7 @@ export const OrganizationManagement: React.FC = () => {
                 </div>
               </div>
 
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">Pimpinan Departemen</label>
-                <input
-                  type="text"
-                  placeholder="Logistics Manager"
-                  value={departmentFormData.headTitle}
-                  onChange={(e) => setDepartmentFormData({ ...departmentFormData, headTitle: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                />
-              </div>
+
 
               <div>
                 <label className="font-semibold text-slate-700 block mb-1">Deskripsi Departemen</label>
@@ -4377,82 +4545,38 @@ export const OrganizationManagement: React.FC = () => {
             </div>
 
             <form onSubmit={handleSubmitMasterPosition} className="p-5 space-y-3.5 text-xs overflow-y-auto flex-1">
-              <div className="grid grid-cols-3 gap-3">
-                <div className="col-span-1">
-                  <label className="font-semibold text-slate-700 block mb-1">Kode Jabatan *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="MJP-018"
-                    value={masterPositionFormData.code}
-                    onChange={(e) => setMasterPositionFormData({ ...masterPositionFormData, code: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-semibold"
-                  />
-                </div>
-                <div className="col-span-2">
-                  <label className="font-semibold text-slate-700 block mb-1">Nama Jabatan *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Contoh: Lead DevOps & Cloud Engineer"
-                    value={masterPositionFormData.title}
-                    onChange={(e) => setMasterPositionFormData({ ...masterPositionFormData, title: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-medium"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Level Jenjang Baku *</label>
-                  <select
-                    value={masterPositionFormData.defaultLevel}
-                    onChange={(e) => setMasterPositionFormData({ ...masterPositionFormData, defaultLevel: Number(e.target.value) })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white font-semibold"
-                  >
-                    <option value={1}>Level 1 - Direksi (BOD)</option>
-                    <option value={2}>Level 2 - Vice President / Head</option>
-                    <option value={3}>Level 3 - Manager / Dept Head</option>
-                    <option value={4}>Level 4 - Supervisor / Lead</option>
-                    <option value={5}>Level 5 - Officer / Staff</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Job Grade</label>
-                  <input
-                    type="text"
-                    placeholder="Contoh: Grade 08 / E-3"
-                    value={masterPositionFormData.jobGrade}
-                    onChange={(e) => setMasterPositionFormData({ ...masterPositionFormData, jobGrade: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono"
-                  />
-                </div>
-              </div>
-
               <div>
-                <label className="font-semibold text-slate-700 block mb-1">Rumpun Profesi (Job Family) *</label>
-                <select
-                  value={masterPositionFormData.jobFamily}
-                  onChange={(e) => setMasterPositionFormData({ ...masterPositionFormData, jobFamily: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white font-medium"
-                >
-                  <option value="Executive & Leadership">Executive & Leadership</option>
-                  <option value="Human Resources & People">Human Resources & People</option>
-                  <option value="Finance & Accounting">Finance & Accounting</option>
-                  <option value="Teknologi & Engineering">Teknologi & Engineering</option>
-                  <option value="Commercial & Sales">Commercial & Sales</option>
-                  <option value="General Affairs & Legal">General Affairs & Legal</option>
-                </select>
+                <label className="font-semibold text-slate-700 block mb-1">Nama Jabatan *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Contoh: Lead DevOps & Cloud Engineer"
+                  value={masterPositionFormData.title}
+                  onChange={(e) => setMasterPositionFormData({ ...masterPositionFormData, title: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg font-medium text-xs focus:outline-violet-600"
+                />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Divisi Default</label>
+                  <label className="font-semibold text-slate-700 block mb-1">Divisi *</label>
                   <select
+                    required
                     value={masterPositionFormData.division}
-                    onChange={(e) => setMasterPositionFormData({ ...masterPositionFormData, division: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white"
+                    onChange={(e) => {
+                      const selectedDivName = e.target.value;
+                      // Auto reset department if it doesn't belong to selected division
+                      const matchingDiv = entityDivisions.find((d) => d.name === selectedDivName);
+                      const deptsInDiv = matchingDiv
+                        ? entityDepartments.filter((dept) => dept.divisionId === matchingDiv.id)
+                        : [];
+                      setMasterPositionFormData({
+                        ...masterPositionFormData,
+                        division: selectedDivName,
+                        department: deptsInDiv[0]?.name || '',
+                      });
+                    }}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white text-xs font-medium focus:outline-violet-600"
                   >
                     <option value="">Pilih Divisi...</option>
                     {entityDivisions.map((d) => (
@@ -4461,37 +4585,66 @@ export const OrganizationManagement: React.FC = () => {
                   </select>
                 </div>
 
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Departemen Default</label>
-                  <input
-                    type="text"
-                    placeholder="Contoh: Infrastructure"
-                    value={masterPositionFormData.department}
-                    onChange={(e) => setMasterPositionFormData({ ...masterPositionFormData, department: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                  />
-                </div>
+                {useDeptLevel ? (
+                  <div>
+                    <label className="font-semibold text-slate-700 block mb-1">Departemen</label>
+                    <select
+                      value={masterPositionFormData.department}
+                      onChange={(e) => setMasterPositionFormData({ ...masterPositionFormData, department: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white text-xs font-medium focus:outline-violet-600"
+                    >
+                      <option value="">Pilih Departemen...</option>
+                      {(() => {
+                        const activeDivObj = entityDivisions.find((d) => d.name === masterPositionFormData.division);
+                        const availableDepts = activeDivObj
+                          ? entityDepartments.filter((dept) => dept.divisionId === activeDivObj.id)
+                          : entityDepartments;
+                        return (availableDepts.length > 0 ? availableDepts : entityDepartments).map((dept) => (
+                          <option key={dept.id} value={dept.name}>{dept.name}</option>
+                        ));
+                      })()}
+                    </select>
+                  </div>
+                ) : (
+                  <div>
+                    <label className="font-semibold text-slate-700 block mb-1">Struktur Departemen</label>
+                    <div className="px-3 py-2 bg-slate-100 border border-slate-200 rounded-lg text-slate-500 text-[11px] font-medium">
+                      Mode Ramping (Bypass Departemen)
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">Grade</label>
+                <input
+                  type="text"
+                  placeholder="Contoh: Grade 08, E-3, atau M-2"
+                  value={masterPositionFormData.jobGrade}
+                  onChange={(e) => setMasterPositionFormData({ ...masterPositionFormData, jobGrade: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono text-xs focus:outline-violet-600"
+                />
               </div>
 
               <div>
                 <label className="font-semibold text-slate-700 block mb-1">Spesifikasi & Kualifikasi Minimum</label>
                 <textarea
-                  rows={2}
+                  rows={3}
                   placeholder="Kualifikasi pendidikan, sertifikasi keahlian, pengalaman tahunan..."
                   value={masterPositionFormData.requirements}
                   onChange={(e) => setMasterPositionFormData({ ...masterPositionFormData, requirements: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:outline-violet-600 leading-relaxed"
                 />
               </div>
 
               <div>
                 <label className="font-semibold text-slate-700 block mb-1">Uraian / Deskripsi Jabatan</label>
                 <textarea
-                  rows={2}
-                  placeholder="Ringkasan tanggung jawab utama posisi..."
+                  rows={3}
+                  placeholder="Ringkasan tugas utama dan tanggung jawab jabatan..."
                   value={masterPositionFormData.description}
                   onChange={(e) => setMasterPositionFormData({ ...masterPositionFormData, description: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:outline-violet-600 leading-relaxed"
                 />
               </div>
 

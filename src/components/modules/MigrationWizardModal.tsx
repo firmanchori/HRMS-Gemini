@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useHrms } from '../../context/HrmsContext';
 import {
   X,
@@ -30,6 +30,16 @@ export const MigrationWizardModal: React.FC<MigrationWizardModalProps> = ({
 }) => {
   const { currentTenant, executeMigrationImport, setActiveModule } = useHrms();
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isOpen) {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
   // Tenant config during wizard
   const [tenantCity, setTenantCity] = useState(currentTenant.city);

@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { useHrms } from '../../context/HrmsContext';
 import {
   X,
@@ -22,6 +22,16 @@ export const UniversalFilePreviewModal: React.FC = () => {
   const { activePreviewItem, closeFilePreview, currentTenant } = useHrms();
   const sheetRef = useRef<HTMLDivElement>(null);
   const [isExporting, setIsExporting] = useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && activePreviewItem) {
+        closeFilePreview();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activePreviewItem, closeFilePreview]);
 
   if (!activePreviewItem) return null;
 

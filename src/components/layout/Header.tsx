@@ -27,6 +27,7 @@ import {
   Briefcase,
   ExternalLink,
   Sparkles,
+  Globe,
 } from 'lucide-react';
 import { UserRole } from '../../types/hrms';
 import { GlobalSearchBar } from './GlobalSearchBar';
@@ -72,16 +73,88 @@ export const Header: React.FC<HeaderProps> = ({
 
   const profileDropdownRef = useRef<HTMLDivElement>(null);
 
+  // Notifications State
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const notifDropdownRef = useRef<HTMLDivElement>(null);
+  const [notifications, setNotifications] = useState([
+    {
+      id: 'notif-1',
+      title: 'Pengajuan Cuti Tahunan',
+      sender: 'Dimas Wicaksono (SWE)',
+      time: '10 menit yang lalu',
+      type: 'leave',
+      unread: true,
+    },
+    {
+      id: 'notif-2',
+      title: 'SPPD Perjalanan Dinas Jakarta-Surabaya',
+      sender: 'Eko Prasetyo (Cloud Infra)',
+      time: '1 jam yang lalu',
+      type: 'trip',
+      unread: true,
+    },
+    {
+      id: 'notif-3',
+      title: 'FPTK Rekrutmen Baru Disetujui',
+      sender: 'Aditya Pratama (HR Admin)',
+      time: '3 jam yang lalu',
+      type: 'recruitment',
+      unread: true,
+    },
+  ]);
+
+  // Multi-Language State
+  const [currentLanguage, setCurrentLanguage] = useState<'id' | 'en'>(() => {
+    return (localStorage.getItem('nusahr_language') as 'id' | 'en') || 'id';
+  });
+  const [isLanguageDropdownOpen, setIsLanguageDropdownOpen] = useState(false);
+  const langDropdownRef = useRef<HTMLDivElement>(null);
+
+  const handleSelectLanguage = (lang: 'id' | 'en') => {
+    setCurrentLanguage(lang);
+    localStorage.setItem('nusahr_language', lang);
+    setIsLanguageDropdownOpen(false);
+  };
+
   // Close dropdown on outside click
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (profileDropdownRef.current && !profileDropdownRef.current.contains(e.target as Node)) {
         setIsProfileDropdownOpen(false);
       }
+      if (notifDropdownRef.current && !notifDropdownRef.current.contains(e.target as Node)) {
+        setIsNotificationsOpen(false);
+      }
+      if (langDropdownRef.current && !langDropdownRef.current.contains(e.target as Node)) {
+        setIsLanguageDropdownOpen(false);
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Close any active Header modal / dropdown on Escape key press
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (isNotificationsOpen) {
+          setIsNotificationsOpen(false);
+        } else if (isLanguageDropdownOpen) {
+          setIsLanguageDropdownOpen(false);
+        } else if (isHelpModalOpen) {
+          setIsHelpModalOpen(false);
+        } else if (isLogoutConfirmOpen) {
+          setIsLogoutConfirmOpen(false);
+        } else if (isProfileModalOpen) {
+          setIsProfileModalOpen(false);
+        } else if (isProfileDropdownOpen) {
+          setIsProfileDropdownOpen(false);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isHelpModalOpen, isLogoutConfirmOpen, isProfileModalOpen, isProfileDropdownOpen, isNotificationsOpen, isLanguageDropdownOpen]);
 
   const handleToggle = () => {
     if (onToggleSidebar) {
@@ -146,9 +219,9 @@ export const Header: React.FC<HeaderProps> = ({
 
   return (
     <>
-      <header className="h-14 bg-white border-b border-slate-200 px-3 sm:px-4 lg:px-5 flex items-center justify-between gap-2 md:gap-3 shrink-0 z-20 min-w-0">
-        {/* Zone 1: Sidebar Toggle & Global Search Bar (No Title in Top Menu) */}
-        <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+      <header className="h-14 bg-white border-b border-slate-200 px-3 sm:px-4 lg:px-5 flex items-center justify-between gap-2 shrink-0 z-20 min-w-0">
+        {/* Zone 1: Sidebar Toggle & Global Search Bar */}
+        <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 shrink-0">
           <button
             onClick={handleToggle}
             className="p-1.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors shrink-0 flex items-center justify-center border border-slate-200 shadow-2xs"
@@ -166,16 +239,16 @@ export const Header: React.FC<HeaderProps> = ({
           <GlobalSearchBar />
         </div>
 
-        {/* Zone 2: Entity Tree Switcher, Quick Actions & User Profile */}
+        {/* Zone 2: Entity Switcher, Language Switcher, Notifications & User Profile */}
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-          {/* Compact Entity Tree Switcher (No bulky outer text, tree-indented in dropdown) */}
+          {/* Dropdown Perusahaan (Strict bounded max width to prevent breaking sidebar toggle and search icon) */}
           {entities.length > 0 && (
-            <div className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 bg-slate-50 hover:bg-slate-100/80 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 transition-colors shadow-2xs">
+            <div className="flex items-center gap-1 sm:gap-1.5 px-2 py-1.5 bg-slate-50 hover:bg-slate-100/80 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 transition-colors shadow-2xs">
               <Building2 className="w-3.5 h-3.5 text-slate-600 shrink-0" />
               <select
                 value={currentEntityId}
                 onChange={(e) => setCurrentEntityId(e.target.value)}
-                className="bg-transparent border-none outline-none font-bold text-slate-800 cursor-pointer text-xs max-w-[110px] sm:max-w-[140px] md:max-w-[160px] lg:max-w-[220px] xl:max-w-[280px] truncate"
+                className="bg-transparent border-none outline-none font-bold text-slate-800 cursor-pointer text-xs max-w-[80px] xs:max-w-[105px] sm:max-w-[125px] md:max-w-[150px] lg:max-w-[190px] xl:max-w-[220px] truncate"
                 title="Pilih Entitas Aktif"
               >
                 {(() => {
@@ -203,68 +276,126 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           )}
 
-          {/* Setup & Migrasi Action Button (Curated Dark Slate) */}
-          <button
-            onClick={onOpenMigrationWizard}
-            className="flex items-center gap-1.5 p-1.5 sm:px-2.5 sm:py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors shrink-0"
-            title="Wizard Setup Organisasi & Migrasi Data"
-          >
-            <UploadCloud className="w-3.5 h-3.5" />
-            <span className="hidden xl:inline">Setup & Migrasi</span>
-          </button>
-
-          {/* Reload Flow Demo Data (Compact) */}
-          <button
-            onClick={() => {
-              resetToSampleFlowData();
-              setFlowResetSuccess(true);
-              setTimeout(() => setFlowResetSuccess(false), 2500);
-            }}
-            className={`flex items-center gap-1 p-1.5 sm:px-2 sm:py-1.5 rounded-lg text-xs font-semibold border transition-all shadow-2xs shrink-0 ${
-              flowResetSuccess
-                ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
-                : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-300'
-            }`}
-            title="Muat ulang seluruh data contoh flow proses bisnis (10 Karyawan, Presensi, Payroll, Kasbon, SPPD)"
-          >
-            {flowResetSuccess ? (
-              <>
-                <Check className="w-3.5 h-3.5 text-emerald-600 animate-in zoom-in-50" />
-                <span className="hidden xl:inline text-[11px] font-bold">Siap</span>
-              </>
-            ) : (
-              <>
-                <RotateCcw className="w-3.5 h-3.5 text-slate-600" />
-                <span className="hidden xl:inline text-[11px] font-semibold">Reset Data</span>
-              </>
-            )}
-          </button>
-
-          {/* Role Switcher for Testing RBAC (Compact, shown on desktop lg+) */}
-          <div className="hidden lg:flex items-center gap-1 px-2 py-1 bg-white border border-slate-300 rounded-lg text-xs shadow-2xs shrink-0" title="Simulasi Hak Akses Pengguna (RBAC)">
-            <ShieldCheck className="w-3.5 h-3.5 text-slate-700 shrink-0" />
-            <select
-              value={currentUser.role}
-              onChange={(e) => setCurrentUserRole(e.target.value as UserRole)}
-              className="bg-transparent border-none outline-none font-semibold text-slate-800 cursor-pointer text-[11px] max-w-[85px] lg:max-w-[125px] truncate"
+          {/* Multi-Bahasa Switcher (ID / EN) */}
+          <div ref={langDropdownRef} className="relative">
+            <button
+              type="button"
+              onClick={() => setIsLanguageDropdownOpen((prev) => !prev)}
+              className="flex items-center gap-1 px-2 py-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 transition-colors shadow-2xs"
+              title="Ganti Bahasa / Switch Language"
+              aria-label="Pilih Bahasa"
             >
-              {roles && roles.length > 0 ? (
-                roles.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.label}
-                  </option>
-                ))
-              ) : (
-                <>
-                  <option value="super_admin">Super Admin</option>
-                  <option value="hr_admin">HR Admin</option>
-                  <option value="payroll_admin">Payroll Admin</option>
-                  <option value="ga_admin">GA Admin</option>
-                  <option value="manager">Manager (MSS)</option>
-                  <option value="employee">Employee (ESS)</option>
-                </>
+              <Globe className="w-3.5 h-3.5 text-slate-500" />
+              <span className="font-bold text-[11px] uppercase tracking-wider">{currentLanguage}</span>
+            </button>
+
+            {isLanguageDropdownOpen && (
+              <div className="absolute right-0 top-full mt-1.5 w-36 bg-white rounded-xl shadow-xl border border-slate-200 z-50 py-1 animate-in fade-in zoom-in-95 text-xs">
+                <button
+                  type="button"
+                  onClick={() => handleSelectLanguage('id')}
+                  className={`w-full flex items-center justify-between px-3 py-2 text-left hover:bg-indigo-50 transition-colors ${
+                    currentLanguage === 'id' ? 'font-bold text-indigo-700 bg-indigo-50/50' : 'text-slate-700'
+                  }`}
+                >
+                  <span className="flex items-center gap-2">
+                    <span>🇮🇩</span>
+                    <span>Indonesia</span>
+                  </span>
+                  {currentLanguage === 'id' && <Check className="w-3.5 h-3.5 text-indigo-600" />}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSelectLanguage('en')}
+                  className={`w-full flex items-center justify-between px-3 py-2 text-left hover:bg-indigo-50 transition-colors ${
+                    currentLanguage === 'en' ? 'font-bold text-indigo-700 bg-indigo-50/50' : 'text-slate-700'
+                  }`}
+                >
+                  <span className="flex items-center gap-2">
+                    <span>🇬🇧</span>
+                    <span>English</span>
+                  </span>
+                  {currentLanguage === 'en' && <Check className="w-3.5 h-3.5 text-indigo-600" />}
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Icon Notifikasi (Interactive Bell Dropdown) */}
+          <div ref={notifDropdownRef} className="relative">
+            <button
+              type="button"
+              onClick={() => setIsNotificationsOpen((prev) => !prev)}
+              className="relative p-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg text-slate-600 hover:text-slate-900 transition-colors shadow-2xs flex items-center justify-center"
+              title="Pemberitahuan & Notifikasi Sistem"
+              aria-label="Notifikasi"
+            >
+              <Bell className="w-4 h-4 text-slate-600" />
+              {notifications.some((n) => n.unread) && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center shadow-xs border border-white">
+                  {notifications.filter((n) => n.unread).length}
+                </span>
               )}
-            </select>
+            </button>
+
+            {isNotificationsOpen && (
+              <div className="absolute right-0 top-full mt-1.5 w-72 sm:w-80 bg-white rounded-2xl shadow-2xl border border-slate-200 z-50 overflow-hidden animate-in fade-in zoom-in-95 text-slate-800">
+                <div className="p-3 bg-slate-900 text-white flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Bell className="w-4 h-4 text-indigo-400" />
+                    <span className="text-xs font-bold">Pemberitahuan</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNotifications((prev) => prev.map((n) => ({ ...n, unread: false })));
+                    }}
+                    className="text-[10px] text-indigo-300 hover:text-white transition-colors"
+                  >
+                    Tandai Semua Dibaca
+                  </button>
+                </div>
+
+                <div className="divide-y divide-slate-100 max-h-72 overflow-y-auto text-xs">
+                  {notifications.map((notif) => (
+                    <div
+                      key={notif.id}
+                      onClick={() => {
+                        setNotifications((prev) =>
+                          prev.map((n) => (n.id === notif.id ? { ...n, unread: false } : n))
+                        );
+                      }}
+                      className={`p-3 hover:bg-slate-50 transition-colors cursor-pointer flex items-start gap-2.5 ${
+                        notif.unread ? 'bg-indigo-50/40' : ''
+                      }`}
+                    >
+                      <div className="w-2 h-2 rounded-full bg-indigo-600 mt-1.5 shrink-0" style={{ visibility: notif.unread ? 'visible' : 'hidden' }} />
+                      <div className="min-w-0 flex-1">
+                        <div className="font-semibold text-slate-900 text-xs">{notif.title}</div>
+                        <div className="text-[11px] text-slate-500 mt-0.5 truncate">{notif.sender}</div>
+                        <div className="text-[10px] text-slate-400 mt-1 font-mono">{notif.time}</div>
+                      </div>
+                    </div>
+                  ))}
+                  {notifications.length === 0 && (
+                    <div className="p-4 text-center text-slate-400 italic">Tidak ada notifikasi baru</div>
+                  )}
+                </div>
+
+                <div className="p-2 bg-slate-50 border-t border-slate-100 text-center">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsNotificationsOpen(false);
+                      setActiveModule('audit');
+                    }}
+                    className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 transition-colors"
+                  >
+                    Lihat Semua Aktivitas Sistem →
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Interactive Photo Profile Trigger with Dropdown */}

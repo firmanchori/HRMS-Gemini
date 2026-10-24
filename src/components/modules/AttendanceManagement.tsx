@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useHrms } from '../../context/HrmsContext';
 import {
   Clock,
@@ -189,6 +189,20 @@ export const AttendanceManagement: React.FC = () => {
   const [isClockModalOpen, setIsClockModalOpen] = useState(false);
   const [isShiftSwapModalOpen, setIsShiftSwapModalOpen] = useState(false);
   const [isCorrectionModalOpen, setIsCorrectionModalOpen] = useState(false);
+
+  // Close any active modal on Escape key press
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (isLeaveModalOpen) setIsLeaveModalOpen(false);
+        else if (isShiftSwapModalOpen) setIsShiftSwapModalOpen(false);
+        else if (isCorrectionModalOpen) setIsCorrectionModalOpen(false);
+        else if (isClockModalOpen) setIsClockModalOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isLeaveModalOpen, isShiftSwapModalOpen, isCorrectionModalOpen, isClockModalOpen]);
 
   // ESS Clock State
   const [clockEmpId, setClockEmpId] = useState(employees[0]?.id || '');

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useHrms } from '../../context/HrmsContext';
 import {
   Calendar,
@@ -71,6 +71,18 @@ export const CompanyCalendarManagement: React.FC = () => {
   const [showValidationErrors, setShowValidationErrors] = useState(false);
   const [calendarNotice, setCalendarNotice] = useState<string | null>(null);
   const [balanceSearch, setBalanceSearch] = useState('');
+
+  // Close any active modal on Escape key press
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (isEventModalOpen) setIsEventModalOpen(false);
+        else if (isDayModalOpen) setIsDayModalOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isEventModalOpen, isDayModalOpen]);
 
   // Settings State for Carry Over
   const [carryOverRules, setCarryOverRules] = useState({

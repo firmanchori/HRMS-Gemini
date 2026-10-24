@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useHrms } from '../../context/HrmsContext';
 import {
   ShieldCheck,
@@ -90,6 +90,19 @@ export const ApprovalCenter: React.FC = () => {
 
   // Feedback notice state
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
+
+  // Close any active modal on Escape key press
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (selectedItem) setSelectedItem(null);
+        else if (previewDelegation) setPreviewDelegation(null);
+        else if (isDelegationModalOpen) setIsDelegationModalOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedItem, previewDelegation, isDelegationModalOpen]);
 
   // Settings State
   const [slaHours, setSlaHours] = useState(48);

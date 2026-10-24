@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useHrms } from '../../context/HrmsContext';
 import {
   Users,
@@ -100,6 +100,20 @@ export const EmployeeManagement: React.FC = () => {
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
   const [detailModalTab, setDetailModalTab] = useState<DossierTabId>('kepegawaian');
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
+
+  // Close any active modal on Escape key press
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (selectedEmployee) setSelectedEmployee(null);
+        else if (isOnboardingChoiceOpen) setIsOnboardingChoiceOpen(false);
+        else if (isRecruitmentOnboardingOpen) setIsRecruitmentOnboardingOpen(false);
+        else if (isDirectOnboardingOpen) setIsDirectOnboardingOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedEmployee, isOnboardingChoiceOpen, isRecruitmentOnboardingOpen, isDirectOnboardingOpen]);
 
   const currentTabIndex = DOSSIER_TABS.findIndex((t) => t.id === detailModalTab);
   const handlePrevTab = () => {

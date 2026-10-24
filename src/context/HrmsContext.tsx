@@ -672,7 +672,15 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const [businessTrips, setBusinessTrips] = useState<BusinessTripRequest[]>(() => {
     const saved = localStorage.getItem('nusahr_trips');
-    return saved ? JSON.parse(saved) : INITIAL_BUSINESS_TRIPS;
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (e) {
+        console.error('Failed to parse nusahr_trips', e);
+      }
+    }
+    return INITIAL_BUSINESS_TRIPS;
   });
 
   const [approvalItems, setApprovalItems] = useState<ApprovalWorkflowItem[]>(() => {
@@ -724,17 +732,17 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // 22B. Divisions & Departments
   const [divisions, setDivisions] = useState<CompanyDivision[]>(() => {
-    const saved = localStorage.getItem('nusahr_divisions');
+    const saved = localStorage.getItem('nusahr_divisions_v3');
     return saved ? JSON.parse(saved) : INITIAL_DIVISIONS;
   });
   const [departments, setDepartments] = useState<CompanyDepartment[]>(() => {
-    const saved = localStorage.getItem('nusahr_departments');
+    const saved = localStorage.getItem('nusahr_departments_v3');
     return saved ? JSON.parse(saved) : INITIAL_DEPARTMENTS;
   });
 
-  // 22B-2. Master Standar Jabatan (Kamus Jabatan)
+  // 22B-2. Master Jabatan (Kamus Jabatan)
   const [masterJobPositions, setMasterJobPositions] = useState<MasterJobPosition[]>(() => {
-    const saved = localStorage.getItem('nusahr_master_job_positions');
+    const saved = localStorage.getItem('nusahr_master_job_positions_v3');
     return saved ? JSON.parse(saved) : INITIAL_MASTER_JOB_POSITIONS;
   });
 
@@ -764,7 +772,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // 27. Org Nodes & Proposals
   const [orgNodes, setOrgNodes] = useState<OrgStructureNode[]>(() => {
-    const saved = localStorage.getItem('nusahr_org_nodes_v2');
+    const saved = localStorage.getItem('nusahr_org_nodes_v3');
     return saved ? JSON.parse(saved) : INITIAL_ORG_NODES;
   });
   const [orgProposals, setOrgProposals] = useState<OrgChangeProposal[]>(() => {
@@ -956,15 +964,15 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [entities]);
 
   useEffect(() => {
-    localStorage.setItem('nusahr_divisions', JSON.stringify(divisions));
+    localStorage.setItem('nusahr_divisions_v3', JSON.stringify(divisions));
   }, [divisions]);
 
   useEffect(() => {
-    localStorage.setItem('nusahr_departments', JSON.stringify(departments));
+    localStorage.setItem('nusahr_departments_v3', JSON.stringify(departments));
   }, [departments]);
 
   useEffect(() => {
-    localStorage.setItem('nusahr_master_job_positions', JSON.stringify(masterJobPositions));
+    localStorage.setItem('nusahr_master_job_positions_v3', JSON.stringify(masterJobPositions));
   }, [masterJobPositions]);
 
   // Filtered scoped items for active tenant
@@ -3567,7 +3575,10 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         attendanceCorrections: attendanceCorrections.filter((c) => c.tenantId === currentTenant.id),
         submitAttendanceCorrection,
         reviewAttendanceCorrection,
-        businessTrips: businessTrips.filter((t) => t.tenantId === currentTenant.id),
+        businessTrips: (() => {
+          const scoped = businessTrips.filter((t) => t.tenantId === currentTenant.id);
+          return scoped.length > 0 ? scoped : businessTrips;
+        })(),
         submitBusinessTrip,
         reviewBusinessTrip,
         approvalItems: approvalItems.filter((a) => a.tenantId === currentTenant.id),

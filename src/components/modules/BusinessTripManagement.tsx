@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useHrms } from '../../context/HrmsContext';
 import {
   Plane,
@@ -18,6 +18,7 @@ import {
   Settings,
   Printer,
   Download,
+  ChevronRight,
 } from 'lucide-react';
 import { EmployeeSelect } from '../common/EmployeeSelect';
 import { QRCodeView } from '../common/QRCodeView';
@@ -65,6 +66,19 @@ export const BusinessTripManagement: React.FC = () => {
   // Form Validation Errors
   const [sppdFormError, setSppdFormError] = useState<string | null>(null);
   const [claimFormError, setClaimFormError] = useState<string | null>(null);
+
+  // Close any active modal on Escape key press
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (selectedTripForDoc) setSelectedTripForDoc(null);
+        else if (selectedTripForClaim) setSelectedTripForClaim(null);
+        else if (isModalOpen) setIsModalOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedTripForDoc, selectedTripForClaim, isModalOpen]);
 
   // Settings State
   const [perDiemStaff, setPerDiemStaff] = useState(350000);
@@ -545,104 +559,116 @@ export const BusinessTripManagement: React.FC = () => {
 
           {/* TAMPILAN MOBILE & TABLET: Adaptive Card View (< md) */}
           <div className="md:hidden space-y-3">
-            {businessTrips.map((trip) => {
-              const emp = employees.find((e) => e.id === trip.employeeId);
-              return (
-                <div
-                  key={`mob-real-${trip.id}`}
-                  onClick={() => {
-                    setSelectedTripForClaim(trip);
-                    setActualExpense(trip.estimatedCost);
-                  }}
-                  className="p-4 bg-white border border-slate-200 hover:border-indigo-300 rounded-xl shadow-xs space-y-3 cursor-pointer hover:shadow-sm transition-all group"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-mono text-indigo-700 font-bold text-xs">
-                      {trip.tripNumber}
-                    </span>
-                    <span className="text-[10px] bg-slate-100 px-2 py-0.5 rounded text-slate-600 font-medium">
-                      {trip.destinationCity}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-2.5">
-                    {emp?.avatar ? (
-                      <img
-                        src={emp.avatar}
-                        alt={emp.fullName}
-                        className="w-7 h-7 rounded-full object-cover border border-slate-200"
-                      />
-                    ) : (
-                      <div className="w-7 h-7 rounded-full bg-indigo-100 text-indigo-700 font-bold text-xs flex items-center justify-center">
-                        {(emp?.fullName || 'K')[0]}
-                      </div>
-                    )}
-                    <div>
-                      <div className="font-bold text-xs text-slate-900">{emp?.fullName}</div>
-                      <div className="text-[10px] text-slate-400">{emp?.position}</div>
-                    </div>
-                  </div>
-
-                  <div className="p-2.5 bg-slate-50 rounded-lg space-y-1 text-xs border border-slate-100">
+            {businessTrips.length > 0 ? (
+              businessTrips.map((trip) => {
+                const emp = employees.find((e) => e.id === trip.employeeId);
+                return (
+                  <div
+                    key={`mob-real-${trip.id}`}
+                    onClick={() => {
+                      setSelectedTripForClaim(trip);
+                      setActualExpense(trip.estimatedCost);
+                    }}
+                    className="p-4 bg-white border border-slate-200 hover:border-indigo-300 rounded-xl shadow-xs space-y-3 cursor-pointer hover:shadow-sm transition-all group"
+                  >
                     <div className="flex items-center justify-between">
-                      <span className="text-slate-500">Uang Muka:</span>
-                      <span className="font-mono font-bold text-slate-900">
-                        {formatRupiah(trip.estimatedCost)}
+                      <span className="font-mono text-indigo-700 font-bold text-xs">
+                        {trip.tripNumber}
+                      </span>
+                      <span className="text-[10px] bg-slate-100 px-2 py-0.5 rounded text-slate-600 font-medium">
+                        {trip.destinationCity}
                       </span>
                     </div>
-                    <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1 border-t border-slate-200/60">
-                      <span>Periode Tugas:</span>
-                      <span className="font-mono">{trip.startDate} - {trip.endDate} ({trip.totalDays} Hari)</span>
+
+                    <div className="flex items-center gap-2.5">
+                      {emp?.avatar ? (
+                        <img
+                          src={emp.avatar}
+                          alt={emp.fullName}
+                          className="w-7 h-7 rounded-full object-cover border border-slate-200"
+                        />
+                      ) : (
+                        <div className="w-7 h-7 rounded-full bg-indigo-100 text-indigo-700 font-bold text-xs flex items-center justify-center">
+                          {(emp?.fullName || 'K')[0]}
+                        </div>
+                      )}
+                      <div>
+                        <div className="font-bold text-xs text-slate-900">{emp?.fullName}</div>
+                        <div className="text-[10px] text-slate-400">{emp?.position}</div>
+                      </div>
+                    </div>
+
+                    <div className="p-2.5 bg-slate-50 rounded-lg space-y-1 text-xs border border-slate-100">
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-500">Uang Muka:</span>
+                        <span className="font-mono font-bold text-slate-900">
+                          {formatRupiah(trip.estimatedCost)}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1 border-t border-slate-200/60">
+                        <span>Periode Tugas:</span>
+                        <span className="font-mono">{trip.startDate} - {trip.endDate} ({trip.totalDays} Hari)</span>
+                      </div>
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-indigo-600 font-semibold group-hover:text-indigo-700">
+                      <span className="flex items-center gap-1.5">
+                        <Receipt className="w-3.5 h-3.5 text-indigo-600" />
+                        Settlement Nota & Kwitansi
+                      </span>
+                      <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-indigo-600 transition-colors" />
                     </div>
                   </div>
-
-                  <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-indigo-600 font-semibold group-hover:text-indigo-700">
-                    <span className="flex items-center gap-1.5">
-                      <Receipt className="w-3.5 h-3.5 text-indigo-600" />
-                      Settlement Nota & Kwitansi
-                    </span>
-                    <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-indigo-600 transition-colors" />
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })
+            ) : (
+              <div className="p-6 text-center text-slate-500 text-xs bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                Belum ada data perjalanan dinas untuk settlement biaya.
+              </div>
+            )}
           </div>
 
           {/* TAMPILAN DESKTOP: List View (>= md) */}
           <div className="hidden md:block divide-y divide-slate-100">
-            {businessTrips.map((trip) => {
-              const emp = employees.find((e) => e.id === trip.employeeId);
-              return (
-                <div
-                  key={trip.id}
-                  onClick={() => {
-                    setSelectedTripForClaim(trip);
-                    setActualExpense(trip.estimatedCost);
-                  }}
-                  className="py-4 px-2 -mx-2 rounded-lg flex flex-row items-center justify-between gap-4 cursor-pointer hover:bg-indigo-50/50 transition-colors group"
-                >
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-indigo-700 font-bold text-xs">{trip.tripNumber}</span>
-                      <span className="text-xs font-semibold text-slate-900">{emp?.fullName}</span>
-                      <span className="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-600 font-medium">{trip.destinationCity}</span>
+            {businessTrips.length > 0 ? (
+              businessTrips.map((trip) => {
+                const emp = employees.find((e) => e.id === trip.employeeId);
+                return (
+                  <div
+                    key={trip.id}
+                    onClick={() => {
+                      setSelectedTripForClaim(trip);
+                      setActualExpense(trip.estimatedCost);
+                    }}
+                    className="py-4 px-2 -mx-2 rounded-lg flex flex-row items-center justify-between gap-4 cursor-pointer hover:bg-indigo-50/50 transition-colors group"
+                  >
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-indigo-700 font-bold text-xs">{trip.tripNumber}</span>
+                        <span className="text-xs font-semibold text-slate-900">{emp?.fullName}</span>
+                        <span className="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-600 font-medium">{trip.destinationCity}</span>
+                      </div>
+                      <div className="text-xs text-slate-500">
+                        Uang Muka Diterima: <span className="font-mono font-bold text-slate-900">{formatRupiah(trip.estimatedCost)}</span>
+                        {' · '}
+                        Periode: {trip.startDate} - {trip.endDate} ({trip.totalDays} Hari)
+                      </div>
                     </div>
-                    <div className="text-xs text-slate-500">
-                      Uang Muka Diterima: <span className="font-mono font-bold text-slate-900">{formatRupiah(trip.estimatedCost)}</span>
-                      {' · '}
-                      Periode: {trip.startDate} - {trip.endDate} ({trip.totalDays} Hari)
-                    </div>
-                  </div>
 
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-medium text-slate-400 group-hover:text-indigo-600 transition-colors hidden sm:inline">
-                      Settlement Nota
-                    </span>
-                    <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-indigo-600 transition-colors" />
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-medium text-slate-400 group-hover:text-indigo-600 transition-colors hidden sm:inline">
+                        Settlement Nota
+                      </span>
+                      <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-indigo-600 transition-colors" />
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })
+            ) : (
+              <div className="py-12 text-center text-slate-400 text-xs">
+                Belum ada data perjalanan dinas untuk pelaporan settlement nota.
+              </div>
+            )}
           </div>
         </div>
       )}

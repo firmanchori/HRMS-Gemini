@@ -55,6 +55,39 @@ const MainLayout: React.FC = () => {
         e.preventDefault();
         setIsCommandPaletteOpen((prev) => !prev);
       }
+      // Escape: Close active modals
+      else if (e.key === 'Escape') {
+        if (isCommandPaletteOpen) {
+          setIsCommandPaletteOpen(false);
+          return;
+        }
+        if (isMigrationWizardOpen) {
+          setIsMigrationWizardOpen(false);
+          return;
+        }
+        if (isMobileSidebarOpen) {
+          setIsMobileSidebarOpen(false);
+          return;
+        }
+
+        // Universal safety net: find topmost modal in the DOM and trigger its close button or backdrop
+        const modalBackdrops = document.querySelectorAll<HTMLElement>('.fixed.inset-0');
+        if (modalBackdrops.length > 0) {
+          const topBackdrop = modalBackdrops[modalBackdrops.length - 1];
+          const buttons = Array.from(topBackdrop.querySelectorAll<HTMLButtonElement>('button'));
+          const closeBtn = buttons.find((btn) =>
+            btn.querySelector('.lucide-x') ||
+            btn.getAttribute('aria-label')?.toLowerCase().includes('close') ||
+            btn.innerText?.trim().toLowerCase() === 'tutup' ||
+            btn.innerText?.trim().toLowerCase() === 'batal'
+          );
+          if (closeBtn) {
+            closeBtn.click();
+          } else {
+            topBackdrop.click();
+          }
+        }
+      }
     };
 
     const handleOpenPalette = () => setIsCommandPaletteOpen(true);
@@ -65,7 +98,7 @@ const MainLayout: React.FC = () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('open-command-palette', handleOpenPalette);
     };
-  }, []);
+  }, [isCommandPaletteOpen, isMigrationWizardOpen, isMobileSidebarOpen]);
 
   const renderModuleView = () => {
     switch (activeModule) {
