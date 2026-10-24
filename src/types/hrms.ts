@@ -456,6 +456,9 @@ export interface FptkSignatory {
   employeeId?: string;
   name: string;
   title: string;
+  nik?: string;
+  avatar?: string;
+  withDegree?: boolean;
   status?: 'Menunggu Approval' | 'Disetujui' | 'Ditolak';
   date?: string;
   notes?: string;

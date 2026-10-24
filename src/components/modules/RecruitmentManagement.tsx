@@ -116,6 +116,223 @@ import { QRCodeView } from '../common/QRCodeView';
 import { CurrencyInput } from '../common/CurrencyInput';
 import { ScrollableTabNav } from '../common/ScrollableTabNav';
 
+export interface CompanyEmployeeItem {
+  id: string;
+  fullName: string;
+  rawName: string;
+  degree: string;
+  nik: string;
+  position: string;
+  department: string;
+  avatar?: string;
+  initials: string;
+}
+
+export const formatEmployeeName = (fullName: string, withDegree: boolean = true) => {
+  if (!fullName) return '';
+  if (withDegree) return fullName;
+  return fullName.split(',')[0].trim();
+};
+
+interface EmployeeSelectDropdownProps {
+  employees: CompanyEmployeeItem[];
+  selectedId?: string;
+  withDegree?: boolean;
+  onSelect: (emp: CompanyEmployeeItem) => void;
+  placeholder?: string;
+  disabled?: boolean;
+}
+
+const EmployeeSelectDropdown: React.FC<EmployeeSelectDropdownProps> = ({
+  employees,
+  selectedId,
+  withDegree = true,
+  onSelect,
+  placeholder = '-- Pilih Karyawan (Foto, Nama, NIK, Jabatan) --',
+  disabled = false,
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const dropdownRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isOpen]);
+
+  const selectedEmp = employees.find((e) => e.id === selectedId);
+
+  const filteredEmployees = employees.filter((e) => {
+    if (!search.trim()) return true;
+    const q = search.toLowerCase();
+    return (
+      e.fullName.toLowerCase().includes(q) ||
+      e.nik.toLowerCase().includes(q) ||
+      e.position.toLowerCase().includes(q) ||
+      e.department.toLowerCase().includes(q)
+    );
+  });
+
+  const getDisplayName = (emp: CompanyEmployeeItem) => {
+    return withDegree ? emp.fullName : emp.rawName;
+  };
+
+  return (
+    <div className="relative w-full" ref={dropdownRef}>
+      {/* Trigger Button */}
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => setIsOpen((prev) => !prev)}
+        className={`w-full px-2.5 py-2 border rounded-xl text-left flex items-center justify-between gap-2 transition-all bg-white shadow-2xs hover:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-600 ${
+          isOpen ? 'ring-1 ring-blue-600 border-blue-600' : 'border-slate-300'
+        } ${disabled ? 'opacity-60 cursor-not-allowed bg-slate-50' : 'cursor-pointer'}`}
+      >
+        {selectedEmp ? (
+          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+            {/* Foto Avatar */}
+            <div className="w-8 h-8 rounded-full overflow-hidden shrink-0 border border-slate-200 bg-blue-50 flex items-center justify-center">
+              <img
+                src={selectedEmp.avatar}
+                alt={selectedEmp.rawName}
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  (e.currentTarget as HTMLElement).style.display = 'none';
+                }}
+              />
+              <span className="text-[10px] font-bold text-blue-700 font-mono">
+                {selectedEmp.initials}
+              </span>
+            </div>
+
+            {/* Nama & NIK + Jabatan */}
+            <div className="min-w-0 flex-1 leading-tight">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="font-bold text-slate-900 text-xs truncate">
+                  {getDisplayName(selectedEmp)}
+                </span>
+                <span className="px-1.5 py-0.2 rounded font-mono text-[9px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+                  {selectedEmp.nik}
+                </span>
+              </div>
+              <div className="text-[11px] text-slate-500 truncate mt-0.5">
+                {selectedEmp.position} • <span className="text-slate-400">{selectedEmp.department}</span>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 text-slate-400 text-xs py-0.5">
+            <div className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 shrink-0">
+              <User className="w-4 h-4" />
+            </div>
+            <span className="truncate">{placeholder}</span>
+          </div>
+        )}
+
+        <ChevronDown
+          className={`w-4 h-4 text-slate-400 shrink-0 transition-transform ${
+            isOpen ? 'rotate-180 text-blue-600' : ''
+          }`}
+        />
+      </button>
+
+      {/* Dropdown Menu Popover */}
+      {isOpen && (
+        <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+          {/* Search Box */}
+          <div className="p-2 border-b border-slate-100 bg-slate-50/70">
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                autoFocus
+                placeholder="Cari nama, NIK, atau jabatan..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full pl-8 pr-2.5 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-blue-600"
+              />
+            </div>
+          </div>
+
+          {/* List Karyawan */}
+          <div className="max-h-60 overflow-y-auto divide-y divide-slate-100 p-1">
+            {filteredEmployees.length === 0 ? (
+              <div className="p-3 text-center text-slate-400 text-xs">
+                Tidak ada karyawan yang sesuai pencarian
+              </div>
+            ) : (
+              filteredEmployees.map((emp) => {
+                const isSelected = emp.id === selectedId;
+                return (
+                  <button
+                    key={emp.id}
+                    type="button"
+                    onClick={() => {
+                      onSelect(emp);
+                      setIsOpen(false);
+                      setSearch('');
+                    }}
+                    className={`w-full p-2 rounded-lg text-left flex items-center justify-between gap-2.5 transition-colors ${
+                      isSelected
+                        ? 'bg-blue-50/70 text-blue-900'
+                        : 'hover:bg-slate-50 text-slate-800'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                      {/* Avatar */}
+                      <div className="w-8 h-8 rounded-full overflow-hidden shrink-0 border border-slate-200 bg-blue-100 flex items-center justify-center">
+                        <img
+                          src={emp.avatar}
+                          alt={emp.rawName}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            (e.currentTarget as HTMLElement).style.display = 'none';
+                          }}
+                        />
+                        <span className="text-[10px] font-bold text-blue-700 font-mono">
+                          {emp.initials}
+                        </span>
+                      </div>
+
+                      {/* Detail */}
+                      <div className="min-w-0 flex-1 leading-tight">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-bold text-xs text-slate-900">
+                            {getDisplayName(emp)}
+                          </span>
+                          <span className="px-1.5 py-0.2 rounded font-mono text-[9px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+                            {emp.nik}
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-slate-500 truncate mt-0.5">
+                          {emp.position} • <span className="text-slate-400">{emp.department}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {isSelected && (
+                      <Check className="w-4 h-4 text-blue-600 shrink-0" />
+                    )}
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 export const RecruitmentManagement: React.FC = () => {
   const {
     jobRequisitions = [],
@@ -168,13 +385,34 @@ export const RecruitmentManagement: React.FC = () => {
     return Array.from(set);
   }, [employees]);
 
-  const companyEmployees = React.useMemo(() => {
-    return employees.map((e) => ({
-      id: e.id,
-      name: e.fullName,
-      position: e.position,
-      department: e.department,
-    }));
+  const companyEmployees: CompanyEmployeeItem[] = React.useMemo(() => {
+    return employees.map((e) => {
+      const rawName = e.fullName.split(',')[0].trim();
+      const degree = e.fullName.includes(',')
+        ? e.fullName.substring(e.fullName.indexOf(',') + 1).trim()
+        : '';
+      const initials = rawName
+        .split(' ')
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((p) => p[0].toUpperCase())
+        .join('');
+      const avatarUrl =
+        e.avatar ||
+        `https://ui-avatars.com/api/?name=${encodeURIComponent(rawName)}&background=0284c7&color=fff&bold=true&size=80`;
+
+      return {
+        id: e.id,
+        fullName: e.fullName,
+        rawName,
+        degree,
+        nik: e.nik || 'EMP-NIK',
+        position: e.position,
+        department: e.department,
+        avatar: avatarUrl,
+        initials,
+      };
+    });
   }, [employees]);
 
   // 7 Explicit Tabs per User Architecture:
@@ -229,6 +467,7 @@ export const RecruitmentManagement: React.FC = () => {
   const [fptkReportingDept, setFptkReportingDept] = useState(companyDepartments[0] || 'Engineering');
   const [fptkReportingTitle, setFptkReportingTitle] = useState('VP of Technology');
   const [fptkReportingEmployeeId, setFptkReportingEmployeeId] = useState('');
+  const [fptkReportingWithDegree, setFptkReportingWithDegree] = useState<boolean>(true);
   const [fptkSupervisedStaff, setFptkSupervisedStaff] = useState<number>(0);
   const [fptkMainResponsibilities, setFptkMainResponsibilities] = useState('');
   const [fptkEduLevel, setFptkEduLevel] = useState('D4 / S1 - Sarjana');
@@ -244,16 +483,21 @@ export const RecruitmentManagement: React.FC = () => {
     : 'Firman Pratama (HR Manager)';
 
   // Yang Menyetujui atas Pengajuan (Fleksibel Multi-Approver)
-  const [fptkSignatories, setFptkSignatories] = useState<FptkSignatory[]>([
-    {
-      id: 'sig-1',
-      role: 'Menyetujui',
-      employeeId: '',
-      name: 'Aditya Pratama',
-      title: 'Head of People & Culture',
-      status: 'Menunggu Approval',
-    },
-  ]);
+  const [fptkSignatories, setFptkSignatories] = useState<FptkSignatory[]>(() => {
+    const firstEmp = employees[0];
+    return [
+      {
+        id: 'sig-1',
+        role: 'Menyetujui',
+        employeeId: firstEmp?.id || 'emp-1',
+        name: firstEmp ? firstEmp.fullName : 'Aditya Pratama, S.Psi',
+        title: firstEmp ? firstEmp.position : 'VP of Human Capital',
+        nik: firstEmp?.nik || 'NTM-2022-014',
+        withDegree: true,
+        status: 'Menunggu Approval',
+      },
+    ];
+  });
 
   const handleAddSignatory = () => {
     const newId = `sig-${Date.now()}`;
@@ -264,8 +508,11 @@ export const RecruitmentManagement: React.FC = () => {
         id: newId,
         role: 'Mengetahui',
         employeeId: defaultEmp?.id || '',
-        name: defaultEmp?.name || 'Manager Terkait',
+        name: defaultEmp ? defaultEmp.fullName : 'Manager Terkait',
         title: defaultEmp?.position || 'Departemen Manager',
+        nik: defaultEmp?.nik,
+        avatar: defaultEmp?.avatar,
+        withDegree: true,
         status: 'Menunggu Approval',
       },
     ]);
@@ -2737,29 +2984,40 @@ export const RecruitmentManagement: React.FC = () => {
                     </select>
                   </div>
                   <div>
-                    <label className="font-semibold text-slate-700 block mb-1">
-                      Bertanggung Jawab ke Atasan *
-                    </label>
-                    <select
-                      value={fptkReportingEmployeeId}
-                      onChange={(e) => {
-                        const empId = e.target.value;
-                        setFptkReportingEmployeeId(empId);
-                        const emp = companyEmployees.find((item) => item.id === empId);
-                        if (emp) {
-                          setFptkReportingTitle(`${emp.name} (${emp.position})`);
-                          if (emp.department) setFptkReportingDept(emp.department);
-                        }
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="font-semibold text-slate-700 block">
+                        Bertanggung Jawab ke Atasan *
+                      </label>
+                      <label className="flex items-center gap-1 cursor-pointer text-[10px] text-slate-600 font-medium select-none">
+                        <input
+                          type="checkbox"
+                          checked={fptkReportingWithDegree}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            setFptkReportingWithDegree(checked);
+                            const emp = companyEmployees.find((item) => item.id === fptkReportingEmployeeId);
+                            if (emp) {
+                              const nameToUse = checked ? emp.fullName : emp.rawName;
+                              setFptkReportingTitle(`${nameToUse} (${emp.position})`);
+                            }
+                          }}
+                          className="w-3 h-3 rounded border-slate-300 text-blue-600"
+                        />
+                        <span>Gunakan Gelar</span>
+                      </label>
+                    </div>
+                    <EmployeeSelectDropdown
+                      employees={companyEmployees}
+                      selectedId={fptkReportingEmployeeId}
+                      withDegree={fptkReportingWithDegree}
+                      onSelect={(emp) => {
+                        setFptkReportingEmployeeId(emp.id);
+                        const nameToUse = fptkReportingWithDegree ? emp.fullName : emp.rawName;
+                        setFptkReportingTitle(`${nameToUse} (${emp.position})`);
+                        if (emp.department) setFptkReportingDept(emp.department);
                       }}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-900 bg-white focus:ring-1 focus:ring-blue-600 focus:outline-none"
-                    >
-                      <option value="">-- Pilih Karyawan Atasan --</option>
-                      {companyEmployees.map((emp) => (
-                        <option key={emp.id} value={emp.id}>
-                          {emp.name} — {emp.position} ({emp.department})
-                        </option>
-                      ))}
-                    </select>
+                      placeholder="-- Pilih Karyawan Atasan --"
+                    />
                   </div>
                   <div>
                     <label className="font-semibold text-slate-700 block mb-1">
@@ -2913,7 +3171,7 @@ export const RecruitmentManagement: React.FC = () => {
                         Yang Menyetujui atas Pengajuan *
                       </label>
                       <p className="text-[11px] text-slate-500">
-                        Pilih karyawan penyetuju. Anda dapat menyesuaikan nama header (misal: Mengetahui, Menyetujui, Memeriksa) dan menambah penanda tangan berjenjang.
+                        Pilih karyawan penyetuju. Foto, nama, NIK, dan jabatan langsung terpasang dari sistem.
                       </p>
                     </div>
                     <button
@@ -2926,110 +3184,95 @@ export const RecruitmentManagement: React.FC = () => {
                     </button>
                   </div>
 
-                  <div className="space-y-2.5">
+                  <div className="space-y-3">
                     {fptkSignatories.map((sig, idx) => (
                       <div
                         key={sig.id}
-                        className="p-3 bg-white rounded-xl border border-slate-200 shadow-2xs flex flex-col md:flex-row gap-3 items-start md:items-center"
+                        className="p-3.5 bg-white rounded-xl border border-slate-200 shadow-2xs space-y-2.5"
                       >
-                        {/* Header/Title Peran Approval */}
-                        <div className="w-full md:w-44">
-                          <label className="text-[10px] font-semibold text-slate-500 block mb-1 uppercase tracking-wider">
-                            Header / Title #{idx + 1}
-                          </label>
-                          <input
-                            type="text"
-                            required
-                            value={sig.role}
-                            onChange={(e) => handleUpdateSignatory(sig.id, { role: e.target.value })}
-                            list={`signatory-roles-${sig.id}`}
-                            placeholder="Menyetujui / Mengetahui"
-                            className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-semibold text-blue-900 bg-blue-50/40 focus:ring-1 focus:ring-blue-600 focus:outline-none"
-                          />
-                          <datalist id={`signatory-roles-${sig.id}`}>
-                            {SIGNATORY_ROLES.map((role) => (
-                              <option key={role} value={role} />
-                            ))}
-                          </datalist>
+                        <div className="flex items-center justify-between gap-3 flex-wrap">
+                          {/* Header / Title Role */}
+                          <div className="flex items-center gap-2">
+                            <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">
+                              Header #{idx + 1}:
+                            </span>
+                            <input
+                              type="text"
+                              required
+                              value={sig.role}
+                              onChange={(e) => handleUpdateSignatory(sig.id, { role: e.target.value })}
+                              list={`signatory-roles-${sig.id}`}
+                              placeholder="Menyetujui / Mengetahui / Memeriksa"
+                              className="px-2.5 py-1 border border-slate-300 rounded-lg text-xs font-bold text-blue-900 bg-blue-50/50 focus:ring-1 focus:ring-blue-600 focus:outline-none"
+                            />
+                            <datalist id={`signatory-roles-${sig.id}`}>
+                              {SIGNATORY_ROLES.map((role) => (
+                                <option key={role} value={role} />
+                              ))}
+                            </datalist>
+                          </div>
+
+                          <div className="flex items-center gap-3">
+                            {/* Checkbox Gunakan Gelar */}
+                            <label className="flex items-center gap-1.5 cursor-pointer select-none text-xs text-slate-700 font-semibold bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200 hover:bg-slate-100 transition-colors">
+                              <input
+                                type="checkbox"
+                                checked={sig.withDegree !== false}
+                                onChange={(e) => {
+                                  const newWithDegree = e.target.checked;
+                                  const emp = companyEmployees.find((item) => item.id === sig.employeeId);
+                                  handleUpdateSignatory(sig.id, {
+                                    withDegree: newWithDegree,
+                                    name: emp ? (newWithDegree ? emp.fullName : emp.rawName) : sig.name,
+                                  });
+                                }}
+                                className="w-3.5 h-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                              />
+                              <span>Gunakan Gelar</span>
+                            </label>
+
+                            {/* Hapus Penanda Tangan */}
+                            {fptkSignatories.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveSignatory(sig.id)}
+                                title="Hapus Penanda Tangan Ini"
+                                className="p-1 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
                         </div>
 
-                        {/* Dropdown Karyawan Perusahaan */}
-                        <div className="w-full md:flex-1">
+                        {/* Dropdown Karyawan (Menampilkan Foto, Nama, NIK, Jabatan / Posisi) */}
+                        <div>
                           <label className="text-[10px] font-semibold text-slate-500 block mb-1 uppercase tracking-wider">
-                            Pilih Karyawan Penyetuju *
+                            Pilih Karyawan Penyetuju (Foto, Nama, NIK, Jabatan) *
                           </label>
-                          <select
-                            value={sig.employeeId || ''}
-                            onChange={(e) => {
-                              const empId = e.target.value;
-                              const emp = companyEmployees.find((item) => item.id === empId);
-                              if (emp) {
-                                handleUpdateSignatory(sig.id, {
-                                  employeeId: emp.id,
-                                  name: emp.name,
-                                  title: emp.position || 'Departemen Head',
-                                });
-                              }
+                          <EmployeeSelectDropdown
+                            employees={companyEmployees}
+                            selectedId={sig.employeeId}
+                            withDegree={sig.withDegree !== false}
+                            onSelect={(emp) => {
+                              handleUpdateSignatory(sig.id, {
+                                employeeId: emp.id,
+                                name: sig.withDegree !== false ? emp.fullName : emp.rawName,
+                                title: emp.position || 'Departemen Head',
+                                nik: emp.nik,
+                                avatar: emp.avatar,
+                              });
                             }}
-                            className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-medium text-slate-900 bg-white focus:ring-1 focus:ring-blue-600 focus:outline-none"
-                          >
-                            <option value="">-- Pilih dari Karyawan --</option>
-                            {companyEmployees.map((emp) => (
-                              <option key={emp.id} value={emp.id}>
-                                {emp.name} — {emp.position} ({emp.department})
-                              </option>
-                            ))}
-                          </select>
+                            placeholder="-- Pilih karyawan penyetuju dari daftar --"
+                          />
                         </div>
-
-                        {/* Nama & Jabatan di Dokumen */}
-                        <div className="w-full md:flex-1 grid grid-cols-2 gap-2">
-                          <div>
-                            <label className="text-[10px] font-semibold text-slate-500 block mb-1 uppercase tracking-wider">
-                              Nama Lengkap
-                            </label>
-                            <input
-                              type="text"
-                              required
-                              value={sig.name}
-                              onChange={(e) => handleUpdateSignatory(sig.id, { name: e.target.value })}
-                              className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs text-slate-900 bg-white focus:ring-1 focus:ring-blue-600 focus:outline-none"
-                              placeholder="Nama Penyetuju"
-                            />
-                          </div>
-                          <div>
-                            <label className="text-[10px] font-semibold text-slate-500 block mb-1 uppercase tracking-wider">
-                              Jabatan Resmi
-                            </label>
-                            <input
-                              type="text"
-                              required
-                              value={sig.title}
-                              onChange={(e) => handleUpdateSignatory(sig.id, { title: e.target.value })}
-                              className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs text-slate-900 bg-white focus:ring-1 focus:ring-blue-600 focus:outline-none"
-                              placeholder="Jabatan"
-                            />
-                          </div>
-                        </div>
-
-                        {/* Hapus Penanda Tangan */}
-                        {fptkSignatories.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveSignatory(sig.id)}
-                            title="Hapus Penanda Tangan Ini"
-                            className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors md:mt-4 self-end md:self-auto"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        )}
                       </div>
                     ))}
                   </div>
                 </div>
               </div>
 
-              {/* Footer Actions */}
+              {/* Footer Actions: Hanya Batal dan Kirim & Menunggu Approval */}
               <div className="pt-4 border-t border-slate-200 flex items-center justify-between gap-3 flex-wrap">
                 <button
                   type="button"
@@ -3039,30 +3282,13 @@ export const RecruitmentManagement: React.FC = () => {
                   Batal
                 </button>
 
-                <div className="flex items-center gap-2">
-                  <button
-                    type="submit"
-                    className="px-4 py-2 bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 rounded-xl font-semibold shadow-2xs transition-colors flex items-center gap-1.5"
-                  >
-                    <Clock className="w-4 h-4 text-amber-600" />
-                    <span>Simpan Menunggu Approval</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      if (!fptkPosition || !fptkDept || !fptkJustification) {
-                        alert('Mohon lengkapi Posisi, Departemen, dan Justifikasi kebutuhan terlebih dahulu.');
-                        return;
-                      }
-                      handleCreateFptk(e, true);
-                    }}
-                    className="px-5 py-2 bg-blue-700 hover:bg-blue-800 text-white rounded-xl font-bold shadow-2xs transition-colors flex items-center gap-1.5"
-                  >
-                    <Check className="w-4 h-4" />
-                    <span>Ajukan & Langsung Setujui</span>
-                  </button>
-                </div>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 bg-blue-700 hover:bg-blue-800 text-white rounded-xl font-bold shadow-xs transition-colors flex items-center gap-2 text-xs"
+                >
+                  <Send className="w-4 h-4" />
+                  <span>Kirim & Menunggu Approval</span>
+                </button>
               </div>
             </form>
           </div>
@@ -3410,7 +3636,7 @@ export const RecruitmentManagement: React.FC = () => {
                     className="px-4 py-2 bg-blue-700 hover:bg-blue-800 text-white rounded-xl font-bold text-xs shadow-2xs transition-colors flex items-center gap-1.5"
                   >
                     <Globe className="w-4 h-4" />
-                    <span>Lanjutkan Sebar Lowongan ke Tab 2 →</span>
+                    <span>Sebarkan Lowongan →</span>
                   </button>
                 )}
               </div>
