@@ -52,6 +52,9 @@ import {
   ThumbsDown,
   DollarSign,
   SlidersHorizontal,
+  Trash2,
+  User,
+  Lock,
 } from 'lucide-react';
 import {
   RecruitmentStage,
@@ -62,6 +65,7 @@ import {
   JobVacancy,
   JobPostingChannel,
   FptkPositionReason,
+  FptkSignatory,
 } from '../../types/hrms';
 import { formatRupiah, calculatePPh21TER, calculateBPJS } from '../../utils/taxCalculator';
 
@@ -84,6 +88,30 @@ export const FPTK_REASONS: FptkPositionReason[] = [
   'Ekspansi Bisnis',
   'Lainnya',
 ];
+
+export const COMPANY_EDUCATION_LEVELS = [
+  'SMA / SMK Sederajat',
+  'D3 - Diploma Tiga',
+  'D4 / S1 - Sarjana',
+  'S2 - Magister / Master',
+  'S3 - Doktoral',
+];
+
+export const COMPANY_EXP_LEVELS = [
+  'Fresh Graduate / Tanpa Pengalaman',
+  '1 - 2 Tahun',
+  '3 - 5 Tahun',
+  '5 - 8 Tahun',
+  '> 8 Tahun (Senior / Lead)',
+];
+
+export const SIGNATORY_ROLES = [
+  'Menyetujui',
+  'Mengetahui',
+  'Memeriksa',
+  'Mengesahkan',
+  'Menyetujui (Final)',
+];
 import { QRCodeView } from '../common/QRCodeView';
 import { CurrencyInput } from '../common/CurrencyInput';
 import { ScrollableTabNav } from '../common/ScrollableTabNav';
@@ -100,6 +128,8 @@ export const RecruitmentManagement: React.FC = () => {
     addCandidate,
     updateCandidateStage,
     currentTenant,
+    currentUser,
+    employees = [],
     addOnboardingProcess,
     onboardingProcesses = [],
     updateOnboardingTask,
@@ -119,6 +149,33 @@ export const RecruitmentManagement: React.FC = () => {
     standardWorkHours: 8,
     planTier: 'Enterprise' as const,
   };
+
+  // Dynamic Company Departments & Employees for Dropdowns
+  const companyDepartments = React.useMemo(() => {
+    const set = new Set<string>();
+    employees.forEach((e) => {
+      if (e.department) set.add(e.department);
+    });
+    [
+      'Engineering',
+      'Product & Design',
+      'People & Culture',
+      'Finance & Accounting',
+      'Marketing & Sales',
+      'Operations & Logistics',
+      'General Affairs & Legal',
+    ].forEach((d) => set.add(d));
+    return Array.from(set);
+  }, [employees]);
+
+  const companyEmployees = React.useMemo(() => {
+    return employees.map((e) => ({
+      id: e.id,
+      name: e.fullName,
+      position: e.position,
+      department: e.department,
+    }));
+  }, [employees]);
 
   // 7 Explicit Tabs per User Architecture:
   // 1. Permintaan FPTK
@@ -162,24 +219,71 @@ export const RecruitmentManagement: React.FC = () => {
   const [fptkPosition, setFptkPosition] = useState('');
   const [fptkGradeMin, setFptkGradeMin] = useState('Grade 2 - Officer / Senior Staff');
   const [fptkGradeMax, setFptkGradeMax] = useState('Grade 3 - Lead / Supervisor');
-  const [fptkDept, setFptkDept] = useState('Engineering');
+  const [fptkDept, setFptkDept] = useState(companyDepartments[0] || 'Engineering');
   const [fptkHeadcount, setFptkHeadcount] = useState(1);
   const [fptkReason, setFptkReason] = useState<string>('Posisi Baru (New Position)');
   const [fptkReplacementFor, setFptkReplacementFor] = useState('');
   const [fptkIsBudgeted, setFptkIsBudgeted] = useState<boolean>(true);
   const [fptkJustification, setFptkJustification] = useState('');
   const [fptkTargetDate, setFptkTargetDate] = useState('2026-11-15');
-  const [fptkReportingDept, setFptkReportingDept] = useState('Engineering & Technology');
+  const [fptkReportingDept, setFptkReportingDept] = useState(companyDepartments[0] || 'Engineering');
   const [fptkReportingTitle, setFptkReportingTitle] = useState('VP of Technology');
+  const [fptkReportingEmployeeId, setFptkReportingEmployeeId] = useState('');
   const [fptkSupervisedStaff, setFptkSupervisedStaff] = useState<number>(0);
   const [fptkMainResponsibilities, setFptkMainResponsibilities] = useState('');
-  const [fptkEdu, setFptkEdu] = useState('S1 Teknik Informatika / Sistem Informasi');
-  const [fptkMinExp, setFptkMinExp] = useState('3+ Tahun');
+  const [fptkEduLevel, setFptkEduLevel] = useState('D4 / S1 - Sarjana');
+  const [fptkEduMajor, setFptkEduMajor] = useState('Teknik Informatika / Sistem Informasi');
+  const [fptkMinExp, setFptkMinExp] = useState('3 - 5 Tahun');
   const [fptkSkills, setFptkSkills] = useState('TypeScript, React, Node.js, PostgreSQL, Docker, CI/CD');
   const [fptkOtherRequirements, setFptkOtherRequirements] = useState('Komunikasi proaktif, problem-solving analitis, mampu bekerja mandiri & tim.');
   const [fptkRequirements, setFptkRequirements] = useState('');
-  const [fptkRequesterName, setFptkRequesterName] = useState('Budi Santoso (Engineering Manager)');
-  const [fptkApproverName, setFptkApproverName] = useState('Aditya Pratama (Head of People)');
+
+  // Yang Mengajukan: Readonly pembuat form
+  const requesterDisplay = currentUser?.name
+    ? `${currentUser.name} (${(currentUser.role || 'HR').replace('_', ' ').toUpperCase()})`
+    : 'Firman Pratama (HR Manager)';
+
+  // Yang Menyetujui atas Pengajuan (Fleksibel Multi-Approver)
+  const [fptkSignatories, setFptkSignatories] = useState<FptkSignatory[]>([
+    {
+      id: 'sig-1',
+      role: 'Menyetujui',
+      employeeId: '',
+      name: 'Aditya Pratama',
+      title: 'Head of People & Culture',
+      status: 'Menunggu Approval',
+    },
+  ]);
+
+  const handleAddSignatory = () => {
+    const newId = `sig-${Date.now()}`;
+    const defaultEmp = companyEmployees[0];
+    setFptkSignatories((prev) => [
+      ...prev,
+      {
+        id: newId,
+        role: 'Mengetahui',
+        employeeId: defaultEmp?.id || '',
+        name: defaultEmp?.name || 'Manager Terkait',
+        title: defaultEmp?.position || 'Departemen Manager',
+        status: 'Menunggu Approval',
+      },
+    ]);
+  };
+
+  const handleUpdateSignatory = (id: string, updates: Partial<FptkSignatory>) => {
+    setFptkSignatories((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, ...updates } : s))
+    );
+  };
+
+  const handleRemoveSignatory = (id: string) => {
+    if (fptkSignatories.length <= 1) {
+      alert('Minimal harus ada 1 penanda tangan / pihak penyetuju.');
+      return;
+    }
+    setFptkSignatories((prev) => prev.filter((s) => s.id !== id));
+  };
 
   // Filter & Detail Preview FPTK
   const [fptkSearch, setFptkSearch] = useState('');
@@ -380,9 +484,19 @@ export const RecruitmentManagement: React.FC = () => {
       fptkGradeMin === fptkGradeMax
         ? fptkGradeMin
         : `${fptkGradeMin.split(' - ')[0]} s/d ${fptkGradeMax.split(' - ')[0]}`;
+    
+    const combinedEducation = `${fptkEduLevel} - ${fptkEduMajor}`;
     const fullRequirements =
       fptkRequirements ||
-      `Pendidikan: ${fptkEdu}. Pengalaman: ${fptkMinExp}. Keterampilan: ${fptkSkills}. ${fptkOtherRequirements}`;
+      `Pendidikan: ${combinedEducation}. Pengalaman: ${fptkMinExp}. Keterampilan: ${fptkSkills}. ${fptkOtherRequirements}`;
+
+    const finalSignatories = fptkSignatories.map((s) => ({
+      ...s,
+      status: directApprove ? ('Disetujui' as const) : ('Menunggu Approval' as const),
+      date: directApprove ? new Date().toISOString().split('T')[0] : undefined,
+    }));
+
+    const primaryApprover = finalSignatories[finalSignatories.length - 1];
 
     addJobRequisition({
       reqNumber: reqNum,
@@ -399,15 +513,20 @@ export const RecruitmentManagement: React.FC = () => {
       targetJoinDate: fptkTargetDate,
       reportingToDepartment: fptkReportingDept,
       reportingToTitle: fptkReportingTitle,
+      reportingToEmployeeId: fptkReportingEmployeeId,
       supervisedStaffCount: Number(fptkSupervisedStaff) || 0,
       mainResponsibilities: fptkMainResponsibilities,
-      educationMin: fptkEdu,
+      educationLevel: fptkEduLevel,
+      educationMajor: fptkEduMajor,
+      educationMin: combinedEducation,
       minExperience: fptkMinExp,
       skills: fptkSkills,
       otherRequirements: fptkOtherRequirements,
       requirements: fullRequirements,
-      requesterName: fptkRequesterName,
-      approvedBy: directApprove ? fptkApproverName : undefined,
+      requesterName: requesterDisplay,
+      signatories: finalSignatories,
+      approvedBy: directApprove ? primaryApprover?.name || 'Direksi' : undefined,
+      approverTitle: directApprove ? primaryApprover?.title || 'Approver' : undefined,
       approvalDate: directApprove ? new Date().toISOString().split('T')[0] : undefined,
       approvalNotes: directApprove ? 'Disetujui langsung saat pengajuan formasi.' : undefined,
       status: directApprove ? 'Disetujui' : 'Menunggu Approval',
@@ -427,9 +546,22 @@ export const RecruitmentManagement: React.FC = () => {
   };
 
   const handleApproveFptk = (id: string) => {
+    const target = jobRequisitions.find((r) => r.id === id);
+    const primaryApprover =
+      target?.signatories && target.signatories.length > 0
+        ? target.signatories[target.signatories.length - 1].name
+        : (target?.approvedBy || 'Aditya Pratama (Head of People)');
+
+    const updatedSignatories = target?.signatories?.map((s) => ({
+      ...s,
+      status: 'Disetujui' as const,
+      date: new Date().toISOString().split('T')[0],
+    }));
+
     updateJobRequisition(id, {
       status: 'Disetujui',
-      approvedBy: fptkApproverName || 'Aditya Pratama (Head of People)',
+      approvedBy: primaryApprover,
+      signatories: updatedSignatories,
       approvalDate: new Date().toISOString().split('T')[0],
       approvalNotes: 'Pengajuan formasi disetujui setelah peninjauan beban kerja dan alokasi anggaran.',
     });
@@ -1061,133 +1193,66 @@ export const RecruitmentManagement: React.FC = () => {
             </div>
           </div>
 
-          {/* Spacious & Unforced Table */}
-          <div className="bg-white border border-slate-200 rounded-xl shadow-2xs overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200 uppercase tracking-wider text-[11px]">
-                  <tr>
-                    <th className="py-3.5 px-4 font-bold text-slate-700">No. Dokumen & Anggaran</th>
-                    <th className="py-3.5 px-4 font-bold text-slate-700">Posisi & Departemen</th>
-                    <th className="py-3.5 px-4 font-bold text-slate-700">Jenjang Grade</th>
-                    <th className="py-3.5 px-4 font-bold text-slate-700">Formasi & Kebutuhan</th>
-                    <th className="py-3.5 px-4 font-bold text-slate-700">Target Masuk</th>
-                    <th className="py-3.5 px-4 font-bold text-slate-700 text-center">Status FPTK</th>
-                    <th className="py-3.5 px-4 font-bold text-slate-700 text-right">Aksi</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {(() => {
-                    const filtered = jobRequisitions.filter((req) => {
-                      const matchSearch =
-                        !fptkSearch ||
-                        req.position.toLowerCase().includes(fptkSearch.toLowerCase()) ||
-                        req.reqNumber.toLowerCase().includes(fptkSearch.toLowerCase()) ||
-                        req.department.toLowerCase().includes(fptkSearch.toLowerCase());
-                      const matchStatus = fptkStatusFilter === 'Semua' || req.status === fptkStatusFilter;
-                      const matchBudget =
-                        fptkBudgetFilter === 'Semua' ||
-                        (fptkBudgetFilter === 'Budgeted' ? req.isBudgeted !== false : req.isBudgeted === false);
-                      return matchSearch && matchStatus && matchBudget;
-                    });
+          {/* RESPONSIVE FPTK LISTING */}
+          {(() => {
+            const filtered = jobRequisitions.filter((req) => {
+              const matchSearch =
+                !fptkSearch ||
+                req.position.toLowerCase().includes(fptkSearch.toLowerCase()) ||
+                req.reqNumber.toLowerCase().includes(fptkSearch.toLowerCase()) ||
+                req.department.toLowerCase().includes(fptkSearch.toLowerCase());
+              const matchStatus = fptkStatusFilter === 'Semua' || req.status === fptkStatusFilter;
+              const matchBudget =
+                fptkBudgetFilter === 'Semua' ||
+                (fptkBudgetFilter === 'Budgeted' ? req.isBudgeted !== false : req.isBudgeted === false);
+              return matchSearch && matchStatus && matchBudget;
+            });
 
-                    if (filtered.length === 0) {
-                      return (
-                        <tr>
-                          <td colSpan={7} className="py-12 text-center text-slate-400">
-                            <FileText className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                            <p className="font-medium text-slate-600">Tidak ada dokumen FPTK yang sesuai filter</p>
-                            <p className="text-[11px] text-slate-400 mt-0.5">
-                              Coba ubah kata kunci pencarian atau status filter di atas.
-                            </p>
-                          </td>
-                        </tr>
-                      );
-                    }
+            if (filtered.length === 0) {
+              return (
+                <div className="bg-white border border-slate-200 rounded-xl p-12 text-center text-slate-400 shadow-2xs">
+                  <FileText className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                  <p className="font-medium text-slate-600 text-xs">Tidak ada dokumen FPTK yang sesuai filter</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    Coba sesuaikan kata kunci pencarian atau status filter di atas.
+                  </p>
+                </div>
+              );
+            }
 
-                    return filtered.map((req) => (
-                      <tr
-                        key={req.id}
-                        className="hover:bg-blue-50/30 transition-colors group cursor-pointer"
-                        onClick={() => setPreviewFptk(req)}
-                      >
-                        <td className="py-3.5 px-4">
-                          <div className="font-mono font-bold text-slate-900 group-hover:text-blue-700 transition-colors">
-                            {req.reqNumber}
+            return (
+              <>
+                {/* 1. TAMPILAN MOBILE & TABLET (RESPONSIVE CARDS) */}
+                <div className="block lg:hidden space-y-3">
+                  {filtered.map((req) => (
+                    <div
+                      key={req.id}
+                      onClick={() => setPreviewFptk(req)}
+                      className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs hover:border-blue-400 hover:shadow-xs transition-all cursor-pointer space-y-3"
+                    >
+                      {/* Top Header */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <div className="font-mono font-bold text-slate-900 text-xs flex items-center gap-1.5">
+                            <span>{req.reqNumber}</span>
                           </div>
-                          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                            <span
-                              className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-                                req.isBudgeted !== false
-                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/60'
-                                  : 'bg-amber-50 text-amber-700 border border-amber-200/60'
-                              }`}
-                            >
-                              {req.isBudgeted !== false ? 'Budgeted (RKAP)' : 'Unbudgeted'}
-                            </span>
-                            <span className="text-[10px] text-slate-400">
-                              {req.createdAt}
-                            </span>
-                          </div>
-                        </td>
-
-                        <td className="py-3.5 px-4">
-                          <div className="font-bold text-slate-900 text-xs group-hover:text-blue-700 transition-colors">
-                            {req.position}
-                          </div>
-                          <div className="flex items-center gap-1.5 text-slate-500 text-[11px] mt-0.5">
-                            <Building2 className="w-3 h-3 text-slate-400 shrink-0" />
-                            <span>{req.department}</span>
-                            {req.reportingToTitle && (
-                              <>
-                                <span className="text-slate-300">•</span>
-                                <span className="text-slate-400 truncate max-w-[150px]" title={`Melapor ke: ${req.reportingToTitle}`}>
-                                  Lapor: {req.reportingToTitle}
-                                </span>
-                              </>
-                            )}
-                          </div>
-                        </td>
-
-                        <td className="py-3.5 px-4">
-                          <span className="inline-block px-2.5 py-1 rounded-md text-[11px] font-semibold bg-slate-100 text-slate-700 border border-slate-200/70">
-                            {req.grade}
+                          <span className="text-[10px] text-slate-400 mt-0.5 block">
+                            Diajukan: {req.createdAt} • Oleh: {req.requesterName.split(' ')[0]}
                           </span>
-                          {req.supervisedStaffCount !== undefined && req.supervisedStaffCount > 0 && (
-                            <span className="block text-[10px] text-slate-400 mt-1">
-                              Supervisi: {req.supervisedStaffCount} staf
-                            </span>
-                          )}
-                        </td>
+                        </div>
 
-                        <td className="py-3.5 px-4">
-                          <div className="font-semibold text-slate-900 flex items-center gap-1">
-                            <Users className="w-3 h-3 text-slate-400" />
-                            <span>{req.headcount} Formasi</span>
-                          </div>
-                          <div className="text-[11px] text-slate-500 mt-0.5">
-                            <span>{req.reason}</span>
-                            {req.replacementFor && (
-                              <span className="block text-[10px] text-slate-400 italic truncate max-w-[140px]" title={req.replacementFor}>
-                                Gantikan: {req.replacementFor}
-                              </span>
-                            )}
-                          </div>
-                        </td>
-
-                        <td className="py-3.5 px-4">
-                          <div className="flex items-center gap-1 text-slate-700 font-mono text-xs">
-                            <Calendar className="w-3 h-3 text-slate-400" />
-                            <span>{req.targetJoinDate}</span>
-                          </div>
-                          <span className="block text-[10px] text-slate-400 mt-0.5">
-                            Oleh: {req.requesterName.split(' ')[0]}
-                          </span>
-                        </td>
-
-                        <td className="py-3.5 px-4 text-center">
+                        <div className="flex items-center gap-1.5 flex-wrap justify-end">
                           <span
-                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold ${
+                            className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                              req.isBudgeted !== false
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/60'
+                                : 'bg-amber-50 text-amber-700 border border-amber-200/60'
+                            }`}
+                          >
+                            {req.isBudgeted !== false ? 'Budgeted' : 'Unbudgeted'}
+                          </span>
+                          <span
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
                               req.status === 'Disetujui'
                                 ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
                                 : req.status === 'Menunggu Approval'
@@ -1206,63 +1271,251 @@ export const RecruitmentManagement: React.FC = () => {
                             />
                             <span>{req.status}</span>
                           </span>
-                          {req.approvedBy && req.status === 'Disetujui' && (
-                            <span className="block text-[10px] text-slate-400 mt-0.5 truncate max-w-[130px] mx-auto">
-                              Oleh: {req.approvedBy.split(' ')[0]}
-                            </span>
+                        </div>
+                      </div>
+
+                      {/* Main Position Info */}
+                      <div>
+                        <h4 className="text-sm font-bold text-slate-900 leading-snug">{req.position}</h4>
+                        <div className="flex items-center gap-1.5 text-[11px] text-slate-600 mt-1">
+                          <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <span>{req.department}</span>
+                          {req.reportingToTitle && (
+                            <>
+                              <span className="text-slate-300">•</span>
+                              <span className="text-slate-500 truncate">Lapor: {req.reportingToTitle}</span>
+                            </>
                           )}
-                        </td>
+                        </div>
+                      </div>
 
-                        <td className="py-3.5 px-4 text-right" onClick={(e) => e.stopPropagation()}>
-                          <div className="flex items-center justify-end gap-1.5">
-                            <button
-                              onClick={() => setPreviewFptk(req)}
-                              className="px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-700 rounded-lg text-[11px] font-medium border border-slate-200 transition-colors shadow-2xs flex items-center gap-1"
-                              title="Lihat Detail Lembar FPTK Lengkap"
-                            >
-                              <Eye className="w-3 h-3 text-slate-500" />
-                              <span>Detail</span>
-                            </button>
+                      {/* Quick Specs Grid */}
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 bg-slate-50/70 p-2.5 rounded-lg border border-slate-100 text-[11px]">
+                        <div>
+                          <span className="text-[10px] text-slate-400 block uppercase font-medium">Jenjang Grade</span>
+                          <span className="font-semibold text-slate-800">{req.grade}</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-400 block uppercase font-medium">Kebutuhan</span>
+                          <span className="font-bold text-slate-900">{req.headcount} Formasi</span>
+                        </div>
+                        <div className="col-span-2 sm:col-span-1">
+                          <span className="text-[10px] text-slate-400 block uppercase font-medium">Target Masuk</span>
+                          <span className="font-mono text-slate-800">{req.targetJoinDate}</span>
+                        </div>
+                      </div>
 
-                            {req.status === 'Menunggu Approval' && (
-                              <>
-                                <button
-                                  onClick={() => handleApproveFptk(req.id)}
-                                  className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-semibold transition-colors shadow-2xs flex items-center gap-1"
-                                  title="Setujui Permintaan Tenaga Kerja"
-                                >
-                                  <Check className="w-3 h-3" />
-                                  <span>Setujui</span>
-                                </button>
-                                <button
-                                  onClick={() => handleRejectFptk(req.id)}
-                                  className="px-2 py-1 bg-white hover:bg-rose-50 text-rose-600 rounded-lg text-[11px] font-medium border border-rose-200 transition-colors"
-                                  title="Tolak Pengajuan FPTK"
-                                >
-                                  <X className="w-3 h-3" />
-                                </button>
-                              </>
-                            )}
+                      {/* Card Footer Actions */}
+                      <div
+                        className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2 flex-wrap"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <span className="text-[10px] text-slate-400 italic">
+                          Ketuk kartu untuk lembar FPTK resmi
+                        </span>
 
-                            {req.status === 'Disetujui' && (
+                        <div className="flex items-center gap-1.5">
+                          {req.status === 'Menunggu Approval' && (
+                            <>
                               <button
-                                onClick={() => handleConvertFptkToVacancy(req)}
-                                className="px-3 py-1 bg-blue-700 hover:bg-blue-800 text-white rounded-lg text-[11px] font-semibold flex items-center gap-1 shadow-2xs transition-colors shrink-0"
-                                title="Buka Lowongan dan Sebar ke Multi-Channel"
+                                onClick={() => handleApproveFptk(req.id)}
+                                className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold shadow-2xs flex items-center gap-1 transition-colors"
                               >
-                                <Globe className="w-3 h-3" />
-                                <span>Sebar Lowongan →</span>
+                                <Check className="w-3 h-3" />
+                                <span>Setujui</span>
                               </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ));
-                  })()}
-                </tbody>
-              </table>
-            </div>
-          </div>
+                              <button
+                                onClick={() => handleRejectFptk(req.id)}
+                                className="px-2.5 py-1 bg-white hover:bg-rose-50 text-rose-600 rounded-lg text-xs font-medium border border-rose-200 transition-colors"
+                              >
+                                Tolak
+                              </button>
+                            </>
+                          )}
+
+                          {req.status === 'Disetujui' && (
+                            <button
+                              onClick={() => handleConvertFptkToVacancy(req)}
+                              className="px-3 py-1 bg-blue-700 hover:bg-blue-800 text-white rounded-lg text-xs font-semibold flex items-center gap-1 shadow-2xs transition-colors"
+                            >
+                              <Globe className="w-3 h-3" />
+                              <span>Sebar Lowongan →</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* 2. TAMPILAN DESKTOP (SPACIOUS DATA TABLE TANPA TOMBOL DETAIL KARENA KLIK ROW) */}
+                <div className="hidden lg:block bg-white border border-slate-200 rounded-xl shadow-2xs overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200 uppercase tracking-wider text-[11px]">
+                        <tr>
+                          <th className="py-3.5 px-4 font-bold text-slate-700">No. Dokumen & Anggaran</th>
+                          <th className="py-3.5 px-4 font-bold text-slate-700">Posisi & Departemen</th>
+                          <th className="py-3.5 px-4 font-bold text-slate-700">Jenjang Grade</th>
+                          <th className="py-3.5 px-4 font-bold text-slate-700">Formasi & Kebutuhan</th>
+                          <th className="py-3.5 px-4 font-bold text-slate-700">Target Masuk</th>
+                          <th className="py-3.5 px-4 font-bold text-slate-700 text-center">Status FPTK</th>
+                          <th className="py-3.5 px-4 font-bold text-slate-700 text-right">Aksi</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {filtered.map((req) => (
+                          <tr
+                            key={req.id}
+                            className="hover:bg-blue-50/40 transition-colors group cursor-pointer"
+                            onClick={() => setPreviewFptk(req)}
+                            title="Klik baris untuk melihat Lembar FPTK Resmi"
+                          >
+                            <td className="py-3.5 px-4">
+                              <div className="font-mono font-bold text-slate-900 group-hover:text-blue-700 transition-colors">
+                                {req.reqNumber}
+                              </div>
+                              <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                                <span
+                                  className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                                    req.isBudgeted !== false
+                                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/60'
+                                      : 'bg-amber-50 text-amber-700 border border-amber-200/60'
+                                  }`}
+                                >
+                                  {req.isBudgeted !== false ? 'Budgeted (RKAP)' : 'Unbudgeted'}
+                                </span>
+                                <span className="text-[10px] text-slate-400">
+                                  {req.createdAt}
+                                </span>
+                              </div>
+                            </td>
+
+                            <td className="py-3.5 px-4">
+                              <div className="font-bold text-slate-900 text-xs group-hover:text-blue-700 transition-colors">
+                                {req.position}
+                              </div>
+                              <div className="flex items-center gap-1.5 text-slate-500 text-[11px] mt-0.5">
+                                <Building2 className="w-3 h-3 text-slate-400 shrink-0" />
+                                <span>{req.department}</span>
+                                {req.reportingToTitle && (
+                                  <>
+                                    <span className="text-slate-300">•</span>
+                                    <span className="text-slate-400 truncate max-w-[150px]" title={`Melapor ke: ${req.reportingToTitle}`}>
+                                      Lapor: {req.reportingToTitle}
+                                    </span>
+                                  </>
+                                )}
+                              </div>
+                            </td>
+
+                            <td className="py-3.5 px-4">
+                              <span className="inline-block px-2.5 py-1 rounded-md text-[11px] font-semibold bg-slate-100 text-slate-700 border border-slate-200/70">
+                                {req.grade}
+                              </span>
+                              {req.supervisedStaffCount !== undefined && req.supervisedStaffCount > 0 && (
+                                <span className="block text-[10px] text-slate-400 mt-1">
+                                  Supervisi: {req.supervisedStaffCount} staf
+                                </span>
+                              )}
+                            </td>
+
+                            <td className="py-3.5 px-4">
+                              <div className="font-semibold text-slate-900 flex items-center gap-1">
+                                <Users className="w-3 h-3 text-slate-400" />
+                                <span>{req.headcount} Formasi</span>
+                              </div>
+                              <div className="text-[11px] text-slate-500 mt-0.5">
+                                <span>{req.reason}</span>
+                                {req.replacementFor && (
+                                  <span className="block text-[10px] text-slate-400 italic truncate max-w-[140px]" title={req.replacementFor}>
+                                    Gantikan: {req.replacementFor}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+
+                            <td className="py-3.5 px-4">
+                              <div className="flex items-center gap-1 text-slate-700 font-mono text-xs">
+                                <Calendar className="w-3 h-3 text-slate-400" />
+                                <span>{req.targetJoinDate}</span>
+                              </div>
+                              <span className="block text-[10px] text-slate-400 mt-0.5">
+                                Oleh: {req.requesterName.split(' ')[0]}
+                              </span>
+                            </td>
+
+                            <td className="py-3.5 px-4 text-center">
+                              <span
+                                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold ${
+                                  req.status === 'Disetujui'
+                                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                                    : req.status === 'Menunggu Approval'
+                                    ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                                    : 'bg-rose-50 text-rose-800 border border-rose-200'
+                                }`}
+                              >
+                                <span
+                                  className={`w-1.5 h-1.5 rounded-full ${
+                                    req.status === 'Disetujui'
+                                      ? 'bg-emerald-500'
+                                      : req.status === 'Menunggu Approval'
+                                      ? 'bg-amber-500 animate-pulse'
+                                      : 'bg-rose-500'
+                                  }`}
+                                />
+                                <span>{req.status}</span>
+                              </span>
+                              {req.approvedBy && req.status === 'Disetujui' && (
+                                <span className="block text-[10px] text-slate-400 mt-0.5 truncate max-w-[130px] mx-auto">
+                                  Oleh: {req.approvedBy.split(' ')[0]}
+                                </span>
+                              )}
+                            </td>
+
+                            <td className="py-3.5 px-4 text-right" onClick={(e) => e.stopPropagation()}>
+                              <div className="flex items-center justify-end gap-1.5">
+                                {req.status === 'Menunggu Approval' && (
+                                  <>
+                                    <button
+                                      onClick={() => handleApproveFptk(req.id)}
+                                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold transition-colors shadow-2xs flex items-center gap-1"
+                                      title="Setujui Permintaan Tenaga Kerja"
+                                    >
+                                      <Check className="w-3.5 h-3.5" />
+                                      <span>Setujui</span>
+                                    </button>
+                                    <button
+                                      onClick={() => handleRejectFptk(req.id)}
+                                      className="px-2.5 py-1.5 bg-white hover:bg-rose-50 text-rose-600 rounded-lg text-xs font-medium border border-rose-200 transition-colors"
+                                      title="Tolak Pengajuan FPTK"
+                                    >
+                                      <X className="w-3.5 h-3.5" />
+                                    </button>
+                                  </>
+                                )}
+
+                                {req.status === 'Disetujui' && (
+                                  <button
+                                    onClick={() => handleConvertFptkToVacancy(req)}
+                                    className="px-3 py-1.5 bg-blue-700 hover:bg-blue-800 text-white rounded-lg text-xs font-semibold flex items-center gap-1 shadow-2xs transition-colors shrink-0"
+                                    title="Buka Lowongan dan Sebar ke Multi-Channel"
+                                  >
+                                    <Globe className="w-3.5 h-3.5" />
+                                    <span>Sebar Lowongan →</span>
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </>
+            );
+          })()}
         </div>
       )}
 
@@ -2295,14 +2548,21 @@ export const RecruitmentManagement: React.FC = () => {
                     <label className="font-semibold text-slate-700 block mb-1">
                       Departemen / Divisi Pemohon *
                     </label>
-                    <input
-                      type="text"
+                    <select
                       required
-                      placeholder="Contoh: Engineering / Finance / Operations"
                       value={fptkDept}
-                      onChange={(e) => setFptkDept(e.target.value)}
+                      onChange={(e) => {
+                        setFptkDept(e.target.value);
+                        setFptkReportingDept(e.target.value);
+                      }}
                       className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-900 font-medium bg-white focus:ring-1 focus:ring-blue-600 focus:outline-none"
-                    />
+                    >
+                      {companyDepartments.map((dept) => (
+                        <option key={dept} value={dept}>
+                          {dept}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
 
@@ -2459,45 +2719,65 @@ export const RecruitmentManagement: React.FC = () => {
                   <span className="text-xs uppercase tracking-wider">III. Struktur Organisasi, Supervisi & Tugas Utama</span>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-start">
                   <div>
                     <label className="font-semibold text-slate-700 block mb-1">
-                      Bertanggung Jawab ke Divisi / Departemen *
+                      Bertanggung Jawab ke Divisi *
                     </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="Contoh: Technology & Product Division"
+                    <select
                       value={fptkReportingDept}
                       onChange={(e) => setFptkReportingDept(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-900 bg-white"
-                    />
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-900 bg-white focus:ring-1 focus:ring-blue-600 focus:outline-none"
+                    >
+                      {companyDepartments.map((dept) => (
+                        <option key={dept} value={dept}>
+                          {dept}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                   <div>
                     <label className="font-semibold text-slate-700 block mb-1">
-                      Bertanggung Jawab ke Jabatan Atasan *
+                      Bertanggung Jawab ke Atasan *
                     </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="Contoh: VP of Technology / Finance Director"
-                      value={fptkReportingTitle}
-                      onChange={(e) => setFptkReportingTitle(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-900 bg-white"
-                    />
+                    <select
+                      value={fptkReportingEmployeeId}
+                      onChange={(e) => {
+                        const empId = e.target.value;
+                        setFptkReportingEmployeeId(empId);
+                        const emp = companyEmployees.find((item) => item.id === empId);
+                        if (emp) {
+                          setFptkReportingTitle(`${emp.name} (${emp.position})`);
+                          if (emp.department) setFptkReportingDept(emp.department);
+                        }
+                      }}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-900 bg-white focus:ring-1 focus:ring-blue-600 focus:outline-none"
+                    >
+                      <option value="">-- Pilih Karyawan Atasan --</option>
+                      {companyEmployees.map((emp) => (
+                        <option key={emp.id} value={emp.id}>
+                          {emp.name} — {emp.position} ({emp.department})
+                        </option>
+                      ))}
+                    </select>
                   </div>
                   <div>
                     <label className="font-semibold text-slate-700 block mb-1">
-                      Jumlah Staff yang Disupervisi
+                      Jumlah Staf yang Disupervisi
                     </label>
-                    <input
-                      type="number"
-                      min={0}
-                      value={fptkSupervisedStaff}
-                      onChange={(e) => setFptkSupervisedStaff(Math.max(0, Number(e.target.value)))}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono text-slate-900 bg-white"
-                      placeholder="0 jika Individual Contributor"
-                    />
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min={0}
+                        value={fptkSupervisedStaff}
+                        onChange={(e) => setFptkSupervisedStaff(Math.max(0, Number(e.target.value)))}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono text-slate-900 bg-white focus:ring-1 focus:ring-blue-600 focus:outline-none"
+                        placeholder="0 jika Individual Contributor"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs">
+                        Staf
+                      </span>
+                    </div>
                   </div>
                 </div>
 
@@ -2523,46 +2803,65 @@ export const RecruitmentManagement: React.FC = () => {
                   <span className="text-xs uppercase tracking-wider">IV. Kualifikasi & Persyaratan Kandidat</span>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-start">
                   <div>
                     <label className="font-semibold text-slate-700 block mb-1">
-                      Pendidikan Minimal *
+                      Tingkat / Strata Pendidikan *
+                    </label>
+                    <select
+                      value={fptkEduLevel}
+                      onChange={(e) => setFptkEduLevel(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-900 bg-white focus:ring-1 focus:ring-blue-600 focus:outline-none"
+                    >
+                      {COMPANY_EDUCATION_LEVELS.map((lvl) => (
+                        <option key={lvl} value={lvl}>
+                          {lvl}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="font-semibold text-slate-700 block mb-1">
+                      Jurusan / Bidang Studi *
                     </label>
                     <input
                       type="text"
                       required
-                      placeholder="Contoh: S1 Teknik Informatika / S1 Akuntansi / D3"
-                      value={fptkEdu}
-                      onChange={(e) => setFptkEdu(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-900 bg-white"
+                      placeholder="Contoh: Teknik Informatika / Sistem Informasi"
+                      value={fptkEduMajor}
+                      onChange={(e) => setFptkEduMajor(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-900 bg-white focus:ring-1 focus:ring-blue-600 focus:outline-none"
                     />
                   </div>
                   <div>
                     <label className="font-semibold text-slate-700 block mb-1">
                       Lama Pengalaman Kerja *
                     </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="Contoh: 3-5 Tahun / Fresh Graduate"
+                    <select
                       value={fptkMinExp}
                       onChange={(e) => setFptkMinExp(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-900 bg-white"
-                    />
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-900 bg-white focus:ring-1 focus:ring-blue-600 focus:outline-none"
+                    >
+                      {COMPANY_EXP_LEVELS.map((exp) => (
+                        <option key={exp} value={exp}>
+                          {exp}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
 
                 <div>
                   <label className="font-semibold text-slate-700 block mb-1">
-                    Keterampilan & Keahlian Khusus (Hard/Soft Skills) *
+                    Keterampilan Khusus (Hard/Soft Skills) *
                   </label>
-                  <input
-                    type="text"
+                  <textarea
+                    rows={3}
                     required
-                    placeholder="Contoh: Kubernetes, Docker, CI/CD, React, Brevet A&B, PSAK, SQL..."
+                    placeholder="Sebutkan keahlian teknis atau spesifik, contoh: TypeScript, React, Node.js, PostgreSQL, Docker, CI/CD, Brevet A&B, PSAK..."
                     value={fptkSkills}
                     onChange={(e) => setFptkSkills(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-900 bg-white"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-900 text-xs bg-white focus:ring-1 focus:ring-blue-600 focus:outline-none"
                   />
                 </div>
 
@@ -2575,44 +2874,157 @@ export const RecruitmentManagement: React.FC = () => {
                     placeholder="Sebutkan sertifikasi profesi yang diwajibkan, kemampuan bahasa asing, atau kualifikasi pendukung lainnya..."
                     value={fptkOtherRequirements}
                     onChange={(e) => setFptkOtherRequirements(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-900 text-xs bg-white"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-900 text-xs bg-white focus:ring-1 focus:ring-blue-600 focus:outline-none"
                   />
                 </div>
               </div>
 
-              {/* SECTION 5: PENGAJU & PENYETUJU */}
-              <div className="bg-slate-50/80 p-4 rounded-xl border border-slate-200/80 space-y-3">
+              {/* SECTION 5: PENGAJU & PENYETUJU (FLEKSIBEL APPROVAL) */}
+              <div className="bg-slate-50/80 p-4 rounded-xl border border-slate-200/80 space-y-4">
                 <div className="flex items-center gap-2 text-slate-900 font-bold border-b border-slate-200 pb-2">
                   <UserCheck className="w-4 h-4 text-blue-700" />
                   <span className="text-xs uppercase tracking-wider">V. Pihak Pengaju & Otorisasi Persetujuan</span>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div>
-                    <label className="font-semibold text-slate-700 block mb-1">
-                      Yang Mengajukan (Nama & Jabatan Pemohon) *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="Contoh: Budi Santoso (Engineering Manager)"
-                      value={fptkRequesterName}
-                      onChange={(e) => setFptkRequesterName(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-900 bg-white font-medium"
-                    />
+                {/* Yang Mengajukan: Readonly Pembuat Dokumen */}
+                <div className="bg-white p-3.5 rounded-xl border border-slate-200">
+                  <label className="font-semibold text-slate-700 block mb-1.5 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <Lock className="w-3.5 h-3.5 text-slate-400" />
+                      <span>Yang Mengajukan *</span>
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-normal">
+                      Otomatis dari akun login pembuat form (Readonly)
+                    </span>
+                  </label>
+                  <input
+                    type="text"
+                    readOnly
+                    value={requesterDisplay}
+                    className="w-full px-3 py-2 border border-slate-200 bg-slate-100 text-slate-800 font-semibold rounded-lg cursor-not-allowed text-xs"
+                  />
+                </div>
+
+                {/* Yang Menyetujui atas Pengajuan (Fleksibel & Multi-Approver) */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <label className="font-bold text-slate-800 text-xs block">
+                        Yang Menyetujui atas Pengajuan *
+                      </label>
+                      <p className="text-[11px] text-slate-500">
+                        Pilih karyawan penyetuju. Anda dapat menyesuaikan nama header (misal: Mengetahui, Menyetujui, Memeriksa) dan menambah penanda tangan berjenjang.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleAddSignatory}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-200 transition-colors shrink-0"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Tambah Penanda Tangan</span>
+                    </button>
                   </div>
-                  <div>
-                    <label className="font-semibold text-slate-700 block mb-1">
-                      Yang Menyetujui atas Pengajuan (Nama & Jabatan Penyetuju) *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="Contoh: Aditya Pratama (Head of People) / Direktur"
-                      value={fptkApproverName}
-                      onChange={(e) => setFptkApproverName(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-900 bg-white font-medium"
-                    />
+
+                  <div className="space-y-2.5">
+                    {fptkSignatories.map((sig, idx) => (
+                      <div
+                        key={sig.id}
+                        className="p-3 bg-white rounded-xl border border-slate-200 shadow-2xs flex flex-col md:flex-row gap-3 items-start md:items-center"
+                      >
+                        {/* Header/Title Peran Approval */}
+                        <div className="w-full md:w-44">
+                          <label className="text-[10px] font-semibold text-slate-500 block mb-1 uppercase tracking-wider">
+                            Header / Title #{idx + 1}
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            value={sig.role}
+                            onChange={(e) => handleUpdateSignatory(sig.id, { role: e.target.value })}
+                            list={`signatory-roles-${sig.id}`}
+                            placeholder="Menyetujui / Mengetahui"
+                            className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-semibold text-blue-900 bg-blue-50/40 focus:ring-1 focus:ring-blue-600 focus:outline-none"
+                          />
+                          <datalist id={`signatory-roles-${sig.id}`}>
+                            {SIGNATORY_ROLES.map((role) => (
+                              <option key={role} value={role} />
+                            ))}
+                          </datalist>
+                        </div>
+
+                        {/* Dropdown Karyawan Perusahaan */}
+                        <div className="w-full md:flex-1">
+                          <label className="text-[10px] font-semibold text-slate-500 block mb-1 uppercase tracking-wider">
+                            Pilih Karyawan Penyetuju *
+                          </label>
+                          <select
+                            value={sig.employeeId || ''}
+                            onChange={(e) => {
+                              const empId = e.target.value;
+                              const emp = companyEmployees.find((item) => item.id === empId);
+                              if (emp) {
+                                handleUpdateSignatory(sig.id, {
+                                  employeeId: emp.id,
+                                  name: emp.name,
+                                  title: emp.position || 'Departemen Head',
+                                });
+                              }
+                            }}
+                            className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-medium text-slate-900 bg-white focus:ring-1 focus:ring-blue-600 focus:outline-none"
+                          >
+                            <option value="">-- Pilih dari Karyawan --</option>
+                            {companyEmployees.map((emp) => (
+                              <option key={emp.id} value={emp.id}>
+                                {emp.name} — {emp.position} ({emp.department})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Nama & Jabatan di Dokumen */}
+                        <div className="w-full md:flex-1 grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[10px] font-semibold text-slate-500 block mb-1 uppercase tracking-wider">
+                              Nama Lengkap
+                            </label>
+                            <input
+                              type="text"
+                              required
+                              value={sig.name}
+                              onChange={(e) => handleUpdateSignatory(sig.id, { name: e.target.value })}
+                              className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs text-slate-900 bg-white focus:ring-1 focus:ring-blue-600 focus:outline-none"
+                              placeholder="Nama Penyetuju"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-semibold text-slate-500 block mb-1 uppercase tracking-wider">
+                              Jabatan Resmi
+                            </label>
+                            <input
+                              type="text"
+                              required
+                              value={sig.title}
+                              onChange={(e) => handleUpdateSignatory(sig.id, { title: e.target.value })}
+                              className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs text-slate-900 bg-white focus:ring-1 focus:ring-blue-600 focus:outline-none"
+                              placeholder="Jabatan"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Hapus Penanda Tangan */}
+                        {fptkSignatories.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveSignatory(sig.id)}
+                            title="Hapus Penanda Tangan Ini"
+                            className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors md:mt-4 self-end md:self-auto"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>
@@ -2827,10 +3239,18 @@ export const RecruitmentManagement: React.FC = () => {
                   <GraduationCap className="w-3.5 h-3.5 text-blue-700" />
                   <span>IV. Kualifikasi & Persyaratan Kandidat</span>
                 </h3>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div>
-                    <span className="text-[10px] font-semibold text-slate-400 block uppercase">Pendidikan Minimal</span>
-                    <span className="font-semibold text-slate-800">{previewFptk.educationMin || '-'}</span>
+                    <span className="text-[10px] font-semibold text-slate-400 block uppercase">Strata Pendidikan</span>
+                    <span className="font-semibold text-slate-800">
+                      {previewFptk.educationLevel || previewFptk.educationMin?.split(' - ')[0] || '-'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-semibold text-slate-400 block uppercase">Jurusan / Bidang Studi</span>
+                    <span className="font-semibold text-slate-800">
+                      {previewFptk.educationMajor || previewFptk.educationMin?.split(' - ')[1] || '-'}
+                    </span>
                   </div>
                   <div>
                     <span className="text-[10px] font-semibold text-slate-400 block uppercase">Lama Pengalaman</span>
@@ -2842,8 +3262,10 @@ export const RecruitmentManagement: React.FC = () => {
                   </div>
                 </div>
                 <div>
-                  <span className="text-[10px] font-semibold text-slate-400 block uppercase mb-0.5">Keterampilan / Skills Utama</span>
-                  <span className="font-medium text-slate-800">{previewFptk.skills || previewFptk.requirements}</span>
+                  <span className="text-[10px] font-semibold text-slate-400 block uppercase mb-1">Keterampilan Khusus</span>
+                  <div className="bg-white p-2.5 rounded-lg border border-slate-200 text-slate-800 font-medium whitespace-pre-line text-xs">
+                    {previewFptk.skills || previewFptk.requirements}
+                  </div>
                 </div>
                 {previewFptk.otherRequirements && (
                   <div>
@@ -2859,10 +3281,11 @@ export const RecruitmentManagement: React.FC = () => {
                   <UserCheck className="w-3.5 h-3.5 text-blue-700" />
                   <span>V. Matriks Otorisasi & Persetujuan</span>
                 </h3>
-                <div className="grid grid-cols-2 gap-6 pt-2">
-                  <div className="bg-white p-3.5 rounded-lg border border-slate-200 space-y-2">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-2">
+                  {/* Pemohon */}
+                  <div className="bg-white p-3.5 rounded-lg border border-slate-200 space-y-1.5">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                      Diajukan Oleh (Pemohon)
+                      Yang Mengajukan
                     </span>
                     <div className="font-bold text-slate-900 text-sm">{previewFptk.requesterName}</div>
                     <span className="text-[10px] text-slate-400 block">Tanggal: {previewFptk.createdAt}</span>
@@ -2872,30 +3295,54 @@ export const RecruitmentManagement: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="bg-white p-3.5 rounded-lg border border-slate-200 space-y-2">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                      Disetujui Oleh (Approver)
-                    </span>
-                    <div className="font-bold text-slate-900 text-sm">
-                      {previewFptk.approvedBy || 'Menunggu Persetujuan Atasan'}
-                    </div>
-                    {previewFptk.approvalDate && (
-                      <span className="text-[10px] text-slate-400 block">
-                        Tanggal Approval: {previewFptk.approvalDate}
+                  {/* Multi-Signatories / Approvers */}
+                  {previewFptk.signatories && previewFptk.signatories.length > 0 ? (
+                    previewFptk.signatories.map((sig, idx) => (
+                      <div key={sig.id || idx} className="bg-white p-3.5 rounded-lg border border-slate-200 space-y-1.5">
+                        <span className="text-[10px] font-bold text-blue-700 uppercase tracking-wider block">
+                          {sig.role || 'Yang Menyetujui'}
+                        </span>
+                        <div className="font-bold text-slate-900 text-sm">{sig.name}</div>
+                        <div className="text-[11px] text-slate-500 font-medium">{sig.title}</div>
+                        {previewFptk.status === 'Disetujui' || sig.status === 'Disetujui' ? (
+                          <div className="pt-2 text-emerald-700 font-semibold text-[10px] flex items-center gap-1">
+                            <CheckCircle className="w-3 h-3" />
+                            <span>Telah {sig.role || 'Disetujui'} ({sig.date || previewFptk.approvalDate || previewFptk.createdAt})</span>
+                          </div>
+                        ) : (
+                          <div className="pt-2 text-amber-700 font-semibold text-[10px] flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            <span>Menunggu Konfirmasi {sig.role || 'Persetujuan'}</span>
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  ) : (
+                    <div className="bg-white p-3.5 rounded-lg border border-slate-200 space-y-1.5">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                        Yang Menyetujui atas Pengajuan
                       </span>
-                    )}
-                    {previewFptk.status === 'Disetujui' ? (
-                      <div className="pt-2 text-emerald-700 font-semibold text-[10px] flex items-center gap-1">
-                        <CheckCircle className="w-3 h-3" />
-                        <span>Telah Disetujui Penuh</span>
+                      <div className="font-bold text-slate-900 text-sm">
+                        {previewFptk.approvedBy || 'Menunggu Persetujuan Atasan'}
                       </div>
-                    ) : (
-                      <div className="pt-2 text-amber-700 font-semibold text-[10px] flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
-                        <span>Menunggu Konfirmasi Persetujuan</span>
-                      </div>
-                    )}
-                  </div>
+                      {previewFptk.approvalDate && (
+                        <span className="text-[10px] text-slate-400 block">
+                          Tanggal Approval: {previewFptk.approvalDate}
+                        </span>
+                      )}
+                      {previewFptk.status === 'Disetujui' ? (
+                        <div className="pt-2 text-emerald-700 font-semibold text-[10px] flex items-center gap-1">
+                          <CheckCircle className="w-3 h-3" />
+                          <span>Telah Disetujui Penuh</span>
+                        </div>
+                      ) : (
+                        <div className="pt-2 text-amber-700 font-semibold text-[10px] flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          <span>Menunggu Konfirmasi Persetujuan</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {previewFptk.approvalNotes && (
@@ -2921,10 +3368,19 @@ export const RecruitmentManagement: React.FC = () => {
                     <button
                       onClick={() => {
                         handleApproveFptk(previewFptk.id);
+                        const primaryApprover =
+                          previewFptk.signatories && previewFptk.signatories.length > 0
+                            ? previewFptk.signatories[previewFptk.signatories.length - 1].name
+                            : (previewFptk.approvedBy || 'Aditya Pratama (Head of People)');
                         setPreviewFptk({
                           ...previewFptk,
                           status: 'Disetujui',
-                          approvedBy: fptkApproverName || 'Aditya Pratama (Head of People)',
+                          approvedBy: primaryApprover,
+                          signatories: previewFptk.signatories?.map((s) => ({
+                            ...s,
+                            status: 'Disetujui',
+                            date: new Date().toISOString().split('T')[0],
+                          })),
                         });
                       }}
                       className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs shadow-2xs transition-colors flex items-center gap-1.5"

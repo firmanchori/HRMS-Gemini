@@ -450,6 +450,17 @@ export type FptkPositionReason =
   | 'Ekspansi Bisnis'
   | 'Lainnya';
 
+export interface FptkSignatory {
+  id: string;
+  role: string; // e.g. 'Menyetujui' | 'Mengetahui' | 'Memeriksa' | 'Mengesahkan'
+  employeeId?: string;
+  name: string;
+  title: string;
+  status?: 'Menunggu Approval' | 'Disetujui' | 'Ditolak';
+  date?: string;
+  notes?: string;
+}
+
 export interface JobRequisition {
   id: string;
   tenantId: string;
@@ -469,23 +480,27 @@ export interface JobRequisition {
   // Struktur Organisasi & Supervisi
   reportingToDepartment?: string; // Bertanggung jawab ke divisi / departemen apa
   reportingToTitle?: string; // Bertanggung jawab ke jabatan/posisi apa
+  reportingToEmployeeId?: string;
   supervisedStaffCount?: number; // Jumlah staff yang disupervisi (0 jika IC)
   mainResponsibilities?: string; // Tugas utama / deskripsi tanggung jawab
 
   // Kualifikasi
-  educationMin?: string; // Pendidikan (D3, S1, S2, dsb.)
+  educationLevel?: string; // Strata Pendidikan (SMA/SMK, D3, S1, S2, S3)
+  educationMajor?: string; // Jurusan / Bidang Studi
+  educationMin?: string; // Gabungan Strata & Jurusan
   minExperience?: string; // Lama pengalaman kerja
   skills?: string; // Keterampilan / Keahlian teknis & soft skills
   otherRequirements?: string; // Kualifikasi lainnya / sertifikasi
   requirements: string; // Ringkasan requirement lengkap
 
-  // Pengajuan & Persetujuan
-  requesterName: string; // Yang mengajukan siapa (Nama & Jabatan)
+  // Pengajuan & Persetujuan (Fleksibel)
+  requesterName: string; // Yang mengajukan (Nama & Jabatan Pembuat Form)
   requesterTitle?: string;
-  approvedBy?: string; // Yang menyetujui atas pengajuan siapa
+  approvedBy?: string; // Yang menyetujui utama
   approverTitle?: string;
   approvalDate?: string;
   approvalNotes?: string;
+  signatories?: FptkSignatory[]; // Daftar penanda tangan / approval berjenjang yang fleksibel
 
   status: 'Disetujui' | 'Menunggu Approval' | 'Draft' | 'Ditolak';
   createdAt: string;
