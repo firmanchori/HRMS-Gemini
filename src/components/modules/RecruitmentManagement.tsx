@@ -26,6 +26,8 @@ import {
   Share2,
   ExternalLink,
   Eye,
+  EyeOff,
+  CheckCircle2,
   Archive,
   UserX,
   UserCheck,
@@ -415,6 +417,33 @@ export const RecruitmentManagement: React.FC = () => {
     });
   }, [employees]);
 
+  // Structural Leadership & Management Positions for Reporting Lines
+  const companyPositions = React.useMemo(() => {
+    const set = new Set<string>();
+    employees.forEach((e) => {
+      if (e.position) set.add(e.position);
+    });
+    [
+      'Chief Executive Officer (CEO)',
+      'Chief Operating Officer (COO)',
+      'Chief Technology Officer (CTO)',
+      'Chief Financial Officer (CFO)',
+      'VP of Technology',
+      'VP of Human Capital',
+      'VP of Finance & Accounting',
+      'Head of Engineering',
+      'Engineering Manager',
+      'Principal Architect',
+      'Product Lead / Head of Product',
+      'Head of People & Culture',
+      'Finance & Accounting Manager',
+      'Marketing & Growth Director',
+      'Operations & Logistics Director',
+      'General Affairs & Legal Manager',
+    ].forEach((p) => set.add(p));
+    return Array.from(set);
+  }, [employees]);
+
   // 7 Explicit Tabs per User Architecture:
   // 1. Permintaan FPTK
   // 2. Lowongan & Sourcing
@@ -466,8 +495,6 @@ export const RecruitmentManagement: React.FC = () => {
   const [fptkTargetDate, setFptkTargetDate] = useState('2026-11-15');
   const [fptkReportingDept, setFptkReportingDept] = useState(companyDepartments[0] || 'Engineering');
   const [fptkReportingTitle, setFptkReportingTitle] = useState('VP of Technology');
-  const [fptkReportingEmployeeId, setFptkReportingEmployeeId] = useState('');
-  const [fptkReportingWithDegree, setFptkReportingWithDegree] = useState<boolean>(true);
   const [fptkSupervisedStaff, setFptkSupervisedStaff] = useState<number>(0);
   const [fptkMainResponsibilities, setFptkMainResponsibilities] = useState('');
   const [fptkEduLevel, setFptkEduLevel] = useState('D4 / S1 - Sarjana');
@@ -546,6 +573,10 @@ export const RecruitmentManagement: React.FC = () => {
   const [vacOpenings, setVacOpenings] = useState(1);
   const [vacExp, setVacExp] = useState('3+ Tahun');
   const [vacSalary, setVacSalary] = useState('Rp 15.000.000 - Rp 20.000.000');
+  const [isSalaryMasked, setIsSalaryMasked] = useState<boolean>(true);
+  const [showSalaryPublicly, setShowSalaryPublicly] = useState<boolean>(false);
+  const [vacModalTab, setVacModalTab] = useState<'form' | 'preview'>('form');
+  const [vacPreviewPortal, setVacPreviewPortal] = useState<'LinkedIn' | 'Jobstreet' | 'Website Karir'>('LinkedIn');
   const [vacRequirements, setVacRequirements] = useState('');
   const [vacDescription, setVacDescription] = useState('');
   const [vacChannels, setVacChannels] = useState<JobPostingChannel[]>([
@@ -760,7 +791,7 @@ export const RecruitmentManagement: React.FC = () => {
       targetJoinDate: fptkTargetDate,
       reportingToDepartment: fptkReportingDept,
       reportingToTitle: fptkReportingTitle,
-      reportingToEmployeeId: fptkReportingEmployeeId,
+      reportingToEmployeeId: undefined,
       supervisedStaffCount: Number(fptkSupervisedStaff) || 0,
       mainResponsibilities: fptkMainResponsibilities,
       educationLevel: fptkEduLevel,
@@ -834,11 +865,32 @@ export const RecruitmentManagement: React.FC = () => {
     setVacGrade(req.grade);
     setVacOpenings(req.headcount);
     setVacExp(req.minExperience || '3+ Tahun');
-    setVacRequirements(req.requirements);
-    setVacDescription(
-      `Membuka lowongan untuk posisi ${req.position} jenjang ${req.grade} pada Departemen ${req.department}. Kebutuhan: ${req.headcount} orang.`
-    );
+    setVacSalary('Rp 15.000.000 - Rp 22.000.000');
+
+    // Auto-compose requirements from FPTK details
+    let reqText = req.requirements || '';
+    if (req.educationLevel || req.educationMajor || req.skills) {
+      reqText = [
+        `• Pendidikan: Minimal ${req.educationLevel || 'S1'} Jurusan ${req.educationMajor || 'Terkait'}`,
+        `• Pengalaman Kerja: Minimal ${req.minExperience || '3+ Tahun'} di posisi setara`,
+        `• Keterampilan Teknis & Keahlian: ${req.skills || 'Sesuai standar kompetensi divisi'}`,
+        req.otherRequirements ? `• Persyaratan Tambahan: ${req.otherRequirements}` : '',
+      ]
+        .filter(Boolean)
+        .join('\n');
+    }
+    setVacRequirements(reqText);
+
+    // Auto-compose external job description wording
+    const descText = req.mainResponsibilities
+      ? `Ringkasan Tugas & Tanggung Jawab Utama:\n${req.mainResponsibilities}\n\nPosisi ini akan berkolaborasi erat dengan tim ${req.department} untuk memastikan tercapainya target operasional dan keberhasilan strategi perusahaan.`
+      : `Membuka kesempatan berkarir untuk posisi ${req.position} jenjang ${req.grade} pada Departemen ${req.department}. Kebutuhan formasi: ${req.headcount} orang.`;
+    setVacDescription(descText);
+
     setVacLinkedReqId(req.id);
+    setIsSalaryMasked(true);
+    setShowSalaryPublicly(false);
+    setVacModalTab('form');
     setIsVacancyModalOpen(true);
   };
 
@@ -1039,23 +1091,16 @@ export const RecruitmentManagement: React.FC = () => {
         <div className="flex items-center gap-2 shrink-0 flex-wrap">
           <button
             onClick={() => setIsRequisitionModalOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-800 rounded-lg text-xs font-semibold shadow-2xs border border-slate-300 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-700 hover:bg-blue-800 text-white rounded-lg text-xs font-semibold shadow-2xs transition-colors"
           >
-            <Plus className="w-3.5 h-3.5 text-blue-700" />
+            <Plus className="w-3.5 h-3.5" />
             <span>+ Ajukan FPTK</span>
           </button>
           <button
-            onClick={() => setIsVacancyModalOpen(true)}
+            onClick={() => setIsCandidateModalOpen(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-800 rounded-lg text-xs font-semibold shadow-2xs border border-slate-300 transition-colors"
           >
-            <Globe className="w-3.5 h-3.5 text-blue-700" />
-            <span>+ Sebar Lowongan</span>
-          </button>
-          <button
-            onClick={() => setIsCandidateModalOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-700 hover:bg-blue-800 text-white rounded-lg text-xs font-semibold shadow-2xs transition-colors"
-          >
-            <UserPlus className="w-3.5 h-3.5" />
+            <UserPlus className="w-3.5 h-3.5 text-blue-700" />
             <span>+ Tambah Pelamar</span>
           </button>
         </div>
@@ -1769,23 +1814,144 @@ export const RecruitmentManagement: React.FC = () => {
       {/* ===================== TAB 2: LOWONGAN & SOURCING ===================== */}
       {activeTab === 'sourcing' && (
         <div className="space-y-4">
+          {/* Header Banner: Strictly Process Tab */}
           <div className="flex items-center justify-between gap-4 flex-wrap bg-white p-4 border border-slate-200 rounded-xl shadow-2xs">
             <div>
-              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+              <div className="flex items-center gap-2">
                 <Globe className="w-4 h-4 text-blue-700" />
-                <span>Tab 2: Lowongan & Sourcing (Penyebaran Lowongan)</span>
-              </h3>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Pembuatan deskripsi pekerjaan dan publikasi otomatis ke multi-channel: Jobstreet, LinkedIn, Glints, Kalibrr, dan Website Karir.
+                <h3 className="text-sm font-bold text-slate-900">
+                  Tab 2: Proses Lowongan & Multi-Portal Sourcing
+                </h3>
+                <span className="text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full">
+                  Proses Berbasis FPTK
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-1 max-w-3xl leading-relaxed">
+                Semua lowongan baru wajib diajukan dan disetujui melalui formulir <strong>FPTK di Tab 1</strong>. Di bagian ini, tim HR bertugas memproses FPTK yang disetujui, mengatur masking kisaran gaji internal, menyesuaikan wording eksternal, dan menyiarkannya ke portal lowongan (Jobstreet, LinkedIn, Glints, Kalibrr, Website Karir).
               </p>
             </div>
             <button
-              onClick={() => setIsVacancyModalOpen(true)}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-700 hover:bg-blue-800 text-white rounded-lg text-xs font-semibold shadow-2xs transition-colors shrink-0"
+              onClick={() => setActiveTab('fptk')}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold border border-slate-300 transition-colors shrink-0"
             >
-              <Plus className="w-3.5 h-3.5" />
-              <span>+ Buat Lowongan Baru</span>
+              <FileText className="w-3.5 h-3.5 text-blue-700" />
+              <span>Lihat Tab Permintaan FPTK</span>
             </button>
+          </div>
+
+          {/* ===================== ANTREAN FPTK DISETUJUI SIAP PROSES ===================== */}
+          {(() => {
+            const approvedFptks = jobRequisitions.filter((r) => r.status === 'Disetujui');
+            return (
+              <div className="bg-gradient-to-r from-blue-50/70 via-indigo-50/50 to-white border border-blue-200/80 rounded-xl p-4 shadow-2xs space-y-3">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold text-xs shadow-xs">
+                      <CheckCircle2 className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                        <span>Antrean FPTK Disetujui (Siap Proses Publikasi Lowongan)</span>
+                        <span className="bg-blue-600 text-white text-[10px] px-1.5 py-0.2 rounded-full font-mono">
+                          {approvedFptks.length}
+                        </span>
+                      </h4>
+                      <p className="text-[11px] text-slate-500">
+                        Permintaan tenaga kerja yang telah disetujui pejabat berwenang dan siap disiarkan ke portal eksternal.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {approvedFptks.length === 0 ? (
+                  <div className="bg-white/80 border border-dashed border-blue-200 rounded-lg p-5 text-center">
+                    <FileText className="w-8 h-8 text-blue-300 mx-auto mb-1.5" />
+                    <p className="text-xs font-semibold text-slate-700">Belum ada FPTK berstatus Disetujui yang menunggu proses siar.</p>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Silakan ajukan form FPTK baru atau selesaikan proses approval di Tab 1.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {approvedFptks.map((req) => {
+                      const alreadyPublished = vacancies.some((v) => v.jobRequisitionId === req.id);
+                      return (
+                        <div
+                          key={req.id}
+                          className="bg-white rounded-lg p-3.5 border border-slate-200 shadow-2xs hover:border-blue-300 transition-all flex flex-col justify-between space-y-3"
+                        >
+                          <div className="space-y-1.5">
+                            <div className="flex items-start justify-between gap-1.5">
+                              <div>
+                                <span className="font-bold text-slate-900 text-xs block leading-tight">
+                                  {req.position}
+                                </span>
+                                <span className="text-[10px] font-mono text-slate-500">
+                                  {req.reqNumber}
+                                </span>
+                              </div>
+                              <span
+                                className={`text-[9px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
+                                  alreadyPublished
+                                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                    : 'bg-blue-50 text-blue-700 border border-blue-200'
+                                }`}
+                              >
+                                {alreadyPublished ? '✓ Terpublikasi' : 'Siap Siar'}
+                              </span>
+                            </div>
+
+                            <div className="text-[11px] text-slate-600 space-y-0.5">
+                              <div className="flex items-center gap-1.5">
+                                <Building2 className="w-3 h-3 text-slate-400 shrink-0" />
+                                <span>{req.department}</span>
+                                <span className="text-slate-300">·</span>
+                                <span className="font-semibold text-blue-700">{req.headcount} Orang</span>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <Calendar className="w-3 h-3 text-slate-400 shrink-0" />
+                                <span>Target: {req.targetJoinDate || 'Segera'}</span>
+                                <span className="text-slate-300">·</span>
+                                <span className="text-slate-500">{req.minExperience || '3+ Thn'}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5 text-[10px] text-slate-500">
+                                <Lock className="w-3 h-3 text-amber-500 shrink-0" />
+                                <span>Budget Gaji:</span>
+                                <span className="font-mono text-slate-700 font-semibold">•••••••••• (Masked)</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
+                            <span className="text-[10px] text-slate-400 truncate max-w-[120px]">
+                              Pemohon: {req.requesterName}
+                            </span>
+                            <button
+                              onClick={() => handleConvertFptkToVacancy(req)}
+                              className="flex items-center gap-1 px-2.5 py-1.5 bg-blue-700 hover:bg-blue-800 text-white rounded-md text-[11px] font-semibold shadow-2xs transition-colors shrink-0"
+                            >
+                              <Send className="w-3 h-3" />
+                              <span>{alreadyPublished ? 'Proses Ulang' : 'Proses Sebar Lowongan'}</span>
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Section Heading: Daftar Lowongan Terpublikasi */}
+          <div className="flex items-center justify-between gap-2 pt-2">
+            <h4 className="text-xs font-bold text-slate-900 flex items-center gap-2">
+              <Globe className="w-4 h-4 text-blue-700" />
+              <span>Daftar Lowongan Terpublikasi ({vacancies.length})</span>
+            </h4>
+            <span className="text-[11px] text-slate-500">
+              Menampilkan lowongan aktif yang telah disiarkan ke multi-portal
+            </span>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -3003,42 +3169,28 @@ export const RecruitmentManagement: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Bertanggung Jawab ke Atasan: Full Row on Tablet & Desktop for generous breathing room */}
+                  {/* Bertanggung Jawab ke Atasan: Jabatan / Posisi Struktural */}
                   <div className="md:col-span-2">
-                    <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
-                      <label className="font-semibold text-slate-700 block text-xs">
-                        Bertanggung Jawab ke Atasan *
-                      </label>
-                      <label className="inline-flex items-center gap-1.5 cursor-pointer text-[10px] text-slate-600 font-semibold select-none bg-slate-100 hover:bg-slate-200/80 px-2.5 py-0.5 rounded-md border border-slate-200 transition-colors">
-                        <input
-                          type="checkbox"
-                          checked={fptkReportingWithDegree}
-                          onChange={(e) => {
-                            const checked = e.target.checked;
-                            setFptkReportingWithDegree(checked);
-                            const emp = companyEmployees.find((item) => item.id === fptkReportingEmployeeId);
-                            if (emp) {
-                              const nameToUse = checked ? emp.fullName : emp.rawName;
-                              setFptkReportingTitle(`${nameToUse} (${emp.position})`);
-                            }
-                          }}
-                          className="w-3.5 h-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                        />
-                        <span>Gunakan Gelar</span>
-                      </label>
+                    <label className="font-semibold text-slate-700 block text-xs mb-1.5">
+                      Bertanggung Jawab ke Atasan (Jabatan / Posisi) *
+                    </label>
+                    <div className="relative">
+                      <select
+                        value={fptkReportingTitle}
+                        onChange={(e) => setFptkReportingTitle(e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-900 bg-white font-medium focus:ring-1 focus:ring-blue-600 focus:outline-none"
+                      >
+                        <option value="">-- Pilih Jabatan / Posisi Atasan Langsung --</option>
+                        {companyPositions.map((pos) => (
+                          <option key={pos} value={pos}>
+                            {pos}
+                          </option>
+                        ))}
+                      </select>
                     </div>
-                    <EmployeeSelectDropdown
-                      employees={companyEmployees}
-                      selectedId={fptkReportingEmployeeId}
-                      withDegree={fptkReportingWithDegree}
-                      onSelect={(emp) => {
-                        setFptkReportingEmployeeId(emp.id);
-                        const nameToUse = fptkReportingWithDegree ? emp.fullName : emp.rawName;
-                        setFptkReportingTitle(`${nameToUse} (${emp.position})`);
-                        if (emp.department) setFptkReportingDept(emp.department);
-                      }}
-                      placeholder="-- Pilih Karyawan Atasan (Foto, Nama, NIK, Jabatan) --"
-                    />
+                    <p className="text-[10px] text-slate-500 mt-1">
+                      * Garis pelaporan organisasi mengacu pada jabatan/posisi struktural (bukan nama personal karyawan).
+                    </p>
                   </div>
                 </div>
 
@@ -3648,177 +3800,521 @@ export const RecruitmentManagement: React.FC = () => {
         </div>
       )}
 
-      {/* ===================== MODAL 2: POSTING & SOURCING LOWONGAN BARU ===================== */}
+      {/* ===================== MODAL 2: PROSES PUBLIKASI & SEBAR LOWONGAN ===================== */}
       {isVacancyModalOpen && (
         <div
-          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto"
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto"
           onClick={(e) => {
             if (e.target === e.currentTarget) setIsVacancyModalOpen(false);
           }}
         >
           <div
-            className="bg-white rounded-xl shadow-xl max-w-lg w-full border border-slate-200 overflow-hidden my-6"
+            className="bg-white rounded-2xl shadow-2xl max-w-2xl sm:max-w-3xl w-full border border-slate-200 overflow-hidden my-4 sm:my-6 flex flex-col max-h-[92vh]"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="px-5 py-4 bg-slate-950 text-white flex items-center justify-between">
+            {/* Modal Header */}
+            <div className="px-5 py-4 bg-slate-950 text-white flex items-center justify-between shrink-0">
               <div>
-                <h3 className="text-sm font-bold flex items-center gap-2">
+                <div className="flex items-center gap-2">
                   <Globe className="w-4 h-4 text-blue-400" />
-                  <span>Sourcing & Publikasi Lowongan Multi-Portal</span>
-                </h3>
-                <span className="text-xs text-slate-400">Tab 2: Auto-broadcast ke portal kerja & medsos</span>
+                  <h3 className="text-sm font-bold text-white">
+                    Proses Publikasi & Sebar Lowongan Eksternal
+                  </h3>
+                  {activeRequisition && (
+                    <span className="text-[10px] bg-blue-900/80 text-blue-200 border border-blue-700/60 font-mono px-2 py-0.5 rounded-full">
+                      Ref FPTK: {activeRequisition.reqNumber}
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Isian otomatis diadopsi dari FPTK yang disetujui. Sesuaikan wording eksternal sebelum dipublikasikan.
+                </p>
               </div>
-              <button onClick={() => setIsVacancyModalOpen(false)}>
-                <X className="w-4 h-4 text-slate-400 hover:text-white" />
+              <button
+                onClick={() => setIsVacancyModalOpen(false)}
+                className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
+              >
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                addVacancy({
-                  title: vacTitle,
-                  department: vacDept,
-                  employmentType: vacType,
-                  grade: vacGrade,
-                  openings: vacOpenings,
-                  minExperience: vacExp,
-                  salaryRange: vacSalary,
-                  requirements: vacRequirements,
-                  description: vacDescription,
-                  activeChannels: vacChannels,
-                  status: 'Buka',
-                  jobRequisitionId: vacLinkedReqId || undefined,
-                });
-                setIsVacancyModalOpen(false);
-                setVacTitle('');
-                alert(`Lowongan '${vacTitle}' berhasil dipublikasikan dan disebarkan ke ${vacChannels.length} portal kerja!`);
-              }}
-              className="p-5 space-y-4 text-xs"
-            >
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">Judul Posisi Lowongan *</label>
-                <input
-                  type="text"
-                  required
-                  value={vacTitle}
-                  onChange={(e) => setVacTitle(e.target.value)}
-                  placeholder="Contoh: Senior DevOps & Site Reliability Engineer"
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg font-medium"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Departemen *</label>
-                  <input
-                    type="text"
-                    required
-                    value={vacDept}
-                    onChange={(e) => setVacDept(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                  />
-                </div>
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Status Hubungan Kerja</label>
-                  <select
-                    value={vacType}
-                    onChange={(e) => setVacType(e.target.value as any)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white"
-                  >
-                    <option value="Tetap">Tetap (PKWTT)</option>
-                    <option value="Kontrak">Kontrak (PKWT)</option>
-                    <option value="Magang">Magang</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Formasi (Headcount)</label>
-                  <input
-                    type="number"
-                    min={1}
-                    required
-                    value={vacOpenings}
-                    onChange={(e) => setVacOpenings(Number(e.target.value))}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold"
-                  />
-                </div>
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Kisaran Gaji</label>
-                  <input
-                    type="text"
-                    value={vacSalary}
-                    onChange={(e) => setVacSalary(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-medium"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">Deskripsi Pekerjaan & Tanggung Jawab *</label>
-                <textarea
-                  rows={2}
-                  required
-                  value={vacDescription}
-                  onChange={(e) => setVacDescription(e.target.value)}
-                  placeholder="Uraikan tanggung jawab posisi ini..."
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                />
-              </div>
-
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">Kualifikasi & Requirement Spesifik *</label>
-                <textarea
-                  rows={2}
-                  required
-                  value={vacRequirements}
-                  onChange={(e) => setVacRequirements(e.target.value)}
-                  placeholder="Contoh: S1 Teknik Informatika, Min. 3 tahun pengalaman..."
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                />
-              </div>
-
-              <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-2">
-                <label className="font-bold text-slate-800 block text-[11px]">
-                  Pilih Channel Distribusi Publikasi Otomatis:
-                </label>
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  {(['Jobstreet', 'LinkedIn', 'Glints', 'Kalibrr', 'Website Karir'] as JobPostingChannel[]).map((ch) => (
-                    <label key={ch} className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={vacChannels.includes(ch)}
-                        onChange={(e) => {
-                          if (e.target.checked) setVacChannels((prev) => [...prev, ch]);
-                          else setVacChannels((prev) => prev.filter((item) => item !== ch));
-                        }}
-                        className="rounded border-slate-300 text-blue-700 focus:ring-blue-600"
-                      />
-                      <span className="text-slate-800 font-medium">{ch}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              <div className="pt-3 border-t border-slate-200 flex justify-end gap-2">
+            {/* Modal Sub-Tabs: Form Wording vs Live Preview Share */}
+            <div className="px-5 pt-3 pb-0 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-3 shrink-0 flex-wrap">
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => setIsVacancyModalOpen(false)}
-                  className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-semibold"
+                  onClick={() => setVacModalTab('form')}
+                  className={`flex items-center gap-2 px-3.5 py-2 text-xs font-bold border-b-2 transition-all ${
+                    vacModalTab === 'form'
+                      ? 'border-blue-600 text-blue-600 bg-white rounded-t-lg shadow-2xs'
+                      : 'border-transparent text-slate-600 hover:text-slate-900'
+                  }`}
                 >
-                  Batal
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>1. Penyesuaian Wording & Saluran</span>
                 </button>
                 <button
-                  type="submit"
-                  className="px-4 py-2 bg-blue-700 hover:bg-blue-800 text-white rounded-lg font-semibold shadow-2xs flex items-center gap-1.5"
+                  type="button"
+                  onClick={() => setVacModalTab('preview')}
+                  className={`flex items-center gap-2 px-3.5 py-2 text-xs font-bold border-b-2 transition-all ${
+                    vacModalTab === 'preview'
+                      ? 'border-blue-600 text-blue-600 bg-white rounded-t-lg shadow-2xs'
+                      : 'border-transparent text-slate-600 hover:text-slate-900'
+                  }`}
                 >
-                  <Send className="w-3.5 h-3.5" />
-                  <span>Publikasikan & Broadcast</span>
+                  <Eye className="w-3.5 h-3.5" />
+                  <span>2. Preview Share Eksternal</span>
+                  <span className="text-[10px] bg-blue-100 text-blue-700 font-mono px-1.5 py-0.2 rounded-full">
+                    {vacChannels.length} Portal
+                  </span>
                 </button>
               </div>
-            </form>
+              {vacModalTab === 'preview' && (
+                <div className="flex items-center gap-1.5 pb-2 text-[11px] text-slate-500">
+                  <span className="font-semibold text-slate-700">Simulasi:</span>
+                  {(['LinkedIn', 'Jobstreet', 'Website Karir'] as const).map((portal) => (
+                    <button
+                      key={portal}
+                      type="button"
+                      onClick={() => setVacPreviewPortal(portal)}
+                      className={`px-2 py-0.5 rounded text-[10px] font-semibold transition-colors ${
+                        vacPreviewPortal === portal
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
+                      }`}
+                    >
+                      {portal}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Modal Body (Scrollable) */}
+            <div className="p-5 overflow-y-auto space-y-4 text-xs flex-1">
+              {vacModalTab === 'form' ? (
+                <div className="space-y-4">
+                  {/* Context notice */}
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl flex items-start gap-2.5 text-blue-900 text-xs">
+                    <Sparkles className="w-4 h-4 text-blue-700 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-bold block">Integrasi Otomatis dari Dokumen FPTK</span>
+                      <p className="text-[11px] text-blue-800/90 mt-0.5 leading-relaxed">
+                        Data posisi, departemen, jenjang, dan uraian tugas telah terisi otomatis dari FPTK. Anda dapat memperhalus redaksi kata (wording) agar sesuai kebutuhan publikasi luar tanpa membocorkan kerahasiaan atau formasi internal.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Form fields */}
+                  <div>
+                    <label className="font-semibold text-slate-700 block mb-1">
+                      Judul Posisi Lowongan Eksternal (Public Job Title) *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={vacTitle}
+                      onChange={(e) => setVacTitle(e.target.value)}
+                      placeholder="Contoh: Senior Fullstack Engineer / IT Specialist"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg font-medium focus:ring-1 focus:ring-blue-600 focus:outline-none"
+                    />
+                    <p className="text-[10px] text-slate-400 mt-1">
+                      * Anda dapat memoles judul posisi publik (misal menambahkan spesialisasi) agar lebih menarik bagi pelamar eksternal.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="font-semibold text-slate-700 block mb-1">Departemen / Divisi</label>
+                      <input
+                        type="text"
+                        required
+                        value={vacDept}
+                        onChange={(e) => setVacDept(e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-slate-50 font-medium"
+                      />
+                    </div>
+                    <div>
+                      <label className="font-semibold text-slate-700 block mb-1">Status Hubungan Kerja</label>
+                      <select
+                        value={vacType}
+                        onChange={(e) => setVacType(e.target.value as any)}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white"
+                      >
+                        <option value="Tetap">Tetap (PKWTT)</option>
+                        <option value="Kontrak">Kontrak (PKWT)</option>
+                        <option value="Magang">Magang</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="font-semibold text-slate-700 block mb-1">Formasi (Kebutuhan)</label>
+                      <input
+                        type="number"
+                        min={1}
+                        required
+                        value={vacOpenings}
+                        onChange={(e) => setVacOpenings(Number(e.target.value))}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold"
+                      />
+                    </div>
+                  </div>
+
+                  {/* SALARY MASKING & SHARING CONTROLS */}
+                  <div className="bg-amber-50/70 border border-amber-200 rounded-xl p-3.5 space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5">
+                        <Lock className="w-4 h-4 text-amber-700 shrink-0" />
+                        <span className="font-bold text-amber-950 text-xs">
+                          Kisaran Gaji & Kebijakan Kerahasiaan (Compensation Privacy)
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-bold bg-amber-200/80 text-amber-900 px-2 py-0.5 rounded-full">
+                        Restricted Access
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
+                      <div>
+                        <label className="font-semibold text-slate-700 block mb-1 text-[11px]">
+                          Kisaran Gaji Internal (dari FPTK)
+                        </label>
+                        <div className="relative">
+                          <input
+                            type={isSalaryMasked ? 'password' : 'text'}
+                            value={vacSalary}
+                            onChange={(e) => setVacSalary(e.target.value)}
+                            className="w-full pl-3 pr-24 py-2 border border-slate-300 rounded-lg font-mono font-semibold bg-white focus:ring-1 focus:ring-blue-600 focus:outline-none"
+                            placeholder="Rp 15.000.000 - Rp 20.000.000"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setIsSalaryMasked(!isSalaryMasked)}
+                            className="absolute right-1.5 top-1/2 -translate-y-1/2 px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-600 text-[10px] font-semibold flex items-center gap-1 transition-colors"
+                          >
+                            {isSalaryMasked ? (
+                              <>
+                                <Eye className="w-3 h-3 text-blue-600" />
+                                <span>Intip</span>
+                              </>
+                            ) : (
+                              <>
+                                <EyeOff className="w-3 h-3 text-slate-600" />
+                                <span>Masking</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Checkbox Opsi Range Gaji Tampil Saat Share */}
+                      <div className="pt-2 sm:pt-4">
+                        <label className="flex items-start gap-2.5 p-2.5 rounded-lg border border-amber-300/80 bg-white cursor-pointer hover:bg-amber-50/50 transition-colors shadow-2xs">
+                          <input
+                            type="checkbox"
+                            checked={showSalaryPublicly}
+                            onChange={(e) => setShowSalaryPublicly(e.target.checked)}
+                            className="mt-0.5 w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                          />
+                          <div>
+                            <span className="font-bold text-slate-800 block text-xs">
+                              Tampilkan Kisaran Gaji di Publikasi Eksternal
+                            </span>
+                            <span className="text-[10px] text-slate-500 block leading-tight mt-0.5">
+                              {showSalaryPublicly
+                                ? 'Kisaran angka gaji AKAN terlihat publik di Jobstreet/LinkedIn.'
+                                : 'Gaji dirahasiakan; publik hanya melihat "Gaji Kompetitif (Confidential)".'}
+                            </span>
+                          </div>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="font-semibold text-slate-700 block mb-1">
+                      Deskripsi Pekerjaan & Tanggung Jawab Eksternal *
+                    </label>
+                    <textarea
+                      rows={3}
+                      required
+                      value={vacDescription}
+                      onChange={(e) => setVacDescription(e.target.value)}
+                      placeholder="Uraikan tanggung jawab posisi ini untuk publik..."
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs leading-relaxed focus:ring-1 focus:ring-blue-600 focus:outline-none"
+                    />
+                    <p className="text-[10px] text-slate-400 mt-0.5">
+                      * Redaksi kalimat dapat disesuaikan dengan bahasa promosi karir yang menarik bagi talenta luar.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="font-semibold text-slate-700 block mb-1">
+                      Kualifikasi & Persyaratan Eksternal *
+                    </label>
+                    <textarea
+                      rows={3}
+                      required
+                      value={vacRequirements}
+                      onChange={(e) => setVacRequirements(e.target.value)}
+                      placeholder="Contoh: S1 Teknik Informatika, Min. 3 tahun pengalaman..."
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs leading-relaxed focus:ring-1 focus:ring-blue-600 focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                    <label className="font-bold text-slate-800 block text-xs">
+                      Pilih Portal Siar Eksternal (Multi-Channel Broadcast):
+                    </label>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs">
+                      {(['Jobstreet', 'LinkedIn', 'Glints', 'Kalibrr', 'Website Karir'] as JobPostingChannel[]).map((ch) => (
+                        <label
+                          key={ch}
+                          className={`flex items-center gap-2 p-2 rounded-lg border transition-colors cursor-pointer ${
+                            vacChannels.includes(ch)
+                              ? 'bg-blue-50 border-blue-300 text-blue-900 font-semibold'
+                              : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={vacChannels.includes(ch)}
+                            onChange={(e) => {
+                              if (e.target.checked) setVacChannels((prev) => [...prev, ch]);
+                              else setVacChannels((prev) => prev.filter((item) => item !== ch));
+                            }}
+                            className="rounded border-slate-300 text-blue-700 focus:ring-blue-600"
+                          />
+                          <span>{ch}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                /* LIVE PREVIEW SHARE EKSTERNAL */
+                <div className="space-y-4">
+                  {/* Security / Compliance Badge */}
+                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between gap-3 text-emerald-900 text-xs flex-wrap">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <div>
+                        <span className="font-bold">Pratinjau Publikasi Eksternal (External Candidate View)</span>
+                        <p className="text-[11px] text-emerald-800 mt-0.5">
+                          Berikut simulasi bagaimana iklan lowongan ini dilihat oleh publik di portal {vacPreviewPortal}.
+                        </p>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-bold bg-emerald-100 text-emerald-800 px-2.5 py-1 rounded-full border border-emerald-300">
+                      Siap Tayang
+                    </span>
+                  </div>
+
+                  {/* Public Job Card Mockup */}
+                  <div className="bg-white border-2 border-slate-200 rounded-2xl p-5 shadow-md space-y-4">
+                    {/* Header: Company & Job Title */}
+                    <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-4">
+                      <div className="flex items-start gap-3">
+                        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-700 to-indigo-800 text-white font-bold text-lg flex items-center justify-center shadow-md shrink-0">
+                          {safeTenant.code || 'HR'}
+                        </div>
+                        <div>
+                          <h2 className="text-base sm:text-lg font-bold text-slate-900 leading-tight">
+                            {vacTitle || 'Judul Posisi Lowongan'}
+                          </h2>
+                          <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-500 mt-1">
+                            <span className="font-semibold text-slate-700">{safeTenant.name}</span>
+                            <span>·</span>
+                            <span className="flex items-center gap-0.5 text-slate-500">
+                              <MapPin className="w-3 h-3" /> Jakarta (Hybrid / On-site)
+                            </span>
+                            <span>·</span>
+                            <span className="text-emerald-600 font-semibold flex items-center gap-1">
+                              <CheckCircle className="w-3 h-3" /> Terverifikasi
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full shrink-0">
+                        {vacPreviewPortal} Ad
+                      </span>
+                    </div>
+
+                    {/* Metadata Badges */}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="px-2.5 py-1 rounded-md bg-slate-100 text-slate-700 text-xs font-semibold flex items-center gap-1">
+                        <Briefcase className="w-3 h-3 text-slate-500" />
+                        {vacType} (Full-time)
+                      </span>
+                      <span className="px-2.5 py-1 rounded-md bg-slate-100 text-slate-700 text-xs font-semibold flex items-center gap-1">
+                        <Building2 className="w-3 h-3 text-slate-500" />
+                        {vacDept}
+                      </span>
+                      <span className="px-2.5 py-1 rounded-md bg-slate-100 text-slate-700 text-xs font-semibold flex items-center gap-1">
+                        <Clock className="w-3 h-3 text-slate-500" />
+                        Pengalaman: {vacExp}
+                      </span>
+                      <span className="px-2.5 py-1 rounded-md bg-slate-100 text-slate-700 text-xs font-semibold flex items-center gap-1">
+                        <Users className="w-3 h-3 text-slate-500" />
+                        Kebutuhan: {vacOpenings} Formasi
+                      </span>
+                    </div>
+
+                    {/* Salary Highlight or Masked Box */}
+                    <div
+                      className={`p-3.5 rounded-xl border ${
+                        showSalaryPublicly
+                          ? 'bg-emerald-50/70 border-emerald-200 text-emerald-900'
+                          : 'bg-slate-50 border-slate-200 text-slate-800'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          {showSalaryPublicly ? (
+                            <DollarSign className="w-4 h-4 text-emerald-600 shrink-0" />
+                          ) : (
+                            <Lock className="w-4 h-4 text-slate-500 shrink-0" />
+                          )}
+                          <span className="text-xs font-bold">
+                            {showSalaryPublicly ? 'Kisaran Gaji Bulanan Ditampilkan Publik:' : 'Kompensasi & Tunjangan:'}
+                          </span>
+                        </div>
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                            showSalaryPublicly
+                              ? 'bg-emerald-200/80 text-emerald-900'
+                              : 'bg-slate-200 text-slate-700'
+                          }`}
+                        >
+                          {showSalaryPublicly ? 'Publik' : 'Dirahasiakan'}
+                        </span>
+                      </div>
+                      <div className="mt-1.5 flex items-baseline gap-2 flex-wrap">
+                        <span
+                          className={`text-base font-extrabold ${
+                            showSalaryPublicly ? 'text-emerald-700 font-mono' : 'text-slate-800'
+                          }`}
+                        >
+                          {showSalaryPublicly ? vacSalary : 'Gaji Kompetitif (Confidential / Sesuai Pengalaman)'}
+                        </span>
+                        {showSalaryPublicly && (
+                          <span className="text-xs text-emerald-600 font-medium">+ BPJS, Asuransi Kesehatan & Tunjangan</span>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-slate-500 mt-1">
+                        {showSalaryPublicly
+                          ? '* Angka gaji tertera akan langsung terlihat oleh semua calon pelamar eksternal.'
+                          : '* Besaran penawaran akan dinegosiasikan pada tahap Offering berdasarkan hasil seleksi kompetensi.'}
+                      </p>
+                    </div>
+
+                    {/* Job Description */}
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-1.5">
+                        Tentang Pekerjaan & Tanggung Jawab
+                      </h4>
+                      <p className="text-xs text-slate-700 whitespace-pre-line leading-relaxed bg-slate-50/50 p-3 rounded-lg border border-slate-100">
+                        {vacDescription || 'Uraian pekerjaan belum ditentukan.'}
+                      </p>
+                    </div>
+
+                    {/* Requirements */}
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-1.5">
+                        Kualifikasi & Persyaratan Kandidat
+                      </h4>
+                      <div className="text-xs text-slate-700 whitespace-pre-line leading-relaxed bg-slate-50/50 p-3 rounded-lg border border-slate-100">
+                        {vacRequirements || 'Persyaratan belum ditentukan.'}
+                      </div>
+                    </div>
+
+                    {/* Broadcast Channels Preview */}
+                    <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2 flex-wrap">
+                      <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                        <Share2 className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                        <span>Akan disiarkan ke:</span>
+                        <div className="flex items-center gap-1 flex-wrap">
+                          {vacChannels.map((ch) => (
+                            <span
+                              key={ch}
+                              className="text-[10px] font-semibold bg-blue-50 text-blue-700 px-2 py-0.5 rounded border border-blue-200"
+                            >
+                              {ch}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        className="px-4 py-2 bg-blue-700 text-white rounded-lg font-bold text-xs shadow-xs pointer-events-none opacity-90"
+                      >
+                        Lamar Pekerjaan Ini (Mock CTA)
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-5 py-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsVacancyModalOpen(false)}
+                className="px-4 py-2 bg-white hover:bg-slate-100 text-slate-700 rounded-lg text-xs font-semibold border border-slate-300 transition-colors"
+              >
+                Batal
+              </button>
+
+              <div className="flex items-center gap-2">
+                {vacModalTab === 'form' ? (
+                  <button
+                    type="button"
+                    onClick={() => setVacModalTab('preview')}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-white hover:bg-slate-100 text-blue-700 rounded-lg text-xs font-semibold border border-blue-300 shadow-2xs transition-colors"
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                    <span>Lihat Preview Share Eksternal →</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setVacModalTab('form')}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-white hover:bg-slate-100 text-slate-700 rounded-lg text-xs font-semibold border border-slate-300 shadow-2xs transition-colors"
+                  >
+                    <span>← Kembali Edit Wording</span>
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    addVacancy({
+                      title: vacTitle,
+                      department: vacDept,
+                      employmentType: vacType,
+                      grade: vacGrade,
+                      openings: vacOpenings,
+                      minExperience: vacExp,
+                      salaryRange: showSalaryPublicly ? vacSalary : 'Gaji Kompetitif (Confidential)',
+                      rawInternalSalary: vacSalary,
+                      showSalaryPublicly,
+                      requirements: vacRequirements,
+                      description: vacDescription,
+                      externalDescription: vacDescription,
+                      activeChannels: vacChannels,
+                      status: 'Buka',
+                      jobRequisitionId: vacLinkedReqId || undefined,
+                    });
+                    setIsVacancyModalOpen(false);
+                    alert(`Lowongan '${vacTitle}' berhasil diproses dan disebarkan ke ${vacChannels.length} portal eksternal!`);
+                  }}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-blue-700 hover:bg-blue-800 text-white rounded-lg text-xs font-semibold shadow-2xs transition-colors"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  <span>Publikasikan & Broadcast ke {vacChannels.length} Portal</span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

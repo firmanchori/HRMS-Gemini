@@ -530,6 +530,9 @@ export interface JobVacancy {
   activeChannels?: JobPostingChannel[];
   channelBroadcastStatus?: { [key in JobPostingChannel]?: 'Terkirim' | 'Aktif' | 'Nonaktif' };
   applicantsCount?: number;
+  showSalaryPublicly?: boolean;
+  rawInternalSalary?: string;
+  externalDescription?: string;
 }
 
 // 3. Incoming & Resume Parsing Data
