@@ -1092,7 +1092,7 @@ export const RecruitmentManagement: React.FC = () => {
           </div>
         </div>
 
-        {/* Card 2: Lowongan & Sourcing */}
+        {/* Card 2: Lowongan Terpublikasi (Publish) */}
         <div
           onClick={() => setActiveTab('sourcing')}
           className={`cursor-pointer rounded-xl p-3 border transition-all hover:shadow-xs flex flex-col justify-between ${
@@ -1102,17 +1102,17 @@ export const RecruitmentManagement: React.FC = () => {
           }`}
         >
           <div className="flex items-center justify-between gap-1 mb-1.5">
-            <span className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">2. Lowongan Siar</span>
+            <span className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">2. Lowongan Terpublikasi</span>
             <div className="w-6 h-6 rounded-md bg-indigo-100 flex items-center justify-center text-indigo-700 shrink-0">
               <Globe className="w-3.5 h-3.5" />
             </div>
           </div>
           <div>
             <div className="text-lg font-bold text-slate-900 font-mono">
-              {openVacanciesCount} <span className="text-xs font-normal text-slate-500">Lowongan</span>
+              {openVacanciesCount} <span className="text-xs font-normal text-slate-500">Lowongan Aktif</span>
             </div>
             <div className="mt-1 text-[10px] text-slate-500 truncate">
-              5 Portal Siar Terkoneksi
+              Multi-Portal Terpublikasi
             </div>
           </div>
         </div>
@@ -1470,7 +1470,7 @@ export const RecruitmentManagement: React.FC = () => {
             return (
               <>
                 {/* 1. TAMPILAN MOBILE & TABLET (RESPONSIVE CARDS) */}
-                <div className="block lg:hidden space-y-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 xl:hidden">
                   {filtered.map((req) => (
                     <div
                       key={req.id}
@@ -1596,7 +1596,7 @@ export const RecruitmentManagement: React.FC = () => {
                 </div>
 
                 {/* 2. TAMPILAN DESKTOP (SPACIOUS DATA TABLE TANPA TOMBOL DETAIL KARENA KLIK ROW) */}
-                <div className="hidden lg:block bg-white border border-slate-200 rounded-xl shadow-2xs overflow-hidden">
+                <div className="hidden xl:block bg-white border border-slate-200 rounded-xl shadow-2xs overflow-hidden">
                   <div className="overflow-x-auto">
                     <table className="w-full text-left text-xs">
                       <thead className="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200 uppercase tracking-wider text-[11px]">
@@ -2966,7 +2966,7 @@ export const RecruitmentManagement: React.FC = () => {
                   <span className="text-xs uppercase tracking-wider">III. Struktur Organisasi, Supervisi & Tugas Utama</span>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-start">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 items-start">
                   <div>
                     <label className="font-semibold text-slate-700 block mb-1">
                       Bertanggung Jawab ke Divisi *
@@ -2983,42 +2983,7 @@ export const RecruitmentManagement: React.FC = () => {
                       ))}
                     </select>
                   </div>
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="font-semibold text-slate-700 block">
-                        Bertanggung Jawab ke Atasan *
-                      </label>
-                      <label className="flex items-center gap-1 cursor-pointer text-[10px] text-slate-600 font-medium select-none">
-                        <input
-                          type="checkbox"
-                          checked={fptkReportingWithDegree}
-                          onChange={(e) => {
-                            const checked = e.target.checked;
-                            setFptkReportingWithDegree(checked);
-                            const emp = companyEmployees.find((item) => item.id === fptkReportingEmployeeId);
-                            if (emp) {
-                              const nameToUse = checked ? emp.fullName : emp.rawName;
-                              setFptkReportingTitle(`${nameToUse} (${emp.position})`);
-                            }
-                          }}
-                          className="w-3 h-3 rounded border-slate-300 text-blue-600"
-                        />
-                        <span>Gunakan Gelar</span>
-                      </label>
-                    </div>
-                    <EmployeeSelectDropdown
-                      employees={companyEmployees}
-                      selectedId={fptkReportingEmployeeId}
-                      withDegree={fptkReportingWithDegree}
-                      onSelect={(emp) => {
-                        setFptkReportingEmployeeId(emp.id);
-                        const nameToUse = fptkReportingWithDegree ? emp.fullName : emp.rawName;
-                        setFptkReportingTitle(`${nameToUse} (${emp.position})`);
-                        if (emp.department) setFptkReportingDept(emp.department);
-                      }}
-                      placeholder="-- Pilih Karyawan Atasan --"
-                    />
-                  </div>
+
                   <div>
                     <label className="font-semibold text-slate-700 block mb-1">
                       Jumlah Staf yang Disupervisi
@@ -3036,6 +3001,44 @@ export const RecruitmentManagement: React.FC = () => {
                         Staf
                       </span>
                     </div>
+                  </div>
+
+                  {/* Bertanggung Jawab ke Atasan: Full Row on Tablet & Desktop for generous breathing room */}
+                  <div className="md:col-span-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
+                      <label className="font-semibold text-slate-700 block text-xs">
+                        Bertanggung Jawab ke Atasan *
+                      </label>
+                      <label className="inline-flex items-center gap-1.5 cursor-pointer text-[10px] text-slate-600 font-semibold select-none bg-slate-100 hover:bg-slate-200/80 px-2.5 py-0.5 rounded-md border border-slate-200 transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={fptkReportingWithDegree}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            setFptkReportingWithDegree(checked);
+                            const emp = companyEmployees.find((item) => item.id === fptkReportingEmployeeId);
+                            if (emp) {
+                              const nameToUse = checked ? emp.fullName : emp.rawName;
+                              setFptkReportingTitle(`${nameToUse} (${emp.position})`);
+                            }
+                          }}
+                          className="w-3.5 h-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span>Gunakan Gelar</span>
+                      </label>
+                    </div>
+                    <EmployeeSelectDropdown
+                      employees={companyEmployees}
+                      selectedId={fptkReportingEmployeeId}
+                      withDegree={fptkReportingWithDegree}
+                      onSelect={(emp) => {
+                        setFptkReportingEmployeeId(emp.id);
+                        const nameToUse = fptkReportingWithDegree ? emp.fullName : emp.rawName;
+                        setFptkReportingTitle(`${nameToUse} (${emp.position})`);
+                        if (emp.department) setFptkReportingDept(emp.department);
+                      }}
+                      placeholder="-- Pilih Karyawan Atasan (Foto, Nama, NIK, Jabatan) --"
+                    />
                   </div>
                 </div>
 
