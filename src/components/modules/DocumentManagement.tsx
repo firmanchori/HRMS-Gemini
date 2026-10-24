@@ -48,6 +48,7 @@ import {
   NumberingTokenInfo,
 } from '../../utils/docxTemplateHelper';
 import { formatRupiah, getTERCategory } from '../../utils/taxCalculator';
+import { ScrollableTabNav } from '../common/ScrollableTabNav';
 
 export const DocumentManagement: React.FC = () => {
   const {
@@ -62,12 +63,19 @@ export const DocumentManagement: React.FC = () => {
     deleteDocumentTemplate,
     moduleSettings,
     updateModuleSettings,
+    updateTenant,
+    updateTenantBranding,
   } = useHrms();
 
   const [activeTab, setActiveTab] = useState<'arsip' | 'upload_docx' | 'templates' | 'daftar_tag' | 'pengaturan'>('arsip');
   const [selectedDoc, setSelectedDoc] = useState<OfficialDocument | null>(null);
   const [isGenerateModalOpen, setIsGenerateModalOpen] = useState(false);
   const [searchDocQuery, setSearchDocQuery] = useState('');
+
+  // Branding states for Kop Surat Logo & App Favicon
+  const [docLogoInput, setDocLogoInput] = useState(currentTenant.documentLogoUrl || '');
+  const [appFaviconInput, setAppFaviconInput] = useState(currentTenant.appFaviconUrl || '');
+  const [brandingSaved, setBrandingSaved] = useState(false);
 
   // Simulator states for Tab Daftar Tag
   const [testNumberingFormula, setTestNumberingFormula] = useState('{SEQ}/HRD-PKWT/{TENANT_CODE}/{ROMAN_MONTH}/{YEAR}');
@@ -428,8 +436,8 @@ export const DocumentManagement: React.FC = () => {
         </div>
       )}
 
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-200 pb-4">
+      {/* Row 1: Header Title & Main Action */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
         <div>
           <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
             <FileText className="w-5 h-5 text-indigo-600" />
@@ -440,111 +448,139 @@ export const DocumentManagement: React.FC = () => {
           </p>
         </div>
 
-        {/* Tab Controls & Token Glossary Quick Trigger */}
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2 shrink-0">
           <button
             type="button"
             onClick={() => setActiveTab('daftar_tag')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 font-bold rounded-md border text-xs transition-colors shadow-2xs ${
+            className={`flex items-center gap-1.5 px-3 py-2 font-bold rounded-md border text-xs transition-colors shadow-2xs ${
               activeTab === 'daftar_tag'
                 ? 'bg-indigo-600 text-white border-indigo-700'
-                : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border-indigo-200'
+                : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200'
             }`}
             title="Buka Menu Daftar Tag Variabel DOCX & Token Formula Lengkap"
           >
-            <HelpCircle className="w-3.5 h-3.5" />
+            <HelpCircle className="w-3.5 h-3.5 text-indigo-600" />
             <span>Kamus Tag & Token</span>
-            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${activeTab === 'daftar_tag' ? 'bg-indigo-800 text-white' : 'bg-indigo-600 text-white'}`}>
-              24+13
-            </span>
-          </button>
-
-          <div className="inline-flex rounded-md border border-slate-200 bg-white p-0.5 text-xs font-semibold shadow-2xs">
-            <button
-              onClick={() => setActiveTab('arsip')}
-              className={`px-3 py-1.5 rounded transition-all flex items-center gap-1.5 ${
-                activeTab === 'arsip' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <FileCheck2 className="w-3.5 h-3.5" />
-              <span>Arsip Dokumen ({documents.length})</span>
-            </button>
-          <button
-            onClick={() => setActiveTab('upload_docx')}
-            className={`px-3 py-1.5 rounded transition-all flex items-center gap-1.5 ${
-              activeTab === 'upload_docx' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <FileUp className="w-3.5 h-3.5" />
-            <span>Upload Template DOCX</span>
-            {documentTemplates.some((t) => t.sourceType === 'uploaded_docx') && (
-              <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-            )}
           </button>
           <button
-            onClick={() => setActiveTab('templates')}
-            className={`px-3 py-1.5 rounded transition-all flex items-center gap-1.5 ${
-              activeTab === 'templates' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
-            }`}
+            type="button"
+            onClick={() => setIsGenerateModalOpen(true)}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md text-xs font-semibold shadow-xs transition-colors"
           >
-            <Edit3 className="w-3.5 h-3.5" />
-            <span>Kop & Pola Penomoran</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('daftar_tag')}
-            className={`px-3 py-1.5 rounded transition-all flex items-center gap-1.5 ${
-              activeTab === 'daftar_tag' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Daftar Tag & Token (DOCX & Formula)</span>
-            <span
-              className={`text-[9px] px-1.5 py-0.2 rounded-full font-bold ${
-                activeTab === 'daftar_tag' ? 'bg-indigo-700 text-white' : 'bg-indigo-100 text-indigo-700'
-              }`}
-            >
-              Lengkap
-            </span>
-          </button>
-          <button
-            onClick={() => setActiveTab('pengaturan')}
-            className={`px-3 py-1.5 rounded transition-all flex items-center gap-1.5 ${
-              activeTab === 'pengaturan' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <Settings className="w-3.5 h-3.5" />
-            <span>Pengaturan Legal</span>
+            <Plus className="w-3.5 h-3.5" />
+            <span>+ Terbitkan Dokumen Baru</span>
           </button>
         </div>
       </div>
-    </div>
+
+      {/* Row 2: Standard Sub-Menu Navigation Bar with Icons (Not Parallel to Title) */}
+      <ScrollableTabNav className="border-b border-slate-200" containerClassName="pt-1">
+        <button
+          onClick={() => setActiveTab('arsip')}
+          className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
+            activeTab === 'arsip'
+              ? 'border-slate-900 text-slate-950 font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+          }`}
+        >
+          <FileCheck2 className="w-3.5 h-3.5" />
+          <span>Arsip Dokumen</span>
+          <span
+            className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full transition-colors ${
+              activeTab === 'arsip'
+                ? 'bg-slate-900 text-white'
+                : 'bg-slate-100 text-slate-600'
+            }`}
+          >
+            {documents.length}
+          </span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('upload_docx')}
+          className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
+            activeTab === 'upload_docx'
+              ? 'border-slate-900 text-slate-950 font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+          }`}
+        >
+          <FileUp className="w-3.5 h-3.5" />
+          <span>Upload Template DOCX</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('templates')}
+          className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
+            activeTab === 'templates'
+              ? 'border-slate-900 text-slate-950 font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+          }`}
+        >
+          <Edit3 className="w-3.5 h-3.5" />
+          <span>Kop & Pola Penomoran</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('daftar_tag')}
+          className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
+            activeTab === 'daftar_tag'
+              ? 'border-slate-900 text-slate-950 font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+          }`}
+        >
+          <Sparkles className="w-3.5 h-3.5" />
+          <span>Daftar Tag & Token Formula</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('pengaturan')}
+          className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
+            activeTab === 'pengaturan'
+              ? 'border-slate-900 text-slate-950 font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+          }`}
+        >
+          <Settings className="w-3.5 h-3.5" />
+          <span>Pengaturan Legal & Logo</span>
+        </button>
+      </ScrollableTabNav>
 
       {/* TAB 1: ARSIP DOKUMEN TERBIT */}
       {activeTab === 'arsip' && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between gap-4 flex-wrap">
-            <div className="relative">
-              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+          <div className="bg-white p-3 sm:p-3.5 border border-slate-200 rounded-xl shadow-xs space-y-2.5 sm:space-y-0 sm:flex sm:items-center sm:justify-between sm:gap-3">
+            <div className="relative w-full sm:max-w-md">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
               <input
                 type="text"
                 placeholder="Cari nomor dokumen, judul surat, nama..."
                 value={searchDocQuery}
                 onChange={(e) => setSearchDocQuery(e.target.value)}
-                className="pl-8 pr-3 py-1.5 text-xs bg-white border border-slate-300 rounded-md focus:ring-1 focus:ring-indigo-500 w-72"
+                className="w-full pl-9 pr-8 py-2 text-xs bg-slate-50/70 focus:bg-white border border-slate-300 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-indigo-500 transition-all font-medium text-slate-800 placeholder-slate-400"
               />
+              {searchDocQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchDocQuery('')}
+                  className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600"
+                  title="Hapus pencarian"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
               <button
                 onClick={() => setActiveTab('upload_docx')}
-                className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md text-xs font-semibold transition-colors"
+                className="inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition-colors shrink-0"
               >
                 <Upload className="w-3.5 h-3.5 text-slate-500" />
                 <span>+ Upload Template DOCX</span>
               </button>
               <button
                 onClick={() => setIsGenerateModalOpen(true)}
-                className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md text-xs font-semibold shadow-xs transition-colors"
+                className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors shrink-0"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>Terbitkan Dokumen Baru</span>
@@ -603,24 +639,15 @@ export const DocumentManagement: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Card Footer: Date & Preview Action */}
+                  {/* Card Footer: Date */}
                   <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-100">
                     <div className="flex items-center gap-1.5 text-slate-500 text-[11px] font-mono">
                       <Calendar className="w-3.5 h-3.5 text-slate-400" />
                       <span>{doc.issueDate}</span>
                     </div>
-
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedDoc(doc);
-                      }}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 rounded-md border border-indigo-200 transition-colors"
-                    >
-                      <Eye className="w-3.5 h-3.5" />
-                      <span>Preview Dokumen QR</span>
-                    </button>
+                    <span className="text-[10px] font-semibold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">
+                      Klik baris untuk preview
+                    </span>
                   </div>
                 </div>
               );
@@ -640,7 +667,6 @@ export const DocumentManagement: React.FC = () => {
                     <th className="py-2.5 px-3 font-semibold text-center">Tanggal Terbit</th>
                     <th className="py-2.5 px-3 font-semibold">Penanda Tangan</th>
                     <th className="py-2.5 px-3 font-semibold text-center">Status</th>
-                    <th className="py-2.5 px-3 font-semibold text-center">Aksi</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -705,15 +731,6 @@ export const DocumentManagement: React.FC = () => {
                           <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
                             {doc.status}
                           </span>
-                        </td>
-                        <td className="py-2.5 px-3 text-center">
-                          <button
-                            onClick={() => setSelectedDoc(doc)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-indigo-600 hover:bg-indigo-50 border border-indigo-200 rounded transition-colors"
-                          >
-                            <Eye className="w-3.5 h-3.5" />
-                            <span>Preview SK</span>
-                          </button>
                         </td>
                       </tr>
                     );
@@ -1992,59 +2009,256 @@ PIHAK PERTAMA memberikan upah pokok sebesar {{gaji_pokok}} ({{gaji_terbilang}}) 
         </div>
       )}
 
-      {/* TAB 5: PENGATURAN LEGAL & QR */}
+      {/* TAB 5: PENGATURAN LEGAL, LOGO DOKUMEN & APP FAVICON */}
       {activeTab === 'pengaturan' && (
-        <div className="bg-white p-6 border border-slate-200 rounded-lg max-w-2xl space-y-4 text-xs shadow-xs">
-          <div className="border-b border-slate-200 pb-3">
-            <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-              <Settings className="w-4 h-4 text-indigo-600" />
-              <span>Pengaturan Tata Kelola Dokumen & Enkripsi Tanda Tangan QR</span>
-            </h3>
-            <p className="text-xs text-slate-500">
-              Konfigurasi pejabat penanda tangan default dan verifikasi hash digital UU ITE No. 11/2008.
-            </p>
+        <div className="space-y-6 max-w-3xl">
+          {/* Section 1: Logo Kop Dokumen & App Favicon */}
+          <div className="bg-white p-6 border border-slate-200 rounded-xl space-y-5 text-xs shadow-xs">
+            <div className="border-b border-slate-200 pb-3">
+              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <Building className="w-4 h-4 text-indigo-600" />
+                <span>Pengaturan Logo Dokumen Resmi & App Favicon</span>
+              </h3>
+              <p className="text-xs text-slate-500">
+                Kelola logo yang tercetak pada Kop Surat Resmi (SK, Surat Promosi/Demosi, Kontrak Kerja, Slip Gaji) dan icon browser favicon.
+              </p>
+            </div>
+
+            {/* Sub-section: Logo Dokumen Resmi */}
+            <div className="space-y-3 p-4 bg-slate-50/80 rounded-lg border border-slate-200">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <label className="font-bold text-slate-800 block text-xs">
+                    Logo Kop Dokumen Resmi (Untuk SK, Kontrak & Slip Gaji)
+                  </label>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Rekomendasi format PNG transparan atau SVG resolusi tinggi minimal 200x200 px.
+                  </p>
+                </div>
+                {docLogoInput ? (
+                  <img
+                    src={docLogoInput}
+                    alt="Preview Logo Dokumen"
+                    className="w-14 h-14 rounded-lg object-contain bg-white border border-slate-200 p-1 shadow-2xs shrink-0"
+                  />
+                ) : (
+                  <div className="w-14 h-14 rounded-lg bg-indigo-700 text-white font-bold text-xl flex items-center justify-center shrink-0 shadow-2xs">
+                    {currentTenant.logoText || 'N'}
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <input
+                  type="text"
+                  placeholder="Masukkan URL gambar logo (https://... atau data:image/...)"
+                  value={docLogoInput}
+                  onChange={(e) => setDocLogoInput(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded font-mono text-xs bg-white text-slate-900"
+                />
+
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[11px] text-slate-500 font-medium">Pilih Preset Logo:</span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setDocLogoInput('https://images.unsplash.com/photo-1599305445671-ac291c95aaa9?w=200&h=200&fit=crop')
+                    }
+                    className="px-2 py-0.5 rounded border border-slate-200 bg-white hover:bg-slate-100 text-[11px] text-slate-700"
+                  >
+                    Tech Corporate (Blue)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setDocLogoInput('https://images.unsplash.com/photo-1516876437184-593fda40c7ce?w=200&h=200&fit=crop')
+                    }
+                    className="px-2 py-0.5 rounded border border-slate-200 bg-white hover:bg-slate-100 text-[11px] text-slate-700"
+                  >
+                    Logistics Holding (Navy)
+                  </button>
+                  <label className="cursor-pointer px-2.5 py-0.5 rounded border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-[11px] text-indigo-700 font-semibold">
+                    <span>Unggah File Gambar...</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = () => {
+                            if (reader.result) setDocLogoInput(reader.result as string);
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
+              </div>
+
+              {/* Preview Kop Surat Mini */}
+              <div className="p-3 bg-white border border-slate-200 rounded-lg">
+                <span className="text-[10px] font-bold text-slate-400 block uppercase tracking-wider mb-2">
+                  Preview Tampilan Kop Surat Resmi
+                </span>
+                <div className="border-b-2 border-slate-900 pb-2.5 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    {docLogoInput ? (
+                      <img
+                        src={docLogoInput}
+                        alt="Logo Preview"
+                        className="w-10 h-10 rounded object-contain border border-slate-200 p-0.5"
+                      />
+                    ) : (
+                      <div className="w-10 h-10 rounded bg-indigo-700 text-white font-bold text-sm flex items-center justify-center">
+                        {currentTenant.logoText || 'N'}
+                      </div>
+                    )}
+                    <div>
+                      <div className="font-bold text-xs uppercase tracking-wide text-slate-900">
+                        {currentTenant.name}
+                      </div>
+                      <div className="text-[10px] text-slate-500">
+                        Gedung Menara Palma Lantai 18, {currentTenant.city} · NPWP: {currentTenant.npwp}
+                      </div>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-mono text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
+                    Kop Resmi Sah
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Sub-section: App Favicon */}
+            <div className="space-y-3 p-4 bg-slate-50/80 rounded-lg border border-slate-200">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <label className="font-bold text-slate-800 block text-xs">
+                    App Favicon (Icon Tab Browser & PWA)
+                  </label>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Icon ukuran persegi (32x32 atau 64x64 px) yang muncul di samping judul tab browser.
+                  </p>
+                </div>
+                {appFaviconInput ? (
+                  <img
+                    src={appFaviconInput}
+                    alt="Favicon Preview"
+                    className="w-8 h-8 rounded-md object-contain bg-white border border-slate-200 p-0.5 shadow-2xs shrink-0"
+                  />
+                ) : (
+                  <div className="w-8 h-8 rounded-md bg-indigo-600 text-white font-bold text-xs flex items-center justify-center shrink-0">
+                    {currentTenant.code[0] || 'N'}
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <input
+                  type="text"
+                  placeholder="Masukkan URL favicon browser (https://... atau data:image/...)"
+                  value={appFaviconInput}
+                  onChange={(e) => setAppFaviconInput(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded font-mono text-xs bg-white text-slate-900"
+                />
+
+                {/* Simulated Browser Tab */}
+                <div className="p-2.5 bg-slate-900 rounded-lg flex items-center gap-2">
+                  <span className="text-[10px] text-slate-400 font-mono">Simulasi Tab Browser:</span>
+                  <div className="flex items-center gap-1.5 px-3 py-1 bg-white rounded-t-md text-slate-800 text-[11px] font-medium shadow-xs">
+                    {appFaviconInput ? (
+                      <img src={appFaviconInput} alt="" className="w-4 h-4 rounded-xs object-contain" />
+                    ) : (
+                      <div className="w-4 h-4 rounded-xs bg-indigo-600 text-white text-[9px] font-bold flex items-center justify-center">
+                        N
+                      </div>
+                    )}
+                    <span>{currentTenant.name} - NusaHR Portal</span>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
 
-          <div>
-            <label className="font-semibold text-slate-700 block mb-1">
-              Jabatan Penanda Tangan Default
-            </label>
-            <input
-              type="text"
-              value={defaultSigneeRole}
-              onChange={(e) => setDefaultSigneeRole(e.target.value)}
-              className="w-full p-2 border border-slate-300 rounded font-semibold"
-            />
-          </div>
+          {/* Section 2: Tata Kelola Legal & QR Watermark */}
+          <div className="bg-white p-6 border border-slate-200 rounded-xl space-y-4 text-xs shadow-xs">
+            <div className="border-b border-slate-200 pb-3">
+              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                <span>Tata Kelola Pejabat Penanda Tangan & QR UU ITE</span>
+              </h3>
+              <p className="text-xs text-slate-500">
+                Konfigurasi penanda tangan default dan verifikasi hash digital UU ITE No. 11/2008.
+              </p>
+            </div>
 
-          <div className="flex items-center gap-2 pt-2">
-            <input
-              type="checkbox"
-              id="qrCheck"
-              checked={enableWatermark}
-              onChange={(e) => setEnableWatermark(e.target.checked)}
-              className="w-4 h-4 text-indigo-600 rounded"
-            />
-            <label htmlFor="qrCheck" className="text-slate-700 font-medium cursor-pointer">
-              Sematkan Watermark QR Hash Verification otomatis pada setiap halaman PDF
-            </label>
-          </div>
+            <div>
+              <label className="font-semibold text-slate-700 block mb-1">
+                Jabatan Penanda Tangan Default
+              </label>
+              <input
+                type="text"
+                value={defaultSigneeRole}
+                onChange={(e) => setDefaultSigneeRole(e.target.value)}
+                className="w-full p-2 border border-slate-300 rounded font-semibold text-slate-900"
+              />
+            </div>
 
-          <div className="flex justify-end pt-3 border-t border-slate-200">
-            <button
-              onClick={handleSaveSettings}
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-semibold shadow-xs"
-            >
-              Simpan Pengaturan
-            </button>
+            <div className="flex items-center gap-2 pt-2">
+              <input
+                type="checkbox"
+                id="qrCheck"
+                checked={enableWatermark}
+                onChange={(e) => setEnableWatermark(e.target.checked)}
+                className="w-4 h-4 text-indigo-600 rounded"
+              />
+              <label htmlFor="qrCheck" className="text-slate-700 font-medium cursor-pointer">
+                Sematkan Watermark QR Hash Verification otomatis pada setiap halaman PDF
+              </label>
+            </div>
+
+            <div className="flex items-center justify-between pt-4 border-t border-slate-200">
+              {brandingSaved && (
+                <span className="text-emerald-700 font-semibold text-xs animate-in zoom-in-50">
+                  ✓ Pengaturan legal, logo dokumen resmi, dan favicon berhasil disimpan!
+                </span>
+              )}
+              <div className="ml-auto">
+                <button
+                  type="button"
+                  onClick={() => {
+                    updateTenantBranding(docLogoInput, appFaviconInput);
+                    handleSaveSettings();
+                    setBrandingSaved(true);
+                    setTimeout(() => setBrandingSaved(false), 3000);
+                  }}
+                  className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold shadow-xs text-xs transition-colors"
+                >
+                  Simpan Seluruh Pengaturan & Branding
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
 
       {/* MODAL: TERBITKAN DOKUMEN BARU (DARI TEMPLATE / DOCX) */}
       {isGenerateModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-xl shadow-2xl max-w-xl w-full border border-slate-200 overflow-hidden my-6">
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setIsGenerateModalOpen(false);
+            }
+          }}
+        >
+          <div
+            className="bg-white rounded-xl shadow-2xl max-w-xl w-full border border-slate-200 overflow-hidden my-6"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="px-5 py-3.5 bg-slate-900 text-white flex items-center justify-between">
               <div>
                 <h3 className="text-sm font-bold">Terbitkan Dokumen Resmi / Surat Keputusan</h3>
@@ -2167,8 +2381,18 @@ PIHAK PERTAMA memberikan upah pokok sebesar {{gaji_pokok}} ({{gaji_terbilang}}) 
 
       {/* MODAL: PREVIEW DOKUMEN RESMI & CETAK PDF */}
       {selectedDoc && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full border border-slate-200 overflow-hidden my-6 flex flex-col max-h-[92vh]">
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setSelectedDoc(null);
+            }
+          }}
+        >
+          <div
+            className="bg-white rounded-xl shadow-2xl max-w-3xl w-full border border-slate-200 overflow-hidden my-6 flex flex-col max-h-[92vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
             {/* Modal Header */}
             <div className="px-6 py-3.5 bg-slate-900 text-white flex items-center justify-between no-print shrink-0">
               <div className="flex items-center gap-2">
@@ -2178,26 +2402,19 @@ PIHAK PERTAMA memberikan upah pokok sebesar {{gaji_pokok}} ({{gaji_terbilang}}) 
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => window.print()}
-                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-xs font-semibold inline-flex items-center gap-1.5 shadow-xs transition-colors"
+                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-semibold inline-flex items-center gap-1.5 shadow-2xs transition-colors"
+                  title="Cetak Fisik Dokumen (Printer)"
                 >
                   <Printer className="w-3.5 h-3.5" />
-                  <span>Cetak / PDF</span>
+                  <span>Cetak</span>
                 </button>
                 <button
-                  onClick={() => {
-                    const blob = new Blob([selectedDoc.contentPreview], { type: 'text/plain;charset=utf-8' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `${selectedDoc.documentNumber.replace(/[\/\s]/g, '_')}.txt`;
-                    a.click();
-                    URL.revokeObjectURL(url);
-                  }}
-                  className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded text-xs font-semibold inline-flex items-center gap-1 transition-colors"
-                  title="Unduh naskah dokumen"
+                  onClick={() => window.print()}
+                  className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-900 border border-slate-300 rounded-lg text-xs font-semibold inline-flex items-center gap-1.5 shadow-2xs transition-colors"
+                  title="Unduh Naskah Dokumen Format PDF"
                 >
                   <Download className="w-3.5 h-3.5" />
-                  <span>Unduh File</span>
+                  <span>Unduh PDF</span>
                 </button>
                 <button onClick={() => setSelectedDoc(null)} className="text-slate-400 hover:text-white">
                   <X className="w-4 h-4" />
@@ -2208,19 +2425,31 @@ PIHAK PERTAMA memberikan upah pokok sebesar {{gaji_pokok}} ({{gaji_terbilang}}) 
             {/* Document Content Canvas */}
             <div className="p-8 space-y-6 text-slate-900 bg-white text-xs overflow-y-auto print:p-0">
               {/* Kop Surat Resmi */}
-              <div className="border-b-2 border-slate-900 pb-4 text-center space-y-1">
-                <div className="flex items-center justify-center gap-2 mb-1">
-                  <Building className="w-5 h-5 text-indigo-700" />
-                  <h1 className="text-lg font-bold text-slate-900 uppercase tracking-wide">
-                    {currentTenant.name}
-                  </h1>
+              <div className="border-b-2 border-slate-900 pb-4 flex items-center justify-between gap-4 text-left">
+                <div className="flex items-center gap-3">
+                  {currentTenant.documentLogoUrl ? (
+                    <img
+                      src={currentTenant.documentLogoUrl}
+                      alt={currentTenant.name}
+                      className="w-12 h-12 rounded-lg object-contain border border-slate-200 p-0.5 bg-white shadow-xs shrink-0"
+                    />
+                  ) : (
+                    <div className="w-12 h-12 rounded-lg bg-indigo-700 text-white flex items-center justify-center font-bold text-xl shadow-xs shrink-0 font-sans">
+                      {currentTenant.logoText || 'N'}
+                    </div>
+                  )}
+                  <div>
+                    <h1 className="text-base font-bold text-slate-900 uppercase tracking-wide">
+                      {currentTenant.name}
+                    </h1>
+                    <p className="text-[11px] text-slate-600">
+                      {currentTenant.address || `Gedung Menara Palma Lantai 18, Jl. HR Rasuna Said, ${currentTenant.city} 12950`}
+                    </p>
+                    <p className="text-[10px] text-slate-500 font-mono">
+                      Telp: +62 21 5566 7788 · Email: legal.hr@nusantara.id · NPWP: {currentTenant.npwp || '01.999.888.7-011.000'}
+                    </p>
+                  </div>
                 </div>
-                <p className="text-[11px] text-slate-600">
-                  {currentTenant.address || 'Gedung Menara Palma Lantai 18, Jl. HR Rasuna Said, Jakarta Selatan 12950'}
-                </p>
-                <p className="text-[10px] text-slate-500 font-mono">
-                  Telp: +62 21 5566 7788 · Email: legal.hr@nusantara.id · NPWP: {currentTenant.npwp || '01.999.888.7-011.000'}
-                </p>
               </div>
 
               {/* Judul & Nomor Surat */}
@@ -2262,8 +2491,18 @@ PIHAK PERTAMA memberikan upah pokok sebesar {{gaji_pokok}} ({{gaji_terbilang}}) 
       )}
       {/* MODAL 3: KATALOG LENGKAP DAFTAR TAG & TOKEN PENOMORAN / VARIABEL */}
       {isTokenGlossaryModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-950/60 backdrop-blur-xs animate-fadeIn">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-150">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-950/60 backdrop-blur-xs animate-fadeIn overflow-y-auto"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setIsTokenGlossaryModalOpen(false);
+            }
+          }}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
             {/* Modal Header */}
             <div className="p-4 sm:p-5 border-b border-slate-200 flex items-center justify-between bg-slate-50/80">
               <div className="flex items-center gap-2.5">

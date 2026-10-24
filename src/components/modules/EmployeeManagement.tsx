@@ -43,6 +43,7 @@ import { CurrencyInput } from '../common/CurrencyInput';
 import { ValidatedDateInput } from '../common/ValidatedDateInput';
 import { validateBirthDate, validateDateString } from '../../utils/dateValidator';
 import { OrgChartManagement } from './OrgChartManagement';
+import { ScrollableTabNav } from '../common/ScrollableTabNav';
 import { ProbationManagement } from './ProbationManagement';
 import { ContractRenewalManagement } from './ContractRenewalManagement';
 
@@ -194,14 +195,37 @@ export const EmployeeManagement: React.FC = () => {
     description?: string;
   } | null>(null);
 
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      alert('Mohon pilih file gambar yang valid (JPG, PNG, atau WEBP).');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Ukuran foto profil maksimal 5 MB.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        setNewAvatar(reader.result);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
   // Filtered employees
   const filteredEmployees = employees.filter((emp) => {
     const matchesSearch =
-      emp.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      emp.nik.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      emp.contractDocNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      emp.nikKtp.includes(searchQuery) ||
-      emp.position.toLowerCase().includes(searchQuery.toLowerCase());
+      (emp?.fullName || '').toLowerCase().includes((searchQuery || '').toLowerCase()) ||
+      (emp?.nik || '').toLowerCase().includes((searchQuery || '').toLowerCase()) ||
+      (emp?.contractDocNumber || '').toLowerCase().includes((searchQuery || '').toLowerCase()) ||
+      (emp?.nikKtp || '').includes(searchQuery || '') ||
+      (emp?.position || '').toLowerCase().includes((searchQuery || '').toLowerCase());
     const matchesType = filterType === 'all' || emp.employmentType === filterType;
     const matchesDept = filterDept === 'all' || emp.department === filterDept;
     return matchesSearch && matchesType && matchesDept;
@@ -478,8 +502,8 @@ export const EmployeeManagement: React.FC = () => {
         </div>
       )}
 
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-200 pb-4">
+      {/* Row 1: Module Header & Main Action */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
         <div>
           <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
             <Users className="w-5 h-5 text-indigo-600" />
@@ -490,131 +514,178 @@ export const EmployeeManagement: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          <div className="inline-flex rounded-md border border-slate-200 bg-white p-0.5 text-xs">
-            <button
-              onClick={() => setActiveTab('karyawan')}
-              className={`px-3 py-1.5 rounded font-medium transition-all ${
-                activeTab === 'karyawan'
-                  ? 'bg-indigo-600 text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Master Karyawan ({employees.length})
-            </button>
-            <button
-              onClick={() => setActiveTab('onboarding')}
-              className={`px-3 py-1.5 rounded font-medium transition-all flex items-center gap-1.5 ${
-                activeTab === 'onboarding'
-                  ? 'bg-indigo-600 text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <UserCheck className="w-3.5 h-3.5" />
-              <span>Proses Onboarding</span>
-              {onboardingProcesses.filter((p) => p.status === 'In Progress').length > 0 && (
-                <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-amber-500 text-white font-mono">
-                  {onboardingProcesses.filter((p) => p.status === 'In Progress').length}
-                </span>
-              )}
-            </button>
-            <button
-              onClick={() => setActiveTab('orgchart')}
-              className={`px-3 py-1.5 rounded font-medium transition-all flex items-center gap-1.5 ${
-                activeTab === 'orgchart'
-                  ? 'bg-indigo-600 text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <Network className="w-3.5 h-3.5" />
-              <span>Struktur Org & Tree</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('probation')}
-              className={`px-3 py-1.5 rounded font-medium transition-all flex items-center gap-1.5 ${
-                activeTab === 'probation'
-                  ? 'bg-indigo-600 text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <Award className="w-3.5 h-3.5" />
-              <span>Evaluasi Probation</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('contracts')}
-              className={`px-3 py-1.5 rounded font-medium transition-all flex items-center gap-1.5 ${
-                activeTab === 'contracts'
-                  ? 'bg-indigo-600 text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <FileClock className="w-3.5 h-3.5" />
-              <span>Kontrak PKWT (H-30)</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('pengaturan')}
-              className={`px-3 py-1.5 rounded font-medium transition-all flex items-center gap-1 ${
-                activeTab === 'pengaturan'
-                  ? 'bg-indigo-600 text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <Settings className="w-3.5 h-3.5" />
-              <span>Pengaturan</span>
-            </button>
-          </div>
-
-          <button
-            onClick={() => setIsOnboardingChoiceOpen(true)}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md text-xs font-semibold shadow-xs transition-colors"
-          >
-            <UserPlus className="w-3.5 h-3.5" />
-            <span>+ Tambah Karyawan (Onboarding)</span>
-          </button>
-        </div>
+        <button
+          onClick={() => setIsOnboardingChoiceOpen(true)}
+          className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors shrink-0"
+        >
+          <UserPlus className="w-3.5 h-3.5" />
+          <span>+ Tambah Karyawan (Onboarding)</span>
+        </button>
       </div>
+
+      {/* Row 2: Enterprise Tab Navigation Bar with Arrows & Mouse-Wheel Horizontal Scroll */}
+      <ScrollableTabNav>
+        <button
+          onClick={() => setActiveTab('karyawan')}
+          className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
+            activeTab === 'karyawan'
+              ? 'border-slate-900 text-slate-950 font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+          }`}
+        >
+          <Users className="w-3.5 h-3.5" />
+          <span>Master Karyawan</span>
+          <span
+            className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full transition-colors ${
+              activeTab === 'karyawan'
+                ? 'bg-slate-900 text-white'
+                : 'bg-slate-100 text-slate-600'
+            }`}
+          >
+            {employees.length}
+          </span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('onboarding')}
+          className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
+            activeTab === 'onboarding'
+              ? 'border-slate-900 text-slate-950 font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+          }`}
+        >
+          <UserCheck className="w-3.5 h-3.5" />
+          <span>Proses Onboarding</span>
+          <span
+            className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full transition-colors ${
+              activeTab === 'onboarding'
+                ? 'bg-amber-600 text-white'
+                : 'bg-amber-50 text-amber-800 border border-amber-200'
+            }`}
+          >
+            {onboardingProcesses.filter((p) => p.status === 'In Progress').length} Berjalan
+          </span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('orgchart')}
+          className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
+            activeTab === 'orgchart'
+              ? 'border-slate-900 text-slate-950 font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+          }`}
+        >
+          <Network className="w-3.5 h-3.5" />
+          <span>Struktur Org & Tree</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('probation')}
+          className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
+            activeTab === 'probation'
+              ? 'border-slate-900 text-slate-950 font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+          }`}
+        >
+          <Award className="w-3.5 h-3.5" />
+          <span>Evaluasi Probation (H-14)</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('contracts')}
+          className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
+            activeTab === 'contracts'
+              ? 'border-slate-900 text-slate-950 font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+          }`}
+        >
+          <FileClock className="w-3.5 h-3.5" />
+          <span>Kontrak PKWT (H-30)</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('pengaturan')}
+          className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
+            activeTab === 'pengaturan'
+              ? 'border-slate-900 text-slate-950 font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+          }`}
+        >
+          <Settings className="w-3.5 h-3.5" />
+          <span>Format NIK & Pengaturan</span>
+        </button>
+      </ScrollableTabNav>
 
       {activeTab === 'karyawan' && (
         <div className="space-y-4">
-          {/* Filters & Search */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white p-3 border border-slate-200 rounded-lg shadow-xs">
-            <div className="relative w-full sm:w-80">
-              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+          {/* Filters & Search Toolbar - Responsive Tablet & Mobile Friendly */}
+          <div className="bg-white p-3 sm:p-3.5 border border-slate-200 rounded-xl shadow-xs space-y-2.5 lg:space-y-0 lg:flex lg:items-center lg:justify-between lg:gap-4">
+            <div className="relative w-full lg:max-w-md">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
               <input
                 type="text"
-                placeholder="Cari nama, NIK, KTP, jabatan, atau no SK..."
+                placeholder="Cari nama karyawan, NIK, KTP, jabatan, divisi..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-3 py-1.5 text-xs border border-slate-300 rounded-md outline-none focus:border-indigo-500"
+                className="w-full pl-9 pr-8 py-2 text-xs bg-slate-50/70 focus:bg-white border border-slate-300 focus:border-indigo-500 rounded-lg outline-none transition-all placeholder:text-slate-400 shadow-2xs"
               />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 p-0.5 rounded-full"
+                  title="Hapus pencarian"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
 
-            <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
-              <Filter className="w-4 h-4 text-slate-400" />
-              <select
-                value={filterType}
-                onChange={(e) => setFilterType(e.target.value)}
-                className="text-xs border border-slate-300 rounded-md py-1.5 px-3 bg-white font-medium text-slate-700"
-              >
-                <option value="all">Semua Status Hubungan</option>
-                <option value="Tetap">Tetap (PKWTT)</option>
-                <option value="Kontrak">Kontrak (PKWT)</option>
-                <option value="Outsource">Outsource</option>
-                <option value="Magang">Magang (Intern)</option>
-              </select>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex lg:items-center gap-2 w-full lg:w-auto">
+              <div className="relative flex-1 sm:w-48 lg:w-48">
+                <select
+                  value={filterType}
+                  onChange={(e) => setFilterType(e.target.value)}
+                  className="w-full text-xs border border-slate-300 rounded-lg py-2 px-3 bg-white font-medium text-slate-700 outline-none focus:border-indigo-500 cursor-pointer shadow-2xs"
+                >
+                  <option value="all">Semua Status Hubungan</option>
+                  <option value="Tetap">Tetap (PKWTT)</option>
+                  <option value="Kontrak">Kontrak (PKWT)</option>
+                  <option value="Outsource">Outsource</option>
+                  <option value="Magang">Magang (Intern)</option>
+                </select>
+              </div>
 
-              <select
-                value={filterDept}
-                onChange={(e) => setFilterDept(e.target.value)}
-                className="text-xs border border-slate-300 rounded-md py-1.5 px-3 bg-white font-medium text-slate-700"
-              >
-                <option value="all">Semua Departemen</option>
-                {departments.map((d) => (
-                  <option key={d} value={d}>
-                    {d}
-                  </option>
-                ))}
-              </select>
+              <div className="relative flex-1 sm:w-48 lg:w-48">
+                <select
+                  value={filterDept}
+                  onChange={(e) => setFilterDept(e.target.value)}
+                  className="w-full text-xs border border-slate-300 rounded-lg py-2 px-3 bg-white font-medium text-slate-700 outline-none focus:border-indigo-500 cursor-pointer shadow-2xs"
+                >
+                  <option value="all">Semua Departemen</option>
+                  {departments.map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {(filterType !== 'all' || filterDept !== 'all' || searchQuery) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFilterType('all');
+                    setFilterDept('all');
+                    setSearchQuery('');
+                  }}
+                  className="col-span-full sm:col-span-2 lg:col-span-1 px-3 py-2 text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 border border-rose-200 rounded-lg transition-colors font-semibold flex items-center justify-center gap-1 shadow-2xs"
+                  title="Reset semua filter"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  <span>Reset Filter</span>
+                </button>
+              )}
             </div>
           </div>
 
@@ -723,17 +794,9 @@ export const EmployeeManagement: React.FC = () => {
 
                   {/* Card Action Footer */}
                   <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handlePreviewEmployeeContract(emp);
-                      }}
-                      className="px-2.5 py-1 text-[11px] font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded border border-indigo-200 flex items-center gap-1 transition-colors"
-                    >
-                      <FileText className="w-3.5 h-3.5 text-indigo-600" />
-                      <span>Preview SK</span>
-                    </button>
+                    <div className="text-[11px] text-slate-400">
+                      Ketuk kartu untuk melihat dossier lengkap
+                    </div>
 
                     <div className="text-xs font-semibold text-indigo-600 flex items-center gap-1">
                       <span>Buka Dossier</span>
@@ -745,21 +808,20 @@ export const EmployeeManagement: React.FC = () => {
             })}
           </div>
 
-          {/* TAMPILAN TABLE: Desktop & Tablet (>= md) dengan Horizontal Slide */}
+          {/* TAMPILAN TABLE: Menyesuaikan kolom secara responsif tanpa slide horizontal pada tablet */}
           <div className="hidden md:block bg-white border border-slate-200 rounded-lg overflow-hidden shadow-xs">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs min-w-[850px]">
+            <div className="w-full">
+              <table className="w-full text-left text-xs">
                 <thead className="bg-slate-50 border-b border-slate-200 text-slate-600">
                   <tr>
                     <th className="py-2.5 px-3 font-semibold">Foto & Nama Karyawan</th>
-                    <th className="py-2.5 px-3 font-semibold">Status & No. Dokumen Kontrak</th>
+                    <th className="py-2.5 px-3 font-semibold">Status & No. Kontrak</th>
                     <th className="py-2.5 px-3 font-semibold">Departemen & Jabatan</th>
-                    <th className="py-2.5 px-3 font-semibold">Kependudukan (KTP/KK)</th>
-                    <th className="py-2.5 px-3 font-semibold text-center">PTKP (TER 2024)</th>
-                    <th className="py-2.5 px-3 font-semibold text-right">Gaji Pokok</th>
-                    <th className="py-2.5 px-3 font-semibold text-center">Keluarga</th>
+                    <th className="py-2.5 px-3 font-semibold hidden xl:table-cell">Kependudukan (KTP/KK)</th>
+                    <th className="py-2.5 px-3 font-semibold text-center hidden 2xl:table-cell">PTKP (TER 2024)</th>
+                    <th className="py-2.5 px-3 font-semibold text-right hidden lg:table-cell">Gaji Pokok</th>
+                    <th className="py-2.5 px-3 font-semibold text-center hidden 2xl:table-cell">Keluarga</th>
                     <th className="py-2.5 px-3 font-semibold text-center">Status</th>
-                    <th className="py-2.5 px-3 font-semibold text-right">Aksi</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -798,7 +860,7 @@ export const EmployeeManagement: React.FC = () => {
                       </td>
                       <td className="py-2.5 px-3">
                         <span
-                          className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                          className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
                             emp.employmentType === 'Tetap'
                               ? 'bg-emerald-100 text-emerald-800'
                               : emp.employmentType === 'Kontrak'
@@ -816,20 +878,20 @@ export const EmployeeManagement: React.FC = () => {
                         <div className="font-semibold text-slate-800">{emp.position}</div>
                         <div className="text-[10px] text-slate-500">{emp.department} (Grade {emp.grade})</div>
                       </td>
-                      <td className="py-2.5 px-3 font-mono text-[11px]">
+                      <td className="py-2.5 px-3 font-mono text-[11px] hidden xl:table-cell">
                         <div className="text-slate-800">KTP: {emp.nikKtp}</div>
                         <div className="text-[10px] text-slate-500">KK: {emp.noKk}</div>
                       </td>
-                      <td className="py-2.5 px-3 text-center">
+                      <td className="py-2.5 px-3 text-center hidden 2xl:table-cell">
                         <span className="font-mono font-bold text-slate-800">{emp.ptkp}</span>
                         <div className="text-[10px] text-indigo-700 font-mono font-semibold">
                           {getTERCategory(emp.ptkp)}
                         </div>
                       </td>
-                      <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-800">
+                      <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-800 hidden lg:table-cell">
                         {formatRupiah(emp.basicSalary)}
                       </td>
-                      <td className="py-2.5 px-3 text-center font-mono text-slate-700">
+                      <td className="py-2.5 px-3 text-center font-mono text-slate-700 hidden 2xl:table-cell">
                         {emp.familyMembers?.length || 0} Jiwa
                       </td>
                       <td className="py-2.5 px-3 text-center">
@@ -866,21 +928,6 @@ export const EmployeeManagement: React.FC = () => {
                             </div>
                           );
                         })()}
-                      </td>
-                      <td className="py-2.5 px-3 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handlePreviewEmployeeContract(emp);
-                            }}
-                            className="px-2.5 py-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded transition-colors flex items-center gap-1"
-                            title="Preview Dokumen Resmi Surat Keputusan Pengangkatan"
-                          >
-                            <FileText className="w-3.5 h-3.5 text-indigo-500" />
-                            <span>Preview SK</span>
-                          </button>
-                        </div>
                       </td>
                     </tr>
                   ))}
@@ -1190,8 +1237,18 @@ export const EmployeeManagement: React.FC = () => {
 
       {/* Modal: Pilihan Jalur Onboarding (Wajib Melalui Onboarding) */}
       {isOnboardingChoiceOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full border border-slate-200 overflow-hidden">
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setIsOnboardingChoiceOpen(false);
+            }
+          }}
+        >
+          <div
+            className="bg-white rounded-xl shadow-2xl max-w-lg w-full border border-slate-200 overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="px-5 py-4 bg-slate-900 text-white flex items-center justify-between">
               <div>
                 <h3 className="text-sm font-bold">Pilih Alur Onboarding Karyawan Baru</h3>
@@ -1252,8 +1309,18 @@ export const EmployeeManagement: React.FC = () => {
 
       {/* Modal Pathway 1: Via Rekrutmen */}
       {isRecruitmentOnboardingOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full border border-slate-200 overflow-hidden">
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setIsRecruitmentOnboardingOpen(false);
+            }
+          }}
+        >
+          <div
+            className="bg-white rounded-xl shadow-xl max-w-md w-full border border-slate-200 overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="px-5 py-4 bg-slate-900 text-white flex items-center justify-between">
               <div>
                 <h3 className="text-sm font-bold">Onboarding dari Pipeline Rekrutmen</h3>
@@ -1317,8 +1384,18 @@ export const EmployeeManagement: React.FC = () => {
 
       {/* Modal Pathway 2: Direct Onboarding Form */}
       {isDirectOnboardingOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
-          <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full h-[88vh] sm:h-[84vh] border border-slate-200 overflow-hidden flex flex-col">
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setIsDirectOnboardingOpen(false);
+            }
+          }}
+        >
+          <div
+            className="bg-white rounded-xl shadow-2xl max-w-3xl w-full h-[88vh] sm:h-[84vh] border border-slate-200 overflow-hidden flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="px-5 sm:px-6 py-3.5 bg-slate-900 text-white flex items-center justify-between shrink-0">
               <div>
                 <h3 className="text-sm font-bold">Onboarding Langsung (Direct Onboarding Tanpa Rekrutmen)</h3>
@@ -1370,30 +1447,56 @@ export const EmployeeManagement: React.FC = () => {
               {/* STEP 1: Profil & Jabatan */}
               {addStep === 1 && (
                 <div className="space-y-4">
-                  {/* Photo Profile Preset Picker */}
-                  <div>
-                    <label className="font-semibold text-slate-800 block mb-1">
-                      Pilih Foto Profil Karyawan (Photo Profile) *
+                  {/* Photo Profile File Uploader */}
+                  <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                    <label className="font-semibold text-slate-800 block text-xs">
+                      Upload Foto Profil Karyawan (Photo Profile) *
                     </label>
-                    <div className="flex items-center gap-3">
-                      <img
-                        src={newAvatar}
-                        alt="Preview"
-                        className="w-12 h-12 rounded-full object-cover border-2 border-indigo-600 shadow-xs shrink-0"
-                      />
-                      <div className="flex items-center gap-2 flex-wrap">
-                        {AVATAR_PRESETS.map((url, i) => (
-                          <button
-                            key={i}
-                            type="button"
-                            onClick={() => setNewAvatar(url)}
-                            className={`rounded-full p-0.5 border-2 transition-all ${
-                              newAvatar === url ? 'border-indigo-600 scale-105' : 'border-transparent opacity-70 hover:opacity-100'
-                            }`}
+                    <div className="flex items-center gap-3.5 flex-wrap sm:flex-nowrap">
+                      <div className="relative group shrink-0">
+                        <img
+                          src={newAvatar || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150'}
+                          alt="Preview Foto Karyawan"
+                          className="w-14 h-14 rounded-full object-cover border-2 border-slate-300 shadow-sm"
+                        />
+                        <label
+                          htmlFor="employee-photo-upload"
+                          className="absolute inset-0 rounded-full bg-slate-950/40 text-white opacity-0 group-hover:opacity-100 flex items-center justify-center cursor-pointer transition-opacity"
+                          title="Klik untuk ganti foto"
+                        >
+                          <Camera className="w-4 h-4 text-white" />
+                        </label>
+                      </div>
+
+                      <div className="flex-1 space-y-1.5 min-w-0">
+                        <input
+                          id="employee-photo-upload"
+                          type="file"
+                          accept="image/png, image/jpeg, image/jpg, image/webp"
+                          className="hidden"
+                          onChange={handlePhotoUpload}
+                        />
+                        <div className="flex items-center gap-2">
+                          <label
+                            htmlFor="employee-photo-upload"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg text-xs font-semibold cursor-pointer shadow-2xs transition-colors"
                           >
-                            <img src={url} alt={`Preset ${i}`} className="w-8 h-8 rounded-full object-cover" />
-                          </button>
-                        ))}
+                            <Camera className="w-3.5 h-3.5 text-slate-600" />
+                            <span>Pilih File Foto Karyawan</span>
+                          </label>
+                          {newAvatar && (
+                            <button
+                              type="button"
+                              onClick={() => setNewAvatar('https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150')}
+                              className="px-2 py-1 text-slate-500 hover:text-rose-600 text-xs font-medium"
+                            >
+                              Reset
+                            </button>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-slate-500">
+                          Format: <strong>JPG, PNG, atau WEBP</strong> (Maks. 5 MB). Foto ini akan digunakan di dossier, kartu nama digital, dan slip gaji.
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -1737,8 +1840,18 @@ export const EmployeeManagement: React.FC = () => {
 
       {/* Modal Dossier Detail Karyawan Komprehensif (Multi-Tab Enterprise) */}
       {selectedEmployee && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 animate-fadeIn">
-          <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full h-[90vh] sm:h-[86vh] border border-slate-200 overflow-hidden flex flex-col">
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 animate-fadeIn overflow-y-auto"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setSelectedEmployee(null);
+            }
+          }}
+        >
+          <div
+            className="bg-white rounded-xl shadow-2xl max-w-4xl w-full h-[90vh] sm:h-[86vh] border border-slate-200 overflow-hidden flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
             {/* Header Profil Karyawan (Mobile Responsive) */}
             <div className="px-4 sm:px-6 py-3.5 bg-slate-900 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 shrink-0">
               <div className="flex items-center gap-3">
@@ -1798,61 +1911,29 @@ export const EmployeeManagement: React.FC = () => {
               </div>
             </div>
 
-            {/* Navigation & Slide Bar (Support Klik Tab & Slide Kiri/Kanan) */}
-            <div className="flex items-center gap-1 px-2 sm:px-4 py-1.5 bg-slate-100 border-b border-slate-200 text-xs shrink-0">
-              {/* Panah Geser Kiri */}
-              <button
-                type="button"
-                onClick={handlePrevTab}
-                disabled={currentTabIndex === 0}
-                className={`p-1.5 rounded-md transition-colors shrink-0 ${
-                  currentTabIndex === 0
-                    ? 'text-slate-300 cursor-not-allowed'
-                    : 'text-slate-700 hover:text-indigo-600 hover:bg-slate-200'
-                }`}
-                title="Geser ke Tab Sebelumnya (←)"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-
-              {/* Daftar Tab Horizontal yang Bisa Digeser */}
-              <div className="flex-1 flex items-center gap-1 overflow-x-auto py-0.5">
-                {DOSSIER_TABS.map((tab) => {
-                  const Icon = tab.icon;
-                  const isActive = detailModalTab === tab.id;
-                  return (
-                    <button
-                      key={tab.id}
-                      onClick={() => setDetailModalTab(tab.id)}
-                      className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded font-semibold whitespace-nowrap transition-colors text-xs ${
-                        isActive
-                          ? 'bg-white text-indigo-700 shadow-xs border border-slate-200'
-                          : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
-                      }`}
-                    >
-                      <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-indigo-600' : 'text-slate-400'}`} />
-                      <span className="hidden sm:inline">{tab.label}</span>
-                      <span className="sm:hidden">{tab.shortLabel}</span>
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Panah Geser Kanan */}
-              <button
-                type="button"
-                onClick={handleNextTab}
-                disabled={currentTabIndex === DOSSIER_TABS.length - 1}
-                className={`p-1.5 rounded-md transition-colors shrink-0 ${
-                  currentTabIndex === DOSSIER_TABS.length - 1
-                    ? 'text-slate-300 cursor-not-allowed'
-                    : 'text-slate-700 hover:text-indigo-600 hover:bg-slate-200'
-                }`}
-                title="Geser ke Tab Selanjutnya (→)"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
+            {/* Dossier Enterprise Sub-Menu Tabs Navigation */}
+            <ScrollableTabNav className="bg-slate-50 border-b border-slate-200" containerClassName="pt-1 px-2 sm:px-4">
+              {DOSSIER_TABS.map((tab) => {
+                const Icon = tab.icon;
+                const isActive = detailModalTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setDetailModalTab(tab.id)}
+                    className={`pb-2.5 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
+                      isActive
+                        ? 'border-indigo-600 text-indigo-700 font-bold bg-white rounded-t-md shadow-2xs'
+                        : 'border-transparent text-slate-600 hover:text-slate-900 hover:border-slate-300'
+                    }`}
+                  >
+                    <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-indigo-600' : 'text-slate-400'}`} />
+                    <span className="hidden sm:inline">{tab.label}</span>
+                    <span className="sm:hidden">{tab.shortLabel}</span>
+                  </button>
+                );
+              })}
+            </ScrollableTabNav>
 
             {/* Sub-Header: Indikator Step Tab & Swipe Hint */}
             <div className="px-4 sm:px-6 py-1.5 bg-indigo-50/70 border-b border-indigo-100 flex items-center justify-between text-[11px] font-mono text-indigo-900 shrink-0">

@@ -24,6 +24,9 @@ import {
   DollarSign,
   FileText,
   Clock,
+  Gift,
+  Sliders,
+  TrendingUp,
 } from 'lucide-react';
 import { PayrollRecord, Employee } from '../../types/hrms';
 import { formatRupiah, calculatePPh21TER, calculateBPJS, calculateOvertimePay } from '../../utils/taxCalculator';
@@ -32,6 +35,7 @@ import { EmployeeSelect } from '../common/EmployeeSelect';
 import { CurrencyInput } from '../common/CurrencyInput';
 import { SalaryComponentManagement } from './SalaryComponentManagement';
 import { GradeSalaryManagement } from './GradeSalaryManagement';
+import { ScrollableTabNav } from '../common/ScrollableTabNav';
 
 interface ReimbursementClaim {
   id: string;
@@ -270,83 +274,102 @@ export const PayrollManagement: React.FC = () => {
 
   return (
     <div className="space-y-5">
-      {/* Module Title */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-200 pb-4">
-        <div>
-          <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-            <Calculator className="w-5 h-5 text-indigo-600" />
-            <span>Manajemen Penggajian & PPh 21 TER 2024</span>
-          </h2>
-          <p className="text-xs text-slate-500">
-            Perhitungan gaji terintegrasi presensi & lembur PP 35/2021, BPJS Ketenagakerjaan & Kesehatan, PPh 21 TER (PMK 168/2023), klaim reimbursement & pesangon PHK.
-          </p>
-        </div>
-
-        {/* Tab Switcher */}
-        <div className="w-full lg:w-auto overflow-x-auto no-scrollbar pb-1 lg:pb-0">
-          <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5 text-xs font-semibold whitespace-nowrap shadow-2xs">
-            <button
-              onClick={() => setActiveTab('payroll')}
-              className={`px-3 py-1.5 rounded-md transition-all ${
-                activeTab === 'payroll' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Payroll Bulanan & Slip
-            </button>
-            <button
-              onClick={() => setActiveTab('reimburse')}
-              className={`px-3 py-1.5 rounded-md transition-all ${
-                activeTab === 'reimburse' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Klaim Medis & Reimburse
-            </button>
-            <button
-              onClick={() => setActiveTab('thr_phk')}
-              className={`px-3 py-1.5 rounded-md transition-all ${
-                activeTab === 'thr_phk' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Kalkulator THR & PHK
-            </button>
-            <button
-              onClick={() => setActiveTab('komponen')}
-              className={`px-3 py-1.5 rounded-md transition-all ${
-                activeTab === 'komponen' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Komponen Tunjangan & Potongan
-            </button>
-            <button
-              onClick={() => setActiveTab('golongan')}
-              className={`px-3 py-1.5 rounded-md transition-all ${
-                activeTab === 'golongan' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Skala Upah & Golongan
-            </button>
-            <button
-              onClick={() => setActiveTab('pengaturan')}
-              className={`px-3 py-1.5 rounded-md transition-all ${
-                activeTab === 'pengaturan' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Pengaturan Gaji & BPJS
-            </button>
-          </div>
-        </div>
+      {/* Row 1: Module Title Header */}
+      <div className="border-b border-slate-200 pb-3">
+        <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+          <Calculator className="w-5 h-5 text-indigo-600" />
+          <span>Manajemen Penggajian & PPh 21 TER 2024</span>
+        </h2>
+        <p className="text-xs text-slate-500 mt-0.5">
+          Perhitungan gaji terintegrasi presensi & lembur PP 35/2021, BPJS Ketenagakerjaan & Kesehatan, PPh 21 TER (PMK 168/2023), klaim reimbursement & pesangon PHK.
+        </p>
       </div>
+
+      {/* Row 2: Enterprise Tab Navigation Bar with Arrows & Mouse-Wheel Horizontal Scroll */}
+      <ScrollableTabNav className="border-b border-slate-200" containerClassName="pt-1">
+        <button
+          onClick={() => setActiveTab('payroll')}
+          className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
+            activeTab === 'payroll'
+              ? 'border-slate-900 text-slate-950 font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+          }`}
+        >
+          <Calculator className="w-3.5 h-3.5" />
+          <span>Payroll Bulanan & Slip</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('reimburse')}
+          className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
+            activeTab === 'reimburse'
+              ? 'border-slate-900 text-slate-950 font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+          }`}
+        >
+          <Receipt className="w-3.5 h-3.5" />
+          <span>Klaim Medis & Reimburse</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('thr_phk')}
+          className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
+            activeTab === 'thr_phk'
+              ? 'border-slate-900 text-slate-950 font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+          }`}
+        >
+          <Gift className="w-3.5 h-3.5" />
+          <span>Kalkulator THR & PHK</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('komponen')}
+          className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
+            activeTab === 'komponen'
+              ? 'border-slate-900 text-slate-950 font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+          }`}
+        >
+          <Sliders className="w-3.5 h-3.5" />
+          <span>Komponen Gaji & Tunjangan</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('golongan')}
+          className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
+            activeTab === 'golongan'
+              ? 'border-slate-900 text-slate-950 font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+          }`}
+        >
+          <TrendingUp className="w-3.5 h-3.5" />
+          <span>Skala Upah & Golongan</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('pengaturan')}
+          className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
+            activeTab === 'pengaturan'
+              ? 'border-slate-900 text-slate-950 font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+          }`}
+        >
+          <Settings className="w-3.5 h-3.5" />
+          <span>Pengaturan Gaji & BPJS</span>
+        </button>
+      </ScrollableTabNav>
 
       {/* TAB 1: RUNNING PAYROLL */}
       {activeTab === 'payroll' && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between gap-3 flex-wrap bg-white p-3 border border-slate-200 rounded-lg shadow-xs">
+          <div className="bg-white p-3 sm:p-3.5 border border-slate-200 rounded-xl shadow-xs space-y-2.5 sm:space-y-0 sm:flex sm:items-center sm:justify-between sm:gap-3">
             <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-slate-700">Periode Gaji:</span>
+              <span className="text-xs font-semibold text-slate-700 shrink-0">Periode Gaji:</span>
               <select
                 value={period}
                 onChange={(e) => setPeriod(e.target.value)}
-                className="py-1.5 px-3 text-xs bg-slate-50 border border-slate-300 rounded-md font-semibold text-slate-800"
+                className="py-2 px-3 text-xs bg-slate-50 border border-slate-300 rounded-lg font-semibold text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 shadow-2xs"
               >
                 <option value="Oktober 2026">Oktober 2026</option>
                 <option value="September 2026">September 2026</option>
@@ -354,10 +377,10 @@ export const PayrollManagement: React.FC = () => {
               </select>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap sm:flex-nowrap items-center gap-2">
               <button
                 onClick={() => generatePayrollRun(period)}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-md text-xs font-semibold transition-colors"
+                className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg text-xs font-semibold transition-colors"
               >
                 <Calculator className="w-3.5 h-3.5 text-indigo-600" />
                 <span>Hitung Ulang Presensi & Gaji</span>
@@ -366,7 +389,7 @@ export const PayrollManagement: React.FC = () => {
               {!isApproved && !isDisbursed && (
                 <button
                   onClick={() => approvePayrollRun(period)}
-                  className="flex items-center gap-1.5 px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md text-xs font-semibold shadow-xs transition-colors"
+                  className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors"
                 >
                   <CheckCircle2 className="w-3.5 h-3.5" />
                   <span>Setujui Payroll Direksi</span>
@@ -376,7 +399,7 @@ export const PayrollManagement: React.FC = () => {
               {isApproved && !isDisbursed && (
                 <button
                   onClick={() => disbursePayrollRun(period)}
-                  className="flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md text-xs font-semibold shadow-xs transition-colors"
+                  className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors"
                 >
                   <Send className="w-3.5 h-3.5" />
                   <span>Salurkan Gaji & Rilis Slip</span>
@@ -384,7 +407,7 @@ export const PayrollManagement: React.FC = () => {
               )}
 
               {isDisbursed && (
-                <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-md">
+                <span className="w-full sm:w-auto inline-flex items-center justify-center gap-1 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-2 rounded-lg">
                   <CheckCircle2 className="w-3.5 h-3.5" />
                   <span>Gaji Telah Disalurkan Bank</span>
                 </span>
@@ -513,20 +536,20 @@ export const PayrollManagement: React.FC = () => {
             })}
           </div>
 
-          {/* TAMPILAN DESKTOP: High-Density Calculation Table (>= lg) */}
+          {/* TAMPILAN DESKTOP & TABLET: Menyesuaikan kolom secara responsif tanpa slide horizontal */}
           <div className="hidden lg:block bg-white border border-slate-200 rounded-lg overflow-hidden shadow-xs">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs min-w-[850px]">
+            <div className="w-full">
+              <table className="w-full text-left text-xs">
                 <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
                   <tr>
                     <th className="py-2.5 px-3">Karyawan & NIK</th>
-                    <th className="py-2.5 px-3 text-right">Gaji Pokok</th>
-                    <th className="py-2.5 px-3 text-right">Tunjangan</th>
-                    <th className="py-2.5 px-3 text-right">Lembur</th>
-                    <th className="py-2.5 px-3 text-center">PTKP & TER</th>
-                    <th className="py-2.5 px-3 text-right">PPh 21 TER</th>
-                    <th className="py-2.5 px-3 text-right">BPJS Pekerja</th>
-                    <th className="py-2.5 px-3 text-right">Potongan Kasbon</th>
+                    <th className="py-2.5 px-3 text-right hidden xl:table-cell">Gaji Pokok</th>
+                    <th className="py-2.5 px-3 text-right hidden 2xl:table-cell">Tunjangan</th>
+                    <th className="py-2.5 px-3 text-right hidden 2xl:table-cell">Lembur</th>
+                    <th className="py-2.5 px-3 text-center hidden xl:table-cell">PTKP & TER</th>
+                    <th className="py-2.5 px-3 text-right hidden 2xl:table-cell">PPh 21 TER</th>
+                    <th className="py-2.5 px-3 text-right hidden 2xl:table-cell">BPJS Pekerja</th>
+                    <th className="py-2.5 px-3 text-right hidden 2xl:table-cell">Potongan Kasbon</th>
                     <th className="py-2.5 px-3 text-right">Take Home Pay</th>
                     <th className="py-2.5 px-3 text-center">Aksi</th>
                   </tr>
@@ -558,32 +581,32 @@ export const PayrollManagement: React.FC = () => {
                             </div>
                           </div>
                         </td>
-                        <td className="py-2.5 px-3 text-right font-mono text-slate-800">
+                        <td className="py-2.5 px-3 text-right font-mono text-slate-800 hidden xl:table-cell">
                           {formatRupiah(rec.basicSalary)}
                         </td>
-                        <td className="py-2.5 px-3 text-right font-mono text-slate-800">
+                        <td className="py-2.5 px-3 text-right font-mono text-slate-800 hidden 2xl:table-cell">
                           {formatRupiah(rec.allowances)}
                         </td>
-                        <td className="py-2.5 px-3 text-right font-mono text-slate-800">
+                        <td className="py-2.5 px-3 text-right font-mono text-slate-800 hidden 2xl:table-cell">
                           {rec.overtimePay > 0 ? (
                             <span className="text-indigo-700 font-medium">{formatRupiah(rec.overtimePay)}</span>
                           ) : (
                             <span className="text-slate-400">-</span>
                           )}
                         </td>
-                        <td className="py-2.5 px-3 text-center">
+                        <td className="py-2.5 px-3 text-center hidden xl:table-cell">
                           <div className="font-bold text-slate-800 font-mono">{emp?.ptkp}</div>
                           <div className="text-[10px] text-indigo-600 font-mono">
                             {rec.pph21TERCategory} ({rec.pph21RatePercent}%)
                           </div>
                         </td>
-                        <td className="py-2.5 px-3 text-right font-mono text-indigo-700 font-medium">
+                        <td className="py-2.5 px-3 text-right font-mono text-indigo-700 font-medium hidden 2xl:table-cell">
                           {formatRupiah(rec.pph21Amount)}
                         </td>
-                        <td className="py-2.5 px-3 text-right font-mono text-amber-800">
+                        <td className="py-2.5 px-3 text-right font-mono text-amber-800 hidden 2xl:table-cell">
                           {formatRupiah(rec.bpjsKesEmployee + rec.bpjsTkEmployee)}
                         </td>
-                        <td className="py-2.5 px-3 text-right font-mono">
+                        <td className="py-2.5 px-3 text-right font-mono hidden 2xl:table-cell">
                           {rec.loanDeduction > 0 ? (
                             <span className="text-rose-700 font-medium">{formatRupiah(rec.loanDeduction)}</span>
                           ) : (
@@ -1164,8 +1187,16 @@ export const PayrollManagement: React.FC = () => {
 
       {/* MODAL: AJUKAN KLAIM REIMBURSEMENT */}
       {isClaimModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full border border-slate-200 overflow-hidden">
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsClaimModalOpen(false);
+          }}
+        >
+          <div
+            className="bg-white rounded-xl shadow-xl max-w-lg w-full border border-slate-200 overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="px-5 py-3.5 bg-slate-900 text-white flex items-center justify-between">
               <h3 className="text-xs font-semibold">Formulir Klaim Reimbursement Baru</h3>
               <button onClick={() => setIsClaimModalOpen(false)}>
@@ -1255,18 +1286,38 @@ export const PayrollManagement: React.FC = () => {
 
       {/* Modal: Interactive Digital Payslip with QR Signature */}
       {selectedPayslip && selectedEmployee && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full border border-slate-200 overflow-hidden my-8">
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setSelectedPayslip(null);
+          }}
+        >
+          <div
+            className="bg-white rounded-xl shadow-2xl max-w-2xl w-full border border-slate-200 overflow-hidden my-8"
+            onClick={(e) => e.stopPropagation()}
+          >
             {/* Top Toolbar */}
             <div className="px-6 py-3.5 bg-slate-900 text-white flex items-center justify-between no-print">
               <div className="text-xs font-semibold">Slip Gaji Elektronik Terverifikasi (PPh 21 TER 2024)</div>
               <div className="flex items-center gap-2">
+                {/* Cetak Fisik / Printer */}
                 <button
                   onClick={() => window.print()}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-white rounded text-xs transition-colors"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-semibold shadow-2xs transition-colors"
+                  title="Cetak Fisik Dokumen Slip Gaji (Printer)"
                 >
                   <Printer className="w-3.5 h-3.5" />
-                  <span>Cetak / PDF</span>
+                  <span>Cetak</span>
+                </button>
+
+                {/* Unduh Berkas PDF */}
+                <button
+                  onClick={() => window.print()}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-900 border border-slate-300 rounded-lg text-xs font-semibold shadow-2xs transition-colors"
+                  title="Unduh Berkas Digital PDF"
+                >
+                  <Download className="w-3.5 h-3.5 text-slate-800" />
+                  <span>Unduh PDF</span>
                 </button>
                 <button onClick={() => setSelectedPayslip(null)}>
                   <X className="w-4 h-4 text-slate-400 hover:text-white" />

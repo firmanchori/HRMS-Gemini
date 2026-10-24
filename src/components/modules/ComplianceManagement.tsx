@@ -152,10 +152,10 @@ export const ComplianceManagement: React.FC = () => {
   const filteredRecords = complianceRecords.filter((rec) => {
     const emp = employees.find((e) => e.id === rec.employeeId);
     const matchesSearch =
-      (emp?.fullName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (emp?.nik || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      rec.letterNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      rec.violationReason.toLowerCase().includes(searchQuery.toLowerCase());
+      (emp?.fullName || '').toLowerCase().includes((searchQuery || '').toLowerCase()) ||
+      (emp?.nik || '').toLowerCase().includes((searchQuery || '').toLowerCase()) ||
+      (rec?.letterNumber || '').toLowerCase().includes((searchQuery || '').toLowerCase()) ||
+      (rec?.violationReason || '').toLowerCase().includes((searchQuery || '').toLowerCase());
     const matchesLevel = filterLevel === 'all' || rec.level === filterLevel;
     return matchesSearch && matchesLevel;
   });
@@ -239,32 +239,58 @@ export const ComplianceManagement: React.FC = () => {
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white p-3 border border-slate-200 rounded-lg shadow-xs">
-        <div className="relative w-full sm:w-80">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+      <div className="bg-white p-3 sm:p-3.5 border border-slate-200 rounded-xl shadow-xs space-y-2.5 lg:space-y-0 lg:flex lg:items-center lg:justify-between lg:gap-4">
+        <div className="relative w-full lg:max-w-md">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
           <input
             type="text"
             placeholder="Cari nama karyawan, NIK, nomor SP, atau pasal..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-3 py-1.5 text-xs border border-slate-300 rounded-md outline-none focus:border-rose-500"
+            className="w-full pl-9 pr-8 py-2 text-xs bg-slate-50/70 focus:bg-white border border-slate-300 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-rose-500 transition-all font-medium text-slate-800 placeholder-slate-400"
           />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery('')}
+              className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600"
+              title="Hapus pencarian"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
 
-        <div className="flex items-center gap-2 w-full sm:w-auto">
-          <Filter className="w-4 h-4 text-slate-400" />
-          <select
-            value={filterLevel}
-            onChange={(e) => setFilterLevel(e.target.value)}
-            className="text-xs border border-slate-300 rounded-md py-1.5 px-3 bg-white font-medium text-slate-700"
-          >
-            <option value="all">Semua Tingkat Sanksi Disiplin</option>
-            <option value="SP 1">Surat Peringatan 1 (SP 1)</option>
-            <option value="SP 2">Surat Peringatan 2 (SP 2)</option>
-            <option value="SP 3">Surat Peringatan 3 (SP 3)</option>
-            <option value="Skorsing">Skorsing Sementara</option>
-            <option value="PHK">Pemutusan Hubungan Kerja (PHK)</option>
-          </select>
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full lg:w-auto">
+          <div className="relative flex-1 sm:flex-initial">
+            <select
+              value={filterLevel}
+              onChange={(e) => setFilterLevel(e.target.value)}
+              className="w-full sm:w-auto py-2 pl-3 pr-8 text-xs border border-slate-300 rounded-lg bg-white font-medium text-slate-700 focus:outline-hidden focus:ring-2 focus:ring-rose-500 shadow-2xs"
+            >
+              <option value="all">Semua Tingkat Sanksi Disiplin</option>
+              <option value="SP 1">Surat Peringatan 1 (SP 1)</option>
+              <option value="SP 2">Surat Peringatan 2 (SP 2)</option>
+              <option value="SP 3">Surat Peringatan 3 (SP 3)</option>
+              <option value="Skorsing">Skorsing Sementara</option>
+              <option value="PHK">Pemutusan Hubungan Kerja (PHK)</option>
+            </select>
+          </div>
+
+          {(searchQuery || filterLevel !== 'all') && (
+            <button
+              type="button"
+              onClick={() => {
+                setSearchQuery('');
+                setFilterLevel('all');
+              }}
+              className="inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors shrink-0"
+              title="Reset Filter"
+            >
+              <X className="w-3.5 h-3.5" />
+              <span>Reset Filter</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -281,7 +307,6 @@ export const ComplianceManagement: React.FC = () => {
                 <th className="py-2.5 px-3 font-semibold text-center">Tanggal Terbit</th>
                 <th className="py-2.5 px-3 font-semibold text-center">Masa Berlaku (6 Bln)</th>
                 <th className="py-2.5 px-3 font-semibold text-center">Status</th>
-                <th className="py-2.5 px-3 font-semibold text-center">Aksi Dokumen</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -349,24 +374,12 @@ export const ComplianceManagement: React.FC = () => {
                           {rec.status}
                         </span>
                       </td>
-                      <td className="py-2.5 px-3 text-center">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handlePreviewCompliance(rec);
-                          }}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-100 hover:bg-rose-50 text-rose-700 hover:text-rose-900 border border-slate-200 rounded font-semibold text-[11px] transition-colors"
-                        >
-                          <FileText className="w-3.5 h-3.5" />
-                          <span>Lihat SK SP</span>
-                        </button>
-                      </td>
                     </tr>
                   );
                 })
               ) : (
                 <tr>
-                  <td colSpan={8} className="py-8 text-center text-slate-400">
+                  <td colSpan={7} className="py-8 text-center text-slate-400">
                     Tidak ada catatan surat peringatan yang sesuai kriteria pencarian.
                   </td>
                 </tr>
@@ -378,8 +391,16 @@ export const ComplianceManagement: React.FC = () => {
 
       {/* Modal: Terbitkan Surat Peringatan Resmi */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-2xl max-w-xl w-full border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]">
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsModalOpen(false);
+          }}
+        >
+          <div
+            className="bg-white rounded-xl shadow-2xl max-w-xl w-full border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="px-5 py-3.5 bg-slate-900 text-white flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <AlertTriangle className="w-5 h-5 text-rose-400" />

@@ -137,8 +137,18 @@ _Dokumen ini diverifikasi secara sah melalui sistem NusaHR Enterprise v2026._`;
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 md:p-6 print:p-0 print:bg-white animate-fadeIn">
-      <div className="relative w-full max-w-4xl bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col h-[90vh] sm:h-[86vh] print:h-auto print:max-h-none print:shadow-none print:border-none print:rounded-none">
+    <div
+      className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 md:p-6 print:p-0 print:bg-white animate-fadeIn"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) {
+          closeFilePreview();
+        }
+      }}
+    >
+      <div
+        className="relative w-full max-w-4xl bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col h-[90vh] sm:h-[86vh] print:h-auto print:max-h-none print:shadow-none print:border-none print:rounded-none"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header Modal Bar */}
         <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 bg-slate-900 text-white shrink-0 print:hidden">
           <div className="flex items-center gap-2.5 truncate">
@@ -169,32 +179,32 @@ _Dokumen ini diverifikasi secara sah melalui sistem NusaHR Enterprise v2026._`;
               <span className="hidden sm:inline">Kirim ke WA</span>
             </button>
 
-            {/* Print Button */}
+            {/* Print Button - Direct window.print */}
             <button
               onClick={handlePrint}
-              title="Cetak Dokumen (Ctrl+P)"
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors"
+              title="Cetak Dokumen Fisik / Printer (Ctrl+P)"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-white transition-colors shadow-2xs"
             >
               <Printer className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Cetak</span>
+              <span>Cetak</span>
             </button>
 
             {/* Direct PDF Download Button (jsPDF Binary) */}
             <button
               onClick={handleExportPdf}
               disabled={isExporting}
-              title="Unduh Berkas Binary PDF 1-Klik"
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white transition-colors shadow-xs disabled:opacity-60"
+              title="Unduh Berkas Binary PDF Resmi"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white hover:bg-slate-100 text-slate-900 transition-colors shadow-2xs disabled:opacity-60"
             >
               {isExporting ? (
                 <>
-                  <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  <span className="hidden sm:inline">Membuat PDF...</span>
+                  <div className="w-3.5 h-3.5 border-2 border-slate-900 border-t-transparent rounded-full animate-spin" />
+                  <span>Membuat PDF...</span>
                 </>
               ) : (
                 <>
-                  <FileDown className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Unduh PDF (.pdf)</span>
+                  <FileDown className="w-3.5 h-3.5 text-slate-900" />
+                  <span>Unduh PDF</span>
                 </>
               )}
             </button>
@@ -219,9 +229,17 @@ _Dokumen ini diverifikasi secara sah melalui sistem NusaHR Enterprise v2026._`;
             <div className="border-b-2 border-slate-900 pb-3 mb-6">
               <div className="flex items-start justify-between gap-4">
                 <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-lg bg-indigo-700 text-white flex items-center justify-center font-bold text-xl shadow-xs shrink-0">
-                    {currentTenant.logoText || 'N'}
-                  </div>
+                  {currentTenant.documentLogoUrl ? (
+                    <img
+                      src={currentTenant.documentLogoUrl}
+                      alt={currentTenant.name}
+                      className="w-12 h-12 rounded-lg object-contain border border-slate-200 p-0.5 bg-white shadow-xs shrink-0"
+                    />
+                  ) : (
+                    <div className="w-12 h-12 rounded-lg bg-indigo-700 text-white flex items-center justify-center font-bold text-xl shadow-xs shrink-0">
+                      {currentTenant.logoText || 'N'}
+                    </div>
+                  )}
                   <div>
                     <h2 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight uppercase leading-tight">
                       {currentTenant.name}

@@ -31,6 +31,7 @@ import {
   Box,
   Check,
   Building2,
+  History,
 } from 'lucide-react';
 import { Employee, GAAsset, OfficialDocument, UserRole } from '../../types/hrms';
 
@@ -128,10 +129,10 @@ const ALL_MODULES: ModuleDefinition[] = [
   },
   {
     id: 'recruitment',
-    name: 'Rekrutmen & Offering Letter',
-    group: 'Talenta & Kepatuhan',
-    description: 'Pemasangan lowongan, screening kandidat, penjadwalan interview, dan penerbitan offering letter',
-    keywords: ['rekrutmen', 'recruitment', 'lowongan', 'job', 'kandidat', 'pelamar', 'interview', 'offering letter', 'hiring'],
+    name: 'Rekrutmen & Onboarding',
+    group: 'Operasional & Personalia',
+    description: 'Pemasangan lowongan, screening kandidat, penjadwalan interview, offering letter, dan alur onboarding',
+    keywords: ['rekrutmen', 'recruitment', 'onboarding', 'lowongan', 'job', 'kandidat', 'pelamar', 'interview', 'offering letter', 'hiring'],
     icon: UserPlus,
   },
   {
@@ -173,6 +174,14 @@ const ALL_MODULES: ModuleDefinition[] = [
     description: 'Konfigurasi akun login, role matrix, permission per modul, dan audit log keamanan',
     keywords: ['rbac', 'user', 'role', 'hak akses', 'admin', 'keamanan', 'permission', 'akun', 'password', 'audit'],
     icon: KeyRound,
+  },
+  {
+    id: 'audit',
+    name: 'Audit Trail & Log Aktivitas',
+    group: 'Administrasi & SaaS Owner',
+    description: 'Pencatatan riwayat transaksi seluruh modul, rekam jejak aksi pengguna, dan audit kepatuhan regulasi',
+    keywords: ['audit', 'audit trail', 'log', 'aktivitas', 'history', 'riwayat', 'jejak', 'keamanan', 'iso 27001'],
+    icon: History,
   },
   {
     id: 'tenants',
@@ -279,6 +288,7 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
     currentTenant,
     currentUser,
     setCurrentUserRole,
+    roles = [],
   } = useHrms();
 
   const [query, setQuery] = useState(initialQuery);
@@ -355,100 +365,29 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
           }, 1000);
         },
       },
-      {
-        id: 'action-role-super-admin',
-        category: 'actions',
+      ...roles.map((r) => ({
+        id: `action-role-${r.id}`,
+        category: 'actions' as const,
         groupTitle: 'Ganti Peran Pengguna (RBAC Testing)',
-        title: 'Beralih ke Peran: Super Admin',
-        subtitle: 'Hak akses penuh ke seluruh 17 modul dan konfigurasi multi-tenant',
-        badge: currentUser.role === 'super_admin' ? 'Aktif' : 'Pilih',
+        title: `Beralih ke Peran: ${r.label}`,
+        subtitle: r.description,
+        badge: currentUser.role === r.id ? 'Aktif' : 'Pilih',
         icon: ShieldCheck,
         score: 0,
         onSelect: () => {
-          setCurrentUserRole('super_admin');
-          setActionFeedback('Peran berhasil diubah ke Super Admin');
+          setCurrentUserRole(r.id);
+          setActionFeedback(`Peran berhasil diubah ke ${r.label}`);
           setTimeout(() => {
             setActionFeedback(null);
             onClose();
           }, 800);
         },
-      },
-      {
-        id: 'action-role-hr-admin',
-        category: 'actions',
-        groupTitle: 'Ganti Peran Pengguna (RBAC Testing)',
-        title: 'Beralih ke Peran: HR Director / Admin',
-        subtitle: 'Akses penuh ke data karyawan, dosier, KPI, kepatuhan SP/PHK, dan rekrutmen',
-        badge: currentUser.role === 'hr_admin' ? 'Aktif' : 'Pilih',
-        icon: Users,
-        score: 0,
-        onSelect: () => {
-          setCurrentUserRole('hr_admin');
-          setActionFeedback('Peran berhasil diubah ke HR Admin');
-          setTimeout(() => {
-            setActionFeedback(null);
-            onClose();
-          }, 800);
-        },
-      },
-      {
-        id: 'action-role-payroll-admin',
-        category: 'actions',
-        groupTitle: 'Ganti Peran Pengguna (RBAC Testing)',
-        title: 'Beralih ke Peran: Payroll Lead / Admin',
-        subtitle: 'Akses ke kalkulasi payroll, slip gaji, TER PPh 21 2024, dan simulasi pinjaman kasbon',
-        badge: currentUser.role === 'payroll_admin' ? 'Aktif' : 'Pilih',
-        icon: Calculator,
-        score: 0,
-        onSelect: () => {
-          setCurrentUserRole('payroll_admin');
-          setActionFeedback('Peran berhasil diubah ke Payroll Admin');
-          setTimeout(() => {
-            setActionFeedback(null);
-            onClose();
-          }, 800);
-        },
-      },
-      {
-        id: 'action-role-ga-admin',
-        category: 'actions',
-        groupTitle: 'Ganti Peran Pengguna (RBAC Testing)',
-        title: 'Beralih ke Peran: GA Manager / Admin',
-        subtitle: 'Akses inventaris aset QR, pengadaan PO, direktori vendor, dan tata kelola dokumen legal',
-        badge: currentUser.role === 'ga_admin' ? 'Aktif' : 'Pilih',
-        icon: QrCode,
-        score: 0,
-        onSelect: () => {
-          setCurrentUserRole('ga_admin');
-          setActionFeedback('Peran berhasil diubah ke GA Admin');
-          setTimeout(() => {
-            setActionFeedback(null);
-            onClose();
-          }, 800);
-        },
-      },
-      {
-        id: 'action-role-employee',
-        category: 'actions',
-        groupTitle: 'Ganti Peran Pengguna (RBAC Testing)',
-        title: 'Beralih ke Peran: Employee (ESS)',
-        subtitle: 'Employee Self-Service: melihat slip gaji pribadi, dosier mandiri, presensi & cuti',
-        badge: currentUser.role === 'employee' ? 'Aktif' : 'Pilih',
-        icon: User,
-        score: 0,
-        onSelect: () => {
-          setCurrentUserRole('employee');
-          setActionFeedback('Peran berhasil diubah ke Employee (ESS)');
-          setTimeout(() => {
-            setActionFeedback(null);
-            onClose();
-          }, 800);
-        },
-      },
+      })),
     ];
 
     return actions;
   }, [
+    roles,
     currentUser.role,
     onToggleSidebar,
     onOpenMigrationWizard,

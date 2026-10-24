@@ -210,8 +210,16 @@ export const OffboardingManagement: React.FC = () => {
 
       {/* Modal: Inisiasi Offboarding */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full border border-slate-200 overflow-hidden">
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsModalOpen(false);
+          }}
+        >
+          <div
+            className="bg-white rounded-xl shadow-xl max-w-md w-full border border-slate-200 overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="px-5 py-4 bg-slate-900 text-white flex items-center justify-between">
               <h3 className="text-sm font-bold">Inisiasi Proses Offboarding Karyawan</h3>
               <button onClick={() => setIsModalOpen(false)}>

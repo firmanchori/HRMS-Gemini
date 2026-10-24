@@ -32,8 +32,10 @@ import {
   Hourglass,
   Layers,
   ChevronRight,
+  Package,
 } from 'lucide-react';
 import { formatRupiah } from '../../utils/taxCalculator';
+import { ScrollableTabNav } from '../common/ScrollableTabNav';
 
 interface DashboardOverviewProps {
   onOpenMigrationWizard: () => void;
@@ -137,20 +139,22 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
       {/* Top Banner: Tenant Welcome & Quick KPI Bar */}
       <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-5 shadow-xs flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs font-semibold px-2 py-0.5 rounded bg-indigo-50 text-indigo-700">
+          <div className="flex items-center gap-2 flex-wrap mb-2">
+            <span className="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200">
               SaaS Multi-Tenant
             </span>
-            <span className="text-xs text-slate-400">·</span>
-            <span className="text-xs text-slate-500">
-              Paket: <strong className="text-slate-700">{currentTenant.planTier}</strong>
+            <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-md bg-slate-100 text-slate-700 border border-slate-200">
+              Paket: <strong className="text-slate-900 ml-0.5">{currentTenant.planTier}</strong>
+            </span>
+            <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">
+              Wilayah: {currentTenant.city}
             </span>
           </div>
           <h2 className="text-base sm:text-lg font-bold text-slate-900 mt-1">
             {currentTenant.name}
           </h2>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Wilayah: {currentTenant.city} · UMR: {formatRupiah(currentTenant.umr)} · Skema: {currentTenant.workDaysPerWeek} Hari Kerja / Minggu
+          <p className="text-xs text-slate-500 mt-1">
+            UMR Regional: {formatRupiah(currentTenant.umr)} · Skema Operasional: {currentTenant.workDaysPerWeek} Hari Kerja / Minggu
           </p>
         </div>
 
@@ -158,23 +162,23 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={onOpenMigrationWizard}
-            className="flex items-center gap-1.5 px-3 py-1.5 sm:py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-md text-xs font-semibold transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 sm:py-2 bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 rounded-lg text-xs font-semibold shadow-2xs transition-colors"
           >
-            <UploadCloud className="w-3.5 h-3.5" />
+            <UploadCloud className="w-3.5 h-3.5 text-slate-700" />
             <span>Wizard Migrasi</span>
           </button>
 
           <button
             onClick={onOpenQRScanner}
-            className="flex items-center gap-1.5 px-3 py-1.5 sm:py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-md text-xs font-semibold transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 sm:py-2 bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 rounded-lg text-xs font-semibold shadow-2xs transition-colors"
           >
-            <QrCode className="w-3.5 h-3.5 text-slate-600" />
+            <QrCode className="w-3.5 h-3.5 text-slate-700" />
             <span>Scan QR Aset</span>
           </button>
 
           <button
             onClick={() => setActiveModule('payroll')}
-            className="flex items-center gap-1.5 px-3 py-1.5 sm:py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-md text-xs font-semibold shadow-xs transition-colors"
+            className="flex items-center gap-1.5 px-3.5 py-1.5 sm:py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors"
           >
             <Calculator className="w-3.5 h-3.5" />
             <span>Jalankan Payroll</span>
@@ -185,78 +189,130 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
       {/* SECTION BARU: Pusat Proses Berjalan & Pemantauan Multi-Modul (All Modules In-Flight Hub) */}
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs">
         {/* Hub Header */}
-        <div className="p-4 sm:p-5 border-b border-slate-200 bg-slate-50/60 flex flex-col md:flex-row md:items-center justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="p-1.5 bg-indigo-600 text-white rounded-lg shadow-xs">
-                <Layers className="w-4 h-4" />
-              </span>
-              <h3 className="text-sm sm:text-base font-bold text-slate-900">
-                Pusat Proses Berjalan & Pemantauan Multi-Modul
-              </h3>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-100 text-amber-800 border border-amber-300">
-                {totalActiveProcesses} Proses Aktif
-              </span>
-            </div>
-            <p className="text-xs text-slate-500 mt-1">
-              Rangkuman terpadu alur operasional yang sedang berjalan (Onboarding, Offboarding, Antrean Approval, Evaluasi Probation & Kontrak, Payroll, Sanksi, Pengadaan & GA).
-            </p>
+        <div className="p-4 sm:p-5 border-b border-slate-200 bg-slate-50/60">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <span className="p-1.5 bg-indigo-600 text-white rounded-lg shadow-xs">
+              <Layers className="w-4 h-4" />
+            </span>
+            <h3 className="text-sm sm:text-base font-bold text-slate-900">
+              Pusat Proses Berjalan & Pemantauan Multi-Modul
+            </h3>
+            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-mono font-bold bg-amber-100 text-amber-800 border border-amber-300">
+              {totalActiveProcesses} Proses Aktif
+            </span>
           </div>
-
-          {/* Module Category Filters */}
-          <div className="flex items-center gap-1 overflow-x-auto pb-1 md:pb-0 text-xs">
-            <button
-              onClick={() => setActiveProcessFilter('all')}
-              className={`px-2.5 py-1.5 rounded-md font-semibold whitespace-nowrap transition-colors ${
-                activeProcessFilter === 'all'
-                  ? 'bg-slate-900 text-white shadow-xs'
-                  : 'bg-white text-slate-600 hover:bg-slate-200/60 border border-slate-200'
-              }`}
-            >
-              Semua ({totalActiveProcesses})
-            </button>
-            <button
-              onClick={() => setActiveProcessFilter('kepegawaian')}
-              className={`px-2.5 py-1.5 rounded-md font-semibold whitespace-nowrap transition-colors ${
-                activeProcessFilter === 'kepegawaian'
-                  ? 'bg-indigo-600 text-white shadow-xs'
-                  : 'bg-white text-slate-600 hover:bg-slate-200/60 border border-slate-200'
-              }`}
-            >
-              Kepegawaian ({inProgressOnboarding.length + inProgressOffboarding.length + pendingProbations.length + pendingContracts.length})
-            </button>
-            <button
-              onClick={() => setActiveProcessFilter('approval')}
-              className={`px-2.5 py-1.5 rounded-md font-semibold whitespace-nowrap transition-colors ${
-                activeProcessFilter === 'approval'
-                  ? 'bg-emerald-600 text-white shadow-xs'
-                  : 'bg-white text-slate-600 hover:bg-slate-200/60 border border-slate-200'
-              }`}
-            >
-              Approval ({pendingApprovals.length})
-            </button>
-            <button
-              onClick={() => setActiveProcessFilter('payroll')}
-              className={`px-2.5 py-1.5 rounded-md font-semibold whitespace-nowrap transition-colors ${
-                activeProcessFilter === 'payroll'
-                  ? 'bg-amber-600 text-white shadow-xs'
-                  : 'bg-white text-slate-600 hover:bg-slate-200/60 border border-slate-200'
-              }`}
-            >
-              Payroll & Sanksi ({activeSanctions.length + (payrollRecords.length > 0 ? 1 : 0)})
-            </button>
-            <button
-              onClick={() => setActiveProcessFilter('ga')}
-              className={`px-2.5 py-1.5 rounded-md font-semibold whitespace-nowrap transition-colors ${
-                activeProcessFilter === 'ga'
-                  ? 'bg-sky-600 text-white shadow-xs'
-                  : 'bg-white text-slate-600 hover:bg-slate-200/60 border border-slate-200'
-              }`}
-            >
-              GA & PO ({activeProcurements.length + openGATickets.length})
-            </button>
-          </div>
+          <p className="text-xs text-slate-500 mt-1.5">
+            Rangkuman terpadu alur operasional yang sedang berjalan (Onboarding, Offboarding, Antrean Approval, Evaluasi Probation & Kontrak, Payroll, Sanksi, Pengadaan & GA).
+          </p>
         </div>
+
+        {/* Row 2: Standard Sub-Menu Navigation Tabs with Icons */}
+        <ScrollableTabNav className="border-b border-slate-200 bg-white" containerClassName="pt-1">
+          <button
+            onClick={() => setActiveProcessFilter('all')}
+            className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
+              activeProcessFilter === 'all'
+                ? 'border-slate-900 text-slate-950 font-bold'
+                : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+            }`}
+          >
+            <Layers className="w-3.5 h-3.5" />
+            <span>Semua Modul</span>
+            <span
+              className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full transition-colors ${
+                activeProcessFilter === 'all'
+                  ? 'bg-slate-900 text-white'
+                  : 'bg-slate-100 text-slate-600'
+              }`}
+            >
+              {totalActiveProcesses}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveProcessFilter('kepegawaian')}
+            className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
+              activeProcessFilter === 'kepegawaian'
+                ? 'border-slate-900 text-slate-950 font-bold'
+                : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+            }`}
+          >
+            <Users className="w-3.5 h-3.5" />
+            <span>Kepegawaian</span>
+            <span
+              className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full transition-colors ${
+                activeProcessFilter === 'kepegawaian'
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-slate-100 text-slate-600'
+              }`}
+            >
+              {inProgressOnboarding.length + inProgressOffboarding.length + pendingProbations.length + pendingContracts.length}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveProcessFilter('approval')}
+            className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
+              activeProcessFilter === 'approval'
+                ? 'border-slate-900 text-slate-950 font-bold'
+                : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+            }`}
+          >
+            <ShieldCheck className="w-3.5 h-3.5" />
+            <span>Antrean Approval</span>
+            <span
+              className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full transition-colors ${
+                activeProcessFilter === 'approval'
+                  ? 'bg-emerald-600 text-white'
+                  : 'bg-slate-100 text-slate-600'
+              }`}
+            >
+              {pendingApprovals.length}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveProcessFilter('payroll')}
+            className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
+              activeProcessFilter === 'payroll'
+                ? 'border-slate-900 text-slate-950 font-bold'
+                : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+            }`}
+          >
+            <Calculator className="w-3.5 h-3.5" />
+            <span>Payroll & Sanksi</span>
+            <span
+              className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full transition-colors ${
+                activeProcessFilter === 'payroll'
+                  ? 'bg-amber-600 text-white'
+                  : 'bg-slate-100 text-slate-600'
+              }`}
+            >
+              {activeSanctions.length + (payrollRecords.length > 0 ? 1 : 0)}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveProcessFilter('ga')}
+            className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
+              activeProcessFilter === 'ga'
+                ? 'border-slate-900 text-slate-950 font-bold'
+                : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+            }`}
+          >
+            <Package className="w-3.5 h-3.5" />
+            <span>GA & Pengadaan</span>
+            <span
+              className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full transition-colors ${
+                activeProcessFilter === 'ga'
+                  ? 'bg-sky-600 text-white'
+                  : 'bg-slate-100 text-slate-600'
+              }`}
+            >
+              {activeProcurements.length + openGATickets.length}
+            </span>
+          </button>
+        </ScrollableTabNav>
 
         {/* Process Cards Grid (Responsive Mobile Card & Multi-Column Desktop) */}
         <div className="p-4 sm:p-5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4">
@@ -269,15 +325,15 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
               return (
                 <div
                   key={onb.id}
-                  className="bg-white border border-slate-200 rounded-lg p-3.5 hover:border-indigo-300 transition-all shadow-xs flex flex-col justify-between"
+                  className="bg-white border border-slate-200 rounded-lg p-4 hover:border-indigo-300 transition-all shadow-xs flex flex-col justify-between"
                 >
                   <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200">
-                        <UserPlus className="w-3 h-3" />
+                    <div className="flex items-center justify-between mb-3 gap-2">
+                      <span className="inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200">
+                        <UserPlus className="w-3.5 h-3.5" />
                         <span>Onboarding Baru</span>
                       </span>
-                      <span className="text-[10px] font-mono text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded font-semibold border border-amber-200">
+                      <span className="inline-flex items-center text-[10px] font-mono text-amber-700 bg-amber-50 px-2 py-0.5 rounded font-semibold border border-amber-200">
                         Sedang Berjalan
                       </span>
                     </div>
@@ -286,13 +342,13 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                     <p className="text-[11px] text-slate-500 mt-0.5">
                       {onb.position} · {onb.department}
                     </p>
-                    <div className="text-[10px] text-slate-400 mt-1">
-                      Mulai Bergabung: <strong className="text-slate-600 font-mono">{onb.joinDate}</strong>
+                    <div className="text-[10px] text-slate-500 mt-1.5">
+                      Mulai Bergabung: <strong className="text-slate-700 font-mono">{onb.joinDate}</strong>
                     </div>
 
                     {/* Progress Bar */}
-                    <div className="mt-3">
-                      <div className="flex justify-between text-[10px] font-mono mb-1">
+                    <div className="mt-3.5">
+                      <div className="flex justify-between text-[10px] font-mono mb-1.5">
                         <span className="text-slate-500">Checklist Onboarding</span>
                         <span className="font-bold text-indigo-700">
                           {compTasks}/{totalTasks} Tugas ({pct}%)
@@ -309,7 +365,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
 
                   <button
                     onClick={() => setActiveModule('employees')}
-                    className="mt-3.5 pt-2 border-t border-slate-100 flex items-center justify-between text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition-colors w-full"
+                    className="mt-4 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition-colors w-full"
                   >
                     <span>Lanjutkan Checklist Onboarding</span>
                     <ArrowRight className="w-3.5 h-3.5" />
@@ -331,15 +387,15 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
               return (
                 <div
                   key={off.id}
-                  className="bg-white border border-slate-200 rounded-lg p-3.5 hover:border-rose-300 transition-all shadow-xs flex flex-col justify-between"
+                  className="bg-white border border-slate-200 rounded-lg p-4 hover:border-rose-300 transition-all shadow-xs flex flex-col justify-between"
                 >
                   <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-200">
-                        <UserX className="w-3 h-3" />
+                    <div className="flex items-center justify-between mb-3 gap-2">
+                      <span className="inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-md bg-rose-50 text-rose-700 border border-rose-200">
+                        <UserX className="w-3.5 h-3.5" />
                         <span>Offboarding & Pesangon</span>
                       </span>
-                      <span className="text-[10px] font-mono text-rose-700 bg-rose-50 px-1.5 py-0.5 rounded font-semibold border border-rose-200">
+                      <span className="inline-flex items-center text-[10px] font-mono text-rose-700 bg-rose-50 px-2 py-0.5 rounded font-semibold border border-rose-200">
                         Exit Clearance
                       </span>
                     </div>
@@ -348,13 +404,13 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                     <p className="text-[11px] text-slate-500 mt-0.5">
                       {off.separationType} · Efektif: {off.effectiveDate}
                     </p>
-                    <div className="text-[10px] text-slate-600 font-mono mt-1 font-semibold">
+                    <div className="text-[10px] text-slate-700 font-mono mt-1.5 font-semibold">
                       Kompensasi/Pesangon: {formatRupiah(off.severancePay)}
                     </div>
 
                     {/* Progress Bar */}
-                    <div className="mt-3">
-                      <div className="flex justify-between text-[10px] font-mono mb-1">
+                    <div className="mt-3.5">
+                      <div className="flex justify-between text-[10px] font-mono mb-1.5">
                         <span className="text-slate-500">Kepatuhan Syarat Exit</span>
                         <span className="font-bold text-rose-700">{compClearance}/4 Syarat</span>
                       </div>
@@ -369,7 +425,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
 
                   <button
                     onClick={() => setActiveModule('offboarding')}
-                    className="mt-3.5 pt-2 border-t border-slate-100 flex items-center justify-between text-xs font-semibold text-rose-600 hover:text-rose-800 transition-colors w-full"
+                    className="mt-4 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs font-semibold text-rose-600 hover:text-rose-800 transition-colors w-full"
                   >
                     <span>Proses Surat Parklaring & Pesangon</span>
                     <ArrowRight className="w-3.5 h-3.5" />
@@ -386,15 +442,15 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
               return (
                 <div
                   key={prob.id}
-                  className="bg-white border border-slate-200 rounded-lg p-3.5 hover:border-amber-300 transition-all shadow-xs flex flex-col justify-between"
+                  className="bg-white border border-slate-200 rounded-lg p-4 hover:border-amber-300 transition-all shadow-xs flex flex-col justify-between"
                 >
                   <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200">
-                        <FileClock className="w-3 h-3" />
+                    <div className="flex items-center justify-between mb-3 gap-2">
+                      <span className="inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-md bg-amber-50 text-amber-800 border border-amber-200">
+                        <FileClock className="w-3.5 h-3.5" />
                         <span>Evaluasi Probation (H-14)</span>
                       </span>
-                      <span className="text-[10px] font-mono text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded font-bold">
+                      <span className="inline-flex items-center text-[10px] font-mono text-amber-800 bg-amber-100 px-2 py-0.5 rounded font-bold border border-amber-200">
                         {prob.status}
                       </span>
                     </div>
@@ -403,17 +459,17 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                     <p className="text-[11px] text-slate-500 mt-0.5">
                       {emp?.position} · {emp?.department}
                     </p>
-                    <p className="text-[10px] text-slate-600 mt-1">
+                    <p className="text-[10px] text-slate-600 mt-1.5">
                       Tanggal Evaluasi: <strong className="font-mono text-slate-900">{prob.evaluationDate}</strong>
                     </p>
-                    <div className="mt-2 text-[11px] p-2 bg-amber-50/70 border border-amber-200/80 rounded text-amber-900">
+                    <div className="mt-2.5 text-[11px] p-2.5 bg-amber-50/70 border border-amber-200/80 rounded-md text-amber-900">
                       Rekomendasi: <strong>{prob.recommendation}</strong> · Penilai: {mgr?.fullName || 'Line Manager'}
                     </div>
                   </div>
 
                   <button
                     onClick={() => setActiveModule('employees')}
-                    className="mt-3.5 pt-2 border-t border-slate-100 flex items-center justify-between text-xs font-semibold text-amber-700 hover:text-amber-900 transition-colors w-full"
+                    className="mt-4 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs font-semibold text-amber-700 hover:text-amber-900 transition-colors w-full"
                   >
                     <span>Buka Form Penilaian Karyawan Tetap</span>
                     <ArrowRight className="w-3.5 h-3.5" />
@@ -429,15 +485,15 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
               return (
                 <div
                   key={ctr.id}
-                  className="bg-white border border-slate-200 rounded-lg p-3.5 hover:border-blue-300 transition-all shadow-xs flex flex-col justify-between"
+                  className="bg-white border border-slate-200 rounded-lg p-4 hover:border-blue-300 transition-all shadow-xs flex flex-col justify-between"
                 >
                   <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200">
-                        <FileSignature className="w-3 h-3" />
+                    <div className="flex items-center justify-between mb-3 gap-2">
+                      <span className="inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-md bg-blue-50 text-blue-700 border border-blue-200">
+                        <FileSignature className="w-3.5 h-3.5" />
                         <span>Review PKWT (H-30)</span>
                       </span>
-                      <span className="text-[10px] font-mono text-blue-800 bg-blue-100 px-1.5 py-0.5 rounded font-bold">
+                      <span className="inline-flex items-center text-[10px] font-mono text-blue-800 bg-blue-100 px-2 py-0.5 rounded font-bold border border-blue-200">
                         {ctr.status}
                       </span>
                     </div>
@@ -446,17 +502,17 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                     <p className="text-[11px] text-slate-500 mt-0.5">
                       {emp?.position} · {emp?.department}
                     </p>
-                    <p className="text-[10px] text-slate-600 mt-1">
+                    <p className="text-[10px] text-slate-600 mt-1.5">
                       Kontrak Berakhir: <strong className="font-mono text-slate-900">{ctr.currentContractEnd}</strong>
                     </p>
-                    <div className="mt-2 text-[11px] p-2 bg-blue-50/70 border border-blue-200/80 rounded text-blue-900">
+                    <div className="mt-2.5 text-[11px] p-2.5 bg-blue-50/70 border border-blue-200/80 rounded-md text-blue-900">
                       Rekomendasi: <strong>{ctr.recommendation}</strong>
                     </div>
                   </div>
 
                   <button
                     onClick={() => setActiveModule('employees')}
-                    className="mt-3.5 pt-2 border-t border-slate-100 flex items-center justify-between text-xs font-semibold text-blue-700 hover:text-blue-900 transition-colors w-full"
+                    className="mt-4 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs font-semibold text-blue-700 hover:text-blue-900 transition-colors w-full"
                   >
                     <span>Proses SK Perpanjangan / PKWTT</span>
                     <ArrowRight className="w-3.5 h-3.5" />
@@ -472,15 +528,15 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
               return (
                 <div
                   key={appr.id}
-                  className="bg-white border border-slate-200 rounded-lg p-3.5 hover:border-emerald-300 transition-all shadow-xs flex flex-col justify-between"
+                  className="bg-white border border-slate-200 rounded-lg p-4 hover:border-emerald-300 transition-all shadow-xs flex flex-col justify-between"
                 >
                   <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">
-                        <ShieldCheck className="w-3 h-3" />
+                    <div className="flex items-center justify-between mb-3 gap-2">
+                      <span className="inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        <ShieldCheck className="w-3.5 h-3.5" />
                         <span>Approval: {appr.category}</span>
                       </span>
-                      <span className="text-[10px] font-mono text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded font-semibold border border-amber-200">
+                      <span className="inline-flex items-center text-[10px] font-mono text-amber-700 bg-amber-50 px-2 py-0.5 rounded font-semibold border border-amber-200">
                         Menunggu Approval
                       </span>
                     </div>
@@ -489,14 +545,14 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                     <p className="text-[11px] text-slate-500 mt-0.5">
                       Pengaju: <strong className="text-slate-800">{reqEmp?.fullName || appr.requesterId}</strong> ({appr.department})
                     </p>
-                    <p className="text-[10px] text-slate-400 mt-1 font-mono">
+                    <p className="text-[10px] text-slate-500 mt-1.5 font-mono">
                       Diajukan: {appr.submittedAt} · Batas SLA: {appr.deadlineAt}
                     </p>
                   </div>
 
                   <button
                     onClick={() => setActiveModule('approvals')}
-                    className="mt-3.5 pt-2 border-t border-slate-100 flex items-center justify-between text-xs font-semibold text-emerald-700 hover:text-emerald-900 transition-colors w-full"
+                    className="mt-4 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs font-semibold text-emerald-700 hover:text-emerald-900 transition-colors w-full"
                   >
                     <span>Review & Setujui Pengajuan</span>
                     <ArrowRight className="w-3.5 h-3.5" />
@@ -512,15 +568,15 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
               return (
                 <div
                   key={sp.id}
-                  className="bg-white border border-slate-200 rounded-lg p-3.5 hover:border-red-300 transition-all shadow-xs flex flex-col justify-between"
+                  className="bg-white border border-slate-200 rounded-lg p-4 hover:border-red-300 transition-all shadow-xs flex flex-col justify-between"
                 >
                   <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-200">
-                        <AlertTriangle className="w-3 h-3" />
+                    <div className="flex items-center justify-between mb-3 gap-2">
+                      <span className="inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-md bg-rose-50 text-rose-700 border border-rose-200">
+                        <AlertTriangle className="w-3.5 h-3.5" />
                         <span>Sanksi Disiplin: {sp.level}</span>
                       </span>
-                      <span className="text-[10px] font-mono text-rose-700 bg-rose-100 px-1.5 py-0.5 rounded font-bold">
+                      <span className="inline-flex items-center text-[10px] font-mono text-rose-700 bg-rose-100 px-2 py-0.5 rounded font-bold border border-rose-200">
                         Aktif Mengikat
                       </span>
                     </div>
@@ -529,14 +585,14 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                     <p className="text-[11px] text-slate-600 mt-1 line-clamp-2">
                       Pelanggaran: {sp.violationReason}
                     </p>
-                    <p className="text-[10px] text-slate-500 mt-1 font-mono">
+                    <p className="text-[10px] text-slate-500 mt-1.5 font-mono">
                       Masa Berlaku s/d: <strong className="text-rose-700">{sp.validUntil}</strong>
                     </p>
                   </div>
 
                   <button
                     onClick={() => setActiveModule('compliance')}
-                    className="mt-3.5 pt-2 border-t border-slate-100 flex items-center justify-between text-xs font-semibold text-rose-700 hover:text-rose-900 transition-colors w-full"
+                    className="mt-4 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs font-semibold text-rose-700 hover:text-rose-900 transition-colors w-full"
                   >
                     <span>Kelola Berkas Sanksi & Pembinaan</span>
                     <ArrowRight className="w-3.5 h-3.5" />
@@ -550,15 +606,15 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             activeProcurements.map((po) => (
               <div
                 key={po.id}
-                className="bg-white border border-slate-200 rounded-lg p-3.5 hover:border-orange-300 transition-all shadow-xs flex flex-col justify-between"
+                className="bg-white border border-slate-200 rounded-lg p-4 hover:border-orange-300 transition-all shadow-xs flex flex-col justify-between"
               >
                 <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-orange-50 text-orange-700 border border-orange-200">
-                      <ShoppingCart className="w-3 h-3" />
+                  <div className="flex items-center justify-between mb-3 gap-2">
+                    <span className="inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-md bg-orange-50 text-orange-700 border border-orange-200">
+                      <ShoppingCart className="w-3.5 h-3.5" />
                       <span>Procurement: {po.prNumber}</span>
                     </span>
-                    <span className="text-[10px] font-mono text-orange-800 bg-orange-100 px-1.5 py-0.5 rounded font-bold">
+                    <span className="inline-flex items-center text-[10px] font-mono text-orange-800 bg-orange-100 px-2 py-0.5 rounded font-bold border border-orange-200">
                       {po.status}
                     </span>
                   </div>
@@ -567,14 +623,14 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                   <p className="text-[11px] text-slate-500 mt-0.5">
                     Vendor: <strong className="text-slate-800">{po.vendorName}</strong>
                   </p>
-                  <p className="text-[10px] text-slate-600 font-mono mt-1 font-semibold">
+                  <p className="text-[10px] text-slate-600 font-mono mt-1.5 font-semibold">
                     Nilai Estimasi: {formatRupiah(po.estimatedCost)}
                   </p>
                 </div>
 
                 <button
                   onClick={() => setActiveModule('procurement')}
-                  className="mt-3.5 pt-2 border-t border-slate-100 flex items-center justify-between text-xs font-semibold text-orange-700 hover:text-orange-900 transition-colors w-full"
+                  className="mt-4 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs font-semibold text-orange-700 hover:text-orange-900 transition-colors w-full"
                 >
                   <span>Pantau PO & Faktur Vendor</span>
                   <ArrowRight className="w-3.5 h-3.5" />
@@ -587,15 +643,15 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             openGATickets.map((tkt) => (
               <div
                 key={tkt.id}
-                className="bg-white border border-slate-200 rounded-lg p-3.5 hover:border-cyan-300 transition-all shadow-xs flex flex-col justify-between"
+                className="bg-white border border-slate-200 rounded-lg p-4 hover:border-cyan-300 transition-all shadow-xs flex flex-col justify-between"
               >
                 <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-cyan-50 text-cyan-700 border border-cyan-200">
-                      <Wrench className="w-3 h-3" />
+                  <div className="flex items-center justify-between mb-3 gap-2">
+                    <span className="inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-md bg-cyan-50 text-cyan-700 border border-cyan-200">
+                      <Wrench className="w-3.5 h-3.5" />
                       <span>Fasilitas: {tkt.ticketNumber}</span>
                     </span>
-                    <span className="text-[10px] font-mono text-cyan-800 bg-cyan-100 px-1.5 py-0.5 rounded font-bold">
+                    <span className="inline-flex items-center text-[10px] font-mono text-cyan-800 bg-cyan-100 px-2 py-0.5 rounded font-bold border border-cyan-200">
                       {tkt.status}
                     </span>
                   </div>
@@ -604,14 +660,14 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                   <p className="text-[11px] text-slate-500 mt-0.5">
                     Kendala: {tkt.description}
                   </p>
-                  <p className="text-[10px] text-slate-400 mt-1 font-mono">
+                  <p className="text-[10px] text-slate-500 mt-1.5 font-mono">
                     Prioritas: <strong className="text-slate-700">{tkt.priority}</strong> · Dilaporkan: {tkt.reportedAt}
                   </p>
                 </div>
 
                 <button
                   onClick={() => setActiveModule('assets')}
-                  className="mt-3.5 pt-2 border-t border-slate-100 flex items-center justify-between text-xs font-semibold text-cyan-700 hover:text-cyan-900 transition-colors w-full"
+                  className="mt-4 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs font-semibold text-cyan-700 hover:text-cyan-900 transition-colors w-full"
                 >
                   <span>Tindak Lanjuti Perbaikan GA</span>
                   <ArrowRight className="w-3.5 h-3.5" />
@@ -714,9 +770,9 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             onClick={() => setActiveModule('recruitment')}
             className="flex flex-col items-start p-3 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition-all text-left group hover:border-indigo-400/50"
           >
-            <div className="flex items-center gap-2 mb-1.5 text-purple-300 group-hover:text-purple-200">
+            <div className="flex items-center gap-2 mb-1.5 text-sky-300 group-hover:text-sky-200">
               <UserPlus className="w-4 h-4" />
-              <span className="text-xs font-bold text-white group-hover:text-purple-200">Offering Letter</span>
+              <span className="text-xs font-bold text-white group-hover:text-sky-200">Offering Letter</span>
             </div>
             <p className="text-[11px] text-slate-300 leading-snug line-clamp-2">
               Kalkulator Net THP / Gross + TER PPh 21 & checklist benefit.
@@ -795,71 +851,111 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         </div>
       </div>
 
-      {/* KPI Cards Row (Single-Elevation, High Density) */}
+      {/* KPI Cards Row (Interactive Navigation Cards) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Metric 1 */}
-        <div className="bg-white border border-slate-200 rounded-lg p-4">
+        {/* Metric 1 -> Employees */}
+        <button
+          onClick={() => setActiveModule('employees')}
+          className="bg-white hover:bg-slate-50/80 border border-slate-200 hover:border-slate-400 rounded-xl p-4 text-left transition-all shadow-2xs group cursor-pointer"
+          title="Buka Modul Manajemen Karyawan Lengkap"
+        >
           <div className="flex items-center justify-between text-slate-500 mb-2">
-            <span className="text-xs font-medium">Total Karyawan Aktif</span>
-            <Users className="w-4 h-4 text-indigo-600" />
+            <span className="text-xs font-semibold group-hover:text-slate-900 transition-colors">Total Karyawan Aktif</span>
+            <Users className="w-4 h-4 text-slate-700 group-hover:text-slate-900 transition-colors" />
           </div>
           <div className="text-2xl font-bold text-slate-900 font-mono tabular-nums">
             {totalEmployees}
           </div>
-          <div className="mt-2 flex items-center gap-2 text-[11px] text-slate-500 flex-wrap">
-            <span>Tetap: <strong className="text-slate-700 font-mono">{tetapCount}</strong></span>
-            <span>·</span>
-            <span>Kontrak: <strong className="text-slate-700 font-mono">{kontrakCount}</strong></span>
-            <span>·</span>
-            <span>Outsource: <strong className="text-slate-700 font-mono">{outsourceCount}</strong></span>
+          <div className="mt-2.5 flex items-center gap-1.5 text-[11px] flex-wrap">
+            <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 font-semibold border border-slate-200">
+              Tetap: {tetapCount}
+            </span>
+            <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-sky-50 text-sky-700 font-semibold border border-sky-200">
+              Kontrak: {kontrakCount}
+            </span>
+            <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 font-semibold border border-amber-200">
+              Outsource: {outsourceCount}
+            </span>
           </div>
-        </div>
+          <div className="mt-2.5 text-[10px] text-slate-500 font-medium flex items-center gap-1 group-hover:text-slate-800">
+            <span>Buka Data Karyawan</span>
+            <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+          </div>
+        </button>
 
-        {/* Metric 2 */}
-        <div className="bg-white border border-slate-200 rounded-lg p-4">
+        {/* Metric 2 -> Attendance */}
+        <button
+          onClick={() => setActiveModule('attendance')}
+          className="bg-white hover:bg-slate-50/80 border border-slate-200 hover:border-slate-400 rounded-xl p-4 text-left transition-all shadow-2xs group cursor-pointer"
+          title="Buka Modul Presensi & Shift"
+        >
           <div className="flex items-center justify-between text-slate-500 mb-2">
-            <span className="text-xs font-medium">Presensi Hari Ini</span>
+            <span className="text-xs font-semibold group-hover:text-slate-900 transition-colors">Presensi Hari Ini</span>
             <Clock className="w-4 h-4 text-emerald-600" />
           </div>
           <div className="text-2xl font-bold text-slate-900 font-mono tabular-nums">
             {presentCount + lateCount} / {totalEmployees}
           </div>
-          <div className="mt-2 flex items-center gap-2 text-[11px] text-slate-500 flex-wrap">
-            <span className="text-emerald-700 font-semibold font-mono">{presentCount} Tepat Waktu</span>
-            <span>·</span>
-            <span className="text-amber-700 font-semibold font-mono">{lateCount} Terlambat</span>
-            <span>·</span>
-            <span className="text-slate-600 font-mono">{leaveCount} Izin/Cuti</span>
+          <div className="mt-2.5 flex items-center gap-1.5 text-[11px] flex-wrap">
+            <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 font-bold border border-emerald-200">
+              {presentCount} Tepat Waktu
+            </span>
+            <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 font-bold border border-amber-200">
+              {lateCount} Terlambat
+            </span>
+            <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 font-semibold border border-slate-200">
+              {leaveCount} Izin/Cuti
+            </span>
           </div>
-        </div>
+          <div className="mt-2.5 text-[10px] text-slate-500 font-medium flex items-center gap-1 group-hover:text-slate-800">
+            <span>Buka Rekap Presensi</span>
+            <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+          </div>
+        </button>
 
-        {/* Metric 3 */}
-        <div className="bg-white border border-slate-200 rounded-lg p-4">
+        {/* Metric 3 -> Assets */}
+        <button
+          onClick={() => setActiveModule('assets')}
+          className="bg-white hover:bg-slate-50/80 border border-slate-200 hover:border-slate-400 rounded-xl p-4 text-left transition-all shadow-2xs group cursor-pointer"
+          title="Buka Modul GA & Aset QR"
+        >
           <div className="flex items-center justify-between text-slate-500 mb-2">
-            <span className="text-xs font-medium">Valuasi Aset GA</span>
-            <Building2 className="w-4 h-4 text-slate-700" />
+            <span className="text-xs font-semibold group-hover:text-slate-900 transition-colors">Valuasi Aset GA</span>
+            <Building2 className="w-4 h-4 text-slate-700 group-hover:text-slate-900 transition-colors" />
           </div>
           <div className="text-xl font-bold text-slate-900 font-mono tabular-nums truncate">
             {formatRupiah(totalAssetValue)}
           </div>
-          <div className="mt-2 text-[11px] text-slate-500">
+          <div className="mt-2.5 text-[11px] text-slate-500">
             <strong className="text-slate-800 font-mono">{assets.length} Unit Aset</strong> terdaftar dengan label QR terverifikasi.
           </div>
-        </div>
+          <div className="mt-2.5 text-[10px] text-slate-500 font-medium flex items-center gap-1 group-hover:text-slate-800">
+            <span>Buka Inventaris Aset</span>
+            <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+          </div>
+        </button>
 
-        {/* Metric 4 */}
-        <div className="bg-white border border-slate-200 rounded-lg p-4">
+        {/* Metric 4 -> Compliance */}
+        <button
+          onClick={() => setActiveModule('compliance')}
+          className="bg-white hover:bg-slate-50/80 border border-slate-200 hover:border-slate-400 rounded-xl p-4 text-left transition-all shadow-2xs group cursor-pointer"
+          title="Buka Modul Kepatuhan & SP"
+        >
           <div className="flex items-center justify-between text-slate-500 mb-2">
-            <span className="text-xs font-medium">Kepatuhan & Pengadaan</span>
+            <span className="text-xs font-semibold group-hover:text-slate-900 transition-colors">Kepatuhan & Pengadaan</span>
             <ShieldCheck className="w-4 h-4 text-amber-600" />
           </div>
           <div className="text-2xl font-bold text-slate-900 font-mono tabular-nums">
             {complianceRecords.length} SP
           </div>
-          <div className="mt-2 text-[11px] text-slate-500">
+          <div className="mt-2.5 text-[11px] text-slate-500">
             {procurementOrders.filter((p) => p.status === 'PO Terbit').length} PO Pengadaan Berjalan · {vacancies.length} Lowongan
           </div>
-        </div>
+          <div className="mt-2.5 text-[10px] text-slate-500 font-medium flex items-center gap-1 group-hover:text-slate-800">
+            <span>Buka Kepatuhan & Disiplin</span>
+            <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+          </div>
+        </button>
       </div>
 
       {/* 2-Column Split: Interactive ESS Quick Punch + Department Distribution */}
@@ -871,7 +967,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
               <span className="text-xs font-bold text-slate-900 uppercase tracking-wider">
                 Presensi Mandiri ESS
               </span>
-              <span className="text-[10px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded font-mono">
+              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-mono font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
                 Live Terminal
               </span>
             </div>
@@ -972,14 +1068,29 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                 onClick={() => setActiveModule('employees')}
                 className="p-3 border border-slate-200 rounded-lg bg-slate-50/50 hover:bg-slate-100/70 transition-colors cursor-pointer"
               >
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-slate-900 text-xs">{emp.fullName}</span>
-                  <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                    {emp.status}
-                  </span>
-                </div>
-                <div className="text-[11px] text-slate-500 mt-0.5">
-                  {emp.position} · {emp.department}
+                <div className="flex items-center gap-2.5">
+                  {emp.avatar ? (
+                    <img
+                      src={emp.avatar}
+                      alt={emp.fullName}
+                      className="w-10 h-10 rounded-full object-cover border border-slate-200 shadow-2xs shrink-0"
+                    />
+                  ) : (
+                    <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center text-xs shrink-0 border border-indigo-200">
+                      {emp.fullName.split(' ').map((n) => n[0]).slice(0, 2).join('')}
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-slate-900 text-xs truncate">{emp.fullName}</span>
+                      <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 shrink-0">
+                        {emp.status}
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-slate-500 mt-0.5 truncate">
+                      {emp.position} · {emp.department}
+                    </div>
+                  </div>
                 </div>
                 <div className="flex items-center justify-between text-xs mt-2 pt-2 border-t border-slate-200/60 font-mono">
                   <span className="text-slate-600 font-semibold">{emp.employmentType}</span>
@@ -989,37 +1100,59 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             ))}
           </div>
 
-          {/* Desktop/Tablet Horizontal Table (>= md) */}
-          <div className="hidden md:block border border-slate-200 rounded-lg overflow-x-auto">
-            <table className="w-full text-xs text-left min-w-[500px]">
+          {/* Desktop/Tablet Horizontal Table (>= md) - Menyesuaikan kolom yang tampil tanpa slide horizontal pada tablet */}
+          <div className="hidden md:block border border-slate-200 rounded-lg overflow-hidden bg-white">
+            <table className="w-full text-xs text-left">
               <thead className="bg-slate-50 border-b border-slate-200 text-slate-600">
                 <tr>
-                  <th className="py-2.5 px-3 font-semibold">Nama & NIK</th>
-                  <th className="py-2.5 px-3 font-semibold">Departemen</th>
-                  <th className="py-2.5 px-3 font-semibold">Tipe Kerja</th>
-                  <th className="py-2.5 px-3 font-semibold text-right">Gaji Pokok</th>
+                  <th className="py-2.5 px-3 font-semibold">Karyawan (Foto & NIK)</th>
+                  <th className="py-2.5 px-3 font-semibold">Jabatan & Dept</th>
+                  <th className="py-2.5 px-3 font-semibold hidden lg:table-cell">Tipe Kerja</th>
+                  <th className="py-2.5 px-3 font-semibold text-right hidden xl:table-cell">Gaji Pokok</th>
                   <th className="py-2.5 px-3 font-semibold text-center">Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {employees.slice(0, 4).map((emp) => (
-                  <tr key={emp.id} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="py-2 px-3">
-                      <div className="font-semibold text-slate-900">{emp.fullName}</div>
-                      <div className="text-[10px] text-slate-500 font-mono">{emp.nik}</div>
+                  <tr
+                    key={emp.id}
+                    onClick={() => setActiveModule('employees')}
+                    className="hover:bg-slate-50 transition-colors cursor-pointer"
+                    title="Klik baris untuk membuka detail karyawan ini"
+                  >
+                    <td className="py-2.5 px-3">
+                      <div className="flex items-center gap-2.5">
+                        {emp.avatar ? (
+                          <img
+                            src={emp.avatar}
+                            alt={emp.fullName}
+                            className="w-8 h-8 rounded-full object-cover border border-slate-200 shadow-2xs shrink-0"
+                          />
+                        ) : (
+                          <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-700 font-bold flex items-center justify-center text-[10px] shrink-0 border border-slate-300">
+                            {emp.fullName.split(' ').map((n) => n[0]).slice(0, 2).join('')}
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <div className="font-semibold text-slate-900 truncate">{emp.fullName}</div>
+                          <div className="text-[10px] text-slate-500 font-mono">{emp.nik}</div>
+                        </div>
+                      </div>
                     </td>
-                    <td className="py-2 px-3 text-slate-700">
-                      <div>{emp.position}</div>
+                    <td className="py-2.5 px-3 text-slate-700">
+                      <div className="font-medium text-slate-800">{emp.position}</div>
                       <div className="text-[10px] text-slate-500">{emp.department}</div>
                     </td>
-                    <td className="py-2 px-3">
-                      <span className="text-slate-800 font-medium">{emp.employmentType}</span>
+                    <td className="py-2.5 px-3 hidden lg:table-cell">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+                        {emp.employmentType}
+                      </span>
                     </td>
-                    <td className="py-2 px-3 text-right font-mono text-slate-800">
+                    <td className="py-2.5 px-3 text-right font-mono text-slate-800 hidden xl:table-cell">
                       {formatRupiah(emp.basicSalary)}
                     </td>
-                    <td className="py-2 px-3 text-center">
-                      <span className="text-[11px] font-semibold text-emerald-700">
+                    <td className="py-2.5 px-3 text-center">
+                      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
                         {emp.status}
                       </span>
                     </td>

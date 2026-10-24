@@ -17,6 +17,7 @@ import {
   X,
   Settings,
   Printer,
+  Download,
 } from 'lucide-react';
 import { EmployeeSelect } from '../common/EmployeeSelect';
 import { QRCodeView } from '../common/QRCodeView';
@@ -25,6 +26,7 @@ import { ValidatedDateInput } from '../common/ValidatedDateInput';
 import { validateDateRange, validateDateString } from '../../utils/dateValidator';
 import { formatRupiah } from '../../utils/taxCalculator';
 import { BusinessTripRequest } from '../../types/hrms';
+import { ScrollableTabNav } from '../common/ScrollableTabNav';
 
 export const BusinessTripManagement: React.FC = () => {
   const {
@@ -125,9 +127,9 @@ export const BusinessTripManagement: React.FC = () => {
   const filteredTrips = businessTrips.filter((t) => {
     const emp = employees.find((e) => e.id === t.employeeId);
     const matchesSearch =
-      (emp?.fullName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      t.tripNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      t.destinationCity.toLowerCase().includes(searchQuery.toLowerCase());
+      (emp?.fullName || '').toLowerCase().includes((searchQuery || '').toLowerCase()) ||
+      (t?.tripNumber || '').toLowerCase().includes((searchQuery || '').toLowerCase()) ||
+      (t?.destinationCity || '').toLowerCase().includes((searchQuery || '').toLowerCase());
     const matchesStatus = statusFilter === 'all' || t.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
@@ -136,8 +138,8 @@ export const BusinessTripManagement: React.FC = () => {
 
   return (
     <div className="space-y-5">
-      {/* Header */}
-      <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 border-b border-slate-200 pb-4">
+      {/* Row 1: Module Header & Primary Action */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
         <div>
           <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
             <Plane className="w-5 h-5 text-indigo-600" />
@@ -148,52 +150,62 @@ export const BusinessTripManagement: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full lg:w-auto">
-          <div className="w-full sm:w-auto overflow-x-auto no-scrollbar pb-1 sm:pb-0">
-            <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5 text-xs whitespace-nowrap shadow-2xs">
-              <button
-                onClick={() => setActiveTab('trips')}
-                className={`px-3 py-1.5 rounded-md font-medium transition-all ${
-                  activeTab === 'trips'
-                    ? 'bg-indigo-600 text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                Daftar SPPD
-              </button>
-              <button
-                onClick={() => setActiveTab('realisasi')}
-                className={`px-3 py-1.5 rounded-md font-medium transition-all ${
-                  activeTab === 'realisasi'
-                    ? 'bg-indigo-600 text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                Klaim & Realisasi
-              </button>
-              <button
-                onClick={() => setActiveTab('pengaturan')}
-                className={`px-3 py-1.5 rounded-md font-medium transition-all flex items-center gap-1 ${
-                  activeTab === 'pengaturan'
-                    ? 'bg-indigo-600 text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <Settings className="w-3.5 h-3.5" />
-                <span>Pengaturan</span>
-              </button>
-            </div>
-          </div>
-
-          <button
-            onClick={() => setIsModalOpen(true)}
-            className="flex items-center justify-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors shrink-0"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Ajukan Perjalanan Dinas</span>
-          </button>
-        </div>
+        <button
+          onClick={() => setIsModalOpen(true)}
+          className="flex items-center justify-center gap-1.5 px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors shrink-0"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          <span>Ajukan Perjalanan Dinas</span>
+        </button>
       </div>
+
+      {/* Row 2: Enterprise Tab Navigation Bar (Not Parallel to Title) */}
+      <ScrollableTabNav className="border-b border-slate-200" containerClassName="pt-1">
+        <button
+          onClick={() => setActiveTab('trips')}
+          className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
+            activeTab === 'trips'
+              ? 'border-slate-900 text-slate-950 font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+          }`}
+        >
+          <Plane className="w-3.5 h-3.5" />
+          <span>Daftar SPPD</span>
+          <span
+            className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full transition-colors ${
+              activeTab === 'trips'
+                ? 'bg-slate-900 text-white'
+                : 'bg-slate-100 text-slate-600'
+            }`}
+          >
+            {businessTrips.length}
+          </span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('realisasi')}
+          className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
+            activeTab === 'realisasi'
+              ? 'border-slate-900 text-slate-950 font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+          }`}
+        >
+          <Receipt className="w-3.5 h-3.5" />
+          <span>Klaim & Realisasi</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('pengaturan')}
+          className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
+            activeTab === 'pengaturan'
+              ? 'border-slate-900 text-slate-950 font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+          }`}
+        >
+          <Settings className="w-3.5 h-3.5" />
+          <span>Pengaturan SPPD & Plafon</span>
+        </button>
+      </ScrollableTabNav>
 
       {sppdNotice && (
         <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center justify-between text-xs text-emerald-800 animate-fadeIn">
@@ -245,24 +257,33 @@ export const BusinessTripManagement: React.FC = () => {
           </div>
 
           {/* Search & Filter */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white p-3 border border-slate-200 rounded-lg shadow-xs">
-            <div className="relative w-full sm:w-80">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+          <div className="bg-white p-3 sm:p-3.5 border border-slate-200 rounded-xl shadow-xs space-y-2.5 lg:space-y-0 lg:flex lg:items-center lg:justify-between lg:gap-4">
+            <div className="relative w-full lg:max-w-md">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
               <input
                 type="text"
                 placeholder="Cari karyawan, tujuan, atau no SPPD..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-3 py-1.5 text-xs border border-slate-300 rounded-md outline-none focus:border-indigo-500"
+                className="w-full pl-9 pr-8 py-2 text-xs bg-slate-50/70 focus:bg-white border border-slate-300 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-indigo-500 transition-all font-medium text-slate-800 placeholder-slate-400"
               />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600"
+                  title="Hapus pencarian"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
 
-            <div className="flex items-center gap-2 w-full sm:w-auto">
-              <Filter className="w-4 h-4 text-slate-400" />
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full lg:w-auto">
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="text-xs border border-slate-300 rounded-md py-1.5 px-3 bg-white font-medium text-slate-700"
+                className="w-full sm:w-auto py-2 px-3 text-xs border border-slate-300 rounded-lg bg-white font-medium text-slate-700 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 shadow-2xs"
               >
                 <option value="all">Semua Status</option>
                 <option value="Menunggu Approval">Menunggu Approval</option>
@@ -270,6 +291,21 @@ export const BusinessTripManagement: React.FC = () => {
                 <option value="Disetujui Finance">Disetujui Finance</option>
                 <option value="Selesai">Selesai</option>
               </select>
+
+              {(searchQuery || statusFilter !== 'all') && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery('');
+                    setStatusFilter('all');
+                  }}
+                  className="inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg transition-colors shrink-0"
+                  title="Reset Filter"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  <span>Reset Filter</span>
+                </button>
+              )}
             </div>
           </div>
 
@@ -716,8 +752,16 @@ export const BusinessTripManagement: React.FC = () => {
 
       {/* Modal: Form Pengajuan SPPD */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full border border-slate-200 overflow-hidden">
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsModalOpen(false);
+          }}
+        >
+          <div
+            className="bg-white rounded-xl shadow-xl max-w-lg w-full border border-slate-200 overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="px-5 py-4 bg-slate-900 text-white flex items-center justify-between">
               <div>
                 <h3 className="text-sm font-bold">Form Pengajuan Perjalanan Dinas (SPPD)</h3>
@@ -881,8 +925,16 @@ export const BusinessTripManagement: React.FC = () => {
 
       {/* Modal: Preview Cetak Dokumen SPPD */}
       {selectedTripForDoc && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]">
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setSelectedTripForDoc(null);
+          }}
+        >
+          <div
+            className="bg-white rounded-xl shadow-2xl max-w-2xl w-full border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="px-5 py-4 bg-slate-900 text-white flex items-center justify-between">
               <div>
                 <h3 className="text-sm font-bold">Surat Perintah Perjalanan Dinas (SPPD)</h3>
@@ -1011,10 +1063,19 @@ export const BusinessTripManagement: React.FC = () => {
               </button>
               <button
                 onClick={() => window.print()}
-                className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-semibold text-xs flex items-center gap-1.5"
+                className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg font-semibold text-xs flex items-center gap-1.5 shadow-2xs"
+                title="Cetak Fisik Dokumen SPPD"
               >
                 <Printer className="w-3.5 h-3.5" />
-                <span>Cetak SPPD Resmi</span>
+                <span>Cetak</span>
+              </button>
+              <button
+                onClick={() => window.print()}
+                className="px-3.5 py-1.5 bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 rounded-lg font-semibold text-xs flex items-center gap-1.5 shadow-2xs"
+                title="Unduh Berkas SPPD Format PDF"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Unduh PDF</span>
               </button>
             </div>
           </div>
@@ -1023,8 +1084,16 @@ export const BusinessTripManagement: React.FC = () => {
 
       {/* Modal: Form Settlement Nota */}
       {selectedTripForClaim && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full border border-slate-200 overflow-hidden">
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setSelectedTripForClaim(null);
+          }}
+        >
+          <div
+            className="bg-white rounded-xl shadow-xl max-w-md w-full border border-slate-200 overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="px-5 py-4 bg-slate-900 text-white flex items-center justify-between">
               <div>
                 <h3 className="text-sm font-bold">Settlement Realisasi Biaya Dinas</h3>

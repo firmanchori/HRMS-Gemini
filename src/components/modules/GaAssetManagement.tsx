@@ -45,6 +45,7 @@ import { formatRupiah } from '../../utils/taxCalculator';
 import { QRCodeView } from '../common/QRCodeView';
 import { EmployeeSelect } from '../common/EmployeeSelect';
 import { ValidatedDateInput } from '../common/ValidatedDateInput';
+import { ScrollableTabNav } from '../common/ScrollableTabNav';
 
 export const GaAssetManagement: React.FC = () => {
   const {
@@ -64,6 +65,7 @@ export const GaAssetManagement: React.FC = () => {
     addVehicleBooking,
     updateVehicleBookingStatus,
     officeSupplies,
+    addOfficeSupply,
     officeSupplyRequests,
     addOfficeSupplyRequest,
     reviewOfficeSupplyRequest,
@@ -136,9 +138,36 @@ export const GaAssetManagement: React.FC = () => {
     endDate: new Date().toISOString().split('T')[0],
     startMileageKm: 12450,
   });
+  const [selectedVehicleForReturn, setSelectedVehicleForReturn] = useState<GAVehicleBooking | null>(null);
+  const [returnForm, setReturnForm] = useState({
+    returnDate: new Date().toISOString().split('T')[0],
+    endOdometer: 0,
+    tollFuelCost: 0,
+    returnNotes: 'Kendaraan dikembalikan dalam kondisi prima dan bersih.',
+  });
 
-  // Supply Request State
+  // Supply Request & Master State
   const [isSupplyModalOpen, setIsSupplyModalOpen] = useState(false);
+  const [isAddSupplyModalOpen, setIsAddSupplyModalOpen] = useState(false);
+  const [newSupplyForm, setNewSupplyForm] = useState<{
+    itemCode: string;
+    itemName: string;
+    category: GAOfficeSupply['category'];
+    currentStock: number;
+    reorderPoint: number;
+    standardReorderQty: number;
+    estimatedUnitPrice: number;
+    unit: string;
+  }>({
+    itemCode: `ATK-${Date.now().toString().slice(-4)}`,
+    itemName: '',
+    category: 'Kertas & Dokumen',
+    currentStock: 25,
+    reorderPoint: 5,
+    standardReorderQty: 10,
+    estimatedUnitPrice: 45000,
+    unit: 'Rim',
+  });
   const [supplyForm, setSupplyForm] = useState({
     supplyId: officeSupplies[0]?.id || 'sup-1',
     quantity: 2,
@@ -165,10 +194,10 @@ export const GaAssetManagement: React.FC = () => {
 
   const filteredAssets = assets.filter((a) => {
     const matchesSearch =
-      a.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      a.assetCode.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      a.building.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      a.room.toLowerCase().includes(searchQuery.toLowerCase());
+      (a?.name || '').toLowerCase().includes((searchQuery || '').toLowerCase()) ||
+      (a?.assetCode || '').toLowerCase().includes((searchQuery || '').toLowerCase()) ||
+      (a?.building || '').toLowerCase().includes((searchQuery || '').toLowerCase()) ||
+      (a?.room || '').toLowerCase().includes((searchQuery || '').toLowerCase());
     const matchesCategory = categoryFilter === 'all' || a.category === categoryFilter;
     return matchesSearch && matchesCategory;
   });
@@ -266,6 +295,44 @@ export const GaAssetManagement: React.FC = () => {
     });
     setIsSupplyModalOpen(false);
     setSupplyForm({ ...supplyForm, purpose: '' });
+  };
+
+  const handleReturnVehicle = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedVehicleForReturn) return;
+    updateVehicleBookingStatus(
+      selectedVehicleForReturn.id,
+      'Dikembalikan',
+      Number(returnForm.endOdometer),
+      Number(returnForm.tollFuelCost)
+    );
+    setSelectedVehicleForReturn(null);
+  };
+
+  const handleAddSupplyItem = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newSupplyForm.itemName) return;
+    addOfficeSupply({
+      itemCode: newSupplyForm.itemCode || `ATK-${Date.now().toString().slice(-4)}`,
+      itemName: newSupplyForm.itemName,
+      category: newSupplyForm.category,
+      currentStock: Number(newSupplyForm.currentStock),
+      reorderPoint: Number(newSupplyForm.reorderPoint),
+      standardReorderQty: Number(newSupplyForm.standardReorderQty || 10),
+      estimatedUnitPrice: Number(newSupplyForm.estimatedUnitPrice || 45000),
+      unit: newSupplyForm.unit,
+    });
+    setIsAddSupplyModalOpen(false);
+    setNewSupplyForm({
+      itemCode: `ATK-${Date.now().toString().slice(-4)}`,
+      itemName: '',
+      category: 'Kertas & Dokumen',
+      currentStock: 25,
+      reorderPoint: 5,
+      standardReorderQty: 10,
+      estimatedUnitPrice: 45000,
+      unit: 'Rim',
+    });
   };
 
   const handleCreateTicket = (e: React.FormEvent) => {
@@ -375,119 +442,165 @@ export const GaAssetManagement: React.FC = () => {
 
   return (
     <div className="space-y-5">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-200 pb-4">
-        <div>
-          <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-            <QrCode className="w-5 h-5 text-indigo-600" />
-            <span>Manajemen General Affairs (GA), Aset QR & Pemeliharaan</span>
-          </h2>
-          <p className="text-xs text-slate-500">
-            Pencatatan inventaris gedung, mutasi & serah terima BAST karyawan, tiket perbaikan & penggantian aset rusak, serta stock opname QR Code.
-          </p>
-        </div>
-
-        {/* Tab Controls */}
-        <div className="inline-flex rounded-md border border-slate-200 bg-white p-0.5 text-xs font-semibold">
-          <button
-            onClick={() => setActiveTab('aset')}
-            className={`px-3 py-1.5 rounded transition-all ${
-              activeTab === 'aset' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            Daftar Aset & QR
-          </button>
-          <button
-            onClick={() => setActiveTab('mutasi')}
-            className={`px-3 py-1.5 rounded transition-all ${
-              activeTab === 'mutasi' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            Mutasi & Penggunaan
-          </button>
-          <button
-            onClick={() => setActiveTab('maintenance')}
-            className={`px-3 py-1.5 rounded transition-all ${
-              activeTab === 'maintenance' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            Tiket Perbaikan ({assetMaintenanceTickets.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('opname')}
-            className={`px-3 py-1.5 rounded transition-all ${
-              activeTab === 'opname' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            Pindai QR Opname
-          </button>
-          <button
-            onClick={() => setActiveTab('ruang_rapat')}
-            className={`px-3 py-1.5 rounded transition-all flex items-center gap-1 ${
-              activeTab === 'ruang_rapat' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <DoorClosed className="w-3.5 h-3.5" />
-            <span>Ruang Rapat</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('kendaraan')}
-            className={`px-3 py-1.5 rounded transition-all flex items-center gap-1 ${
-              activeTab === 'kendaraan' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <Car className="w-3.5 h-3.5" />
-            <span>Kendaraan / Fleet</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('atk')}
-            className={`px-3 py-1.5 rounded transition-all flex items-center gap-1 ${
-              activeTab === 'atk' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <Package className="w-3.5 h-3.5" />
-            <span>ATK & Supplies</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('tiket_ga')}
-            className={`px-3 py-1.5 rounded transition-all flex items-center gap-1 ${
-              activeTab === 'tiket_ga' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <Headphones className="w-3.5 h-3.5" />
-            <span>GA Helpdesk</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('pengaturan')}
-            className={`px-3 py-1.5 rounded transition-all ${
-              activeTab === 'pengaturan' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            Pengaturan GA
-          </button>
-        </div>
+      {/* Row 1: Module Header */}
+      <div className="border-b border-slate-200 pb-3">
+        <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+          <QrCode className="w-5 h-5 text-indigo-600" />
+          <span>Manajemen General Affairs (GA), Aset QR & Pemeliharaan</span>
+        </h2>
+        <p className="text-xs text-slate-500 mt-0.5">
+          Pencatatan inventaris gedung, mutasi & serah terima BAST karyawan, tiket perbaikan & penggantian aset rusak, serta stock opname QR Code.
+        </p>
       </div>
+
+      {/* Row 2: Enterprise Tab Navigation Bar (Not Parallel to Title) */}
+      <ScrollableTabNav className="border-b border-slate-200" containerClassName="pt-1">
+        <button
+          onClick={() => setActiveTab('aset')}
+          className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
+            activeTab === 'aset'
+              ? 'border-slate-900 text-slate-950 font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+          }`}
+        >
+          <span>Daftar Aset & QR</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('mutasi')}
+          className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
+            activeTab === 'mutasi'
+              ? 'border-slate-900 text-slate-950 font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+          }`}
+        >
+          <span>Mutasi & Penggunaan</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('maintenance')}
+          className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
+            activeTab === 'maintenance'
+              ? 'border-slate-900 text-slate-950 font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+          }`}
+        >
+          <span>Tiket Perbaikan</span>
+          {assetMaintenanceTickets.length > 0 && (
+            <span
+              className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full transition-colors ${
+                activeTab === 'maintenance'
+                  ? 'bg-slate-900 text-white'
+                  : 'bg-slate-100 text-slate-600'
+              }`}
+            >
+              {assetMaintenanceTickets.length}
+            </span>
+          )}
+        </button>
+
+        <button
+          onClick={() => setActiveTab('opname')}
+          className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
+            activeTab === 'opname'
+              ? 'border-slate-900 text-slate-950 font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+          }`}
+        >
+          <span>Pindai QR Opname</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('ruang_rapat')}
+          className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
+            activeTab === 'ruang_rapat'
+              ? 'border-slate-900 text-slate-950 font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+          }`}
+        >
+          <DoorClosed className="w-3.5 h-3.5" />
+          <span>Ruang Rapat</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('kendaraan')}
+          className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
+            activeTab === 'kendaraan'
+              ? 'border-slate-900 text-slate-950 font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+          }`}
+        >
+          <Car className="w-3.5 h-3.5" />
+          <span>Kendaraan / Fleet</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('atk')}
+          className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
+            activeTab === 'atk'
+              ? 'border-slate-900 text-slate-950 font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+          }`}
+        >
+          <Package className="w-3.5 h-3.5" />
+          <span>ATK & Supplies</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('tiket_ga')}
+          className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
+            activeTab === 'tiket_ga'
+              ? 'border-slate-900 text-slate-950 font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+          }`}
+        >
+          <Headphones className="w-3.5 h-3.5" />
+          <span>GA Helpdesk</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('pengaturan')}
+          className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
+            activeTab === 'pengaturan'
+              ? 'border-slate-900 text-slate-950 font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+          }`}
+        >
+          <span>Pengaturan GA</span>
+        </button>
+      </ScrollableTabNav>
 
       {/* TAB 1: DAFTAR ASET */}
       {activeTab === 'aset' && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between gap-4 flex-wrap">
-            <div className="flex items-center gap-2">
-              <div className="relative">
-                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  placeholder="Cari kode aset, nama perangkat, ruangan..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-8 pr-3 py-1.5 text-xs bg-white border border-slate-300 rounded-md focus:ring-1 focus:ring-indigo-500 w-64"
-                />
-              </div>
+          {/* Filter & Action Toolbar */}
+          <div className="bg-white p-3 sm:p-3.5 border border-slate-200 rounded-xl shadow-xs space-y-2.5 lg:space-y-0 lg:flex lg:items-center lg:justify-between lg:gap-4">
+            <div className="relative w-full lg:max-w-xs">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Cari kode aset, nama perangkat, ruangan..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-8 py-2 text-xs bg-slate-50/70 focus:bg-white border border-slate-300 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-indigo-500 transition-all font-medium text-slate-800 placeholder-slate-400"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600"
+                  title="Hapus pencarian"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
 
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex lg:items-center gap-2 w-full lg:w-auto">
               <select
                 value={categoryFilter}
                 onChange={(e) => setCategoryFilter(e.target.value)}
-                className="py-1.5 px-3 text-xs bg-white border border-slate-300 rounded-md text-slate-700"
+                className="py-2 px-3 text-xs bg-white border border-slate-300 rounded-lg text-slate-700 font-medium focus:outline-hidden focus:ring-2 focus:ring-indigo-500 shadow-2xs"
               >
                 <option value="all">Semua Kategori</option>
                 <option value="Laptop & Komputer">Laptop & Komputer</option>
@@ -496,23 +609,38 @@ export const GaAssetManagement: React.FC = () => {
                 <option value="Elektronik & Server">Elektronik & Server</option>
                 <option value="Gedung & Ruangan">Gedung & Ruangan</option>
               </select>
-            </div>
 
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setIsMutasiModalOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-md text-xs font-semibold"
-              >
-                <ArrowRightLeft className="w-3.5 h-3.5 text-indigo-600" />
-                <span>Mutasi / Serah Terima</span>
-              </button>
-              <button
-                onClick={() => setIsRegisterModalOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md text-xs font-semibold shadow-xs"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Registrasi Aset Baru</span>
-              </button>
+              {(searchQuery || categoryFilter !== 'all') && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery('');
+                    setCategoryFilter('all');
+                  }}
+                  className="inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg transition-colors shrink-0"
+                  title="Reset Filter"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  <span>Reset Filter</span>
+                </button>
+              )}
+
+              <div className="col-span-1 sm:col-span-2 lg:col-span-1 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                <button
+                  onClick={() => setIsMutasiModalOpen(true)}
+                  className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg text-xs font-semibold transition-colors"
+                >
+                  <ArrowRightLeft className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>Mutasi / Serah Terima</span>
+                </button>
+                <button
+                  onClick={() => setIsRegisterModalOpen(true)}
+                  className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors shrink-0"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Registrasi Aset Baru</span>
+                </button>
+              </div>
             </div>
           </div>
 
@@ -1155,7 +1283,15 @@ export const GaAssetManagement: React.FC = () => {
                       )}
                       {vb.status === 'Sedang Digunakan' && (
                         <button
-                          onClick={() => updateVehicleBookingStatus(vb.id, 'Dikembalikan', vb.startOdometer + 85, 200000)}
+                          onClick={() => {
+                            setSelectedVehicleForReturn(vb);
+                            setReturnForm({
+                              returnDate: new Date().toISOString().split('T')[0],
+                              endOdometer: (vb.startOdometer || 0) + 65,
+                              tollFuelCost: 150000,
+                              returnNotes: 'Kendaraan dikembalikan dalam kondisi prima dan bersih.',
+                            });
+                          }}
                           className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[10px] font-semibold"
                         >
                           Kembalikan Kendaraan
@@ -1183,13 +1319,22 @@ export const GaAssetManagement: React.FC = () => {
                 Pencatatan stok fisik alat tulis kantor, batas minimal restock, dan persetujuan permintaan ATK divisi/karyawan.
               </p>
             </div>
-            <button
-              onClick={() => setIsSupplyModalOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-xs font-semibold shadow-xs"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>+ Permintaan ATK</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setIsAddSupplyModalOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded text-xs font-semibold border border-slate-300"
+              >
+                <Plus className="w-3.5 h-3.5 text-slate-600" />
+                <span>+ Master ATK Baru</span>
+              </button>
+              <button
+                onClick={() => setIsSupplyModalOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-xs font-semibold shadow-xs"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>+ Permintaan ATK</span>
+              </button>
+            </div>
           </div>
 
           {/* Stock Overview */}
@@ -1362,8 +1507,14 @@ export const GaAssetManagement: React.FC = () => {
 
       {/* MODAL: REGISTRASI ASET BARU */}
       {isRegisterModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full border border-slate-200 overflow-hidden">
+        <div
+          onClick={() => setIsRegisterModalOpen(false)}
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 cursor-pointer"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-xl shadow-xl max-w-lg w-full border border-slate-200 overflow-hidden cursor-default"
+          >
             <div className="px-5 py-3.5 bg-slate-900 text-white flex items-center justify-between">
               <h3 className="text-xs font-semibold">Registrasi Aset Baru</h3>
               <button onClick={() => setIsRegisterModalOpen(false)}>
@@ -1464,8 +1615,14 @@ export const GaAssetManagement: React.FC = () => {
 
       {/* MODAL: MUTASI ASET */}
       {isMutasiModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full border border-slate-200 overflow-hidden">
+        <div
+          onClick={() => setIsMutasiModalOpen(false)}
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 cursor-pointer"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-xl shadow-xl max-w-lg w-full border border-slate-200 overflow-hidden cursor-default"
+          >
             <div className="px-5 py-3.5 bg-slate-900 text-white flex items-center justify-between">
               <h3 className="text-xs font-semibold">Perpindahan / Mutasi & Serah Terima Aset</h3>
               <button onClick={() => setIsMutasiModalOpen(false)}>
@@ -1554,8 +1711,14 @@ export const GaAssetManagement: React.FC = () => {
 
       {/* MODAL: TIKET PERBAIKAN */}
       {isMaintenanceModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full border border-slate-200 overflow-hidden">
+        <div
+          onClick={() => setIsMaintenanceModalOpen(false)}
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 cursor-pointer"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-xl shadow-xl max-w-lg w-full border border-slate-200 overflow-hidden cursor-default"
+          >
             <div className="px-5 py-3.5 bg-slate-900 text-white flex items-center justify-between">
               <h3 className="text-xs font-semibold">Buat Tiket Perbaikan & Penggantian Aset</h3>
               <button onClick={() => setIsMaintenanceModalOpen(false)}>
@@ -1650,8 +1813,14 @@ export const GaAssetManagement: React.FC = () => {
 
       {/* MODAL: BOOKING RUANG RAPAT */}
       {isRoomModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full border border-slate-200 overflow-hidden">
+        <div
+          onClick={() => setIsRoomModalOpen(false)}
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 cursor-pointer"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-xl shadow-xl max-w-md w-full border border-slate-200 overflow-hidden cursor-default"
+          >
             <div className="px-5 py-3.5 bg-slate-900 text-white flex items-center justify-between">
               <h3 className="text-xs font-semibold">Formulir Reservasi Ruang Rapat</h3>
               <button onClick={() => setIsRoomModalOpen(false)}>
@@ -1748,8 +1917,14 @@ export const GaAssetManagement: React.FC = () => {
 
       {/* MODAL: INPUT NOTULEN RAPAT */}
       {selectedBookingForMinutes && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full border border-slate-200 overflow-hidden">
+        <div
+          onClick={() => setSelectedBookingForMinutes(null)}
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 cursor-pointer"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-xl shadow-xl max-w-lg w-full border border-slate-200 overflow-hidden cursor-default"
+          >
             <div className="px-5 py-3.5 bg-slate-900 text-white flex items-center justify-between">
               <h3 className="text-xs font-semibold">Dokumentasi Notulen Rapat</h3>
               <button onClick={() => setSelectedBookingForMinutes(null)}>
@@ -1798,8 +1973,14 @@ export const GaAssetManagement: React.FC = () => {
 
       {/* MODAL: BOOKING KENDARAAN */}
       {isVehicleModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full border border-slate-200 overflow-hidden">
+        <div
+          onClick={() => setIsVehicleModalOpen(false)}
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 cursor-pointer"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-xl shadow-xl max-w-md w-full border border-slate-200 overflow-hidden cursor-default"
+          >
             <div className="px-5 py-3.5 bg-slate-900 text-white flex items-center justify-between">
               <h3 className="text-xs font-semibold">Formulir Peminjaman Mobil Operasional</h3>
               <button onClick={() => setIsVehicleModalOpen(false)}>
@@ -1893,8 +2074,14 @@ export const GaAssetManagement: React.FC = () => {
 
       {/* MODAL: PERMINTAAN ATK */}
       {isSupplyModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full border border-slate-200 overflow-hidden">
+        <div
+          onClick={() => setIsSupplyModalOpen(false)}
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 cursor-pointer"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-xl shadow-xl max-w-md w-full border border-slate-200 overflow-hidden cursor-default"
+          >
             <div className="px-5 py-3.5 bg-slate-900 text-white flex items-center justify-between">
               <h3 className="text-xs font-semibold">Formulir Permintaan ATK</h3>
               <button onClick={() => setIsSupplyModalOpen(false)}>
@@ -1963,8 +2150,14 @@ export const GaAssetManagement: React.FC = () => {
 
       {/* MODAL: BUAT TIKET GA */}
       {isTicketModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full border border-slate-200 overflow-hidden">
+        <div
+          onClick={() => setIsTicketModalOpen(false)}
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 cursor-pointer"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-xl shadow-xl max-w-md w-full border border-slate-200 overflow-hidden cursor-default"
+          >
             <div className="px-5 py-3.5 bg-slate-900 text-white flex items-center justify-between">
               <h3 className="text-xs font-semibold">Buat Tiket GA Helpdesk</h3>
               <button onClick={() => setIsTicketModalOpen(false)}>
@@ -2057,8 +2250,14 @@ export const GaAssetManagement: React.FC = () => {
 
       {/* MODAL: SELESAIKAN TIKET GA */}
       {selectedTicketForResolve && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full border border-slate-200 overflow-hidden">
+        <div
+          onClick={() => setSelectedTicketForResolve(null)}
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 cursor-pointer"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-xl shadow-xl max-w-md w-full border border-slate-200 overflow-hidden cursor-default"
+          >
             <div className="px-5 py-3.5 bg-slate-900 text-white flex items-center justify-between">
               <h3 className="text-xs font-semibold">Tandai Selesai: Tiket {selectedTicketForResolve.ticketNumber}</h3>
               <button onClick={() => setSelectedTicketForResolve(null)}>
@@ -2105,8 +2304,14 @@ export const GaAssetManagement: React.FC = () => {
 
       {/* MODAL: CETAK LABEL QR ASET */}
       {selectedAssetForQR && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-2xl max-w-sm w-full border border-slate-200 overflow-hidden">
+        <div
+          onClick={() => setSelectedAssetForQR(null)}
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 cursor-pointer"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-xl shadow-2xl max-w-sm w-full border border-slate-200 overflow-hidden cursor-default"
+          >
             <div className="px-5 py-3.5 bg-slate-900 text-white flex items-center justify-between no-print">
               <h3 className="text-xs font-semibold">Label Barcode / QR Aset</h3>
               <div className="flex items-center gap-2">
@@ -2144,6 +2349,217 @@ export const GaAssetManagement: React.FC = () => {
                 </p>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: PENGEMBALIAN ARMADA KENDARAAN */}
+      {selectedVehicleForReturn && (
+        <div
+          onClick={() => setSelectedVehicleForReturn(null)}
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 cursor-pointer"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-xl shadow-xl max-w-md w-full border border-slate-200 overflow-hidden cursor-default"
+          >
+            <div className="px-5 py-3.5 bg-slate-900 text-white flex items-center justify-between">
+              <h3 className="text-xs font-semibold">Formulir Pengembalian Armada Kendaraan</h3>
+              <button onClick={() => setSelectedVehicleForReturn(null)}>
+                <X className="w-4 h-4 text-slate-400 hover:text-white" />
+              </button>
+            </div>
+
+            <form onSubmit={handleReturnVehicle} className="p-5 space-y-3.5 text-xs">
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                <div className="font-bold text-slate-800 text-sm">{selectedVehicleForReturn.vehicleName}</div>
+                <div className="text-slate-500 text-[11px] mt-0.5">
+                  Driver: <span className="font-semibold text-slate-700">{selectedVehicleForReturn.driverName}</span> · Keperluan: {selectedVehicleForReturn.purpose}
+                </div>
+                <div className="text-slate-500 text-[11px] mt-1">
+                  Odometer Awal: <span className="font-bold font-mono text-slate-700">{selectedVehicleForReturn.startOdometer?.toLocaleString()} KM</span>
+                </div>
+              </div>
+
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">Tanggal Pengembalian Fisik</label>
+                <input
+                  type="date"
+                  required
+                  value={returnForm.returnDate}
+                  onChange={(e) => setReturnForm({ ...returnForm, returnDate: e.target.value })}
+                  className="w-full p-2 border border-slate-300 rounded"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Odometer Akhir (KM)</label>
+                  <input
+                    type="number"
+                    min={selectedVehicleForReturn.startOdometer || 0}
+                    required
+                    value={returnForm.endOdometer}
+                    onChange={(e) => setReturnForm({ ...returnForm, endOdometer: Number(e.target.value) })}
+                    className="w-full p-2 border border-slate-300 rounded font-mono"
+                  />
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">
+                    Jarak tempuh: {Math.max(0, returnForm.endOdometer - (selectedVehicleForReturn.startOdometer || 0))} KM
+                  </span>
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Total Biaya BBM & Tol (Rp)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="5000"
+                    required
+                    value={returnForm.tollFuelCost}
+                    onChange={(e) => setReturnForm({ ...returnForm, tollFuelCost: Number(e.target.value) })}
+                    className="w-full p-2 border border-slate-300 rounded font-mono"
+                  />
+                  <span className="text-[10px] text-emerald-600 font-semibold mt-0.5 block">
+                    {formatRupiah(returnForm.tollFuelCost)}
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">Catatan Kondisi Mobil & Keterangan</label>
+                <textarea
+                  rows={2}
+                  required
+                  value={returnForm.returnNotes}
+                  onChange={(e) => setReturnForm({ ...returnForm, returnNotes: e.target.value })}
+                  placeholder="Misal: Kondisi bersih, bensin terisi separuh, tidak ada baret..."
+                  className="w-full p-2 border border-slate-300 rounded"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setSelectedVehicleForReturn(null)}
+                  className="px-3 py-1.5 border border-slate-300 rounded text-slate-700"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-semibold"
+                >
+                  Konfirmasi Pengembalian
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: REGISTRASI MASTER ATK BARU */}
+      {isAddSupplyModalOpen && (
+        <div
+          onClick={() => setIsAddSupplyModalOpen(false)}
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 cursor-pointer"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-xl shadow-xl max-w-md w-full border border-slate-200 overflow-hidden cursor-default"
+          >
+            <div className="px-5 py-3.5 bg-slate-900 text-white flex items-center justify-between">
+              <h3 className="text-xs font-semibold">Formulir Tambah Master Barang ATK</h3>
+              <button onClick={() => setIsAddSupplyModalOpen(false)}>
+                <X className="w-4 h-4 text-slate-400 hover:text-white" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddSupplyItem} className="p-5 space-y-3.5 text-xs">
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">Nama Barang / ATK</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Contoh: Kertas HVS A4 80gr PaperOne, Pulpen Joyko Gel 0.5..."
+                  value={newSupplyForm.itemName}
+                  onChange={(e) => setNewSupplyForm({ ...newSupplyForm, itemName: e.target.value })}
+                  className="w-full p-2 border border-slate-300 rounded"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Kategori ATK</label>
+                  <select
+                    value={newSupplyForm.category}
+                    onChange={(e) => setNewSupplyForm({ ...newSupplyForm, category: e.target.value as GAOfficeSupply['category'] })}
+                    className="w-full p-2 border border-slate-300 rounded"
+                  >
+                    <option value="Kertas & Dokumen">Kertas & Dokumen</option>
+                    <option value="Alat Tulis">Alat Tulis</option>
+                    <option value="Tinta & Toner">Tinta & Toner</option>
+                    <option value="Peralatan Kantor">Peralatan Kantor</option>
+                    <option value="Kebersihan & Pantry">Kebersihan & Pantry</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Satuan Kemasan</label>
+                  <select
+                    value={newSupplyForm.unit}
+                    onChange={(e) => setNewSupplyForm({ ...newSupplyForm, unit: e.target.value })}
+                    className="w-full p-2 border border-slate-300 rounded"
+                  >
+                    <option value="Rim">Rim</option>
+                    <option value="Pcs">Pcs</option>
+                    <option value="Box">Box</option>
+                    <option value="Pack">Pack</option>
+                    <option value="Botol">Botol</option>
+                    <option value="Set">Set</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Stok Awal Fisik</label>
+                  <input
+                    type="number"
+                    min="1"
+                    required
+                    value={newSupplyForm.currentStock}
+                    onChange={(e) => setNewSupplyForm({ ...newSupplyForm, currentStock: Number(e.target.value) })}
+                    className="w-full p-2 border border-slate-300 rounded font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Batas Minimal Reorder</label>
+                  <input
+                    type="number"
+                    min="1"
+                    required
+                    value={newSupplyForm.reorderPoint}
+                    onChange={(e) => setNewSupplyForm({ ...newSupplyForm, reorderPoint: Number(e.target.value) })}
+                    className="w-full p-2 border border-slate-300 rounded font-mono"
+                  />
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">Notifikasi restock jika dibawah angka ini</span>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setIsAddSupplyModalOpen(false)}
+                  className="px-3 py-1.5 border border-slate-300 rounded text-slate-700"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-semibold"
+                >
+                  Simpan Master ATK
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

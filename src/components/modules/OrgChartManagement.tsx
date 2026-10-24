@@ -440,8 +440,14 @@ export const OrgChartManagement: React.FC = () => {
 
       {/* Modal: Form Usul Ubah Struktur */}
       {isProposalModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in">
-          <div className="bg-white rounded-2xl max-w-lg w-full border border-slate-200 shadow-xl overflow-hidden">
+        <div
+          onClick={() => setIsProposalModalOpen(false)}
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in cursor-pointer"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-2xl max-w-lg w-full border border-slate-200 shadow-xl overflow-hidden cursor-default"
+          >
             <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
               <div className="font-bold text-slate-900 text-sm">
                 Usulkan Perubahan Struktur Organisasi

@@ -1,8 +1,45 @@
 @import "tailwindcss";
 
+@theme {
+  /* Corporate Enterprise Sapphire Blue (Replaces AI Indigo/Purple Tint) */
+  --color-indigo-50: #eff6ff;
+  --color-indigo-100: #dbeafe;
+  --color-indigo-200: #bfdbfe;
+  --color-indigo-300: #93c5fd;
+  --color-indigo-400: #60a5fa;
+  --color-indigo-500: #3b82f6;
+  --color-indigo-600: #1d4ed8;
+  --color-indigo-700: #1e40af;
+  --color-indigo-800: #1e3a8a;
+  --color-indigo-900: #172554;
+  --color-indigo-950: #0f172a;
+
+  /* Neutral Corporate Accents (Replaces AI Purple) */
+  --color-purple-50: #f8fafc;
+  --color-purple-100: #f1f5f9;
+  --color-purple-200: #e2e8f0;
+  --color-purple-300: #cbd5e1;
+  --color-purple-400: #94a3b8;
+  --color-purple-500: #64748b;
+  --color-purple-600: #1e40af;
+  --color-purple-700: #1e3a8a;
+  --color-purple-800: #0f172a;
+}
+
 @layer base {
   body {
     font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  }
+
+  /* Refined dropdown arrow positioning */
+  select {
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%2364748b' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+    background-position: right 0.65rem center;
+    background-repeat: no-repeat;
+    background-size: 1.15em 1.15em;
+    padding-right: 2.1rem !important;
   }
 }
 

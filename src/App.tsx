@@ -20,6 +20,9 @@ import { BusinessTripManagement } from './components/modules/BusinessTripManagem
 import { ApprovalCenter } from './components/modules/ApprovalCenter';
 import { RbacManagement } from './components/modules/RbacManagement';
 import { TenantManagement } from './components/modules/TenantManagement';
+import { EssPortal } from './components/modules/EssPortal';
+import { MssPortal } from './components/modules/MssPortal';
+import { AuditTrailManagement } from './components/modules/AuditTrailManagement';
 import { UniversalFilePreviewModal } from './components/common/UniversalFilePreviewModal';
 import { CommandPaletteModal } from './components/common/CommandPaletteModal';
 
@@ -95,8 +98,14 @@ const MainLayout: React.FC = () => {
         return <ProcurementManagement />;
       case 'documents':
         return <DocumentManagement />;
+      case 'ess':
+        return <EssPortal />;
+      case 'mss':
+        return <MssPortal />;
       case 'rbac':
         return <RbacManagement />;
+      case 'audit':
+        return <AuditTrailManagement />;
       case 'tenants':
         return <TenantManagement />;
       default:
@@ -136,7 +145,7 @@ const MainLayout: React.FC = () => {
         />
 
         {/* Viewport Content Area */}
-        <main className="flex-1 overflow-y-auto p-2.5 sm:p-4 lg:p-4 bg-slate-50/70">
+        <main className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6 lg:p-6 bg-slate-50/70">
           <div className="max-w-[1600px] mx-auto">{renderModuleView()}</div>
         </main>
       </div>

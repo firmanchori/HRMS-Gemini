@@ -1,4 +1,28 @@
-export type UserRole = 'super_admin' | 'hr_admin' | 'payroll_admin' | 'ga_admin' | 'manager' | 'employee';
+export type UserRole =
+  | 'super_admin'
+  | 'hr_admin'
+  | 'payroll_admin'
+  | 'ga_admin'
+  | 'manager'
+  | 'employee'
+  | (string & {});
+
+export interface RoleDefinition {
+  id: string;
+  label: string;
+  description: string;
+  badgeClass?: string;
+  isSystem?: boolean;
+}
+
+export interface OperationPermissions {
+  view: boolean;
+  create: boolean;
+  edit: boolean;
+  delete: boolean;
+  approve: boolean;
+  export: boolean;
+}
 
 export type EmploymentType = 'Tetap' | 'Kontrak' | 'Outsource' | 'Magang';
 
@@ -10,7 +34,16 @@ export type DisciplinaryLevel = 'SP 1' | 'SP 2' | 'SP 3' | 'Skorsing' | 'PHK';
 
 export type AssetCondition = 'Baik' | 'Perlu Perbaikan' | 'Rusak' | 'Dipinjam' | 'Hilang';
 
-export type RecruitmentStage = 'Applied' | 'Screening' | 'Interview' | 'Offered' | 'Hired' | 'Rejected';
+export type RecruitmentStage =
+  | 'Incoming'
+  | 'Screening'
+  | 'Assessment'
+  | 'Interview'
+  | 'Offered'
+  | 'Hired'
+  | 'TalentPool'
+  | 'Rejected'
+  | 'Applied';
 
 // Tenant Structure for SaaS Apps Owner
 export interface Tenant {
@@ -18,6 +51,8 @@ export interface Tenant {
   name: string;
   code: string;
   logoText: string;
+  documentLogoUrl?: string; // Logo untuk Kop Dokumen Resmi / SK / Slip Gaji
+  appFaviconUrl?: string; // App Favicon & Icon Tab Browser
   npwp: string;
   city: string;
   umr: number;
@@ -99,6 +134,7 @@ export interface Employee {
   joinDate: string;
   status: 'Aktif' | 'Cuti Panjang' | 'Resign' | 'PHK';
   remainingLeaveDays: number;
+  annualLeaveBalance?: number;
 
   // 3. Identitas Kependudukan & Pribadi
   nikKtp: string;
@@ -128,6 +164,7 @@ export interface Employee {
   bankAccount: string;
   bankAccountHolder: string;
   basicSalary: number;
+  salary?: number;
   fixedAllowance: number;
   transportAllowance: number;
   mealAllowance: number;
@@ -402,7 +439,29 @@ export interface ComplianceRecord {
   status: 'Aktif' | 'Kedaluwarsa' | 'Dibatalkan';
 }
 
-// Recruitment & Offering Calculator
+// 1. Permintaan Karyawan Baru (FPTK / Job Requisition)
+export interface JobRequisition {
+  id: string;
+  tenantId: string;
+  reqNumber: string;
+  position: string;
+  grade: string; // e.g. 'Grade 1 - Staff' | 'Grade 2 - Officer/Senior' | 'Grade 3 - Lead/Supervisor' | 'Grade 4 - Manager' | 'Grade 5 - Head/VP'
+  department: string;
+  headcount: number;
+  reason: 'Penambahan Headcount' | 'Penggantian Karyawan Resign' | 'Proyek Baru' | 'Ekspansi Bisnis';
+  requirements: string;
+  targetJoinDate: string;
+  status: 'Disetujui' | 'Menunggu Approval' | 'Draft' | 'Ditolak';
+  requesterName: string;
+  approvedBy?: string;
+  createdAt: string;
+  minExperience?: string;
+  educationMin?: string;
+}
+
+// 2. Sourcing & Multi-Channel Job Posting
+export type JobPostingChannel = 'Jobstreet' | 'LinkedIn' | 'Glints' | 'Kalibrr' | 'Website Karir';
+
 export interface JobVacancy {
   id: string;
   tenantId: string;
@@ -414,6 +473,28 @@ export interface JobVacancy {
   salaryRange: string;
   status: 'Buka' | 'Ditutup';
   postedDate: string;
+  grade?: string;
+  requirements?: string;
+  description?: string;
+  jobRequisitionId?: string;
+  activeChannels?: JobPostingChannel[];
+  channelBroadcastStatus?: { [key in JobPostingChannel]?: 'Terkirim' | 'Aktif' | 'Nonaktif' };
+  applicantsCount?: number;
+}
+
+// 3. Incoming & Resume Parsing Data
+export interface CandidateParsedData {
+  fullName: string;
+  email: string;
+  phone: string;
+  currentTitle: string;
+  currentCompany: string;
+  totalExperienceYears: number;
+  education: string;
+  university: string;
+  topSkills: string[];
+  extractionScore: number;
+  parsedAt: string;
 }
 
 export interface Candidate {
@@ -427,13 +508,55 @@ export interface Candidate {
   expectedSalary: number;
   stage: RecruitmentStage;
   appliedDate: string;
+
+  // 2. Sourcing Source
+  sourcePortal?: JobPostingChannel | 'Referral' | 'Walk-in';
+
+  // 3. Incoming & Resume Parsing
+  resumeParsed?: boolean;
+  parsedData?: CandidateParsedData;
+  cvFileName?: string;
+  cvFileSize?: string;
+
+  // 4. Screening & AI Match
+  aiMatchScore?: number; // 0 - 100
+  matchedKeywords?: string[];
+  missingKeywords?: string[];
+  isShortlisted?: boolean;
+  screeningNotes?: string;
+
+  // 5. Assessment / Test
+  testType?: 'Tes Teknis / Coding' | 'Psikotes (DISC / MBTI)' | 'Tes Logika & Numerik' | 'Case Study' | 'Bahasa Inggris';
+  testScore?: number; // 0 - 100
+  testPassingGrade?: number;
+  testStatus?: 'Belum Ditugaskan' | 'Terkirim' | 'Sedang Mengerjakan' | 'Lulus' | 'Tidak Lulus';
+  testNotes?: string;
+  testAssignedDate?: string;
+
+  // 6. Interview
   interviewDate?: string;
   interviewer?: string;
   interviewScore?: number;
   interviewNotes?: string;
+  meetingPlatform?: 'Google Meet' | 'Microsoft Teams' | 'Ruang Interview Kantor';
+  meetingLink?: string;
+  interviewScorecard?: {
+    technical: number;
+    culturalFit: number;
+    communication: number;
+    recommendation: 'Direkomendasikan Lolos' | 'Dipertimbangkan' | 'Tidak Direkomendasikan';
+  };
+
+  // 7. Offering
   offeredSalary?: number;
   offeringDocNumber?: string;
+  offeringSentDate?: string;
+
+  // 8. Hired / Disqualified / Talent Pool
   joinedDate?: string;
+  disqualificationReason?: string;
+  talentPoolCategory?: string;
+  talentPoolTags?: string[];
 }
 
 export interface OfferingCalculationState {

@@ -13,6 +13,7 @@ import {
   EmployeeKPI,
   ComplianceRecord,
   JobVacancy,
+  JobRequisition,
   Candidate,
   OffboardingRecord,
   GAAsset,
@@ -53,6 +54,8 @@ import {
   AuditLogEntry,
   ENpsSurvey,
   UniversalPreviewItem,
+  RoleDefinition,
+  OperationPermissions,
 } from '../types/hrms';
 import {
   INITIAL_TENANTS,
@@ -64,6 +67,7 @@ import {
   INITIAL_LOANS,
   INITIAL_KPIS,
   INITIAL_COMPLIANCE,
+  INITIAL_JOB_REQUISITIONS,
   INITIAL_JOB_VACANCIES,
   INITIAL_CANDIDATES,
   INITIAL_OFFBOARDING,
@@ -101,6 +105,7 @@ import {
   INITIAL_AUDIT_LOGS,
   INITIAL_ENPS_SURVEY,
   INITIAL_PAYROLL_RECORDS,
+  INITIAL_ROLE_PERMISSIONS,
 } from '../data/initialData';
 import { calculatePPh21TER, calculateBPJS, calculateOvertimePay, calculateSeverancePay } from '../utils/taxCalculator';
 import { generateDocumentNumber } from '../utils/documentNumbering';
@@ -110,9 +115,20 @@ interface HrmsContextType {
   tenants: Tenant[];
   currentTenant: Tenant;
   setCurrentTenantId: (id: string) => void;
+  updateTenant: (id: string, updates: Partial<Tenant>) => void;
+  updateTenantBranding: (documentLogoUrl?: string, appFaviconUrl?: string) => void;
   currentUser: UserAccount;
   setCurrentUserRole: (role: UserRole) => void;
   users: UserAccount[];
+  addUser: (user: Omit<UserAccount, 'id' | 'tenantId'>) => void;
+  deleteUser: (id: string) => void;
+  roles: RoleDefinition[];
+  addRole: (role: RoleDefinition, copyFrom?: string) => void;
+  deleteRole: (id: string) => void;
+  rolePermissions: Record<string, OperationPermissions>;
+  updateRolePermission: (module: string, roleKey: string, op: keyof OperationPermissions, allowed: boolean) => void;
+  getRolePermission: (module: string, roleKey: string) => OperationPermissions;
+  hasPermission: (module: string, roleKey: string, op: keyof OperationPermissions) => boolean;
 
   // Navigation & View
   activeModule: string;
@@ -177,9 +193,13 @@ interface HrmsContextType {
   }) => void;
 
   // 7. Recruitment & Onboarding
+  jobRequisitions: JobRequisition[];
+  addJobRequisition: (req: Omit<JobRequisition, 'id' | 'tenantId' | 'createdAt'>) => void;
+  updateJobRequisition: (id: string, updates: Partial<JobRequisition>) => void;
   vacancies: JobVacancy[];
   candidates: Candidate[];
   addVacancy: (vacancy: Omit<JobVacancy, 'id' | 'tenantId' | 'postedDate'>) => void;
+  updateVacancy: (id: string, updates: Partial<JobVacancy>) => void;
   addCandidate: (candidate: Omit<Candidate, 'id' | 'tenantId' | 'appliedDate'>) => void;
   updateCandidateStage: (
     id: string,
@@ -349,6 +369,7 @@ interface HrmsContextType {
   addVehicleBooking: (booking: Omit<GAVehicleBooking, 'id' | 'tenantId' | 'formDocNumber' | 'status'>) => void;
   updateVehicleBookingStatus: (id: string, status: GAVehicleBooking['status'], endOdometer?: number, fuelCost?: number) => void;
   officeSupplies: GAOfficeSupply[];
+  addOfficeSupply: (item: Omit<GAOfficeSupply, 'id' | 'tenantId'>) => void;
   officeSupplyRequests: GAOfficeSupplyRequest[];
   addOfficeSupplyRequest: (req: Omit<GAOfficeSupplyRequest, 'id' | 'tenantId' | 'status' | 'requestDate'>) => void;
   reviewOfficeSupplyRequest: (id: string, approved: boolean) => void;
@@ -391,7 +412,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const closeFilePreview = () => setActivePreviewItem(null);
 
   // Tenant State
-  const [tenants] = useState<Tenant[]>(() => {
+  const [tenants, setTenants] = useState<Tenant[]>(() => {
     const saved = localStorage.getItem('nusahr_tenants');
     return saved ? JSON.parse(saved) : INITIAL_TENANTS;
   });
@@ -399,13 +420,83 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return localStorage.getItem('nusahr_active_tenant') || 'tenant-ntm';
   });
 
+  const updateTenant = (id: string, updates: Partial<Tenant>) => {
+    setTenants((prev) => {
+      const next = prev.map((t) => (t.id === id ? { ...t, ...updates } : t));
+      localStorage.setItem('nusahr_tenants', JSON.stringify(next));
+      return next;
+    });
+  };
+
+  const updateTenantBranding = (documentLogoUrl?: string, appFaviconUrl?: string) => {
+    updateTenant(currentTenantId, {
+      ...(documentLogoUrl !== undefined ? { documentLogoUrl } : {}),
+      ...(appFaviconUrl !== undefined ? { appFaviconUrl } : {}),
+    });
+  };
+
   const currentTenant = useMemo(() => {
     return tenants.find((t) => t.id === currentTenantId) || tenants[0];
   }, [tenants, currentTenantId]);
 
+  // Sync Favicon to HTML head
+  useEffect(() => {
+    if (currentTenant?.appFaviconUrl) {
+      let link: HTMLLinkElement | null = document.querySelector("link[rel*='icon']");
+      if (!link) {
+        link = document.createElement('link');
+        link.rel = 'icon';
+        document.head.appendChild(link);
+      }
+      link.href = currentTenant.appFaviconUrl;
+    }
+  }, [currentTenant?.appFaviconUrl]);
+
+  const DEFAULT_ROLES: RoleDefinition[] = [
+    { id: 'super_admin', label: 'Super Admin', description: 'Akses penuh seluruh modul, konfigurasi organisasi & audit log', badgeClass: 'bg-purple-100 text-purple-800', isSystem: true },
+    { id: 'hr_admin', label: 'HR Admin', description: 'Pengelolaan SDM, presensi, cuti, KPI, kepatuhan & rekrutmen', badgeClass: 'bg-indigo-100 text-indigo-800', isSystem: true },
+    { id: 'payroll_admin', label: 'Payroll Admin', description: 'Perhitungan gaji, slip PPh 21 TER, pinjaman & kasbon karyawan', badgeClass: 'bg-blue-100 text-blue-800', isSystem: true },
+    { id: 'ga_admin', label: 'GA Admin', description: 'Aset inventaris, barcode QR, pengadaan PO & logistik operasional', badgeClass: 'bg-amber-100 text-amber-800', isSystem: true },
+    { id: 'manager', label: 'Manager (MSS)', description: 'Persetujuan berjenjang, monitoring kehadiran & cuti tim bawahan', badgeClass: 'bg-emerald-100 text-emerald-800', isSystem: true },
+    { id: 'employee', label: 'Staff (ESS)', description: 'Portal mandiri: pengajuan cuti, presensi, reimbursement, & slip', badgeClass: 'bg-slate-100 text-slate-800', isSystem: true },
+  ];
+
   // Current User State & Role Switching
   const [currentUserRole, setCurrentUserRole] = useState<UserRole>('super_admin');
-  const [users] = useState<UserAccount[]>(INITIAL_USERS);
+  const [roles, setRoles] = useState<RoleDefinition[]>(() => {
+    const saved = localStorage.getItem('nusahr_roles');
+    return saved ? JSON.parse(saved) : DEFAULT_ROLES;
+  });
+  const [users, setUsers] = useState<UserAccount[]>(() => {
+    const saved = localStorage.getItem('nusahr_users');
+    return saved ? JSON.parse(saved) : INITIAL_USERS;
+  });
+  const [rolePermissions, setRolePermissions] = useState<Record<string, OperationPermissions>>(() => {
+    const saved = localStorage.getItem('nusahr_role_permissions');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object') {
+          return { ...INITIAL_ROLE_PERMISSIONS, ...parsed };
+        }
+      } catch (e) {
+        console.error('Failed to parse saved role permissions:', e);
+      }
+    }
+    return INITIAL_ROLE_PERMISSIONS;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('nusahr_roles', JSON.stringify(roles));
+  }, [roles]);
+
+  useEffect(() => {
+    localStorage.setItem('nusahr_users', JSON.stringify(users));
+  }, [users]);
+
+  useEffect(() => {
+    localStorage.setItem('nusahr_role_permissions', JSON.stringify(rolePermissions));
+  }, [rolePermissions]);
 
   const currentUser = useMemo(() => {
     const found = users.find((u) => u.tenantId === currentTenant.id && u.role === currentUserRole);
@@ -469,6 +560,11 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [complianceRecords, setComplianceRecords] = useState<ComplianceRecord[]>(() => {
     const saved = localStorage.getItem('nusahr_compliance');
     return saved ? JSON.parse(saved) : INITIAL_COMPLIANCE;
+  });
+
+  const [jobRequisitions, setJobRequisitions] = useState<JobRequisition[]>(() => {
+    const saved = localStorage.getItem('nusahr_job_requisitions');
+    return saved ? JSON.parse(saved) : INITIAL_JOB_REQUISITIONS;
   });
 
   const [vacancies, setVacancies] = useState<JobVacancy[]>(() => {
@@ -1213,6 +1309,22 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // 7. Recruitment & Onboarding
+  const addJobRequisition = (req: Omit<JobRequisition, 'id' | 'tenantId' | 'createdAt'>) => {
+    const newReq: JobRequisition = {
+      ...req,
+      id: `req-${Date.now()}`,
+      tenantId: currentTenant.id,
+      createdAt: new Date().toISOString().split('T')[0],
+    };
+    setJobRequisitions((prev) => [newReq, ...prev]);
+  };
+
+  const updateJobRequisition = (id: string, updates: Partial<JobRequisition>) => {
+    setJobRequisitions((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, ...updates } : r))
+    );
+  };
+
   const addVacancy = (v: Omit<JobVacancy, 'id' | 'tenantId' | 'postedDate'>) => {
     const newVac: JobVacancy = {
       ...v,
@@ -1221,6 +1333,10 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       postedDate: new Date().toISOString().split('T')[0],
     };
     setVacancies((prev) => [newVac, ...prev]);
+  };
+
+  const updateVacancy = (id: string, updates: Partial<JobVacancy>) => {
+    setVacancies((prev) => prev.map((v) => (v.id === id ? { ...v, ...updates } : v)));
   };
 
   const addCandidate = (c: Omit<Candidate, 'id' | 'tenantId' | 'appliedDate'>) => {
@@ -2106,6 +2222,90 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setAuditLogs((prev) => [entry, ...prev]);
   };
 
+  const addUser = (userData: Omit<UserAccount, 'id' | 'tenantId'>) => {
+    const newUser: UserAccount = {
+      ...userData,
+      id: `usr-${Date.now().toString().slice(-4)}`,
+      tenantId: currentTenant.id,
+      status: userData.status || 'Aktif',
+    };
+    setUsers((prev) => [newUser, ...prev]);
+    logAuditAction('RBAC User', 'ADD_USER', newUser.id, `Pendaftaran user baru: ${newUser.name} (${newUser.email}) role ${newUser.role}`);
+  };
+
+  const deleteUser = (id: string) => {
+    const target = users.find((u) => u.id === id);
+    setUsers((prev) => prev.filter((u) => u.id !== id));
+    if (target) {
+      logAuditAction('RBAC User', 'DELETE_USER', id, `Menghapus akun user ${target.name} (${target.email})`);
+    }
+  };
+
+  const getRolePermission = (module: string, roleKey: string): OperationPermissions => {
+    const key = `${module}__${roleKey}`;
+    if (rolePermissions[key]) {
+      return rolePermissions[key];
+    }
+    if (INITIAL_ROLE_PERMISSIONS[key]) {
+      return INITIAL_ROLE_PERMISSIONS[key];
+    }
+    if (roleKey === 'super_admin') {
+      return { view: true, create: true, edit: true, delete: true, approve: true, export: true };
+    }
+    return { view: false, create: false, edit: false, delete: false, approve: false, export: false };
+  };
+
+  const hasPermission = (module: string, roleKey: string, op: keyof OperationPermissions): boolean => {
+    return !!getRolePermission(module, roleKey)[op];
+  };
+
+  const addRole = (newRole: RoleDefinition, copyFrom?: string) => {
+    setRoles((prev) => [...prev, newRole]);
+    setRolePermissions((prev) => {
+      const next = { ...prev };
+      const systemModules = [
+        'employees', 'personalia', 'attendance', 'trips', 'payroll',
+        'loans', 'approvals', 'kpi', 'compliance', 'recruitment',
+        'offboarding', 'assets', 'procurement', 'documents', 'audit_trail', 'calendar'
+      ];
+      systemModules.forEach((modId) => {
+        const targetKey = `${modId}__${newRole.id}`;
+        if (copyFrom) {
+          const source = prev[`${modId}__${copyFrom}`] || INITIAL_ROLE_PERMISSIONS[`${modId}__${copyFrom}`];
+          next[targetKey] = source
+            ? { ...source }
+            : { view: false, create: false, edit: false, delete: false, approve: false, export: false };
+        } else {
+          next[targetKey] = { view: false, create: false, edit: false, delete: false, approve: false, export: false };
+        }
+      });
+      return next;
+    });
+    logAuditAction('RBAC Role', 'ADD_ROLE', newRole.id, `Menambahkan jenis role baru: "${newRole.label}" (key: ${newRole.id})`);
+  };
+
+  const deleteRole = (id: string) => {
+    setRoles((prev) => prev.filter((r) => r.id !== id));
+    logAuditAction('RBAC Role', 'DELETE_ROLE', id, `Menghapus role kustom: ${id}`);
+  };
+
+  const updateRolePermission = (module: string, roleKey: string, op: keyof OperationPermissions, allowed: boolean) => {
+    const key = `${module}__${roleKey}`;
+    setRolePermissions((prev) => {
+      const current = prev[key] || getRolePermission(module, roleKey);
+      const updated = { ...current, [op]: allowed };
+      if (!updated.view && op === 'view') {
+        updated.create = false;
+        updated.edit = false;
+        updated.delete = false;
+        updated.approve = false;
+        updated.export = false;
+      }
+      return { ...prev, [key]: updated };
+    });
+    logAuditAction('RBAC Permission', 'UPDATE_PERMISSION', key, `Update izin [${op.toUpperCase()}=${allowed}] untuk role ${roleKey} di modul ${module}`);
+  };
+
   // 22. Entity Handlers
   const addEntity = (entityData: Omit<CompanyEntity, 'id' | 'tenantId'>) => {
     const newEnt: CompanyEntity = {
@@ -2665,6 +2865,16 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
   };
 
+  const addOfficeSupply = (item: Omit<GAOfficeSupply, 'id' | 'tenantId'>) => {
+    const newItem: GAOfficeSupply = {
+      ...item,
+      id: `atk-${Date.now()}`,
+      tenantId: currentTenant.id,
+    };
+    setOfficeSupplies((prev) => [...prev, newItem]);
+    logAuditAction('GA ATK', 'ADD_SUPPLY_ITEM', newItem.id, `Mendaftarkan master ATK: ${newItem.itemName}`);
+  };
+
   const addOfficeSupplyRequest = (req: Omit<GAOfficeSupplyRequest, 'id' | 'tenantId' | 'status' | 'requestDate'>) => {
     const newReq: GAOfficeSupplyRequest = {
       ...req,
@@ -2829,6 +3039,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setApprovalItems(INITIAL_APPROVALS);
     setAssets(INITIAL_ASSETS);
     setCandidates(INITIAL_CANDIDATES);
+    setJobRequisitions(INITIAL_JOB_REQUISITIONS);
     setBusinessTrips(INITIAL_BUSINESS_TRIPS);
     setContractReviews(INITIAL_CONTRACT_REVIEWS);
     setProbationEvaluations(INITIAL_PROBATION_EVALUATIONS);
@@ -2842,9 +3053,20 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         tenants,
         currentTenant,
         setCurrentTenantId,
+        updateTenant,
+        updateTenantBranding,
         currentUser,
         setCurrentUserRole,
         users,
+        addUser,
+        deleteUser,
+        roles,
+        addRole,
+        deleteRole,
+        rolePermissions,
+        updateRolePermission,
+        getRolePermission,
+        hasPermission,
         activeModule,
         setActiveModule,
         employees: tenantEmployees,
@@ -2870,8 +3092,12 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         complianceRecords: complianceRecords.filter((c) => c.tenantId === currentTenant.id),
         issueComplianceAction,
         vacancies: vacancies.filter((v) => v.id && v.tenantId === currentTenant.id),
+        jobRequisitions: jobRequisitions.filter((r) => r.tenantId === currentTenant.id),
+        addJobRequisition,
+        updateJobRequisition,
         candidates: candidates.filter((c) => c.tenantId === currentTenant.id),
         addVacancy,
+        updateVacancy,
         addCandidate,
         updateCandidateStage,
         convertCandidateToEmployee,
@@ -2968,6 +3194,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         addVehicleBooking,
         updateVehicleBookingStatus,
         officeSupplies: officeSupplies.filter((s) => s.tenantId === currentTenant.id),
+        addOfficeSupply,
         officeSupplyRequests: officeSupplyRequests.filter((r) => r.tenantId === currentTenant.id),
         addOfficeSupplyRequest,
         reviewOfficeSupplyRequest,

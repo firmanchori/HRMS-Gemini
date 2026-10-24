@@ -280,7 +280,7 @@ export const GlobalSearchBar: React.FC = () => {
           <button
             type="button"
             onClick={() => window.dispatchEvent(new CustomEvent('open-command-palette'))}
-            className="w-36 md:w-52 lg:w-64 xl:w-72 pl-8 pr-12 sm:pr-14 py-1 sm:py-1.5 text-xs bg-slate-50 hover:bg-slate-100/90 border border-slate-200 hover:border-indigo-400 rounded-md outline-none transition-all text-slate-500 hover:text-slate-700 shadow-2xs flex items-center justify-between text-left"
+            className="w-28 sm:w-36 md:w-44 lg:w-60 xl:w-72 pl-8 pr-10 sm:pr-14 py-1 sm:py-1.5 text-xs bg-slate-50 hover:bg-slate-100/90 border border-slate-200 hover:border-indigo-400 rounded-md outline-none transition-all text-slate-500 hover:text-slate-700 shadow-2xs flex items-center justify-between text-left"
             title="Buka Command Palette & Pencarian Global (Ctrl+K)"
           >
             <span className="truncate">Cari atau Perintah...</span>

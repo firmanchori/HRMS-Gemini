@@ -10,7 +10,6 @@ import {
   Plus,
   Search,
   Filter,
-  FileText,
   CheckCircle,
   Building,
   Calendar,
@@ -28,7 +27,6 @@ import {
 } from 'lucide-react';
 import { PersonaliaActionType, Employee } from '../../types/hrms';
 import { EmployeeSelect } from '../common/EmployeeSelect';
-import { QRCodeView } from '../common/QRCodeView';
 import { CurrencyInput } from '../common/CurrencyInput';
 import { ValidatedDateInput } from '../common/ValidatedDateInput';
 import { formatRupiah } from '../../utils/taxCalculator';
@@ -39,17 +37,27 @@ export const PersonaliaManagement: React.FC = () => {
     personaliaLogs,
     processPersonaliaAction,
     currentTenant,
-    documents,
+    orgNodes,
+    openFilePreview,
   } = useHrms();
 
   const [activeTab, setActiveTab] = useState<'log' | 'pengaturan'>('log');
   const [filterType, setFilterType] = useState<string>('all');
+  const [isCustomPos, setIsCustomPos] = useState(false);
+
+  // Master positions extracted directly from org chart structure nodes + existing employees
+  const availablePositions = React.useMemo(() => {
+    const set = new Set<string>();
+    orgNodes?.forEach((n) => {
+      if (n.title) set.add(n.title.trim());
+    });
+    employees?.forEach((e) => {
+      if (e.position) set.add(e.position.trim());
+    });
+    return Array.from(set).sort();
+  }, [orgNodes, employees]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedLetter, setSelectedLetter] = useState<{
-    log: any;
-    doc: any;
-  } | null>(null);
 
   // Form State
   const [targetEmpId, setTargetEmpId] = useState(employees[0]?.id || '');
@@ -157,9 +165,9 @@ export const PersonaliaManagement: React.FC = () => {
   const filteredLogs = personaliaLogs.filter((log) => {
     const emp = employees.find((e) => e.id === log.employeeId);
     const matchesSearch =
-      (emp?.fullName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (emp?.nik || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      log.letterNumber.toLowerCase().includes(searchQuery.toLowerCase());
+      (emp?.fullName || '').toLowerCase().includes((searchQuery || '').toLowerCase()) ||
+      (emp?.nik || '').toLowerCase().includes((searchQuery || '').toLowerCase()) ||
+      (log?.letterNumber || '').toLowerCase().includes((searchQuery || '').toLowerCase());
     const matchesType = filterType === 'all' || log.type === filterType;
     return matchesSearch && matchesType;
   });
@@ -226,17 +234,47 @@ export const PersonaliaManagement: React.FC = () => {
     setShowValidationErrors(false);
   };
 
-  const handleOpenSK = (log: any) => {
-    const doc = documents.find((d) => d.documentNumber === log.letterNumber) || {
+  const handlePreviewSK = (log: any) => {
+    const emp = employees.find((e) => e.id === log.employeeId);
+    const empName = emp?.fullName || 'Karyawan';
+    const empNik = emp?.nik || 'KR-001';
+    const empDept = log.newDepartment || emp?.department || 'Operasional';
+
+    openFilePreview({
+      title: `SURAT KEPUTUSAN DIREKSI: ${log.type.toUpperCase()}`,
       documentNumber: log.letterNumber,
-      title: `Surat Keputusan ${log.type}`,
-      issueDate: log.effectiveDate,
+      typeBadge: `SK ${log.type}`,
+      date: log.effectiveDate,
+      partyName: empName,
+      partyRole: `${log.newPosition} · Divisi ${empDept} (NIK: ${empNik})`,
+      statusBadge: {
+        label: 'Terverifikasi Sah Direksi',
+        variant: 'success',
+      },
+      detailsGrid: [
+        { label: 'Nomor Dokumen SK Resmi', value: log.letterNumber },
+        { label: 'Jenis Tindakan Personalia', value: log.type },
+        { label: 'Nama Karyawan', value: empName },
+        { label: 'Nomor Induk Karyawan (NIK)', value: empNik },
+        { label: 'Jabatan Sebelumnya', value: log.previousPosition || '-' },
+        { label: 'Jabatan Baru Ditetapkan', value: log.newPosition },
+        { label: 'Divisi / Unit Kerja', value: empDept },
+        { label: 'Lokasi Penempatan Kerja', value: log.newBranchLocation || emp?.branchLocation || 'Kantor Pusat' },
+        ...(log.newSalary ? [
+          { label: 'Gaji Pokok Baru Disepakati', value: formatRupiah(log.newSalary) },
+          { label: 'Gaji Pokok Sebelumnya', value: formatRupiah(log.previousSalary) },
+        ] : []),
+        { label: 'Tanggal Efektif Berlaku', value: log.effectiveDate },
+      ],
+      contentParagraphs: [
+        `Menimbang hasil evaluasi komprehensif atas performa kerja, kepatuhan tata tertib kerja, serta kebutuhan pengembangan organisasi di lingkungan ${currentTenant.name}, Direksi dengan ini menetapkan keputusan resmi tentang ${log.type.toUpperCase()} atas nama karyawan yang bersangkutan.`,
+        `Ketetapan Mutasi/Promosi/Perubahan: Menetapkan nama karyawan di atas untuk mengemban posisi jabatan baru sebagai "${log.newPosition}" pada unit kerja ${empDept} terhitung efektif sejak tanggal ${log.effectiveDate}.`,
+        `Dasar Pertimbangan Manajemen: "${log.reason || 'Kebutuhan strategis penguatan organisasi dan hasil evaluasi kompetensi berkala.'}".`,
+        `Surat Keputusan ini memiliki kekuatan hukum mengikat bagi perusahaan dan karyawan bersangkutan. Seluruh hak, wewenang, dan kewajiban baru mulai berlaku penuh sejak tanggal efektif penetapan SK ini.`,
+      ],
       signeeName: log.approvedBy || 'Ir. Budi Santoso',
       signeeRole: 'President Director & CEO',
-      qrVerificationUrl: `https://nusahr.enterprise/verify?doc=${log.letterNumber.replace(/\//g, '-')}`,
-      contentPreview: `Berdasarkan evaluasi kinerja berkala, ditetapkan keputusan resmi ${log.type} dari jabatan lama ${log.previousPosition} menjadi ${log.newPosition} dengan gaji penyesuaian ${formatRupiah(log.newSalary)}.`,
-    };
-    setSelectedLetter({ log, doc });
+    });
   };
 
   const renderBadge = (type: string) => {
@@ -300,7 +338,7 @@ export const PersonaliaManagement: React.FC = () => {
 
   return (
     <div className="space-y-4">
-      {/* Header */}
+      {/* Row 1: Header Title & Main CTA */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
         <div>
           <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
@@ -312,44 +350,52 @@ export const PersonaliaManagement: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
-          <div className="w-full sm:w-auto overflow-x-auto no-scrollbar pb-1 sm:pb-0">
-            <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5 text-xs whitespace-nowrap shadow-2xs">
-              <button
-                onClick={() => setActiveTab('log')}
-                className={`px-3 py-1.5 rounded-md font-medium transition-all ${
-                  activeTab === 'log'
-                    ? 'bg-indigo-600 text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                Riwayat SK Personalia
-              </button>
-              <button
-                onClick={() => setActiveTab('pengaturan')}
-                className={`px-3 py-1.5 rounded-md font-medium transition-all flex items-center gap-1 ${
-                  activeTab === 'pengaturan'
-                    ? 'bg-indigo-600 text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <Settings className="w-3.5 h-3.5" />
-                <span>Aturan & Kebijakan</span>
-              </button>
-            </div>
-          </div>
+        <button
+          onClick={() => {
+            syncFormDefaults(selectedTargetEmp, actionType);
+            setIsModalOpen(true);
+          }}
+          className="flex items-center justify-center gap-1.5 px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors shrink-0"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          <span>Buat Tindakan Personalia</span>
+        </button>
+      </div>
 
-          <button
-            onClick={() => {
-              syncFormDefaults(selectedTargetEmp, actionType);
-              setIsModalOpen(true);
-            }}
-            className="flex items-center justify-center gap-1.5 px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md text-xs font-semibold shadow-xs transition-colors shrink-0"
+      {/* Row 2: Enterprise Tab Navigation Bar */}
+      <div className="border-b border-slate-200 flex items-center gap-1 sm:gap-2 overflow-x-auto no-scrollbar pt-1">
+        <button
+          onClick={() => setActiveTab('log')}
+          className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
+            activeTab === 'log'
+              ? 'border-slate-900 text-slate-950 font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+          }`}
+        >
+          <Award className="w-3.5 h-3.5" />
+          <span>Riwayat SK & Keputusan Personalia</span>
+          <span
+            className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full transition-colors ${
+              activeTab === 'log'
+                ? 'bg-slate-900 text-white'
+                : 'bg-slate-100 text-slate-600'
+            }`}
           >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Buat Tindakan Personalia</span>
-          </button>
-        </div>
+            {personaliaLogs.length} SK
+          </span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('pengaturan')}
+          className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
+            activeTab === 'pengaturan'
+              ? 'border-slate-900 text-slate-950 font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+          }`}
+        >
+          <Settings className="w-3.5 h-3.5" />
+          <span>Aturan & Kebijakan Personalia</span>
+        </button>
       </div>
 
       {activeTab === 'log' && (
@@ -409,36 +455,62 @@ export const PersonaliaManagement: React.FC = () => {
             </div>
           </div>
 
-          {/* Filters & Search */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white p-3 border border-slate-200 rounded-lg shadow-xs">
-            <div className="relative w-full sm:w-80">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+          {/* Filters & Search Toolbar - Responsive Tablet & Mobile Friendly */}
+          <div className="bg-white p-3 sm:p-3.5 border border-slate-200 rounded-xl shadow-xs space-y-2.5 lg:space-y-0 lg:flex lg:items-center lg:justify-between lg:gap-4">
+            <div className="relative w-full lg:max-w-md">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
               <input
                 type="text"
                 placeholder="Cari nama karyawan, NIK, atau nomor SK..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-3 py-1.5 text-xs border border-slate-300 rounded-md outline-none focus:border-indigo-500"
+                className="w-full pl-9 pr-8 py-2 text-xs bg-slate-50/70 focus:bg-white border border-slate-300 focus:border-indigo-500 rounded-lg outline-none transition-all placeholder:text-slate-400 shadow-2xs"
               />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 p-0.5 rounded-full"
+                  title="Hapus pencarian"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
 
-            <div className="flex items-center gap-2 w-full sm:w-auto">
-              <Filter className="w-4 h-4 text-slate-400" />
-              <select
-                value={filterType}
-                onChange={(e) => setFilterType(e.target.value)}
-                className="text-xs border border-slate-300 rounded-md py-1.5 px-3 bg-white font-medium text-slate-700"
-              >
-                <option value="all">Semua Jenis Tindakan Personalia (8 Jenis)</option>
-                <option value="Promosi">Promosi Jabatan / Grade</option>
-                <option value="Demosi">Demosi Jabatan</option>
-                <option value="Mutasi">Mutasi Antar Departemen</option>
-                <option value="Rotasi Cabang">Rotasi Cabang / Site</option>
-                <option value="Penyesuaian Gaji">Penyesuaian Gaji Pokok</option>
-                <option value="Pengangkatan Tetap">Pengangkatan Karyawan Tetap (PKWTT)</option>
-                <option value="Perpanjangan Kontrak">Perpanjangan Kontrak (PKWT)</option>
-                <option value="Penetapan Plt">Penetapan Pejabat Sementara (Plt)</option>
-              </select>
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full lg:w-auto">
+              <div className="relative w-full sm:w-80 lg:w-80">
+                <select
+                  value={filterType}
+                  onChange={(e) => setFilterType(e.target.value)}
+                  className="w-full text-xs border border-slate-300 rounded-lg py-2 px-3 bg-white font-medium text-slate-700 outline-none focus:border-indigo-500 cursor-pointer shadow-2xs"
+                >
+                  <option value="all">Semua Jenis Tindakan Personalia (8 Jenis)</option>
+                  <option value="Promosi">Promosi Jabatan / Grade</option>
+                  <option value="Demosi">Demosi Jabatan</option>
+                  <option value="Mutasi">Mutasi Antar Departemen</option>
+                  <option value="Rotasi Cabang">Rotasi Cabang / Site</option>
+                  <option value="Penyesuaian Gaji">Penyesuaian Gaji Pokok</option>
+                  <option value="Pengangkatan Tetap">Pengangkatan Karyawan Tetap (PKWTT)</option>
+                  <option value="Perpanjangan Kontrak">Perpanjangan Kontrak (PKWT)</option>
+                  <option value="Penetapan Plt">Penetapan Pejabat Sementara (Plt)</option>
+                </select>
+              </div>
+
+              {(filterType !== 'all' || searchQuery) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFilterType('all');
+                    setSearchQuery('');
+                  }}
+                  className="px-3 py-2 text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 border border-rose-200 rounded-lg transition-colors font-semibold flex items-center justify-center gap-1 shadow-2xs shrink-0"
+                  title="Reset filter"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  <span>Reset Filter</span>
+                </button>
+              )}
             </div>
           </div>
 
@@ -450,8 +522,9 @@ export const PersonaliaManagement: React.FC = () => {
                 return (
                   <div
                     key={log.id}
-                    onClick={() => handleOpenSK(log)}
-                    className="bg-white border border-slate-200 hover:border-indigo-300 rounded-xl p-4 shadow-xs space-y-3 cursor-pointer active:scale-[0.99] transition-all"
+                    onClick={() => handlePreviewSK(log)}
+                    className="bg-white border border-slate-200 hover:border-indigo-300 rounded-xl p-4 shadow-xs space-y-3 cursor-pointer active:scale-[0.99] transition-all group"
+                    title="Klik kartu untuk membaca Surat Keputusan (SK) resmi"
                   >
                     {/* Header: Employee & Badge */}
                     <div className="flex items-start justify-between gap-2">
@@ -497,7 +570,7 @@ export const PersonaliaManagement: React.FC = () => {
                     </div>
 
                     {/* Salary & Effective Date Grid */}
-                    <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-slate-100">
                       <div>
                         <span className="text-[10px] text-slate-400 block">Gaji Pokok Baru:</span>
                         {log.newSalary ? (
@@ -519,22 +592,6 @@ export const PersonaliaManagement: React.FC = () => {
                         <div className="text-[10px] text-indigo-700 font-mono truncate mt-0.5">{log.letterNumber}</div>
                       </div>
                     </div>
-
-                    {/* Footer */}
-                    <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-100">
-                      <span className="text-[10px] text-slate-400">Ketuk untuk membaca Surat Keputusan</span>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleOpenSK(log);
-                        }}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 rounded-md border border-indigo-200 transition-colors"
-                      >
-                        <FileText className="w-3.5 h-3.5" />
-                        <span>Lihat SK Resmi</span>
-                      </button>
-                    </div>
                   </div>
                 );
               })
@@ -545,19 +602,18 @@ export const PersonaliaManagement: React.FC = () => {
             )}
           </div>
 
-          {/* TAMPILAN DESKTOP: Table (>= md) */}
+          {/* TAMPILAN DESKTOP & TABLET: Menyesuaikan kolom secara responsif tanpa slide horizontal pada tablet */}
           <div className="hidden md:block bg-white border border-slate-200 rounded-lg overflow-hidden shadow-xs">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs min-w-[750px]">
+            <div className="w-full">
+              <table className="w-full text-left text-xs">
                 <thead className="bg-slate-50 border-b border-slate-200 text-slate-600">
                   <tr>
                     <th className="py-2.5 px-3 font-semibold">Karyawan</th>
                     <th className="py-2.5 px-3 font-semibold">Jenis Tindakan</th>
                     <th className="py-2.5 px-3 font-semibold">Perubahan Jabatan / Posisi</th>
-                    <th className="py-2.5 px-3 font-semibold text-right">Remunerasi Pokok</th>
-                    <th className="py-2.5 px-3 font-semibold">Tanggal Efektif</th>
-                    <th className="py-2.5 px-3 font-semibold">Nomor SK Resmi</th>
-                    <th className="py-2.5 px-3 font-semibold text-center">Aksi Dokumen</th>
+                    <th className="py-2.5 px-3 font-semibold text-right hidden lg:table-cell">Remunerasi Pokok</th>
+                    <th className="py-2.5 px-3 font-semibold hidden xl:table-cell">Tanggal Efektif</th>
+                    <th className="py-2.5 px-3 font-semibold hidden xl:table-cell">Nomor SK Resmi</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -567,8 +623,9 @@ export const PersonaliaManagement: React.FC = () => {
                       return (
                         <tr
                           key={log.id}
-                          onClick={() => handleOpenSK(log)}
+                          onClick={() => handlePreviewSK(log)}
                           className="hover:bg-indigo-50/40 cursor-pointer transition-colors group"
+                          title="Klik baris untuk membaca Surat Keputusan (SK) resmi"
                         >
                           <td className="py-2.5 px-3">
                             <div className="flex items-center gap-2.5">
@@ -611,7 +668,7 @@ export const PersonaliaManagement: React.FC = () => {
                               <span className="text-[10px] text-purple-600 block">Lokasi: {log.newBranchLocation}</span>
                             )}
                           </td>
-                          <td className="py-2.5 px-3 text-right">
+                          <td className="py-2.5 px-3 text-right hidden lg:table-cell">
                             {log.newSalary ? (
                               <>
                                 <div className="text-slate-400 line-through text-[10px]">
@@ -630,32 +687,20 @@ export const PersonaliaManagement: React.FC = () => {
                               <span className="text-slate-400 font-mono">-</span>
                             )}
                           </td>
-                          <td className="py-2.5 px-3 text-slate-700 font-mono text-[11px]">
+                          <td className="py-2.5 px-3 text-slate-700 font-mono text-[11px] hidden xl:table-cell">
                             {log.effectiveDate}
                           </td>
-                          <td className="py-2.5 px-3">
+                          <td className="py-2.5 px-3 hidden xl:table-cell">
                             <span className="font-mono text-indigo-700 font-medium bg-slate-100 px-2 py-0.5 rounded text-[10px]">
                               {log.letterNumber}
                             </span>
-                          </td>
-                          <td className="py-2.5 px-3 text-center">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleOpenSK(log);
-                              }}
-                              className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-100 hover:bg-indigo-50 text-indigo-600 hover:text-indigo-800 border border-slate-200 rounded font-medium text-[11px] transition-colors"
-                            >
-                              <FileText className="w-3.5 h-3.5" />
-                              <span>Lihat SK</span>
-                            </button>
                           </td>
                         </tr>
                       );
                     })
                   ) : (
                     <tr>
-                      <td colSpan={7} className="py-8 text-center text-slate-400">
+                      <td colSpan={6} className="py-8 text-center text-slate-400">
                         Belum ada riwayat tindakan personalia yang sesuai filter.
                       </td>
                     </tr>
@@ -754,8 +799,19 @@ export const PersonaliaManagement: React.FC = () => {
 
       {/* Modal: Form Isian Dinamis Tindakan Personalia */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full border border-slate-200 overflow-hidden flex flex-col max-h-[92vh]">
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setIsModalOpen(false);
+              setShowValidationErrors(false);
+            }
+          }}
+        >
+          <div
+            className="bg-white rounded-xl shadow-2xl max-w-2xl w-full border border-slate-200 overflow-hidden flex flex-col max-h-[92vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="px-5 py-3.5 bg-slate-900 text-white flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <FileBadge className="w-5 h-5 text-indigo-400" />
@@ -858,15 +914,46 @@ export const PersonaliaManagement: React.FC = () => {
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="font-medium text-slate-700 block mb-1">Jabatan / Posisi Baru *</label>
-                      <input
-                        type="text"
-                        required
-                        value={newPosition}
-                        onChange={(e) => setNewPosition(e.target.value)}
-                        placeholder="Contoh: Principal Software Engineer"
-                        className="w-full px-3 py-1.5 border border-slate-300 rounded bg-white font-medium"
-                      />
+                      <label className="font-medium text-slate-700 block mb-1">
+                        Jabatan / Posisi Baru (Referensi Tabel Jabatan) *
+                      </label>
+                      <div className="space-y-1.5">
+                        <select
+                          value={availablePositions.includes(newPosition) ? newPosition : (newPosition ? '__custom__' : '')}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === '__custom__') {
+                              setIsCustomPos(true);
+                            } else {
+                              setIsCustomPos(false);
+                              setNewPosition(val);
+                              const matchingNode = orgNodes?.find((n) => n.title === val);
+                              if (matchingNode?.department) {
+                                setNewDepartment(matchingNode.department);
+                              }
+                            }
+                          }}
+                          className="w-full px-3 py-1.5 border border-slate-300 rounded bg-white font-medium text-slate-900 text-xs"
+                        >
+                          <option value="">-- Pilih Posisi dari Tabel Jabatan --</option>
+                          {availablePositions.map((pos) => (
+                            <option key={pos} value={pos}>
+                              {pos}
+                            </option>
+                          ))}
+                          <option value="__custom__">+ Input Posisi Kustom Baru</option>
+                        </select>
+                        {(isCustomPos || (newPosition && !availablePositions.includes(newPosition))) && (
+                          <input
+                            type="text"
+                            required
+                            value={newPosition}
+                            onChange={(e) => setNewPosition(e.target.value)}
+                            placeholder="Ketik nama jabatan baru definitif..."
+                            className="w-full px-3 py-1.5 border border-indigo-300 rounded bg-indigo-50/50 font-medium text-xs text-indigo-950"
+                          />
+                        )}
+                      </div>
                     </div>
                     <div>
                       <label className="font-medium text-slate-700 block mb-1">Grade Golongan Baru</label>
@@ -916,14 +1003,42 @@ export const PersonaliaManagement: React.FC = () => {
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="font-medium text-slate-700 block mb-1">Jabatan Baru Penyesuaian *</label>
-                      <input
-                        type="text"
-                        required
-                        value={newPosition}
-                        onChange={(e) => setNewPosition(e.target.value)}
-                        className="w-full px-3 py-1.5 border border-slate-300 rounded bg-white font-medium"
-                      />
+                      <label className="font-medium text-slate-700 block mb-1">
+                        Jabatan Baru Penyesuaian (Referensi Tabel Jabatan) *
+                      </label>
+                      <div className="space-y-1.5">
+                        <select
+                          value={availablePositions.includes(newPosition) ? newPosition : (newPosition ? '__custom__' : '')}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === '__custom__') {
+                              setIsCustomPos(true);
+                            } else {
+                              setIsCustomPos(false);
+                              setNewPosition(val);
+                            }
+                          }}
+                          className="w-full px-3 py-1.5 border border-slate-300 rounded bg-white font-medium text-slate-900 text-xs"
+                        >
+                          <option value="">-- Pilih Posisi dari Tabel Jabatan --</option>
+                          {availablePositions.map((pos) => (
+                            <option key={pos} value={pos}>
+                              {pos}
+                            </option>
+                          ))}
+                          <option value="__custom__">+ Input Posisi Kustom Baru</option>
+                        </select>
+                        {(isCustomPos || (newPosition && !availablePositions.includes(newPosition))) && (
+                          <input
+                            type="text"
+                            required
+                            value={newPosition}
+                            onChange={(e) => setNewPosition(e.target.value)}
+                            placeholder="Ketik jabatan penyesuaian..."
+                            className="w-full px-3 py-1.5 border border-rose-300 rounded bg-rose-50/50 font-medium text-xs text-rose-950"
+                          />
+                        )}
+                      </div>
                     </div>
                     <div>
                       <label className="font-medium text-slate-700 block mb-1">Grade Diturunkan Ke</label>
@@ -974,14 +1089,42 @@ export const PersonaliaManagement: React.FC = () => {
                       </select>
                     </div>
                     <div>
-                      <label className="font-medium text-slate-700 block mb-1">Posisi di Divisi Tujuan *</label>
-                      <input
-                        type="text"
-                        required
-                        value={newPosition}
-                        onChange={(e) => setNewPosition(e.target.value)}
-                        className="w-full px-3 py-1.5 border border-slate-300 rounded bg-white font-medium"
-                      />
+                      <label className="font-medium text-slate-700 block mb-1">
+                        Posisi di Divisi Tujuan (Tabel Jabatan) *
+                      </label>
+                      <div className="space-y-1.5">
+                        <select
+                          value={availablePositions.includes(newPosition) ? newPosition : (newPosition ? '__custom__' : '')}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === '__custom__') {
+                              setIsCustomPos(true);
+                            } else {
+                              setIsCustomPos(false);
+                              setNewPosition(val);
+                            }
+                          }}
+                          className="w-full px-3 py-1.5 border border-slate-300 rounded bg-white font-medium text-slate-900 text-xs"
+                        >
+                          <option value="">-- Pilih Posisi dari Tabel Jabatan --</option>
+                          {availablePositions.map((pos) => (
+                            <option key={pos} value={pos}>
+                              {pos}
+                            </option>
+                          ))}
+                          <option value="__custom__">+ Input Posisi Kustom Baru</option>
+                        </select>
+                        {(isCustomPos || (newPosition && !availablePositions.includes(newPosition))) && (
+                          <input
+                            type="text"
+                            required
+                            value={newPosition}
+                            onChange={(e) => setNewPosition(e.target.value)}
+                            placeholder="Ketik posisi divisi tujuan..."
+                            className="w-full px-3 py-1.5 border border-slate-300 rounded bg-white font-medium text-xs"
+                          />
+                        )}
+                      </div>
                     </div>
                   </div>
                   <CurrencyInput
@@ -1140,15 +1283,42 @@ export const PersonaliaManagement: React.FC = () => {
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="font-medium text-slate-700 block mb-1">Jabatan Plt yang Diemban *</label>
-                      <input
-                        type="text"
-                        required
-                        value={newPosition}
-                        onChange={(e) => setNewPosition(e.target.value)}
-                        placeholder="Contoh: Plt. Head of Engineering"
-                        className="w-full px-3 py-1.5 border border-slate-300 rounded font-medium"
-                      />
+                      <label className="font-medium text-slate-700 block mb-1">
+                        Jabatan Plt yang Diemban (Referensi Tabel Posisi) *
+                      </label>
+                      <div className="space-y-1.5">
+                        <select
+                          value={availablePositions.includes(newPosition) ? newPosition : (newPosition ? '__custom__' : '')}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === '__custom__') {
+                              setIsCustomPos(true);
+                            } else {
+                              setIsCustomPos(false);
+                              setNewPosition(val);
+                            }
+                          }}
+                          className="w-full px-3 py-1.5 border border-slate-300 rounded bg-white font-medium text-slate-900 text-xs"
+                        >
+                          <option value="">-- Pilih Posisi dari Tabel Jabatan --</option>
+                          {availablePositions.map((pos) => (
+                            <option key={pos} value={pos}>
+                              {pos}
+                            </option>
+                          ))}
+                          <option value="__custom__">+ Input Posisi Kustom Baru</option>
+                        </select>
+                        {(isCustomPos || (newPosition && !availablePositions.includes(newPosition))) && (
+                          <input
+                            type="text"
+                            required
+                            value={newPosition}
+                            onChange={(e) => setNewPosition(e.target.value)}
+                            placeholder="Contoh: Plt. Head of Engineering"
+                            className="w-full px-3 py-1.5 border border-cyan-300 rounded bg-cyan-50/50 font-medium text-xs text-cyan-950"
+                          />
+                        )}
+                      </div>
                     </div>
                     <ValidatedDateInput
                       id="pltExpiryDate"
@@ -1208,171 +1378,7 @@ export const PersonaliaManagement: React.FC = () => {
           </div>
         </div>
       )}
-
-      {/* Modal: Preview SK Resmi Ber-QR */}
-      {selectedLetter && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]">
-            <div className="px-5 py-3.5 bg-slate-900 text-white flex items-center justify-between">
-              <div>
-                <h3 className="text-sm font-bold">Surat Keputusan (SK) Resmi Direksi</h3>
-                <span className="text-[11px] text-slate-400 font-mono">
-                  {selectedLetter.log.letterNumber}
-                </span>
-              </div>
-              <button onClick={() => setSelectedLetter(null)}>
-                <X className="w-4 h-4 text-slate-400 hover:text-white" />
-              </button>
-            </div>
-
-            <div className="p-8 overflow-y-auto space-y-6 text-slate-900 font-serif leading-relaxed text-xs">
-              {/* Kop Surat */}
-              <div className="border-b-2 border-slate-900 pb-3 text-center space-y-1">
-                <h1 className="text-base font-bold tracking-wider font-sans uppercase">
-                  {currentTenant.name}
-                </h1>
-                <p className="text-[10px] text-slate-600 font-sans">
-                  Menara Palma Lantai 18, Jl. HR Rasuna Said, Jakarta Selatan · Telp: (021) 555-0199
-                </p>
-                <p className="text-[10px] text-slate-500 font-sans">
-                  NPWP Perusahaan: {currentTenant.npwp} · Kode Entitas: {currentTenant.code}
-                </p>
-              </div>
-
-              {/* Judul & Nomor */}
-              <div className="text-center space-y-1">
-                <h2 className="text-sm font-bold uppercase underline tracking-wide font-sans">
-                  SURAT KEPUTUSAN DIREKSI TENTANG {selectedLetter.log.type.toUpperCase()}
-                </h2>
-                <div className="font-mono text-slate-600 font-semibold text-[11px]">
-                  Nomor: {selectedLetter.log.letterNumber}
-                </div>
-              </div>
-
-              {/* Isi SK */}
-              <div className="space-y-3 font-sans text-xs">
-                <p>
-                  Menimbang hasil tinjauan performa kerja dan pemenuhan ketentuan ketenagakerjaan, Manajemen{' '}
-                  <span className="font-semibold">{currentTenant.name}</span> dengan ini memutuskan secara sah:
-                </p>
-
-                <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-lg space-y-2 font-sans">
-                  <div className="grid grid-cols-3">
-                    <span className="text-slate-500">Nama Karyawan</span>
-                    <span className="col-span-2 font-bold text-slate-900">
-                      {employees.find((e) => e.id === selectedLetter.log.employeeId)?.fullName}
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-3">
-                    <span className="text-slate-500">Nomor Induk Karyawan</span>
-                    <span className="col-span-2 font-mono text-indigo-700 font-semibold">
-                      {employees.find((e) => e.id === selectedLetter.log.employeeId)?.nik}
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-3">
-                    <span className="text-slate-500">Jenis Tindakan</span>
-                    <span className="col-span-2 font-semibold text-slate-900">
-                      {selectedLetter.log.type}
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-3">
-                    <span className="text-slate-500">Jabatan Ditetapkan</span>
-                    <span className="col-span-2 font-semibold text-slate-900">
-                      {selectedLetter.log.newPosition}
-                    </span>
-                  </div>
-                  {selectedLetter.log.newDepartment && (
-                    <div className="grid grid-cols-3">
-                      <span className="text-slate-500">Divisi / Unit Kerja</span>
-                      <span className="col-span-2 font-medium text-slate-800">
-                        {selectedLetter.log.newDepartment}
-                      </span>
-                    </div>
-                  )}
-                  {selectedLetter.log.newBranchLocation && (
-                    <div className="grid grid-cols-3">
-                      <span className="text-slate-500">Lokasi Penempatan</span>
-                      <span className="col-span-2 font-medium text-purple-700">
-                        {selectedLetter.log.newBranchLocation}
-                      </span>
-                    </div>
-                  )}
-                  {selectedLetter.log.newSalary > 0 && (
-                    <div className="grid grid-cols-3">
-                      <span className="text-slate-500">Gaji Pokok Disepakati</span>
-                      <span className="col-span-2 font-mono font-bold text-slate-900">
-                        {formatRupiah(selectedLetter.log.newSalary)}
-                      </span>
-                    </div>
-                  )}
-                  <div className="grid grid-cols-3">
-                    <span className="text-slate-500">Tanggal Efektif</span>
-                    <span className="col-span-2 font-mono text-slate-700">
-                      {selectedLetter.log.effectiveDate}
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-3 pt-1 border-t border-slate-200">
-                    <span className="text-slate-500">Dasar Pertimbangan</span>
-                    <span className="col-span-2 text-slate-700 italic">
-                      "{selectedLetter.log.reason}"
-                    </span>
-                  </div>
-                </div>
-
-                <p className="text-[11px] text-slate-600 leading-normal">
-                  Surat Keputusan ini berlaku sejak tanggal ditetapkan. Apabila di kemudian hari
-                  terdapat kekeliruan dalam keputusan ini, akan diadakan perbaikan sebagaimana
-                  mestinya sesuai Undang-Undang Ketenagakerjaan yang berlaku.
-                </p>
-              </div>
-
-              {/* Tanda Tangan & QR Verification */}
-              <div className="flex items-end justify-between pt-6 border-t border-slate-200 font-sans">
-                <div className="flex items-center gap-3">
-                  <QRCodeView
-                    value={selectedLetter.doc.qrVerificationUrl}
-                    size={75}
-                    label="VALID QR"
-                    subLabel="NusaHR Hash"
-                  />
-                  <div className="text-[10px] text-slate-500 max-w-xs leading-tight">
-                    Pindai QR ini untuk verifikasi keabsahan digital SK resmi pada blockchain / server
-                    NusaHR Enterprise.
-                  </div>
-                </div>
-
-                <div className="text-right space-y-1">
-                  <div className="text-[11px] text-slate-500">
-                    Jakarta, {selectedLetter.log.effectiveDate}
-                  </div>
-                  <div className="font-bold text-slate-900 text-xs">
-                    {selectedLetter.log.approvedBy || 'Ir. Budi Santoso'}
-                  </div>
-                  <div className="text-[10px] text-slate-500">President Director & CEO</div>
-                  <div className="text-[9px] text-emerald-700 font-medium bg-emerald-50 px-2 py-0.5 rounded inline-block">
-                    ✓ Ditandatangani Secara Elektronik (BSrE/Kominfo)
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="px-5 py-3 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
-              <button
-                onClick={() => setSelectedLetter(null)}
-                className="px-4 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded font-semibold text-xs"
-              >
-                Tutup
-              </button>
-              <button
-                onClick={() => window.print()}
-                className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-semibold text-xs"
-              >
-                Cetak SK (Print PDF)
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
+

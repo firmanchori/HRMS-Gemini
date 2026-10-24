@@ -95,10 +95,10 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
   };
 
   return (
-    <div className="min-h-screen w-screen flex flex-col justify-center items-center bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 p-4 sm:p-6 text-slate-100 font-sans select-none relative overflow-hidden">
+    <div className="min-h-screen w-screen flex flex-col justify-center items-center bg-slate-950 p-4 sm:p-6 text-slate-100 font-sans select-none relative overflow-hidden">
       {/* Background Decorative Rings */}
-      <div className="absolute -top-32 -left-32 w-96 h-96 bg-indigo-600/10 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-purple-600/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute -top-32 -left-32 w-96 h-96 bg-blue-600/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-sky-600/10 rounded-full blur-3xl pointer-events-none" />
 
       {/* Main Login Card */}
       <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden text-slate-900 relative z-10 animate-fadeIn">
@@ -106,20 +106,20 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
         <div className="px-6 py-6 bg-slate-900 text-white border-b border-slate-800">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white font-extrabold flex items-center justify-center text-base shadow-sm">
+              <div className="w-9 h-9 rounded-xl bg-blue-700 text-white font-extrabold flex items-center justify-center text-base shadow-sm">
                 N
               </div>
               <div>
                 <h1 className="font-extrabold text-base tracking-tight leading-none text-white">
                   NusaHR Enterprise
                 </h1>
-                <span className="text-[10px] text-indigo-300 font-mono">
+                <span className="text-[10px] text-blue-300 font-mono">
                   Multi-Tenant Corporate Portal
                 </span>
               </div>
             </div>
 
-            <span className="text-[10px] bg-indigo-900/80 text-indigo-300 px-2 py-0.8 rounded-full font-mono border border-indigo-700/60">
+            <span className="text-[10px] bg-slate-800 text-blue-300 px-2.5 py-0.8 rounded-full font-mono border border-slate-700">
               v2026.1
             </span>
           </div>

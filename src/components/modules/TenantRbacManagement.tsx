@@ -22,6 +22,7 @@ export const TenantRbacManagement: React.FC = () => {
     users,
     currentUser,
     setCurrentUserRole,
+    getRolePermission,
   } = useHrms();
 
   const [activeSubTab, setActiveSubTab] = useState<'rbac' | 'tenant'>('rbac');
@@ -42,48 +43,14 @@ export const TenantRbacManagement: React.FC = () => {
     { id: 'tenants', label: 'Pengaturan Tenant & Lisensi SaaS' },
   ];
 
-  // RBAC Permission map [Module, Role]: Read, Write, Approve, None
+  // Dynamic RBAC Permission map using getRolePermission
   const getPermission = (modId: string, role: UserRole) => {
-    if (role === 'super_admin') return { read: true, write: true, approve: true };
-
-    if (role === 'hr_admin') {
-      if (['employees', 'attendance', 'kpi', 'compliance', 'recruitment', 'offboarding', 'documents'].includes(modId)) {
-        return { read: true, write: true, approve: true };
-      }
-      if (['payroll', 'loans', 'assets'].includes(modId)) {
-        return { read: true, write: false, approve: false };
-      }
-      return { read: false, write: false, approve: false };
-    }
-
-    if (role === 'payroll_admin') {
-      if (['payroll', 'loans'].includes(modId)) {
-        return { read: true, write: true, approve: true };
-      }
-      if (['employees', 'attendance', 'documents'].includes(modId)) {
-        return { read: true, write: false, approve: false };
-      }
-      return { read: false, write: false, approve: false };
-    }
-
-    if (role === 'ga_admin') {
-      if (['assets', 'procurement', 'documents'].includes(modId)) {
-        return { read: true, write: true, approve: true };
-      }
-      if (['employees'].includes(modId)) {
-        return { read: true, write: false, approve: false };
-      }
-      return { read: false, write: false, approve: false };
-    }
-
-    // employee (ESS)
-    if (['attendance', 'kpi', 'loans'].includes(modId)) {
-      return { read: true, write: true, approve: false };
-    }
-    if (['payroll', 'documents'].includes(modId)) {
-      return { read: true, write: false, approve: false };
-    }
-    return { read: false, write: false, approve: false };
+    const perm = getRolePermission(modId, role);
+    return {
+      read: perm.view,
+      write: perm.create || perm.edit,
+      approve: perm.approve,
+    };
   };
 
   return (

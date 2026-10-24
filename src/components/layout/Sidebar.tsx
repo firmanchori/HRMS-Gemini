@@ -24,6 +24,8 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   ChevronLeft,
+  UserCheck,
+  History,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -45,9 +47,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const navigationGroups = [
     {
+      title: 'PORTAL MANDIRI (SELF-SERVICE)',
+      items: [
+        { id: 'ess', label: 'ESS (Employee Self-Service)', icon: UserCheck },
+        { id: 'mss', label: 'MSS (Manager Self-Service)', icon: ShieldCheck },
+      ],
+    },
+    {
       title: 'OPERASIONAL & PERSONALIA',
       items: [
         { id: 'dashboard', label: 'Ringkasan Dashboard', icon: LayoutDashboard },
+        { id: 'recruitment', label: 'Rekrutmen & Onboarding', icon: UserPlus },
         {
           id: 'employees',
           label: 'Manajemen Karyawan',
@@ -72,7 +82,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
       items: [
         { id: 'kpi', label: 'Penilaian KPI Real-time', icon: Target },
         { id: 'compliance', label: 'Kepatuhan & Sanksi SP/PHK', icon: AlertTriangle },
-        { id: 'recruitment', label: 'Rekrutmen & Offering Letter', icon: UserPlus },
         { id: 'offboarding', label: 'Offboarding & Pesangon', icon: UserMinus },
       ],
     },
@@ -88,6 +97,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       title: 'ADMINISTRASI & SAAS OWNER',
       items: [
         { id: 'rbac', label: 'Manajemen User & RBAC (Admin)', icon: KeyRound },
+        { id: 'audit', label: 'Audit Trail & Log Aktivitas', icon: History },
         { id: 'tenants', label: 'Manajemen Tenant (Apps Owner)', icon: Building },
       ],
     },

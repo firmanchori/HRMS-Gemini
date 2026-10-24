@@ -10,6 +10,7 @@ import {
   EmployeeKPI,
   ComplianceRecord,
   JobVacancy,
+  JobRequisition,
   Candidate,
   OffboardingRecord,
   GAAsset,
@@ -48,6 +49,7 @@ import {
   VendorInvoice,
   AuditLogEntry,
   ENpsSurvey,
+  OperationPermissions,
 } from '../types/hrms';
 
 export const INITIAL_TENANTS: Tenant[] = [
@@ -56,6 +58,8 @@ export const INITIAL_TENANTS: Tenant[] = [
     name: 'PT Nusantara Teknologi Mandiri',
     code: 'NTM',
     logoText: 'NTM Tech',
+    documentLogoUrl: 'https://images.unsplash.com/photo-1599305445671-ac291c95aaa9?w=200&h=200&fit=crop',
+    appFaviconUrl: 'https://images.unsplash.com/photo-1599305445671-ac291c95aaa9?w=64&h=64&fit=crop',
     npwp: '01.234.567.8-012.000',
     city: 'Jakarta Selatan',
     umr: 5067381,
@@ -68,6 +72,8 @@ export const INITIAL_TENANTS: Tenant[] = [
     name: 'PT Mega Logistik Nusantara',
     code: 'MLN',
     logoText: 'MegaLogistik',
+    documentLogoUrl: 'https://images.unsplash.com/photo-1516876437184-593fda40c7ce?w=200&h=200&fit=crop',
+    appFaviconUrl: 'https://images.unsplash.com/photo-1516876437184-593fda40c7ce?w=64&h=64&fit=crop',
     npwp: '02.345.678.9-023.000',
     city: 'Surabaya',
     umr: 4725479,
@@ -1369,67 +1375,177 @@ export const INITIAL_COMPLIANCE: ComplianceRecord[] = [
   },
 ];
 
+export const INITIAL_JOB_REQUISITIONS: JobRequisition[] = [
+  {
+    id: 'req-1',
+    tenantId: 'tenant-ntm',
+    reqNumber: 'FPTK/ENG/2026/001',
+    position: 'Senior DevOps & Site Reliability Engineer',
+    grade: 'Grade 4 - Manager / Specialist',
+    department: 'Engineering',
+    headcount: 2,
+    reason: 'Ekspansi Bisnis',
+    requirements: 'Min. S1 Teknik Informatika/Ilmu Komputer. Pengalaman min. 4 tahun Kubernetes, Docker, Terraform IaC, AWS/GCP, dan otomasi CI/CD pipeline.',
+    targetJoinDate: '2026-11-01',
+    status: 'Disetujui',
+    requesterName: 'Bambang Sudirja (VP Technology)',
+    approvedBy: 'Aditya Pratama (Head of People)',
+    createdAt: '2026-09-10',
+    minExperience: '4+ Tahun',
+    educationMin: 'S1 Teknik Informatika / Sistem Informasi',
+  },
+  {
+    id: 'req-2',
+    tenantId: 'tenant-ntm',
+    reqNumber: 'FPTK/HRD/2026/002',
+    position: 'People Partner / HR Operations Specialist',
+    grade: 'Grade 2 - Officer / Senior Staff',
+    department: 'People & Culture',
+    headcount: 1,
+    reason: 'Penambahan Headcount',
+    requirements: 'Min. S1 Psikologi/Hukum/Manajemen SDM. Pengalaman min. 2 tahun pengelolaan HRIS, payroll & BPJS, kepatuhan UU Ketenagakerjaan/PP 35.',
+    targetJoinDate: '2026-11-15',
+    status: 'Disetujui',
+    requesterName: 'Aditya Pratama (Head of People)',
+    approvedBy: 'Direktur Operasional',
+    createdAt: '2026-09-25',
+    minExperience: '2+ Tahun',
+    educationMin: 'S1 Psikologi / Manajemen SDM / Hukum',
+  },
+  {
+    id: 'req-3',
+    tenantId: 'tenant-ntm',
+    reqNumber: 'FPTK/FIN/2026/003',
+    position: 'Senior Tax & Corporate Finance Analyst',
+    grade: 'Grade 3 - Lead / Supervisor',
+    department: 'Finance & Accounting',
+    headcount: 1,
+    reason: 'Penggantian Karyawan Resign',
+    requirements: 'Min. S1 Akuntansi/Perpajakan dengan Brevet A & B. Menguasai e-Faktur, PPh 21 TER, PPh 23/26, pelaporan SPT Tahunan Badan & PSAK audit.',
+    targetJoinDate: '2026-12-01',
+    status: 'Menunggu Approval',
+    requesterName: 'Maya Indriani (Finance Manager)',
+    createdAt: '2026-10-15',
+    minExperience: '3+ Tahun',
+    educationMin: 'S1 Akuntansi / Perpajakan',
+  },
+];
+
 export const INITIAL_JOB_VACANCIES: JobVacancy[] = [
   {
     id: 'job-1',
     tenantId: 'tenant-ntm',
+    jobRequisitionId: 'req-1',
     title: 'Senior DevOps & Site Reliability Engineer',
     department: 'Engineering',
     employmentType: 'Tetap',
+    grade: 'Grade 4 - Manager / Specialist',
     openings: 2,
     minExperience: '4+ Tahun',
     salaryRange: 'Rp 18.000.000 - Rp 25.000.000',
     status: 'Buka',
     postedDate: '2026-09-15',
+    requirements: 'S1 Teknik Informatika/Sistem Informasi, Min. 4 Tahun pengalaman Kubernetes, Docker, CI/CD, AWS/GCP, Sertifikasi CKA/CKS diutamakan.',
+    description: 'Bertanggung jawab atas ketersediaan infrastruktur cloud high-availability 99.99%, arsitektur container Kubernetes, dan otomasi pipeline CI/CD.',
+    activeChannels: ['Jobstreet', 'LinkedIn', 'Glints', 'Website Karir'],
+    channelBroadcastStatus: {
+      Jobstreet: 'Aktif',
+      LinkedIn: 'Aktif',
+      Glints: 'Aktif',
+      'Website Karir': 'Aktif',
+      Kalibrr: 'Nonaktif',
+    },
+    applicantsCount: 18,
   },
   {
     id: 'job-2',
     tenantId: 'tenant-ntm',
+    jobRequisitionId: 'req-2',
     title: 'People Partner / HR Operations Specialist',
     department: 'People & Culture',
     employmentType: 'Kontrak',
+    grade: 'Grade 2 - Officer / Senior Staff',
     openings: 1,
     minExperience: '2+ Tahun',
     salaryRange: 'Rp 9.000.000 - Rp 13.000.000',
     status: 'Buka',
     postedDate: '2026-10-01',
+    requirements: 'S1 Psikologi/Hukum/Manajemen, Min. 2 Tahun pengalaman HR Generalist, Payroll, BPJS & Hubungan Industrial PP 35/2021.',
+    description: 'Mendukung operasional people operations, penanganan perselisihan industrial, integrasi BPJS Ketenagakerjaan & Kesehatan, dan onboarding talenta baru.',
+    activeChannels: ['Jobstreet', 'LinkedIn', 'Kalibrr', 'Website Karir'],
+    channelBroadcastStatus: {
+      Jobstreet: 'Aktif',
+      LinkedIn: 'Aktif',
+      Kalibrr: 'Aktif',
+      'Website Karir': 'Aktif',
+      Glints: 'Nonaktif',
+    },
+    applicantsCount: 12,
   },
 ];
 
 export const INITIAL_CANDIDATES: Candidate[] = [
+  // 3. Incoming (Lamaran Masuk Otomatis + Resume Parsing)
   {
-    id: 'cand-1',
+    id: 'cand-4',
     tenantId: 'tenant-ntm',
     jobVacancyId: 'job-1',
-    name: 'Gilang Ramadhan',
-    email: 'gilang.r@example.com',
-    phone: '081299887766',
-    lastCompany: 'Fintech Unicorn Indonesia',
-    expectedSalary: 22000000,
-    stage: 'Interview',
-    appliedDate: '2026-09-20',
-    interviewDate: '2026-10-19 14:00',
-    interviewer: 'Aditya Pratama & Lead Architect',
-    interviewScore: 88,
-    interviewNotes: 'Kuat di Kubernetes, CI/CD, dan mitigasi disaster recovery.',
+    name: 'Farhan Ramadhani',
+    email: 'farhan.r@devops.id',
+    phone: '081211223344',
+    lastCompany: 'Tech Corp Asia',
+    expectedSalary: 21000000,
+    stage: 'Incoming',
+    appliedDate: '2026-10-18',
+    sourcePortal: 'LinkedIn',
+    resumeParsed: true,
+    cvFileName: 'CV_Farhan_Ramadhani_DevOps.pdf',
+    cvFileSize: '1.4 MB',
+    parsedData: {
+      fullName: 'Farhan Ramadhani',
+      email: 'farhan.r@devops.id',
+      phone: '081211223344',
+      currentTitle: 'Cloud Infrastructure Engineer',
+      currentCompany: 'Tech Corp Asia',
+      totalExperienceYears: 4,
+      education: 'S1 Teknik Informatika',
+      university: 'Institut Teknologi Bandung (ITB)',
+      topSkills: ['Kubernetes', 'Docker', 'Terraform', 'AWS', 'CI/CD', 'Prometheus'],
+      extractionScore: 98,
+      parsedAt: '2026-10-18 11:24',
+    },
   },
   {
-    id: 'cand-2',
+    id: 'cand-5',
     tenantId: 'tenant-ntm',
-    jobVacancyId: 'job-1',
-    name: 'Kevin Wijaya',
-    email: 'kevin.w@example.com',
-    phone: '081388776655',
-    lastCompany: 'E-Commerce Marketplace',
-    expectedSalary: 20000000,
-    stage: 'Offered',
-    appliedDate: '2026-09-18',
-    interviewDate: '2026-10-10 10:00',
-    interviewer: 'Aditya Pratama',
-    interviewScore: 92,
-    interviewNotes: 'Direkomendasikan menerima offering letter level L4.',
-    offeredSalary: 21000000,
+    jobVacancyId: 'job-2',
+    name: 'Siti Rahmawati',
+    email: 'siti.rahma@workmail.id',
+    phone: '081399887711',
+    lastCompany: 'Retail Sejahtera Group',
+    expectedSalary: 11500000,
+    stage: 'Incoming',
+    appliedDate: '2026-10-19',
+    sourcePortal: 'Jobstreet',
+    resumeParsed: true,
+    cvFileName: 'Resume_Siti_Rahmawati_HR.pdf',
+    cvFileSize: '880 KB',
+    parsedData: {
+      fullName: 'Siti Rahmawati',
+      email: 'siti.rahma@workmail.id',
+      phone: '081399887711',
+      currentTitle: 'HR Operations Officer',
+      currentCompany: 'Retail Sejahtera Group',
+      totalExperienceYears: 3,
+      education: 'S1 Psikologi',
+      university: 'Universitas Indonesia (UI)',
+      topSkills: ['People Operations', 'BPJS Kesehatan/TK', 'Payroll HRIS', 'Talent Acquisition'],
+      extractionScore: 96,
+      parsedAt: '2026-10-19 14:10',
+    },
   },
+
+  // 4. Screening (Keyword Matching & Shortlist)
   {
     id: 'cand-3',
     tenantId: 'tenant-ntm',
@@ -1441,6 +1557,143 @@ export const INITIAL_CANDIDATES: Candidate[] = [
     expectedSalary: 11000000,
     stage: 'Screening',
     appliedDate: '2026-10-12',
+    sourcePortal: 'Jobstreet',
+    resumeParsed: true,
+    cvFileName: 'CV_Nadia_Salsabila.pdf',
+    cvFileSize: '1.1 MB',
+    aiMatchScore: 91,
+    matchedKeywords: ['People Partner', 'HR Operations', 'BPJS', '2+ thn exp', 'S1 Psikologi'],
+    missingKeywords: ['Penyelesaian PHK Bipartit'],
+    isShortlisted: true,
+    screeningNotes: 'Kualifikasi sangat cocok dengan kebutuhan People Operations NTM.',
+  },
+  {
+    id: 'cand-6',
+    tenantId: 'tenant-ntm',
+    jobVacancyId: 'job-1',
+    name: 'Ahmad Fauzi',
+    email: 'ahmad.fauzi@cloud.com',
+    phone: '081988223311',
+    lastCompany: 'SaaS Startup Pte Ltd',
+    expectedSalary: 23000000,
+    stage: 'Screening',
+    appliedDate: '2026-10-13',
+    sourcePortal: 'LinkedIn',
+    resumeParsed: true,
+    cvFileName: 'Ahmad_Fauzi_Resume_2026.pdf',
+    cvFileSize: '1.2 MB',
+    aiMatchScore: 94,
+    matchedKeywords: ['Kubernetes', 'Terraform', 'CI/CD', 'AWS', '4+ thn exp', 'Linux Kernel'],
+    missingKeywords: ['ArgoCD GitOps'],
+    isShortlisted: true,
+    screeningNotes: 'Shortlisted! Sangat direkomendasikan untuk tahap Tes Kompetensi Arsitektur Cloud.',
+  },
+
+  // 5. Assessment / Test (Tes Kompetensi & Skoring)
+  {
+    id: 'cand-7',
+    tenantId: 'tenant-ntm',
+    jobVacancyId: 'job-1',
+    name: 'Budi Santoso',
+    email: 'budi.santoso@engineer.net',
+    phone: '081766554433',
+    lastCompany: 'Fintech Payment Gateway',
+    expectedSalary: 20000000,
+    stage: 'Assessment',
+    appliedDate: '2026-10-10',
+    sourcePortal: 'Glints',
+    resumeParsed: true,
+    testType: 'Tes Teknis / Coding',
+    testScore: 88,
+    testPassingGrade: 75,
+    testStatus: 'Lulus',
+    testAssignedDate: '2026-10-14',
+    testNotes: 'Skor 88/100 (Passing Grade 75). Berhasil mengonfigurasi multi-node k8s cluster dan zero-downtime rolling update.',
+  },
+
+  // 6. Interview (Wawancara Terjadwal, Kalender & Scorecard)
+  {
+    id: 'cand-1',
+    tenantId: 'tenant-ntm',
+    jobVacancyId: 'job-1',
+    name: 'Gilang Ramadhan',
+    email: 'gilang.r@example.com',
+    phone: '081299887766',
+    lastCompany: 'Fintech Unicorn Indonesia',
+    expectedSalary: 22000000,
+    stage: 'Interview',
+    appliedDate: '2026-09-20',
+    sourcePortal: 'LinkedIn',
+    interviewDate: '2026-10-24 14:00',
+    interviewer: 'Aditya Pratama (Head of People) & Lead Architect',
+    meetingPlatform: 'Google Meet',
+    meetingLink: 'https://meet.google.com/xyz-ntm-hr',
+    interviewScore: 90,
+    interviewScorecard: {
+      technical: 5,
+      culturalFit: 4,
+      communication: 5,
+      recommendation: 'Direkomendasikan Lolos',
+    },
+    interviewNotes: 'Sangat kuat di mitigasi disaster recovery dan cost-optimization AWS. Rekomendasi lolos ke tahap Offering Letter.',
+  },
+
+  // 7. Offering (Kalkulator THP / PPh 21 TER & Dokumen Resmi)
+  {
+    id: 'cand-2',
+    tenantId: 'tenant-ntm',
+    jobVacancyId: 'job-1',
+    name: 'Kevin Wijaya',
+    email: 'kevin.w@example.com',
+    phone: '081388776655',
+    lastCompany: 'E-Commerce Marketplace',
+    expectedSalary: 20000000,
+    stage: 'Offered',
+    appliedDate: '2026-09-18',
+    sourcePortal: 'LinkedIn',
+    interviewDate: '2026-10-10 10:00',
+    interviewer: 'Aditya Pratama',
+    interviewScore: 92,
+    interviewNotes: 'Direkomendasikan menerima offering letter level L4.',
+    offeredSalary: 21000000,
+    offeringDocNumber: '001/OL-HRD/NTM/X/2026',
+    offeringSentDate: '2026-10-11',
+  },
+
+  // 8a. Hired (Diterima & Transisi ke Onboarding)
+  {
+    id: 'cand-8',
+    tenantId: 'tenant-ntm',
+    jobVacancyId: 'job-1',
+    name: 'Dimas Anggara',
+    email: 'dimas.anggara@corp.id',
+    phone: '081822334455',
+    lastCompany: 'Digital Bank Nasional',
+    expectedSalary: 23000000,
+    stage: 'Hired',
+    appliedDate: '2026-09-01',
+    sourcePortal: 'Website Karir',
+    offeredSalary: 23500000,
+    offeringDocNumber: '002/OL-HRD/NTM/IX/2026',
+    joinedDate: '2026-10-01',
+  },
+
+  // 8b. Disqualified / Talent Pool (Basis Data Cadangan)
+  {
+    id: 'cand-9',
+    tenantId: 'tenant-ntm',
+    jobVacancyId: 'job-1',
+    name: 'Rizky Kurniawan',
+    email: 'rizky.kurnia@tech.com',
+    phone: '081677889900',
+    lastCompany: 'Global Consulting Group',
+    expectedSalary: 28000000,
+    stage: 'TalentPool',
+    appliedDate: '2026-09-12',
+    sourcePortal: 'LinkedIn',
+    disqualificationReason: 'Ekspektasi gaji di atas budget posisi SRE (L3). Kandidat sangat kompeten untuk di-pool posisi Principal Architect Q1 2027.',
+    talentPoolCategory: 'Cloud Architecture & Infrastructure',
+    talentPoolTags: ['AWS Solutions Architect', 'Kubernetes', 'Enterprise Security'],
   },
 ];
 
@@ -3191,4 +3444,96 @@ export const INITIAL_PAYROLL_RECORDS: PayrollRecord[] = [
     paidDate: '2026-10-25',
   },
 ];
+
+const createInitialPerm = (
+  view: boolean,
+  create: boolean,
+  edit: boolean,
+  del: boolean,
+  approve: boolean,
+  exp: boolean
+): OperationPermissions => ({
+  view,
+  create,
+  edit,
+  delete: del,
+  approve,
+  export: exp,
+});
+
+export const INITIAL_ROLE_PERMISSIONS: Record<string, OperationPermissions> = (() => {
+  const perms: Record<string, OperationPermissions> = {};
+
+  const modules = [
+    'employees',
+    'personalia',
+    'attendance',
+    'trips',
+    'payroll',
+    'loans',
+    'approvals',
+    'kpi',
+    'compliance',
+    'recruitment',
+    'offboarding',
+    'assets',
+    'procurement',
+    'documents',
+    'audit_trail',
+    'calendar',
+  ];
+
+  modules.forEach((mod) => {
+    // 1. super_admin: wildcard full access
+    perms[`${mod}__super_admin`] = createInitialPerm(true, true, true, true, true, true);
+
+    // 2. hr_admin
+    const hrCore = ['employees', 'personalia', 'attendance', 'trips', 'kpi', 'compliance', 'recruitment', 'offboarding', 'documents', 'approvals', 'calendar'];
+    if (hrCore.includes(mod)) {
+      perms[`${mod}__hr_admin`] = createInitialPerm(true, true, true, false, true, true);
+    } else if (['payroll', 'loans', 'assets', 'procurement', 'audit_trail'].includes(mod)) {
+      perms[`${mod}__hr_admin`] = createInitialPerm(true, false, false, false, false, true);
+    } else {
+      perms[`${mod}__hr_admin`] = createInitialPerm(false, false, false, false, false, false);
+    }
+
+    // 3. payroll_admin
+    if (['payroll', 'loans', 'approvals'].includes(mod)) {
+      perms[`${mod}__payroll_admin`] = createInitialPerm(true, true, true, false, true, true);
+    } else if (['employees', 'attendance', 'documents', 'calendar'].includes(mod)) {
+      perms[`${mod}__payroll_admin`] = createInitialPerm(true, false, false, false, false, false);
+    } else {
+      perms[`${mod}__payroll_admin`] = createInitialPerm(false, false, false, false, false, false);
+    }
+
+    // 4. ga_admin
+    if (['assets', 'procurement', 'documents', 'approvals', 'calendar'].includes(mod)) {
+      perms[`${mod}__ga_admin`] = createInitialPerm(true, true, true, false, true, true);
+    } else if (['employees'].includes(mod)) {
+      perms[`${mod}__ga_admin`] = createInitialPerm(true, false, false, false, false, false);
+    } else {
+      perms[`${mod}__ga_admin`] = createInitialPerm(false, false, false, false, false, false);
+    }
+
+    // 5. manager
+    if (['attendance', 'trips', 'kpi', 'approvals', 'calendar'].includes(mod)) {
+      perms[`${mod}__manager`] = createInitialPerm(true, true, true, false, true, true);
+    } else if (['employees', 'personalia', 'loans', 'procurement'].includes(mod)) {
+      perms[`${mod}__manager`] = createInitialPerm(true, true, false, false, false, false);
+    } else {
+      perms[`${mod}__manager`] = createInitialPerm(false, false, false, false, false, false);
+    }
+
+    // 6. employee (ESS)
+    if (['attendance', 'trips', 'kpi', 'loans', 'calendar'].includes(mod)) {
+      perms[`${mod}__employee`] = createInitialPerm(true, true, false, false, false, false);
+    } else if (['payroll', 'documents'].includes(mod)) {
+      perms[`${mod}__employee`] = createInitialPerm(true, false, false, false, false, false);
+    } else {
+      perms[`${mod}__employee`] = createInitialPerm(false, false, false, false, false, false);
+    }
+  });
+
+  return perms;
+})();
 

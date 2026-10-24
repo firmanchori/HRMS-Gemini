@@ -168,8 +168,8 @@ export const LoanManagement: React.FC = () => {
 
   return (
     <div className="space-y-5">
-      {/* Header */}
-      <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 border-b border-slate-200 pb-4">
+      {/* Row 1: Module Header & Primary Action */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
         <div>
           <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
             <Wallet className="w-5 h-5 text-indigo-600" />
@@ -180,52 +180,61 @@ export const LoanManagement: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full lg:w-auto">
-          <div className="w-full sm:w-auto overflow-x-auto no-scrollbar pb-1 sm:pb-0">
-            <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5 text-xs whitespace-nowrap shadow-2xs">
-              <button
-                onClick={() => setActiveTab('daftar')}
-                className={`px-3 py-1.5 rounded-md font-medium transition-all ${
-                  activeTab === 'daftar'
-                    ? 'bg-indigo-600 text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                Buku Pinjaman ({loans.length})
-              </button>
-              <button
-                onClick={() => setActiveTab('simulasi')}
-                className={`px-3 py-1.5 rounded-md font-medium transition-all flex items-center gap-1.5 ${
-                  activeTab === 'simulasi'
-                    ? 'bg-indigo-600 text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <Calculator className="w-3.5 h-3.5" />
-                <span>Simulasi Pinjaman</span>
-              </button>
-              <button
-                onClick={() => setActiveTab('pengaturan')}
-                className={`px-3 py-1.5 rounded-md font-medium transition-all flex items-center gap-1 ${
-                  activeTab === 'pengaturan'
-                    ? 'bg-indigo-600 text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <Settings className="w-3.5 h-3.5" />
-                <span>Pengaturan</span>
-              </button>
-            </div>
-          </div>
+        <button
+          onClick={() => setIsModalOpen(true)}
+          className="flex items-center justify-center gap-1.5 px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors shrink-0"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          <span>Ajukan Pinjaman Baru</span>
+        </button>
+      </div>
 
-          <button
-            onClick={() => setIsModalOpen(true)}
-            className="flex items-center justify-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors shrink-0"
+      {/* Row 2: Enterprise Tab Navigation Bar (Not Parallel to Title) */}
+      <div className="border-b border-slate-200 flex items-center gap-1 sm:gap-2 overflow-x-auto no-scrollbar pt-1">
+        <button
+          onClick={() => setActiveTab('daftar')}
+          className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
+            activeTab === 'daftar'
+              ? 'border-slate-900 text-slate-950 font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+          }`}
+        >
+          <Wallet className="w-3.5 h-3.5" />
+          <span>Buku Pinjaman Aktif</span>
+          <span
+            className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full transition-colors ${
+              activeTab === 'daftar'
+                ? 'bg-slate-900 text-white'
+                : 'bg-slate-100 text-slate-600'
+            }`}
           >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Ajukan Pinjaman Baru</span>
-          </button>
-        </div>
+            {loans.length}
+          </span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('simulasi')}
+          className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
+            activeTab === 'simulasi'
+              ? 'border-slate-900 text-slate-950 font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+          }`}
+        >
+          <Calculator className="w-3.5 h-3.5" />
+          <span>Kalkulator & Simulasi Pinjaman</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('pengaturan')}
+          className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
+            activeTab === 'pengaturan'
+              ? 'border-slate-900 text-slate-950 font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+          }`}
+        >
+          <Settings className="w-3.5 h-3.5" />
+          <span>Aturan Bunga & Plafon Pinjaman</span>
+        </button>
       </div>
 
       {loanNotice && (
@@ -752,8 +761,16 @@ export const LoanManagement: React.FC = () => {
 
       {/* Modal: Form Ajukan Pinjaman */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full border border-slate-200 overflow-hidden">
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsModalOpen(false);
+          }}
+        >
+          <div
+            className="bg-white rounded-xl shadow-xl max-w-md w-full border border-slate-200 overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="px-5 py-4 bg-slate-900 text-white flex items-center justify-between">
               <div>
                 <h3 className="text-sm font-bold">Form Permohonan Pinjaman Karyawan</h3>

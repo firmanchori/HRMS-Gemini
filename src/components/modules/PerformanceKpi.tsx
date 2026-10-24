@@ -88,7 +88,7 @@ export const PerformanceKpi: React.FC = () => {
       metrics,
       finalScore,
       feedback,
-      reviewer: currentUser.name,
+      reviewer: currentUser?.name || 'Administrator',
     });
     setSaveToast(true);
     setTimeout(() => setSaveToast(false), 3000);

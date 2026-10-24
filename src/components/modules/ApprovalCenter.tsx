@@ -19,11 +19,13 @@ import {
   ShieldAlert,
   Eye,
   AlertCircle,
+  History,
 } from 'lucide-react';
 import { EmployeeSelect } from '../common/EmployeeSelect';
 import { ValidatedDateInput } from '../common/ValidatedDateInput';
 import { formatRupiah } from '../../utils/taxCalculator';
 import { ApprovalWorkflowItem, ApprovalDelegation } from '../../types/hrms';
+import { ScrollableTabNav } from '../common/ScrollableTabNav';
 
 export const ApprovalCenter: React.FC = () => {
   const {
@@ -100,9 +102,9 @@ export const ApprovalCenter: React.FC = () => {
   const displayedItems = (activeTab === 'inbox' ? pendingItems : historyItems).filter((item) => {
     const requester = employees.find((e) => e.id === item.requesterId);
     const matchesSearch =
-      item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (requester?.fullName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.department.toLowerCase().includes(searchQuery.toLowerCase());
+      (item?.title || '').toLowerCase().includes((searchQuery || '').toLowerCase()) ||
+      (requester?.fullName || '').toLowerCase().includes((searchQuery || '').toLowerCase()) ||
+      (item?.department || '').toLowerCase().includes((searchQuery || '').toLowerCase());
     const matchesCategory = categoryFilter === 'all' || item.category === categoryFilter;
     return matchesSearch && matchesCategory;
   });
@@ -153,8 +155,8 @@ export const ApprovalCenter: React.FC = () => {
 
   return (
     <div className="space-y-5">
-      {/* Header */}
-      <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 border-b border-slate-200 pb-4">
+      {/* Row 1: Module Header & Primary Action */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
         <div>
           <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
             <ShieldCheck className="w-5 h-5 text-indigo-600" />
@@ -165,68 +167,76 @@ export const ApprovalCenter: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full lg:w-auto">
-          <div className="w-full sm:w-auto overflow-x-auto no-scrollbar pb-1 sm:pb-0">
-            <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5 text-xs whitespace-nowrap shadow-2xs">
-              <button
-                onClick={() => setActiveTab('inbox')}
-                className={`px-3 py-1.5 rounded-md font-medium transition-all flex items-center gap-1.5 ${
-                  activeTab === 'inbox'
-                    ? 'bg-indigo-600 text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <span>Kotak Masuk</span>
-                {pendingItems.length > 0 && (
-                  <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-rose-500 text-white font-mono">
-                    {pendingItems.length}
-                  </span>
-                )}
-              </button>
-              <button
-                onClick={() => setActiveTab('riwayat')}
-                className={`px-3 py-1.5 rounded-md font-medium transition-all ${
-                  activeTab === 'riwayat'
-                    ? 'bg-indigo-600 text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                Riwayat Putusan
-              </button>
-              <button
-                onClick={() => setActiveTab('delegasi')}
-                className={`px-3 py-1.5 rounded-md font-medium transition-all flex items-center gap-1 ${
-                  activeTab === 'delegasi'
-                    ? 'bg-indigo-600 text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <UserCheck className="w-3.5 h-3.5" />
-                <span>Pengganti Approver</span>
-              </button>
-              <button
-                onClick={() => setActiveTab('pengaturan')}
-                className={`px-3 py-1.5 rounded-md font-medium transition-all flex items-center gap-1 ${
-                  activeTab === 'pengaturan'
-                    ? 'bg-indigo-600 text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <Settings className="w-3.5 h-3.5" />
-                <span>SLA & Pengaturan</span>
-              </button>
-            </div>
-          </div>
-
-          <button
-            onClick={() => setIsDelegationModalOpen(true)}
-            className="flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg text-xs font-semibold transition-colors shrink-0"
-          >
-            <Plus className="w-3.5 h-3.5 text-indigo-600" />
-            <span>Atur Delegasi</span>
-          </button>
-        </div>
+        <button
+          onClick={() => setIsDelegationModalOpen(true)}
+          className="flex items-center justify-center gap-1.5 px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors shrink-0"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          <span>Atur Delegasi Approver</span>
+        </button>
       </div>
+
+      {/* Row 2: Enterprise Tab Navigation Bar (Not Parallel to Title) */}
+      <ScrollableTabNav className="border-b border-slate-200" containerClassName="pt-1">
+        <button
+          onClick={() => setActiveTab('inbox')}
+          className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
+            activeTab === 'inbox'
+              ? 'border-slate-900 text-slate-950 font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+          }`}
+        >
+          <ShieldCheck className="w-3.5 h-3.5" />
+          <span>Kotak Masuk</span>
+          {pendingItems.length > 0 && (
+            <span
+              className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full transition-colors ${
+                activeTab === 'inbox'
+                  ? 'bg-rose-600 text-white'
+                  : 'bg-rose-100 text-rose-800'
+              }`}
+            >
+              {pendingItems.length}
+            </span>
+          )}
+        </button>
+
+        <button
+          onClick={() => setActiveTab('riwayat')}
+          className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
+            activeTab === 'riwayat'
+              ? 'border-slate-900 text-slate-950 font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+          }`}
+        >
+          <History className="w-3.5 h-3.5" />
+          <span>Riwayat Putusan</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('delegasi')}
+          className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
+            activeTab === 'delegasi'
+              ? 'border-slate-900 text-slate-950 font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+          }`}
+        >
+          <UserCheck className="w-3.5 h-3.5" />
+          <span>Pengganti Approver</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('pengaturan')}
+          className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
+            activeTab === 'pengaturan'
+              ? 'border-slate-900 text-slate-950 font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+          }`}
+        >
+          <Settings className="w-3.5 h-3.5" />
+          <span>SLA & Pengaturan</span>
+        </button>
+      </ScrollableTabNav>
 
       {feedbackMessage && (
         <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center justify-between text-xs text-emerald-800">
@@ -281,24 +291,33 @@ export const ApprovalCenter: React.FC = () => {
           </div>
 
           {/* Search & Category Filter */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white p-3 border border-slate-200 rounded-lg shadow-xs">
-            <div className="relative w-full sm:w-80">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+          <div className="bg-white p-3 sm:p-3.5 border border-slate-200 rounded-xl shadow-xs space-y-2.5 lg:space-y-0 lg:flex lg:items-center lg:justify-between lg:gap-4">
+            <div className="relative w-full lg:max-w-md">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
               <input
                 type="text"
                 placeholder="Cari pengajuan, pemohon, atau departemen..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-3 py-1.5 text-xs border border-slate-300 rounded-md outline-none focus:border-indigo-500"
+                className="w-full pl-9 pr-8 py-2 text-xs bg-slate-50/70 focus:bg-white border border-slate-300 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-indigo-500 transition-all font-medium text-slate-800 placeholder-slate-400"
               />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600"
+                  title="Hapus pencarian"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
 
-            <div className="flex items-center gap-2 w-full sm:w-auto">
-              <Filter className="w-4 h-4 text-slate-400" />
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full lg:w-auto">
               <select
                 value={categoryFilter}
                 onChange={(e) => setCategoryFilter(e.target.value)}
-                className="text-xs border border-slate-300 rounded-md py-1.5 px-3 bg-white font-medium text-slate-700"
+                className="w-full sm:w-auto py-2 px-3 text-xs border border-slate-300 rounded-lg bg-white font-medium text-slate-700 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 shadow-2xs"
               >
                 <option value="all">Semua Kategori Pengajuan</option>
                 <option value="Cuti">Cuti & Izin</option>
@@ -309,6 +328,21 @@ export const ApprovalCenter: React.FC = () => {
                 <option value="Procurement PR">Procurement (PR/PO)</option>
                 <option value="Promosi/Personalia">Promosi & Personalia</option>
               </select>
+
+              {(searchQuery || categoryFilter !== 'all') && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery('');
+                    setCategoryFilter('all');
+                  }}
+                  className="inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg transition-colors shrink-0"
+                  title="Reset Filter"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  <span>Reset Filter</span>
+                </button>
+              )}
             </div>
           </div>
 
@@ -766,8 +800,16 @@ export const ApprovalCenter: React.FC = () => {
 
       {/* Modal: Putusan Review */}
       {selectedItem && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full border border-slate-200 overflow-hidden">
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setSelectedItem(null);
+          }}
+        >
+          <div
+            className="bg-white rounded-xl shadow-xl max-w-md w-full border border-slate-200 overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="px-5 py-4 bg-slate-900 text-white flex items-center justify-between">
               <div>
                 <h3 className="text-sm font-bold">
@@ -847,8 +889,16 @@ export const ApprovalCenter: React.FC = () => {
 
       {/* Modal: Delegasi Approver */}
       {isDelegationModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full border border-slate-200 overflow-hidden">
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsDelegationModalOpen(false);
+          }}
+        >
+          <div
+            className="bg-white rounded-xl shadow-xl max-w-lg w-full border border-slate-200 overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="px-5 py-4 bg-slate-900 text-white flex items-center justify-between">
               <div>
                 <h3 className="text-sm font-bold">Penugasan Pejabat Pengganti (Delegasi Approver)</h3>
