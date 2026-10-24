@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useHrms } from '../../context/HrmsContext';
 import {
   ShieldCheck,
@@ -90,6 +91,12 @@ export const ApprovalCenter: React.FC = () => {
 
   // Feedback notice state
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!feedbackMessage) return;
+    const timer = setTimeout(() => setFeedbackMessage(null), 4000);
+    return () => clearTimeout(timer);
+  }, [feedbackMessage]);
 
   // Close any active modal on Escape key press
   useEffect(() => {
@@ -252,19 +259,27 @@ export const ApprovalCenter: React.FC = () => {
         </button>
       </ScrollableTabNav>
 
-      {feedbackMessage && (
-        <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center justify-between text-xs text-emerald-800">
+      {/* Floating In-App Toast Notification - Portaled to document.body, eliminating layout shifts and backdrop clipping bug */}
+      {typeof document !== 'undefined' && feedbackMessage && createPortal(
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed top-5 right-5 z-[999999] px-4 py-3 bg-slate-900 border border-slate-700 text-white rounded-xl flex items-center justify-between gap-3 text-xs font-semibold shadow-2xl toast-floating-enter ring-1 ring-white/10 max-w-md pointer-events-auto"
+        >
           <div className="flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-            <span>{feedbackMessage}</span>
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span className="leading-snug">{feedbackMessage}</span>
           </div>
           <button
+            type="button"
             onClick={() => setFeedbackMessage(null)}
-            className="text-emerald-600 hover:text-emerald-800 font-bold"
+            className="text-slate-400 hover:text-white transition-colors p-1"
+            title="Tutup Notifikasi"
           >
             <X className="w-4 h-4" />
           </button>
-        </div>
+        </div>,
+        document.body
       )}
 
       {(activeTab === 'inbox' || activeTab === 'riwayat') && (

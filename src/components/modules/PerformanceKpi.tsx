@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useHrms } from '../../context/HrmsContext';
 import { Target, Award, Plus, Trash2, CheckCircle, TrendingUp, Save } from 'lucide-react';
 import { KPIMetric } from '../../types/hrms';
@@ -108,11 +109,16 @@ export const PerformanceKpi: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-3">
-          {saveToast && (
-            <span className="text-xs font-semibold text-emerald-700 flex items-center gap-1 bg-emerald-50 px-3 py-1.5 rounded-md border border-emerald-200">
-              <CheckCircle className="w-3.5 h-3.5" />
-              Tersimpan Real-time!
-            </span>
+          {typeof document !== 'undefined' && saveToast && createPortal(
+            <div
+              role="status"
+              aria-live="polite"
+              className="fixed top-5 right-5 z-[999999] flex items-center gap-2 px-4 py-3 bg-slate-900 text-white border border-slate-700 rounded-xl text-xs font-semibold shadow-2xl toast-floating-enter ring-1 ring-white/10 pointer-events-auto"
+            >
+              <CheckCircle className="w-4 h-4 text-emerald-400" />
+              <span>Evaluasi KPI Berhasil Disimpan Real-time!</span>
+            </div>,
+            document.body
           )}
           <button
             onClick={handleSave}

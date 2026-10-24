@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useHrms } from '../../context/HrmsContext';
 import {
   FileText,
@@ -88,6 +89,12 @@ export const DocumentManagement: React.FC = () => {
     title: string;
     description?: string;
   } | null>(null);
+
+  useEffect(() => {
+    if (!feedbackMessage) return;
+    const timer = setTimeout(() => setFeedbackMessage(null), 4000);
+    return () => clearTimeout(timer);
+  }, [feedbackMessage]);
 
   // Generate Document State
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>(documentTemplates[0]?.id || '');
@@ -404,36 +411,40 @@ export const DocumentManagement: React.FC = () => {
 
   return (
     <div className="space-y-5">
-      {/* Feedback Banner */}
-      {feedbackMessage && (
+      {/* Floating In-App Toast Notification - Portaled to document.body, eliminating layout shifts and backdrop clipping bug */}
+      {typeof document !== 'undefined' && feedbackMessage && createPortal(
         <div
-          className={`p-3.5 rounded-lg border text-xs flex items-center justify-between transition-all shadow-xs ${
+          role="status"
+          aria-live="polite"
+          className={`fixed top-5 right-5 z-[999999] p-3.5 rounded-xl border text-xs flex items-center justify-between gap-3 shadow-2xl max-w-md pointer-events-auto ring-1 ring-white/10 toast-floating-enter ${
             feedbackMessage.type === 'success'
-              ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+              ? 'bg-slate-900 border-emerald-500/50 text-white'
               : feedbackMessage.type === 'error'
-              ? 'bg-rose-50 border-rose-200 text-rose-900'
-              : 'bg-blue-50 border-blue-200 text-blue-900'
+              ? 'bg-slate-900 border-rose-500/50 text-white'
+              : 'bg-slate-900 border-indigo-500/50 text-white'
           }`}
         >
           <div className="flex items-center gap-2.5">
-            {feedbackMessage.type === 'success' && <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />}
-            {feedbackMessage.type === 'error' && <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />}
-            {feedbackMessage.type === 'info' && <Sparkles className="w-4 h-4 text-blue-600 shrink-0" />}
+            {feedbackMessage.type === 'success' && <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />}
+            {feedbackMessage.type === 'error' && <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />}
+            {feedbackMessage.type === 'info' && <Sparkles className="w-4 h-4 text-blue-400 shrink-0" />}
             <div>
               <span className="font-bold">{feedbackMessage.title}:</span>
               {feedbackMessage.description && (
-                <span className="ml-1.5 text-slate-700">{feedbackMessage.description}</span>
+                <span className="ml-1.5 text-slate-200">{feedbackMessage.description}</span>
               )}
             </div>
           </div>
           <button
             type="button"
             onClick={() => setFeedbackMessage(null)}
-            className="text-slate-400 hover:text-slate-700"
+            className="text-slate-400 hover:text-white transition-colors p-1"
+            title="Tutup Notifikasi"
           >
             <X className="w-4 h-4" />
           </button>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Row 1: Header Title & Main Action */}

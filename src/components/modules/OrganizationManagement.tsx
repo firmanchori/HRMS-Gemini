@@ -1,4 +1,5 @@
 import React, { useState, useRef, useMemo, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useHrms } from '../../context/HrmsContext';
 import {
   Network,
@@ -640,10 +641,13 @@ export const OrganizationManagement: React.FC = () => {
     if (idx > 0) setActiveTab(mainTabList[idx - 1]);
   };
 
+  // Hilangkan mode swap ketika di area diagram organisasi dan diagram perusahaan
+  const isDiagramTab = activeTab === 'chart' || activeTab === 'corporate';
   const mainTabSwipe = useTabSwipe({
     tabs: mainTabList,
     activeTab,
     onTabChange: setActiveTab,
+    disabled: isDiagramTab,
   });
 
   // Swipe Navigation Setup for Tab 3: Setup Divisi, Dept & Jabatan Sub-tabs
@@ -1808,13 +1812,6 @@ export const OrganizationManagement: React.FC = () => {
 
   return (
     <div className="space-y-5 animate-in fade-in duration-200">
-      {/* Toast Notification */}
-      {toastMessage && (
-        <div className="fixed top-5 right-5 z-50 bg-slate-900 text-white px-4 py-2.5 rounded-xl shadow-xl text-xs font-semibold flex items-center gap-2 border border-slate-700 animate-slideDown">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-          <span>{toastMessage}</span>
-        </div>
-      )}
 
       {/* Clean Header Bar (Tanpa Button Cetak Bagan & Tanpa Button Tambah Posisi Sesuai Permintaan) */}
       <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col xl:flex-row xl:items-center justify-between gap-4">
@@ -2051,9 +2048,9 @@ export const OrganizationManagement: React.FC = () => {
       <div {...mainTabSwipe} className="w-full">
       {/* TAB 1: DIAGRAM ORGANISASI (PRESISI TANPA POTONG KIRI DENGAN EXPORT PDF/PNG) */}
       {activeTab === 'chart' && (
-        <div className="bg-slate-100/70 rounded-2xl border border-slate-200 overflow-hidden flex flex-col min-h-[580px] shadow-xs">
+        <div className="bg-slate-100/70 rounded-2xl border border-slate-200 overflow-hidden flex flex-col min-h-[580px] shadow-xs no-swipe" data-no-swipe="true">
           {/* Controls Bar: Legend, Zoom In, Zoom Out, Reset, Export PNG, Export PDF */}
-          <div className="p-4 bg-white border-b border-slate-200/80 flex flex-col lg:flex-row items-center justify-between gap-3 shrink-0">
+          <div className="p-4 bg-white border-b border-slate-200/80 flex flex-col lg:flex-row items-center justify-between gap-3 shrink-0 no-swipe" data-no-swipe="true">
             <div className="flex flex-wrap items-center gap-2.5 text-xs text-slate-600">
               <span className="flex items-center gap-1.5 font-medium bg-slate-50 text-slate-700 px-2.5 py-1 rounded-md border border-slate-200">
                 <span className="w-3.5 h-0.5 bg-slate-400 inline-block" /> Komando Struktural Resmi ({entityNodes.filter((n) => n.relationType !== 'administratif').length})
@@ -2126,7 +2123,8 @@ export const OrganizationManagement: React.FC = () => {
           {/* Org Tree Scrollable Viewport: min-w-full w-max mx-auto px-6 sm:px-12 md:px-16 prevents left-clipping */}
           <div
             ref={orgScrollContainerRef}
-            className="flex-1 overflow-auto p-4 sm:p-6 relative touch-pan-x touch-pan-y"
+            className="flex-1 overflow-auto p-4 sm:p-6 relative touch-pan-x touch-pan-y no-swipe"
+            data-no-swipe="true"
           >
             <div className="min-w-full w-max mx-auto flex flex-col items-center px-6 sm:px-12 md:px-16 py-8">
               <div
@@ -2185,10 +2183,10 @@ export const OrganizationManagement: React.FC = () => {
 
       {/* TAB 2: DIAGRAM PERUSAHAAN (POHON RELASI ENTITAS DENGAN EXPORT PDF/PNG) */}
       {activeTab === 'corporate' && (
-        <div className="space-y-6">
-          <div className="bg-slate-100/70 rounded-2xl border border-slate-200 overflow-hidden flex flex-col min-h-[580px] shadow-xs">
+        <div className="space-y-6 no-swipe" data-no-swipe="true">
+          <div className="bg-slate-100/70 rounded-2xl border border-slate-200 overflow-hidden flex flex-col min-h-[580px] shadow-xs no-swipe" data-no-swipe="true">
             {/* Controls Bar */}
-            <div className="p-4 bg-white border-b border-slate-200/80 flex flex-col lg:flex-row items-center justify-between gap-3 shrink-0">
+            <div className="p-4 bg-white border-b border-slate-200/80 flex flex-col lg:flex-row items-center justify-between gap-3 shrink-0 no-swipe" data-no-swipe="true">
               <div>
                 <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                   <Building className="w-4 h-4 text-indigo-600" />
@@ -2257,7 +2255,8 @@ export const OrganizationManagement: React.FC = () => {
             {/* Corporate Tree Scrollable Viewport */}
             <div
               ref={corpScrollContainerRef}
-              className="flex-1 overflow-auto p-4 sm:p-6 relative touch-pan-x touch-pan-y"
+              className="flex-1 overflow-auto p-4 sm:p-6 relative touch-pan-x touch-pan-y no-swipe"
+              data-no-swipe="true"
             >
               <div className="min-w-full w-max mx-auto flex flex-col items-center px-6 sm:px-12 md:px-16 py-8">
                 <div
@@ -7608,6 +7607,26 @@ export const OrganizationManagement: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+      {/* Global Toast Notification - Portaled to document.body, eliminating layout shifts, space-y conflicts, and double-backdrop-filter GPU clipping bug */}
+      {typeof document !== 'undefined' && toastMessage && createPortal(
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed top-5 right-5 z-[999999] bg-slate-900 text-white px-4 py-3 rounded-xl shadow-2xl text-xs font-semibold flex items-center gap-2.5 border border-slate-700 toast-floating-enter max-w-md pointer-events-auto ring-1 ring-white/10"
+        >
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span className="leading-snug flex-1">{toastMessage}</span>
+          <button
+            type="button"
+            onClick={() => setToastMessage(null)}
+            className="text-slate-400 hover:text-white p-0.5 rounded transition-colors"
+            title="Tutup Notifikasi"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>,
+        document.body
       )}
     </div>
   );

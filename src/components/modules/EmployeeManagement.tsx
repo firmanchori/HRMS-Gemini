@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useHrms } from '../../context/HrmsContext';
 import {
   Users,
@@ -211,6 +212,12 @@ export const EmployeeManagement: React.FC = () => {
     title: string;
     description?: string;
   } | null>(null);
+
+  useEffect(() => {
+    if (!feedbackMessage) return;
+    const timer = setTimeout(() => setFeedbackMessage(null), 4000);
+    return () => clearTimeout(timer);
+  }, [feedbackMessage]);
 
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -491,32 +498,36 @@ export const EmployeeManagement: React.FC = () => {
 
   return (
     <div className="space-y-5">
-      {/* In-App Feedback Toast Banner */}
-      {feedbackMessage && (
+      {/* Floating In-App Toast Notification - Portaled to document.body, eliminating layout shifts and backdrop clipping bug */}
+      {typeof document !== 'undefined' && feedbackMessage && createPortal(
         <div
-          className={`p-3.5 rounded-lg border text-xs flex items-center justify-between transition-all shadow-xs ${
+          role="status"
+          aria-live="polite"
+          className={`fixed top-5 right-5 z-[999999] p-3.5 rounded-xl border text-xs flex items-center justify-between gap-3 shadow-2xl max-w-md pointer-events-auto ring-1 ring-white/10 toast-floating-enter ${
             feedbackMessage.type === 'success'
-              ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
-              : 'bg-blue-50 border-blue-200 text-blue-900'
+              ? 'bg-slate-900 border-emerald-500/50 text-white'
+              : 'bg-slate-900 border-indigo-500/50 text-white'
           }`}
         >
           <div className="flex items-center gap-2.5">
-            <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+            <CheckCircle className={`w-4 h-4 shrink-0 ${feedbackMessage.type === 'success' ? 'text-emerald-400' : 'text-blue-400'}`} />
             <div>
               <span className="font-bold">{feedbackMessage.title}:</span>
               {feedbackMessage.description && (
-                <span className="ml-1.5 text-slate-700">{feedbackMessage.description}</span>
+                <span className="ml-1.5 text-slate-200">{feedbackMessage.description}</span>
               )}
             </div>
           </div>
           <button
             type="button"
             onClick={() => setFeedbackMessage(null)}
-            className="text-slate-400 hover:text-slate-700 transition-colors"
+            className="text-slate-400 hover:text-white transition-colors p-1"
+            title="Tutup Notifikasi"
           >
             <X className="w-4 h-4" />
           </button>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Row 1: Module Header & Main Action */}

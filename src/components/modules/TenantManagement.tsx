@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useHrms } from '../../context/HrmsContext';
 import {
   Building2,
@@ -973,11 +974,16 @@ export const TenantManagement: React.FC = () => {
                 </p>
               </div>
             </div>
-            {brandSavedToast && (
-              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-lg text-xs font-semibold animate-fadeIn">
-                <Check className="w-4 h-4 text-emerald-600" />
-                <span>Pengaturan Tersimpan!</span>
-              </div>
+            {typeof document !== 'undefined' && brandSavedToast && createPortal(
+              <div
+                role="status"
+                aria-live="polite"
+                className="fixed top-5 right-5 z-[999999] flex items-center gap-2 px-4 py-3 bg-slate-900 text-white border border-slate-700 rounded-xl text-xs font-semibold shadow-2xl toast-floating-enter ring-1 ring-white/10 pointer-events-auto"
+              >
+                <Check className="w-4 h-4 text-emerald-400" />
+                <span>Pengaturan Branding Korporat Berhasil Disimpan!</span>
+              </div>,
+              document.body
             )}
           </div>
 
