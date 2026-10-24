@@ -505,7 +505,7 @@ export interface JobRequisition {
   approvalNotes?: string;
   signatories?: FptkSignatory[]; // Daftar penanda tangan / approval berjenjang yang fleksibel
 
-  status: 'Disetujui' | 'Menunggu Approval' | 'Draft' | 'Ditolak';
+  status: 'Disetujui' | 'Menunggu Approval' | 'Draft' | 'Ditolak' | 'Dibatalkan';
   createdAt: string;
 }
 

@@ -28,6 +28,8 @@ import {
   Eye,
   EyeOff,
   CheckCircle2,
+  XCircle,
+  History,
   Archive,
   UserX,
   UserCheck,
@@ -561,9 +563,10 @@ export const RecruitmentManagement: React.FC = () => {
 
   // Filter & Detail Preview FPTK
   const [fptkSearch, setFptkSearch] = useState('');
-  const [fptkStatusFilter, setFptkStatusFilter] = useState<'Semua' | 'Menunggu Approval' | 'Disetujui' | 'Ditolak'>('Semua');
+  const [fptkStatusFilter, setFptkStatusFilter] = useState<'Semua' | 'Menunggu Approval' | 'Disetujui' | 'Ditolak' | 'Dibatalkan'>('Semua');
   const [fptkBudgetFilter, setFptkBudgetFilter] = useState<'Semua' | 'Budgeted' | 'Unbudgeted'>('Semua');
   const [previewFptk, setPreviewFptk] = useState<JobRequisition | null>(null);
+  const [trackingFptk, setTrackingFptk] = useState<JobRequisition | null>(null);
 
   // ===================== 2. FORM SOURCING & JOB POSTING =====================
   const [vacTitle, setVacTitle] = useState('');
@@ -856,6 +859,34 @@ export const RecruitmentManagement: React.FC = () => {
       });
       alert('Dokumen FPTK ditandai ditolak.');
     }
+  };
+
+  const handleCancelRequisition = (id: string) => {
+    const reason = prompt(
+      'Masukkan alasan pembatalan pengajuan FPTK:',
+      'Dibatalkan oleh pemohon (penyesuaian kebutuhan divisi).'
+    );
+    if (reason !== null) {
+      updateJobRequisition(id, {
+        status: 'Dibatalkan',
+        approvalNotes: `Dibatalkan oleh pemohon: ${reason}`,
+      });
+      alert('Pengajuan FPTK telah berhasil dibatalkan dan ditarik kembali.');
+      if (trackingFptk?.id === id) {
+        setTrackingFptk(null);
+      }
+      if (previewFptk?.id === id) {
+        setPreviewFptk(null);
+      }
+    }
+  };
+
+  const handleSendApprovalReminder = (signatoryName: string, roleTitle: string) => {
+    alert(`Pengingat (Approval Reminder) berhasil dikirimkan ke ${roleTitle}: ${signatoryName} melalui notifikasi sistem & email.`);
+  };
+
+  const handleBlastAllReminders = (req: JobRequisition) => {
+    alert(`Pengingat notifikasi (Retrack Blast) berhasil dikirimkan ke semua pihak terkait (${req.signatories?.length || 1} pihak: Mengetahui & Menyetujui) untuk FPTK ${req.reqNumber}.`);
   };
 
   const handleConvertFptkToVacancy = (req: JobRequisition) => {
@@ -1451,7 +1482,7 @@ export const RecruitmentManagement: React.FC = () => {
             <div className="flex items-center gap-2 flex-wrap text-xs">
               {/* Status Filter Chips */}
               <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg border border-slate-200">
-                {(['Semua', 'Menunggu Approval', 'Disetujui', 'Ditolak'] as const).map((st) => {
+                {(['Semua', 'Menunggu Approval', 'Disetujui', 'Ditolak', 'Dibatalkan'] as const).map((st) => {
                   const count =
                     st === 'Semua'
                       ? jobRequisitions.length
@@ -1599,34 +1630,51 @@ export const RecruitmentManagement: React.FC = () => {
 
                       {/* Card Footer Actions */}
                       <div
-                        className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2 flex-wrap"
+                        className="pt-2.5 border-t border-slate-100 flex items-center justify-between gap-2 flex-wrap"
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <span className="text-[10px] text-slate-400 italic">
-                          Ketuk kartu untuk lembar FPTK resmi
-                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setTrackingFptk(req)}
+                          className="text-[11px] font-semibold text-blue-700 hover:text-blue-900 flex items-center gap-1 hover:underline"
+                        >
+                          <History className="w-3.5 h-3.5" />
+                          <span>Retrack / Lacak ({req.signatories?.length || 1} Pihak)</span>
+                        </button>
 
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           {req.status === 'Menunggu Approval' && (
                             <>
                               <button
+                                type="button"
+                                onClick={() => handleCancelRequisition(req.id)}
+                                className="px-2 py-1 bg-white hover:bg-rose-50 text-rose-700 rounded-lg text-xs font-semibold border border-rose-200 transition-colors flex items-center gap-1"
+                                title="Batalkan & Tarik Kembali Pengajuan"
+                              >
+                                <XCircle className="w-3 h-3 text-rose-500" />
+                                <span>Batalkan</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleRejectFptk(req.id)}
+                                className="px-2 py-1 bg-white hover:bg-slate-100 text-slate-700 rounded-lg text-xs font-medium border border-slate-300 transition-colors"
+                              >
+                                Tolak
+                              </button>
+                              <button
+                                type="button"
                                 onClick={() => handleApproveFptk(req.id)}
                                 className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold shadow-2xs flex items-center gap-1 transition-colors"
                               >
                                 <Check className="w-3 h-3" />
                                 <span>Setujui</span>
                               </button>
-                              <button
-                                onClick={() => handleRejectFptk(req.id)}
-                                className="px-2.5 py-1 bg-white hover:bg-rose-50 text-rose-600 rounded-lg text-xs font-medium border border-rose-200 transition-colors"
-                              >
-                                Tolak
-                              </button>
                             </>
                           )}
 
                           {req.status === 'Disetujui' && (
                             <button
+                              type="button"
                               onClick={() => handleConvertFptkToVacancy(req)}
                               className="px-3 py-1 bg-blue-700 hover:bg-blue-800 text-white rounded-lg text-xs font-semibold flex items-center gap-1 shadow-2xs transition-colors"
                             >
@@ -1634,13 +1682,21 @@ export const RecruitmentManagement: React.FC = () => {
                               <span>Sebar Lowongan →</span>
                             </button>
                           )}
+
+                          {req.status === 'Dibatalkan' && (
+                            <span className="text-[10px] text-slate-400 italic">Dibatalkan</span>
+                          )}
+
+                          {req.status === 'Ditolak' && (
+                            <span className="text-[10px] text-rose-600 font-medium">Ditolak</span>
+                          )}
                         </div>
                       </div>
                     </div>
                   ))}
                 </div>
 
-                {/* 2. TAMPILAN DESKTOP (SPACIOUS DATA TABLE TANPA TOMBOL DETAIL KARENA KLIK ROW) */}
+                {/* 2. TAMPILAN DESKTOP (SPACIOUS DATA TABLE DENGAN ACTION SHELF DI BAWAH ROW TANPA HEADER AKSI) */}
                 <div className="hidden xl:block bg-white border border-slate-200 rounded-xl shadow-2xs overflow-hidden">
                   <div className="overflow-x-auto">
                     <table className="w-full text-left text-xs">
@@ -1652,154 +1708,230 @@ export const RecruitmentManagement: React.FC = () => {
                           <th className="py-3.5 px-4 font-bold text-slate-700">Formasi & Kebutuhan</th>
                           <th className="py-3.5 px-4 font-bold text-slate-700">Target Masuk</th>
                           <th className="py-3.5 px-4 font-bold text-slate-700 text-center">Status FPTK</th>
-                          <th className="py-3.5 px-4 font-bold text-slate-700 text-right">Aksi</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
                         {filtered.map((req) => (
-                          <tr
-                            key={req.id}
-                            className="hover:bg-blue-50/40 transition-colors group cursor-pointer"
-                            onClick={() => setPreviewFptk(req)}
-                            title="Klik baris untuk melihat Lembar FPTK Resmi"
-                          >
-                            <td className="py-3.5 px-4">
-                              <div className="font-mono font-bold text-slate-900 group-hover:text-blue-700 transition-colors">
-                                {req.reqNumber}
-                              </div>
-                              <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                                <span
-                                  className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-                                    req.isBudgeted !== false
-                                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/60'
-                                      : 'bg-amber-50 text-amber-700 border border-amber-200/60'
-                                  }`}
-                                >
-                                  {req.isBudgeted !== false ? 'Budgeted (RKAP)' : 'Unbudgeted'}
-                                </span>
-                                <span className="text-[10px] text-slate-400">
-                                  {req.createdAt}
-                                </span>
-                              </div>
-                            </td>
+                          <React.Fragment key={req.id}>
+                            {/* Baris Utama Data FPTK */}
+                            <tr
+                              className="hover:bg-blue-50/40 transition-colors group cursor-pointer border-t border-slate-100"
+                              onClick={() => setPreviewFptk(req)}
+                              title="Klik baris untuk melihat Lembar FPTK Resmi"
+                            >
+                              <td className="py-3.5 px-4">
+                                <div className="font-mono font-bold text-slate-900 group-hover:text-blue-700 transition-colors">
+                                  {req.reqNumber}
+                                </div>
+                                <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                                  <span
+                                    className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                                      req.isBudgeted !== false
+                                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/60'
+                                        : 'bg-amber-50 text-amber-700 border border-amber-200/60'
+                                    }`}
+                                  >
+                                    {req.isBudgeted !== false ? 'Budgeted (RKAP)' : 'Unbudgeted'}
+                                  </span>
+                                  <span className="text-[10px] text-slate-400">
+                                    {req.createdAt}
+                                  </span>
+                                </div>
+                              </td>
 
-                            <td className="py-3.5 px-4">
-                              <div className="font-bold text-slate-900 text-xs group-hover:text-blue-700 transition-colors">
-                                {req.position}
-                              </div>
-                              <div className="flex items-center gap-1.5 text-slate-500 text-[11px] mt-0.5">
-                                <Building2 className="w-3 h-3 text-slate-400 shrink-0" />
-                                <span>{req.department}</span>
-                                {req.reportingToTitle && (
-                                  <>
-                                    <span className="text-slate-300">•</span>
-                                    <span className="text-slate-400 truncate max-w-[150px]" title={`Melapor ke: ${req.reportingToTitle}`}>
-                                      Lapor: {req.reportingToTitle}
-                                    </span>
-                                  </>
-                                )}
-                              </div>
-                            </td>
+                              <td className="py-3.5 px-4">
+                                <div className="font-bold text-slate-900 text-xs group-hover:text-blue-700 transition-colors">
+                                  {req.position}
+                                </div>
+                                <div className="flex items-center gap-1.5 text-slate-500 text-[11px] mt-0.5">
+                                  <Building2 className="w-3 h-3 text-slate-400 shrink-0" />
+                                  <span>{req.department}</span>
+                                  {req.reportingToTitle && (
+                                    <>
+                                      <span className="text-slate-300">•</span>
+                                      <span className="text-slate-400 truncate max-w-[150px]" title={`Melapor ke: ${req.reportingToTitle}`}>
+                                        Lapor: {req.reportingToTitle}
+                                      </span>
+                                    </>
+                                  )}
+                                </div>
+                              </td>
 
-                            <td className="py-3.5 px-4">
-                              <span className="inline-block px-2.5 py-1 rounded-md text-[11px] font-semibold bg-slate-100 text-slate-700 border border-slate-200/70">
-                                {req.grade}
-                              </span>
-                              {req.supervisedStaffCount !== undefined && req.supervisedStaffCount > 0 && (
-                                <span className="block text-[10px] text-slate-400 mt-1">
-                                  Supervisi: {req.supervisedStaffCount} staf
+                              <td className="py-3.5 px-4">
+                                <span className="inline-block px-2.5 py-1 rounded-md text-[11px] font-semibold bg-slate-100 text-slate-700 border border-slate-200/70">
+                                  {req.grade}
                                 </span>
-                              )}
-                            </td>
-
-                            <td className="py-3.5 px-4">
-                              <div className="font-semibold text-slate-900 flex items-center gap-1">
-                                <Users className="w-3 h-3 text-slate-400" />
-                                <span>{req.headcount} Formasi</span>
-                              </div>
-                              <div className="text-[11px] text-slate-500 mt-0.5">
-                                <span>{req.reason}</span>
-                                {req.replacementFor && (
-                                  <span className="block text-[10px] text-slate-400 italic truncate max-w-[140px]" title={req.replacementFor}>
-                                    Gantikan: {req.replacementFor}
+                                {req.supervisedStaffCount !== undefined && req.supervisedStaffCount > 0 && (
+                                  <span className="block text-[10px] text-slate-400 mt-1">
+                                    Supervisi: {req.supervisedStaffCount} staf
                                   </span>
                                 )}
-                              </div>
-                            </td>
+                              </td>
 
-                            <td className="py-3.5 px-4">
-                              <div className="flex items-center gap-1 text-slate-700 font-mono text-xs">
-                                <Calendar className="w-3 h-3 text-slate-400" />
-                                <span>{req.targetJoinDate}</span>
-                              </div>
-                              <span className="block text-[10px] text-slate-400 mt-0.5">
-                                Oleh: {req.requesterName.split(' ')[0]}
-                              </span>
-                            </td>
+                              <td className="py-3.5 px-4">
+                                <div className="font-semibold text-slate-900 flex items-center gap-1">
+                                  <Users className="w-3 h-3 text-slate-400" />
+                                  <span>{req.headcount} Formasi</span>
+                                </div>
+                                <div className="text-[11px] text-slate-500 mt-0.5">
+                                  <span>{req.reason}</span>
+                                  {req.replacementFor && (
+                                    <span className="block text-[10px] text-slate-400 italic truncate max-w-[140px]" title={req.replacementFor}>
+                                      Gantikan: {req.replacementFor}
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
 
-                            <td className="py-3.5 px-4 text-center">
-                              <span
-                                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold ${
-                                  req.status === 'Disetujui'
-                                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                                    : req.status === 'Menunggu Approval'
-                                    ? 'bg-amber-50 text-amber-800 border border-amber-200'
-                                    : 'bg-rose-50 text-rose-800 border border-rose-200'
-                                }`}
-                              >
-                                <span
-                                  className={`w-1.5 h-1.5 rounded-full ${
-                                    req.status === 'Disetujui'
-                                      ? 'bg-emerald-500'
-                                      : req.status === 'Menunggu Approval'
-                                      ? 'bg-amber-500 animate-pulse'
-                                      : 'bg-rose-500'
-                                  }`}
-                                />
-                                <span>{req.status}</span>
-                              </span>
-                              {req.approvedBy && req.status === 'Disetujui' && (
-                                <span className="block text-[10px] text-slate-400 mt-0.5 truncate max-w-[130px] mx-auto">
-                                  Oleh: {req.approvedBy.split(' ')[0]}
+                              <td className="py-3.5 px-4">
+                                <div className="flex items-center gap-1 text-slate-700 font-mono text-xs">
+                                  <Calendar className="w-3 h-3 text-slate-400" />
+                                  <span>{req.targetJoinDate}</span>
+                                </div>
+                                <span className="block text-[10px] text-slate-400 mt-0.5">
+                                  Oleh: {req.requesterName.split(' ')[0]}
                                 </span>
-                              )}
-                            </td>
+                              </td>
 
-                            <td className="py-3.5 px-4 text-right" onClick={(e) => e.stopPropagation()}>
-                              <div className="flex items-center justify-end gap-1.5">
-                                {req.status === 'Menunggu Approval' && (
-                                  <>
-                                    <button
-                                      onClick={() => handleApproveFptk(req.id)}
-                                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold transition-colors shadow-2xs flex items-center gap-1"
-                                      title="Setujui Permintaan Tenaga Kerja"
-                                    >
-                                      <Check className="w-3.5 h-3.5" />
-                                      <span>Setujui</span>
-                                    </button>
-                                    <button
-                                      onClick={() => handleRejectFptk(req.id)}
-                                      className="px-2.5 py-1.5 bg-white hover:bg-rose-50 text-rose-600 rounded-lg text-xs font-medium border border-rose-200 transition-colors"
-                                      title="Tolak Pengajuan FPTK"
-                                    >
-                                      <X className="w-3.5 h-3.5" />
-                                    </button>
-                                  </>
+                              <td className="py-3.5 px-4 text-center">
+                                <span
+                                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold ${
+                                    req.status === 'Disetujui'
+                                      ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                                      : req.status === 'Menunggu Approval'
+                                      ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                                      : req.status === 'Dibatalkan'
+                                      ? 'bg-slate-100 text-slate-700 border border-slate-300'
+                                      : 'bg-rose-50 text-rose-800 border border-rose-200'
+                                  }`}
+                                >
+                                  <span
+                                    className={`w-1.5 h-1.5 rounded-full ${
+                                      req.status === 'Disetujui'
+                                        ? 'bg-emerald-500'
+                                        : req.status === 'Menunggu Approval'
+                                        ? 'bg-amber-500 animate-pulse'
+                                        : req.status === 'Dibatalkan'
+                                        ? 'bg-slate-400'
+                                        : 'bg-rose-500'
+                                    }`}
+                                  />
+                                  <span>{req.status}</span>
+                                </span>
+                                {req.approvedBy && req.status === 'Disetujui' && (
+                                  <span className="block text-[10px] text-slate-400 mt-0.5 truncate max-w-[130px] mx-auto">
+                                    Oleh: {req.approvedBy.split(' ')[0]}
+                                  </span>
                                 )}
+                              </td>
+                            </tr>
 
-                                {req.status === 'Disetujui' && (
-                                  <button
-                                    onClick={() => handleConvertFptkToVacancy(req)}
-                                    className="px-3 py-1.5 bg-blue-700 hover:bg-blue-800 text-white rounded-lg text-xs font-semibold flex items-center gap-1 shadow-2xs transition-colors shrink-0"
-                                    title="Buka Lowongan dan Sebar ke Multi-Channel"
-                                  >
-                                    <Globe className="w-3.5 h-3.5" />
-                                    <span>Sebar Lowongan →</span>
-                                  </button>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
+                            {/* Baris Aksi & Retrack Otorisasi di Bawah Row (Konsep Shelf Card) */}
+                            <tr className="bg-slate-50/70 border-b border-slate-200/90">
+                              <td colSpan={6} className="py-2.5 px-4" onClick={(e) => e.stopPropagation()}>
+                                <div className="flex items-center justify-between gap-3 flex-wrap">
+                                  {/* Left: Alur Approval & Retrack */}
+                                  <div className="flex items-center gap-2 flex-wrap text-xs">
+                                    <span className="text-[11px] font-semibold text-slate-600 flex items-center gap-1">
+                                      <Users className="w-3.5 h-3.5 text-blue-700" />
+                                      <span>Alur Otorisasi:</span>
+                                    </span>
+
+                                    {req.signatories && req.signatories.length > 0 ? (
+                                      <div className="flex items-center gap-1.5 flex-wrap">
+                                        {req.signatories.map((sig, idx) => (
+                                          <span
+                                            key={sig.id}
+                                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium border ${
+                                              req.status === 'Disetujui'
+                                                ? 'bg-emerald-50 text-emerald-800 border-emerald-200 font-semibold'
+                                                : req.status === 'Menunggu Approval'
+                                                ? 'bg-amber-50 text-amber-800 border-amber-200'
+                                                : 'bg-slate-100 text-slate-600 border-slate-200'
+                                            }`}
+                                          >
+                                            <span>{idx + 1}. {sig.role}: {sig.name.split(' ')[0]}</span>
+                                            {req.status === 'Disetujui' && <Check className="w-2.5 h-2.5 text-emerald-600" />}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <span className="text-[10px] text-slate-400">1 Pejabat Penyetuju</span>
+                                    )}
+
+                                    <button
+                                      type="button"
+                                      onClick={() => setTrackingFptk(req)}
+                                      className="ml-1 text-blue-700 hover:text-blue-900 font-semibold text-[11px] flex items-center gap-1 hover:underline"
+                                    >
+                                      <History className="w-3 h-3 text-blue-700" />
+                                      <span>Retrack Alur ({req.signatories?.length || 1} Pihak)</span>
+                                    </button>
+                                  </div>
+
+                                  {/* Right: Actions */}
+                                  <div className="flex items-center gap-2">
+                                    {req.status === 'Menunggu Approval' && (
+                                      <>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleCancelRequisition(req.id)}
+                                          className="px-2.5 py-1.5 bg-white hover:bg-rose-50 text-rose-700 rounded-lg text-xs font-semibold border border-rose-200 flex items-center gap-1.5 transition-colors shadow-2xs"
+                                          title="Batalkan & Tarik Kembali Pengajuan FPTK"
+                                        >
+                                          <XCircle className="w-3.5 h-3.5 text-rose-500" />
+                                          <span>Batalkan Pengajuan</span>
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleRejectFptk(req.id)}
+                                          className="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 rounded-lg text-xs font-semibold border border-slate-300 transition-colors"
+                                          title="Tolak Pengajuan FPTK"
+                                        >
+                                          <span>Tolak</span>
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleApproveFptk(req.id)}
+                                          className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold shadow-2xs flex items-center gap-1.5 transition-colors"
+                                          title="Setujui Permintaan Tenaga Kerja"
+                                        >
+                                          <Check className="w-3.5 h-3.5" />
+                                          <span>Setujui</span>
+                                        </button>
+                                      </>
+                                    )}
+
+                                    {req.status === 'Disetujui' && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleConvertFptkToVacancy(req)}
+                                        className="px-4 py-1.5 bg-blue-700 hover:bg-blue-800 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-2xs transition-colors shrink-0"
+                                        title="Buka Lowongan dan Sebar ke Multi-Channel"
+                                      >
+                                        <Globe className="w-3.5 h-3.5" />
+                                        <span>Sebar Lowongan →</span>
+                                      </button>
+                                    )}
+
+                                    {req.status === 'Dibatalkan' && (
+                                      <span className="text-[11px] text-slate-500 italic flex items-center gap-1">
+                                        <XCircle className="w-3.5 h-3.5 text-slate-400" />
+                                        <span>Pengajuan telah dibatalkan oleh pemohon</span>
+                                      </span>
+                                    )}
+
+                                    {req.status === 'Ditolak' && (
+                                      <span className="text-[11px] text-rose-600 font-medium flex items-center gap-1">
+                                        <X className="w-3.5 h-3.5" />
+                                        <span>Ditolak: {req.approvalNotes || 'Tidak disetujui'}</span>
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          </React.Fragment>
                         ))}
                       </tbody>
                     </table>
@@ -2385,7 +2517,7 @@ export const RecruitmentManagement: React.FC = () => {
                     <th className="py-3 px-4">Tahap Seleksi</th>
                     <th className="py-3 px-4">Hasil / Evaluasi</th>
                     <th className="py-3 px-4">Ekspektasi Upah</th>
-                    <th className="py-3 px-4 text-right">Aksi</th>
+                    <th className="py-3 px-4 text-right"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -2478,7 +2610,7 @@ export const RecruitmentManagement: React.FC = () => {
                     <th className="py-3 px-4">Gaji Ditawarkan (Gross)</th>
                     <th className="py-3 px-4">Tanggal Dikirim</th>
                     <th className="py-3 px-4 text-center">Status Surat</th>
-                    <th className="py-3 px-4 text-right">Aksi Dokumen</th>
+                    <th className="py-3 px-4 text-right"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -3735,18 +3867,52 @@ export const RecruitmentManagement: React.FC = () => {
             </div>
 
             {/* Modal Footer Actions */}
-            <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-3 shrink-0">
-              <button
-                onClick={() => setPreviewFptk(null)}
-                className="px-4 py-2 bg-white hover:bg-slate-100 text-slate-700 rounded-xl font-semibold border border-slate-200 text-xs transition-colors"
-              >
-                Tutup
-              </button>
+            <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-3 shrink-0 flex-wrap">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPreviewFptk(null)}
+                  className="px-4 py-2 bg-white hover:bg-slate-100 text-slate-700 rounded-xl font-semibold border border-slate-200 text-xs transition-colors"
+                >
+                  Tutup
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const req = previewFptk;
+                    setPreviewFptk(null);
+                    setTrackingFptk(req);
+                  }}
+                  className="px-3 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl font-semibold border border-blue-200 text-xs transition-colors flex items-center gap-1.5"
+                >
+                  <History className="w-3.5 h-3.5" />
+                  <span>Retrack Alur ({previewFptk.signatories?.length || 1} Pihak)</span>
+                </button>
+              </div>
 
               <div className="flex items-center gap-2">
                 {previewFptk.status === 'Menunggu Approval' && (
                   <>
                     <button
+                      type="button"
+                      onClick={() => handleCancelRequisition(previewFptk.id)}
+                      className="px-3 py-2 bg-white hover:bg-rose-50 text-rose-600 rounded-xl font-semibold border border-rose-200 text-xs transition-colors flex items-center gap-1"
+                    >
+                      <XCircle className="w-3.5 h-3.5 text-rose-500" />
+                      <span>Batalkan Pengajuan</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleRejectFptk(previewFptk.id);
+                        setPreviewFptk(null);
+                      }}
+                      className="px-3 py-2 bg-white hover:bg-slate-100 text-slate-700 rounded-xl font-medium border border-slate-300 text-xs transition-colors"
+                    >
+                      Tolak
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => {
                         handleApproveFptk(previewFptk.id);
                         const primaryApprover =
@@ -3769,20 +3935,12 @@ export const RecruitmentManagement: React.FC = () => {
                       <Check className="w-4 h-4" />
                       <span>Setujui Dokumen Ini</span>
                     </button>
-                    <button
-                      onClick={() => {
-                        handleRejectFptk(previewFptk.id);
-                        setPreviewFptk(null);
-                      }}
-                      className="px-3 py-2 bg-white hover:bg-rose-50 text-rose-600 rounded-xl font-medium border border-rose-200 text-xs transition-colors"
-                    >
-                      Tolak
-                    </button>
                   </>
                 )}
 
                 {previewFptk.status === 'Disetujui' && (
                   <button
+                    type="button"
                     onClick={() => {
                       const req = previewFptk;
                       setPreviewFptk(null);
@@ -3794,6 +3952,241 @@ export const RecruitmentManagement: React.FC = () => {
                     <span>Sebarkan Lowongan →</span>
                   </button>
                 )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===================== MODAL RETRACK ALUR PERSETUJUAN FPTK ===================== */}
+      {trackingFptk && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setTrackingFptk(null);
+          }}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full border border-slate-200 overflow-hidden my-4 sm:my-6 flex flex-col max-h-[92vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="px-5 py-4 bg-slate-950 text-white flex items-center justify-between shrink-0">
+              <div>
+                <div className="flex items-center gap-2">
+                  <History className="w-4 h-4 text-blue-400" />
+                  <h3 className="text-sm font-bold text-white">
+                    Lacak & Retrack Alur Persetujuan FPTK
+                  </h3>
+                  <span className="text-[10px] bg-blue-900/80 text-blue-200 border border-blue-700/60 font-mono px-2 py-0.5 rounded-full">
+                    {trackingFptk.reqNumber}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Pantau status peninjauan ke seluruh pihak terkait (Mengetahui, Menyetujui, dll) & kirim pengingat.
+                </p>
+              </div>
+              <button
+                onClick={() => setTrackingFptk(null)}
+                className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-5 overflow-y-auto space-y-4 text-xs flex-1">
+              {/* Summary Card */}
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                <div>
+                  <span className="text-[10px] text-slate-400 block uppercase font-medium">Posisi Dibutuhkan</span>
+                  <span className="font-bold text-slate-900">{trackingFptk.position}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 block uppercase font-medium">Departemen</span>
+                  <span className="font-semibold text-slate-800">{trackingFptk.department}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 block uppercase font-medium">Diajukan Oleh</span>
+                  <span className="font-semibold text-slate-800">{trackingFptk.requesterName}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 block uppercase font-medium">Status Dokumen</span>
+                  <span
+                    className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                      trackingFptk.status === 'Disetujui'
+                        ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                        : trackingFptk.status === 'Menunggu Approval'
+                        ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                        : trackingFptk.status === 'Dibatalkan'
+                        ? 'bg-slate-100 text-slate-700 border border-slate-300'
+                        : 'bg-rose-50 text-rose-800 border border-rose-200'
+                    }`}
+                  >
+                    {trackingFptk.status}
+                  </span>
+                </div>
+              </div>
+
+              {/* Step-by-Step Approval Track */}
+              <div>
+                <div className="flex items-center justify-between gap-2 mb-3">
+                  <h4 className="font-bold text-slate-900 text-xs flex items-center gap-1.5 uppercase tracking-wider">
+                    <Users className="w-4 h-4 text-blue-700" />
+                    <span>Daftar Pihak Terkait & Verifikasi Approval</span>
+                  </h4>
+                  {trackingFptk.status === 'Menunggu Approval' && (
+                    <button
+                      type="button"
+                      onClick={() => handleBlastAllReminders(trackingFptk)}
+                      className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg text-[11px] font-semibold flex items-center gap-1 transition-colors"
+                    >
+                      <Send className="w-3 h-3" />
+                      <span>Kirim Pengingat ke Semua Pihak</span>
+                    </button>
+                  )}
+                </div>
+
+                <div className="space-y-3">
+                  {trackingFptk.signatories && trackingFptk.signatories.length > 0 ? (
+                    trackingFptk.signatories.map((sig, idx) => {
+                      const isApproved = trackingFptk.status === 'Disetujui' || sig.status === 'Disetujui';
+                      return (
+                        <div
+                          key={sig.id}
+                          className={`p-3.5 rounded-xl border flex items-center justify-between gap-3 flex-wrap transition-colors ${
+                            isApproved
+                              ? 'bg-emerald-50/50 border-emerald-200'
+                              : trackingFptk.status === 'Ditolak'
+                              ? 'bg-rose-50/50 border-rose-200'
+                              : 'bg-white border-slate-200 shadow-2xs'
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="flex flex-col items-center">
+                              <span
+                                className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                                  isApproved
+                                    ? 'bg-emerald-600 text-white'
+                                    : 'bg-blue-100 text-blue-800'
+                                }`}
+                              >
+                                {isApproved ? <Check className="w-3.5 h-3.5" /> : idx + 1}
+                              </span>
+                            </div>
+
+                            <img
+                              src={
+                                sig.avatar ||
+                                `https://ui-avatars.com/api/?name=${encodeURIComponent(sig.name)}&background=0284c7&color=fff&bold=true`
+                              }
+                              alt={sig.name}
+                              className="w-9 h-9 rounded-full object-cover border border-slate-200 shrink-0"
+                            />
+
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700 bg-blue-50 px-1.5 py-0.2 rounded">
+                                  {sig.role}
+                                </span>
+                                <span className="font-bold text-slate-900 text-xs">{sig.name}</span>
+                              </div>
+                              <div className="flex items-center gap-2 text-[11px] text-slate-500 mt-0.5">
+                                <span>{sig.title || 'Pejabat Berwenang'}</span>
+                                {sig.nik && <span>• NIK: {sig.nik}</span>}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`px-2.5 py-1 rounded-full text-[10px] font-bold flex items-center gap-1 ${
+                                isApproved
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : trackingFptk.status === 'Menunggu Approval'
+                                  ? 'bg-amber-100 text-amber-900'
+                                  : 'bg-slate-100 text-slate-700'
+                              }`}
+                            >
+                              {isApproved ? (
+                                <>
+                                  <Check className="w-3 h-3 text-emerald-700" />
+                                  <span>Telah Disetujui</span>
+                                </>
+                              ) : trackingFptk.status === 'Menunggu Approval' ? (
+                                <>
+                                  <Clock className="w-3 h-3 text-amber-700" />
+                                  <span>Menunggu Review</span>
+                                </>
+                              ) : (
+                                <span>-</span>
+                              )}
+                            </span>
+
+                            {trackingFptk.status === 'Menunggu Approval' && (
+                              <button
+                                type="button"
+                                onClick={() => handleSendApprovalReminder(sig.name, sig.role)}
+                                className="px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg text-[10px] font-semibold flex items-center gap-1 shadow-2xs transition-colors"
+                              >
+                                <Send className="w-2.5 h-2.5 text-blue-600" />
+                                <span>Kirim Pengingat</span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl text-center text-slate-500 text-xs">
+                      Alur penanda tangan menggunakan approver tunggal: {trackingFptk.approvedBy || 'Direksi'}.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {trackingFptk.approvalNotes && (
+                <div className="bg-blue-50/60 border border-blue-200 rounded-xl p-3 text-xs text-blue-950">
+                  <span className="font-bold block mb-0.5">Catatan Persetujuan / Riwayat:</span>
+                  <p className="text-slate-700 leading-relaxed">{trackingFptk.approvalNotes}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="px-5 py-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setTrackingFptk(null)}
+                className="px-4 py-2 bg-white hover:bg-slate-100 text-slate-700 rounded-lg text-xs font-semibold border border-slate-300 transition-colors"
+              >
+                Tutup
+              </button>
+
+              <div className="flex items-center gap-2">
+                {trackingFptk.status === 'Menunggu Approval' && (
+                  <button
+                    type="button"
+                    onClick={() => handleCancelRequisition(trackingFptk.id)}
+                    className="flex items-center gap-1.5 px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg text-xs font-semibold border border-rose-200 transition-colors"
+                  >
+                    <XCircle className="w-3.5 h-3.5 text-rose-500" />
+                    <span>Batalkan & Tarik Pengajuan</span>
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const req = trackingFptk;
+                    setTrackingFptk(null);
+                    setPreviewFptk(req);
+                  }}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-blue-700 hover:bg-blue-800 text-white rounded-lg text-xs font-semibold shadow-2xs transition-colors"
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>Lihat Dokumen FPTK Lengkap →</span>
+                </button>
               </div>
             </div>
           </div>
