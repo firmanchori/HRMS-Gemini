@@ -5008,7 +5008,7 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                                           className="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 rounded-lg text-xs font-semibold border border-slate-300 transition-colors"
                                           title="Tolak Pengajuan FPTK"
                                         >
-                                          <span>Tolak</span>
+                                          <span className="whitespace-nowrap">Tolak</span>
                                         </button>
                                         <button
                                           type="button"
@@ -5965,7 +5965,7 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                                         title="Buka Hasil Screening Kualifikasi, Rincian Profiling CV & Scoring Keyword Match"
                                       >
                                         <Sparkles className="w-3.5 h-3.5 text-blue-600 shrink-0 group-hover:rotate-12 transition-transform" />
-                                        <span className="leading-tight text-center">Hasil Screening, Profiling & Scoring Match</span>
+                                        <span className="whitespace-nowrap">Review Screening & CV</span>
                                       </button>
 
                                       {/* 2. Tombol Koreksi Screening Manual */}
@@ -5982,12 +5982,12 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                                         {isParsingDoubtful ? (
                                           <>
                                             <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                                            <span>Input Screening Manual (Wajib)</span>
+                                            <span className="whitespace-nowrap">Input Screening</span>
                                           </>
                                         ) : (
                                           <>
                                             <Pencil className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-                                            <span>Koreksi Screening Manual</span>
+                                            <span className="whitespace-nowrap">Koreksi Screening</span>
                                           </>
                                         )}
                                       </button>
@@ -5999,7 +5999,7 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                                           <button
                                             type="button"
                                             onClick={() => setConfirmAssessmentCandidate(candidate)}
-                                            className="w-full py-1.5 px-1.5 text-[10px] font-bold bg-blue-700 hover:bg-blue-800 active:bg-blue-900 text-white rounded flex items-center justify-center gap-1 transition-colors shadow-2xs text-center"
+                                            className="w-full py-1.5 px-1.5 text-[10px] font-bold bg-blue-700 hover:bg-blue-800 active:bg-blue-900 text-white rounded flex items-center justify-center gap-1 transition-colors shadow-2xs text-center whitespace-nowrap"
                                             title="Shortlist pelamar ke proses Tes Kompetensi (Asesmen)"
                                           >
                                             <Award className="w-3 h-3 shrink-0" />
@@ -6008,7 +6008,7 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                                           <button
                                             type="button"
                                             onClick={() => setConfirmInterviewCandidate(candidate)}
-                                            className="w-full py-1.5 px-1.5 text-[10px] font-bold bg-indigo-700 hover:bg-indigo-800 active:bg-indigo-900 text-white rounded flex items-center justify-center gap-1 transition-colors shadow-2xs text-center"
+                                            className="w-full py-1.5 px-1.5 text-[10px] font-bold bg-indigo-700 hover:bg-indigo-800 active:bg-indigo-900 text-white rounded flex items-center justify-center gap-1 transition-colors shadow-2xs text-center whitespace-nowrap"
                                             title="Langsung Shortlist ke Wawancara (User)"
                                           >
                                             <Video className="w-3 h-3 shrink-0" />
@@ -6026,7 +6026,7 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                                           title="Pindahkan kandidat ke Talent Pool untuk kebutuhan mendatang"
                                         >
                                           <FolderPlus className="w-3 h-3 text-amber-600 shrink-0" />
-                                          <span>Talent Pool</span>
+                                          <span className="whitespace-nowrap">Talent Pool</span>
                                         </button>
                                         <button
                                           type="button"
@@ -6035,7 +6035,7 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                                           title="Tolak lamaran kandidat & kirimkan pesan penolakan resmi"
                                         >
                                           <UserX className="w-3 h-3 text-rose-600 shrink-0" />
-                                          <span>Tolak</span>
+                                          <span className="whitespace-nowrap">Tolak</span>
                                         </button>
                                       </div>
                                     </>
@@ -6090,7 +6090,7 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                                         title="Buka modal asesmen 3 tahap: Setup & Perencanaan, Input Nilai Asesor, dan Keputusan Kelulusan"
                                       >
                                         <Award className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                                        <span>Kelola & Proses Tes Kompetensi</span>
+                                        <span className="whitespace-nowrap">Kelola Tes Kompetensi</span>
                                       </button>
 
                                       <div className="grid grid-cols-2 gap-1.5">
@@ -6106,7 +6106,7 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                                         <button
                                           type="button"
                                           onClick={() => setConfirmInterviewCandidate(candidate)}
-                                          className="w-full py-1 px-1 text-[10px] font-semibold bg-slate-900 hover:bg-slate-800 active:bg-black text-white rounded text-center transition-colors shadow-2xs truncate"
+                                          className="w-full py-1 px-1 text-[10px] font-semibold bg-slate-900 hover:bg-slate-800 active:bg-black text-white rounded text-center transition-colors shadow-2xs whitespace-nowrap truncate"
                                           title="Loloskan ke Wawancara (User) melalui konfirmasi"
                                         >
                                           Ke Wawancara →
@@ -6166,7 +6166,7 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                                         title="Buka proses wawancara 3 tahap: Jadwal & Panel, Input Nilai per User, dan Formula Pembobotan Objektif"
                                       >
                                         <Calendar className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                                        <span>Kelola & Proses Wawancara</span>
+                                        <span className="whitespace-nowrap">Kelola Wawancara</span>
                                       </button>
 
                                       <div className="grid grid-cols-2 gap-1.5">
@@ -6207,14 +6207,14 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                                             title="Ke Medical Check Up"
                                           >
                                             <HeartPulse className="w-3 h-3 shrink-0" />
-                                            <span>Ke Medical Check Up</span>
+                                            <span className="whitespace-nowrap">Ke Medical Check-Up</span>
                                           </button>
                                           <button
                                             onClick={() => handlePromoteToOffering(candidate)}
                                             className="w-full py-1 text-[9px] font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-center transition-colors"
                                             title="Lewati MCU dan langsung terbitkan Offering Letter"
                                           >
-                                            Langsung ke Offering (Skip MCU)
+                                            Skip ke Offering
                                           </button>
                                         </div>
                                       ) : (
@@ -6224,7 +6224,7 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                                           title={`Offering / MCU Terkunci: ${statusInfo.statusLabel}. Klik untuk detail validasi SOP.`}
                                         >
                                           <Lock className="w-3 h-3 text-slate-400 group-hover/btn:text-amber-600 shrink-0" />
-                                          <span>Terkunci (Belum Lolos Interview)</span>
+                                          <span className="whitespace-nowrap">Terkunci (Belum Lolos)</span>
                                         </button>
                                       )}
                                     </div>
@@ -6303,7 +6303,7 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                                             title="Kandidat dinyatakan Fit to Work. Lanjut ke pembuatan Offering Letter."
                                           >
                                             <CheckCircle className="w-3 h-3 shrink-0" />
-                                            <span>Lanjut ke Tahap Offering →</span>
+                                            <span className="whitespace-nowrap">Lanjut ke Offering →</span>
                                           </button>
                                         ) : (
                                           <div className="text-[9.5px] text-center text-slate-400 py-0.5">
@@ -9589,7 +9589,7 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                         className="px-4 py-1.5 bg-blue-700 hover:bg-blue-800 text-white rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1.5"
                       >
                         <Check className="w-3.5 h-3.5" />
-                        <span>Simpan Hasil Screening Manual</span>
+                        <span className="whitespace-nowrap">Simpan Screening</span>
                       </button>
                     </div>
                   </div>
@@ -9900,7 +9900,7 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                   className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-700 hover:bg-blue-800 active:bg-blue-900 text-white rounded-lg font-semibold text-xs shadow-2xs transition-colors"
                 >
                   <Check className="w-3.5 h-3.5" />
-                  <span>Ya, Pindahkan ke Screening</span>
+                  <span className="whitespace-nowrap">Pindah ke Screening</span>
                 </button>
               </div>
             </div>
@@ -9990,7 +9990,7 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                   className="inline-flex items-center gap-1.5 px-4 py-2 bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white rounded-lg font-semibold text-xs shadow-2xs transition-colors"
                 >
                   <Undo2 className="w-3.5 h-3.5" />
-                  <span>Ya, Kembalikan ke Incoming</span>
+                  <span className="whitespace-nowrap">Kembali ke Incoming</span>
                 </button>
               </div>
             </div>
@@ -10082,7 +10082,7 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                   className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-700 hover:bg-blue-800 active:bg-blue-900 text-white rounded-lg font-semibold text-xs shadow-2xs transition-colors"
                 >
                   <Check className="w-3.5 h-3.5" />
-                  <span>Ya, Pindahkan ke Tes</span>
+                  <span className="whitespace-nowrap">Pindah ke Tes</span>
                 </button>
               </div>
             </div>
@@ -10174,7 +10174,7 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                   className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-700 hover:bg-indigo-800 active:bg-indigo-900 text-white rounded-lg font-semibold text-xs shadow-2xs transition-colors"
                 >
                   <Check className="w-3.5 h-3.5" />
-                  <span>Ya, Langsung ke Wawancara</span>
+                  <span className="whitespace-nowrap">Lanjut ke Wawancara</span>
                 </button>
               </div>
             </div>
@@ -10418,7 +10418,7 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                   className="inline-flex items-center gap-1.5 px-4 py-2 bg-rose-700 hover:bg-rose-800 active:bg-rose-900 text-white rounded-lg font-semibold text-xs shadow-2xs transition-colors"
                 >
                   <Send className="w-3.5 h-3.5" />
-                  <span>Kirim Pesan Penolakan & Tolak Pelamar</span>
+                  <span className="whitespace-nowrap">Kirim & Tolak Pelamar</span>
                 </button>
               </div>
             </div>
@@ -10994,8 +10994,8 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                     </div>
                     <div>
                       <div className="text-[11px] font-bold leading-tight">Tahap 1</div>
-                      <div className="text-[10px] text-slate-500 font-medium hidden sm:block">
-                        Setup & Penugasan Tes
+                      <div className="text-[10px] text-slate-500 font-medium hidden sm:block whitespace-nowrap">
+                        Setup Tes
                       </div>
                     </div>
                   </button>
@@ -11031,8 +11031,8 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                     </div>
                     <div>
                       <div className="text-[11px] font-bold leading-tight">Tahap 2</div>
-                      <div className="text-[10px] text-slate-500 font-medium hidden sm:block">
-                        Input Nilai Hasil Tes
+                      <div className="text-[10px] text-slate-500 font-medium hidden sm:block whitespace-nowrap">
+                        Input Nilai
                       </div>
                     </div>
                   </button>
@@ -11062,8 +11062,8 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                     </div>
                     <div>
                       <div className="text-[11px] font-bold leading-tight">Tahap 3</div>
-                      <div className="text-[10px] text-slate-500 font-medium hidden sm:block">
-                        Hasil Nilai Akhir & Keputusan
+                      <div className="text-[10px] text-slate-500 font-medium hidden sm:block whitespace-nowrap">
+                        Keputusan
                       </div>
                     </div>
                   </button>
@@ -11479,7 +11479,7 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                                       title="Gunakan jika pelamar memerlukan tes ulang atau link lama telah kedaluwarsa/hangus"
                                     >
                                       <RotateCcw className="w-3 h-3 text-amber-600" />
-                                      <span>Generate Ulang Token / Link Baru (Tes Ulang)</span>
+                                      <span>Generate Token Baru</span>
                                     </button>
 
                                     <button
@@ -11488,7 +11488,7 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                                       className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-xs transition-colors flex items-center justify-center gap-1.5 shadow-2xs"
                                     >
                                       <Send className="w-3.5 h-3.5" />
-                                      <span>Kirim Konten & Link ke Pelamar</span>
+                                      <span>Kirim Link Pelamar</span>
                                     </button>
                                   </div>
                                 </div>
@@ -11809,7 +11809,7 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                           className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 rounded-lg font-semibold text-xs transition-colors shadow-2xs"
                         >
                           <Undo2 className="w-3.5 h-3.5 text-amber-600" />
-                          <span>Kembalikan ke Screening</span>
+                          <span>Ke Screening</span>
                         </button>
                       </div>
 
@@ -11830,7 +11830,7 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                           className="px-5 py-2.5 bg-indigo-700 hover:bg-indigo-800 active:bg-indigo-900 text-white rounded-lg font-bold text-xs shadow-md shadow-indigo-700/20 flex items-center justify-center gap-2 transition-all"
                           title="Lanjutkan ke tahap 2 untuk menginput nilai evaluasi hasil tes"
                         >
-                          <span>Lanjutkan ke Input Nilai (Tahap 2)</span>
+                          <span className="whitespace-nowrap">Lanjut ke Input Nilai →</span>
                           <ArrowRight className="w-4 h-4" />
                         </button>
                       </div>
@@ -11922,7 +11922,7 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                               className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 text-[11px] font-semibold transition-colors border border-indigo-200 shrink-0"
                             >
                               <ExternalLink className="w-3.5 h-3.5" />
-                              <span>Buka Halaman Ujian Pelamar</span>
+                              <span>Buka Halaman Ujian</span>
                             </button>
                           </div>
                         )}
@@ -12203,7 +12203,7 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                         className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-semibold text-center transition-colors text-xs flex items-center justify-center gap-1.5"
                       >
                         <ArrowLeft className="w-3.5 h-3.5" />
-                        <span>Kembali ke Setup (Tahap 1)</span>
+                        <span>← Kembali ke Setup</span>
                       </button>
 
                       <button
@@ -12211,7 +12211,7 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                         onClick={handleProceedToStep3}
                         className="px-5 py-2.5 bg-indigo-700 hover:bg-indigo-800 active:bg-indigo-900 text-white rounded-lg font-bold shadow-md shadow-indigo-700/20 flex items-center justify-center gap-2 transition-all"
                       >
-                        <span>Lanjut ke Hasil Nilai Akhir (Tahap 3)</span>
+                        <span>Lanjut ke Hasil Akhir →</span>
                         <ArrowRight className="w-4 h-4" />
                       </button>
                     </div>
@@ -12466,7 +12466,7 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                               title="Loloskan pelamar ke tahap Wawancara melalui dialog konfirmasi"
                             >
                               <CheckCircle2 className="w-4 h-4" />
-                              <span>Loloskan ke Wawancara (User) →</span>
+                              <span className="whitespace-nowrap">Lolos ke Wawancara →</span>
                             </button>
                           </>
                         ) : (
@@ -12482,7 +12482,7 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                               title="Tolak pelamar dan kirim pesan penolakan resmi"
                             >
                               <UserX className="w-4 h-4 text-rose-700" />
-                              <span>Tolak Pelamar (Kirim Email Penolakan)</span>
+                              <span className="whitespace-nowrap">Tolak Pelamar</span>
                             </button>
 
                             <button
@@ -12495,7 +12495,7 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                               title="Masukan pelamar ke Talent Pool melalui dialog konfirmasi"
                             >
                               <FolderPlus className="w-4 h-4" />
-                              <span>Masukan ke Talent Pool (Rekomendasi)</span>
+                              <span className="whitespace-nowrap">Ke Talent Pool</span>
                             </button>
                           </>
                         )}
@@ -14233,7 +14233,7 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                           className="px-3.5 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-semibold text-xs flex items-center gap-1.5 shadow-2xs transition-colors"
                         >
                           <ArrowRight className="w-3.5 h-3.5" />
-                          <span>Lanjutkan ke Tahap Offering Letter Langsung</span>
+                          <span className="whitespace-nowrap">Lanjut ke Offering</span>
                         </button>
                         <button
                           type="button"
@@ -14249,7 +14249,7 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                           className="px-3.5 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-700 text-white font-semibold text-xs flex items-center gap-1.5 shadow-2xs transition-colors"
                         >
                           <HeartPulse className="w-3.5 h-3.5" />
-                          <span>Lanjutkan ke Medical Check-Up (MCU)</span>
+                          <span className="whitespace-nowrap">Lanjut ke MCU</span>
                         </button>
                       </div>
                     )}
@@ -14337,7 +14337,7 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                     }}
                     className="px-4 py-2 bg-indigo-700 hover:bg-indigo-800 text-white rounded-lg font-semibold text-xs shadow-2xs transition-colors flex items-center gap-1.5"
                   >
-                    <span>Lanjutkan ke Input Nilai (Tahap 2)</span>
+                    <span className="whitespace-nowrap">Lanjut ke Input Nilai →</span>
                     <ArrowRight className="w-4 h-4" />
                   </button>
                 )}
@@ -14351,7 +14351,7 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                     }}
                     className="px-4 py-2 bg-indigo-700 hover:bg-indigo-800 text-white rounded-lg font-semibold text-xs shadow-2xs transition-colors flex items-center gap-1.5"
                   >
-                    <span>Lanjutkan ke Hasil Akhir & Keputusan (Tahap 3)</span>
+                    <span className="whitespace-nowrap">Lanjut ke Hasil Akhir →</span>
                     <ArrowRight className="w-4 h-4" />
                   </button>
                 )}
@@ -14373,7 +14373,7 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                       title="Loloskan kandidat ke pemeriksaan kesehatan Medical Check-Up"
                     >
                       <HeartPulse className="w-4 h-4" />
-                      <span>Lanjut Medical Check Up</span>
+                      <span className="whitespace-nowrap">Lanjut ke MCU</span>
                     </button>
 
                     <button
@@ -14383,7 +14383,7 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                       title="Lanjutkan ke penerbitan surat penawaran kerja (Offering Letter)"
                     >
                       <ArrowRight className="w-4 h-4" />
-                      <span>Lanjutkan ke Proses Offering</span>
+                      <span className="whitespace-nowrap">Lanjut ke Offering</span>
                     </button>
                   </div>
                 )}
@@ -14511,7 +14511,7 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                 onClick={handleSaveInterviewerChange}
                 className="px-4 py-1.5 bg-indigo-700 hover:bg-indigo-800 text-white rounded-lg font-semibold text-xs shadow-2xs"
               >
-                Simpan Perubahan & Catat Riwayat
+                Simpan Perubahan
               </button>
             </div>
           </div>
@@ -15228,7 +15228,7 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                         className="px-4 py-2 bg-teal-700 hover:bg-teal-800 text-white rounded-lg font-bold text-xs shadow-2xs transition-colors flex items-center justify-center gap-1.5"
                       >
                         <Calendar className="w-3.5 h-3.5" />
-                        <span>Simpan Jadwal MCU</span>
+                        <span className="whitespace-nowrap">Simpan Jadwal</span>
                       </button>
 
                       <button
@@ -15246,7 +15246,7 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                         }}
                         className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-bold text-xs shadow-2xs transition-colors flex items-center justify-center gap-1.5"
                       >
-                        <span>Lanjut ke Update Hasil MCU →</span>
+                        <span className="whitespace-nowrap">Update Hasil MCU →</span>
                       </button>
                     </>
                   ) : (
@@ -15287,7 +15287,7 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                           className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-xs shadow-2xs transition-colors flex items-center justify-center gap-1.5"
                         >
                           <CheckCircle className="w-3.5 h-3.5" />
-                          <span>Simpan & Lanjut ke Offering →</span>
+                          <span className="whitespace-nowrap">Lanjut ke Offering →</span>
                         </button>
                       )}
                     </>
@@ -15591,7 +15591,7 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                   className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-xs transition-colors flex items-center gap-1.5 shadow-2xs"
                 >
                   <MessageSquare className="w-3.5 h-3.5" />
-                  <span>Kirim ke WhatsApp Pelamar</span>
+                  <span className="whitespace-nowrap">Kirim via WhatsApp</span>
                 </button>
               </div>
             </div>
