@@ -38,6 +38,7 @@ import {
   ArrowRight,
   RotateCcw,
   Trash2,
+  Info,
 } from 'lucide-react';
 import { EmploymentType, PTKPStatus, Employee, Candidate, FamilyMember, EmergencyContact, OnboardingProcess } from '../../types/hrms';
 import { formatRupiah, getTERCategory } from '../../utils/taxCalculator';
@@ -245,14 +246,14 @@ export const EmployeeManagement: React.FC = () => {
   const [newBpjsKes, setNewBpjsKes] = useState('0001' + Math.floor(10000000 + Math.random() * 90000000));
   const [newFaskes, setNewFaskes] = useState('Puskesmas Kecamatan Setiabudi');
 
-  // Gaji & Bank
-  const [newBasicSalary, setNewBasicSalary] = useState<number>(10000000);
-  const [newFixedAllow, setNewFixedAllow] = useState<number>(1500000);
-  const [newTransportAllow, setNewTransportAllow] = useState<number>(800000);
-  const [newMealAllow, setNewMealAllow] = useState<number>(700000);
-  const [newPositionAllow, setNewPositionAllow] = useState<number>(500000);
+  // Gaji & Bank (Kompensasi bulanan disetup melalui Menu Payroll)
+  const [newBasicSalary, setNewBasicSalary] = useState<number>(0);
+  const [newFixedAllow, setNewFixedAllow] = useState<number>(0);
+  const [newTransportAllow, setNewTransportAllow] = useState<number>(0);
+  const [newMealAllow, setNewMealAllow] = useState<number>(0);
+  const [newPositionAllow, setNewPositionAllow] = useState<number>(0);
   const [newBankName, setNewBankName] = useState('BCA');
-  const [newBankAccount, setNewBankAccount] = useState(String(Math.floor(1000000000 + Math.random() * 9000000000)));
+  const [newBankAccount, setNewBankAccount] = useState('');
   const [newBankAccountHolder, setNewBankAccountHolder] = useState('');
 
   // Pendidikan
@@ -428,14 +429,14 @@ export const EmployeeManagement: React.FC = () => {
     setNewBpjsKes('0001' + Math.floor(10000000 + Math.random() * 90000000));
     setNewFaskes('Puskesmas Kecamatan Setiabudi');
 
-    // Gaji & Bank
-    setNewBasicSalary(10000000);
-    setNewFixedAllow(1500000);
-    setNewTransportAllow(800000);
-    setNewMealAllow(700000);
-    setNewPositionAllow(500000);
+    // Gaji & Bank - Kompensasi disetup melalui Menu Payroll
+    setNewBasicSalary(0);
+    setNewFixedAllow(0);
+    setNewTransportAllow(0);
+    setNewMealAllow(0);
+    setNewPositionAllow(0);
     setNewBankName('BCA');
-    setNewBankAccount(String(Math.floor(1000000000 + Math.random() * 9000000000)));
+    setNewBankAccount('');
     setNewBankAccountHolder('');
 
     // Pendidikan
@@ -642,12 +643,8 @@ export const EmployeeManagement: React.FC = () => {
     }
 
     // Validasi Finansial
-    if (!newBasicSalary || newBasicSalary <= 0) {
-      setFormError('Gaji Pokok wajib diisi dengan angka valid di atas Rp 0!');
-      setShowValidationErrors(true);
-      setDossierFormTab('finansial');
-      return;
-    }
+    // Rincian struktur kompensasi bulanan disetup melalui Menu Payroll.
+    // Di tab ini yang wajib diisi adalah Rekening Bank Payroll.
     if (!newBankAccount.trim()) {
       setFormError('Nomor Rekening Bank Payroll wajib diisi!');
       setShowValidationErrors(true);
@@ -2225,89 +2222,134 @@ export const EmployeeManagement: React.FC = () => {
                 {/* TAB 4: REMUNERASI & BANK */}
                 {dossierFormTab === 'finansial' && (
                   <div className="space-y-4">
-                    <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-3.5">
-                      <h4 className="font-bold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-2">
-                        <CreditCard className="w-4 h-4 text-indigo-600" />
-                        <span>Rincian Struktur Kompensasi & Benefit Bulanan</span>
-                      </h4>
+                    {/* Information Banner: Setup di Menu Payroll */}
+                    <div className="p-4 bg-sky-50 rounded-xl border border-sky-200 flex items-start gap-3 shadow-2xs">
+                      <div className="w-8 h-8 rounded-lg bg-sky-100 flex items-center justify-center shrink-0 text-sky-700 font-bold mt-0.5">
+                        <Info className="w-4 h-4" />
+                      </div>
+                      <div className="text-xs">
+                        <h5 className="font-bold text-sky-950 text-sm mb-1 flex items-center gap-2">
+                          <span>Struktur Remunerasi & Benefit Dikelola di Menu Payroll</span>
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-200 text-sky-800 uppercase tracking-wider">
+                            Setup di Payroll
+                          </span>
+                        </h5>
+                        <p className="text-sky-800 leading-relaxed">
+                          Rincian struktur kompensasi, gaji pokok, serta benefit bulanan karyawan baru akan disetup secara terpusat melalui <strong>Menu Payroll</strong>. 
+                          Pada tab pendaftaran karyawan ini, rincian kompensasi berstatus <em>Belum Disetup (Readonly)</em>. Silakan lengkapi <strong>Input Rekening Bank Payroll Karyawan</strong> di bawah ini, lalu lakukan konfigurasi komponen payroll pada Menu Payroll setelah data karyawan tersimpan.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Rincian Kompensasi & Benefit (Readonly / Status Belum Disetup) */}
+                    <div className="bg-slate-50/80 p-4 rounded-xl border border-slate-200 space-y-3.5">
+                      <div className="flex items-center justify-between border-b border-slate-200/80 pb-2.5">
+                        <h4 className="font-bold text-slate-800 flex items-center gap-2 text-sm">
+                          <CreditCard className="w-4 h-4 text-slate-500" />
+                          <span>Rincian Struktur Kompensasi & Benefit Bulanan</span>
+                        </h4>
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-800 border border-amber-200">
+                          <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
+                          Belum Disetup (Setup di Menu Payroll)
+                        </span>
+                      </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                        <CurrencyInput
-                          id="formBasicSalary"
-                          label="Gaji Pokok Bulanan (IDR) *"
-                          value={newBasicSalary}
-                          onChange={(val) => setNewBasicSalary(val)}
-                          required
-                          min={currentTenant.umr || 3000000}
-                          showError={showValidationErrors}
-                          helperText={`Standar UMR ${currentTenant.city}: ${formatRupiah(currentTenant.umr)}`}
-                        />
+                        <div>
+                          <label className="text-xs font-semibold text-slate-600 block mb-1">
+                            Gaji Pokok Bulanan
+                          </label>
+                          <div className="px-3 py-2 bg-white/80 border border-slate-200 rounded-lg text-slate-700 font-mono text-sm flex items-center justify-between shadow-2xs">
+                            <span className={newBasicSalary > 0 ? 'font-bold text-slate-800' : 'text-slate-400 italic'}>
+                              {newBasicSalary > 0 ? formatRupiah(newBasicSalary) : 'Rp 0 (Belum Disetup)'}
+                            </span>
+                            <span className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded font-sans font-medium">Readonly</span>
+                          </div>
+                          <p className="text-[10px] text-slate-500 mt-1">
+                            {newBasicSalary > 0 ? 'Nilai referensi dari penawaran rekrutmen.' : 'Akan disetup melalui Menu Payroll.'}
+                          </p>
+                        </div>
 
-                        <CurrencyInput
-                          id="formFixedAllow"
-                          label="Tunjangan Tetap (IDR)"
-                          value={newFixedAllow}
-                          onChange={(val) => setNewFixedAllow(val)}
-                          helperText="Tunjangan tetap keahlian / operasional"
-                        />
+                        <div>
+                          <label className="text-xs font-semibold text-slate-600 block mb-1">
+                            Tunjangan Tetap Keahlian
+                          </label>
+                          <div className="px-3 py-2 bg-white/80 border border-slate-200 rounded-lg text-slate-700 font-mono text-sm flex items-center justify-between shadow-2xs">
+                            <span className={newFixedAllow > 0 ? 'font-bold text-slate-800' : 'text-slate-400 italic'}>
+                              {newFixedAllow > 0 ? formatRupiah(newFixedAllow) : 'Rp 0 (Belum Disetup)'}
+                            </span>
+                            <span className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded font-sans font-medium">Readonly</span>
+                          </div>
+                          <p className="text-[10px] text-slate-500 mt-1">Disetup melalui Menu Payroll.</p>
+                        </div>
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
-                        <CurrencyInput
-                          id="formPositionAllow"
-                          label="Tunjangan Jabatan (IDR)"
-                          value={newPositionAllow}
-                          onChange={(val) => setNewPositionAllow(val)}
-                        />
-                        <CurrencyInput
-                          id="formTransportAllow"
-                          label="Tunjangan Transport (IDR)"
-                          value={newTransportAllow}
-                          onChange={(val) => setNewTransportAllow(val)}
-                        />
-                        <CurrencyInput
-                          id="formMealAllow"
-                          label="Tunjangan Makan (IDR)"
-                          value={newMealAllow}
-                          onChange={(val) => setNewMealAllow(val)}
-                        />
+                        <div>
+                          <label className="text-xs font-semibold text-slate-600 block mb-1">Tunjangan Jabatan</label>
+                          <div className="px-3 py-2 bg-white/80 border border-slate-200 rounded-lg text-slate-700 font-mono text-xs flex items-center justify-between">
+                            <span className={newPositionAllow > 0 ? 'font-bold text-slate-800' : 'text-slate-400 italic'}>
+                              {newPositionAllow > 0 ? formatRupiah(newPositionAllow) : 'Rp 0'}
+                            </span>
+                            <span className="text-[9px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-sans">Readonly</span>
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-xs font-semibold text-slate-600 block mb-1">Tunjangan Transport</label>
+                          <div className="px-3 py-2 bg-white/80 border border-slate-200 rounded-lg text-slate-700 font-mono text-xs flex items-center justify-between">
+                            <span className={newTransportAllow > 0 ? 'font-bold text-slate-800' : 'text-slate-400 italic'}>
+                              {newTransportAllow > 0 ? formatRupiah(newTransportAllow) : 'Rp 0'}
+                            </span>
+                            <span className="text-[9px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-sans">Readonly</span>
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-xs font-semibold text-slate-600 block mb-1">Tunjangan Makan</label>
+                          <div className="px-3 py-2 bg-white/80 border border-slate-200 rounded-lg text-slate-700 font-mono text-xs flex items-center justify-between">
+                            <span className={newMealAllow > 0 ? 'font-bold text-slate-800' : 'text-slate-400 italic'}>
+                              {newMealAllow > 0 ? formatRupiah(newMealAllow) : 'Rp 0'}
+                            </span>
+                            <span className="text-[9px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-sans">Readonly</span>
+                          </div>
+                        </div>
                       </div>
 
-                      {/* Total Remunerasi Summary Card */}
-                      <div className="p-3.5 bg-indigo-50/70 rounded-xl border border-indigo-200 flex items-center justify-between">
-                        <div>
-                          <span className="font-bold text-indigo-950 block text-xs">
-                            Total Remunerasi Tetap Bulanan
-                          </span>
-                          <span className="text-[11px] text-indigo-700">
-                            Dasar perhitungan lembur, jamsostek, dan PPh 21 TER
-                          </span>
+                      {/* Info setup card */}
+                      <div className="p-3 bg-amber-50 rounded-lg border border-amber-200 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                          <div>
+                            <span className="font-bold text-amber-950 block text-xs">
+                              Rincian Kompensasi Belum Disetup
+                            </span>
+                            <span className="text-[11px] text-amber-800">
+                              Silakan lakukan konfigurasi komponen payroll pada <strong>Menu Payroll</strong> setelah menyimpan data karyawan ini.
+                            </span>
+                          </div>
                         </div>
-                        <span className="font-mono font-bold text-indigo-950 text-base">
-                          {formatRupiah(
-                            Number(newBasicSalary || 0) +
-                              Number(newFixedAllow || 0) +
-                              Number(newPositionAllow || 0) +
-                              Number(newTransportAllow || 0) +
-                              Number(newMealAllow || 0)
-                          )}
+                        <span className="text-[11px] font-bold text-amber-800 bg-amber-100 px-2.5 py-1 rounded border border-amber-300 shrink-0">
+                          Setup di Menu Payroll
                         </span>
                       </div>
                     </div>
 
+                    {/* Input Rekening Bank Payroll Karyawan */}
                     <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-3.5">
-                      <h4 className="font-bold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-2">
-                        <CreditCard className="w-4 h-4 text-indigo-600" />
-                        <span>Rekening Bank Payroll Karyawan</span>
-                      </h4>
+                      <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                        <h4 className="font-bold text-slate-900 flex items-center gap-2 text-sm">
+                          <CreditCard className="w-4 h-4 text-indigo-600" />
+                          <span>Input Rekening Bank Payroll Karyawan</span>
+                        </h4>
+                        <span className="text-[11px] text-slate-500">Wajib diisi untuk proses transfer gaji</span>
+                      </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
                         <div>
-                          <label className="font-medium text-slate-700 block mb-1">Bank Mitra Payroll</label>
+                          <label className="font-medium text-slate-700 block mb-1 text-xs">Bank Mitra Payroll *</label>
                           <select
                             value={newBankName}
                             onChange={(e) => setNewBankName(e.target.value)}
-                            className="w-full px-3 py-2 border border-slate-300 rounded bg-white font-medium cursor-pointer"
+                            className="w-full px-3 py-2 border border-slate-300 rounded bg-white font-medium cursor-pointer text-xs"
                           >
                             <option value="BCA">Bank BCA</option>
                             <option value="Mandiri">Bank Mandiri</option>
@@ -2320,24 +2362,25 @@ export const EmployeeManagement: React.FC = () => {
                         </div>
 
                         <div>
-                          <label className="font-medium text-slate-700 block mb-1">Nomor Rekening Payroll *</label>
+                          <label className="font-medium text-slate-700 block mb-1 text-xs">Nomor Rekening Payroll *</label>
                           <input
                             type="text"
                             required
+                            placeholder="Contoh: 1234567890"
                             value={newBankAccount}
                             onChange={(e) => setNewBankAccount(e.target.value)}
-                            className="w-full px-3 py-2 border border-slate-300 rounded font-mono font-bold"
+                            className="w-full px-3 py-2 border border-slate-300 rounded font-mono font-bold text-xs"
                           />
                         </div>
 
                         <div>
-                          <label className="font-medium text-slate-700 block mb-1">Nama Pemilik Rekening</label>
+                          <label className="font-medium text-slate-700 block mb-1 text-xs">Nama Pemilik Rekening</label>
                           <input
                             type="text"
-                            placeholder="Sama dengan nama karyawan jika kosong"
+                            placeholder={newName ? `Contoh: ${newName}` : 'Sama dengan nama karyawan jika kosong'}
                             value={newBankAccountHolder}
                             onChange={(e) => setNewBankAccountHolder(e.target.value)}
-                            className="w-full px-3 py-2 border border-slate-300 rounded"
+                            className="w-full px-3 py-2 border border-slate-300 rounded text-xs"
                           />
                         </div>
                       </div>
