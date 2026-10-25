@@ -26,11 +26,19 @@ import { MssPortal } from './components/modules/MssPortal';
 import { AuditTrailManagement } from './components/modules/AuditTrailManagement';
 import { UniversalFilePreviewModal } from './components/common/UniversalFilePreviewModal';
 import { CommandPaletteModal } from './components/common/CommandPaletteModal';
+import { CandidateOnlineTestPortal } from './components/modules/CandidateOnlineTestPortal';
 import { LoginScreen } from './components/auth/LoginScreen';
 import { UserRole } from './types/hrms';
 
 const MainLayout: React.FC = () => {
   const { activeModule, setActiveModule, setCurrentUserRole } = useHrms();
+
+  // Deteksi jika link tes online pelamar sedang dibuka via URL query param (?testToken=...)
+  const [portalToken, setPortalToken] = useState<string | null>(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('testToken') || params.get('token');
+  });
+
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     return localStorage.getItem('nusahr_is_logged_out') !== 'true';
   });
@@ -158,6 +166,19 @@ const MainLayout: React.FC = () => {
         );
     }
   };
+
+  // Jika URL membawa token tes online kandidat, buka langsung portal pengerjaan ujian
+  if (portalToken) {
+    return (
+      <CandidateOnlineTestPortal
+        testToken={portalToken}
+        onClosePortal={() => {
+          window.history.replaceState({}, document.title, window.location.pathname);
+          setPortalToken(null);
+        }}
+      />
+    );
+  }
 
   if (!isAuthenticated) {
     return (

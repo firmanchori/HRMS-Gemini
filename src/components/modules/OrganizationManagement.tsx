@@ -4256,17 +4256,17 @@ export const OrganizationManagement: React.FC = () => {
             {/* Scrollable Content Body */}
             <div className="p-4 sm:p-5 space-y-4 text-xs overflow-y-auto flex-1">
               <div className="p-4 bg-indigo-50/70 rounded-xl border border-indigo-200 space-y-2.5">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-indigo-200/60">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="font-mono font-bold text-indigo-800 bg-indigo-100 px-2.5 py-0.5 rounded-md border border-indigo-300 text-xs shadow-xs">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2.5 border-b border-indigo-200/60">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono font-bold text-indigo-800 bg-indigo-100 px-2.5 py-1 rounded-md border border-indigo-300 text-xs shadow-2xs">
                       {previewDivision.code}
                     </span>
                     <span className="text-[10px] uppercase font-bold text-indigo-700 bg-white px-2 py-0.5 rounded border border-indigo-200">
                       Divisi
                     </span>
                   </div>
-                  <div className="text-[11px] text-slate-500 flex items-center gap-1 min-w-0">
-                    <span className="shrink-0 text-slate-400">Entitas:</span>
+                  <div className="inline-flex items-center gap-1.5 text-[11px] bg-white/80 px-2.5 py-1 rounded-lg border border-indigo-100 self-start sm:self-auto max-w-full">
+                    <span className="shrink-0 text-slate-400 font-medium">Entitas:</span>
                     <span className="font-semibold text-slate-800 truncate" title={currentEntity.name}>
                       {currentEntity.name}
                     </span>
@@ -4284,7 +4284,8 @@ export const OrganizationManagement: React.FC = () => {
 
               {/* Departemen & Posisi di bawah divisi */}
               {(() => {
-                const childDepts = (departments || []).filter((d) => 
+                const allDepts = (entityDepartments && entityDepartments.length > 0) ? entityDepartments : departments;
+                const childDepts = (allDepts || []).filter((d) => 
                   d.divisionId === previewDivision.id || 
                   d.division === previewDivision.name || 
                   (d.divisionId && d.divisionId.toLowerCase() === previewDivision.id.toLowerCase()) ||
@@ -4292,7 +4293,7 @@ export const OrganizationManagement: React.FC = () => {
                   (previewDivision.name.toLowerCase().includes('human') && (d.name.toLowerCase().includes('talent') || d.name.toLowerCase().includes('people') || d.name.toLowerCase().includes('payroll') || d.name.toLowerCase().includes('culture'))) ||
                   ((previewDivision.name.toLowerCase().includes('keuangan') || previewDivision.name.toLowerCase().includes('finance')) && (d.name.toLowerCase().includes('tax') || d.name.toLowerCase().includes('treasury') || d.name.toLowerCase().includes('finance') || d.name.toLowerCase().includes('akuntansi'))) ||
                   ((previewDivision.name.toLowerCase().includes('general') || previewDivision.name.toLowerCase().includes('affairs')) && (d.name.toLowerCase().includes('procurement') || d.name.toLowerCase().includes('facility') || d.name.toLowerCase().includes('asset') || d.name.toLowerCase().includes('ga'))) ||
-                  ((previewDivision.name.toLowerCase().includes('commercial') || previewDivision.name.toLowerCase().includes('bisnis') || previewDivision.name.toLowerCase().includes('business')) && (d.name.toLowerCase().includes('sales') || d.name.toLowerCase().includes('account') || d.name.toLowerCase().includes('bisnis'))) ||
+                  ((previewDivision.name.toLowerCase().includes('commercial') || previewDivision.name.toLowerCase().includes('bisnis') || previewDivision.name.toLowerCase().includes('business')) && (d.name.toLowerCase().includes('sales') || d.name.toLowerCase().includes('account') || d.name.toLowerCase().includes('bisnis') || d.name.toLowerCase().includes('commercial'))) ||
                   ((previewDivision.name.toLowerCase().includes('direksi') || previewDivision.name.toLowerCase().includes('executive')) && (d.name.toLowerCase().includes('secretary') || d.name.toLowerCase().includes('governance')))
                 );
                 const childDeptNames = new Set(childDepts.map((d) => d.name.toLowerCase()));
@@ -4304,7 +4305,8 @@ export const OrganizationManagement: React.FC = () => {
                   (previewDivision.name.toLowerCase().includes('teknologi') && (n.title.toLowerCase().includes('cloud') || n.title.toLowerCase().includes('software') || n.title.toLowerCase().includes('architect') || n.title.toLowerCase().includes('engineer') || n.title.toLowerCase().includes('ui/ux'))) ||
                   (previewDivision.name.toLowerCase().includes('human') && (n.title.toLowerCase().includes('human') || n.title.toLowerCase().includes('talent') || n.title.toLowerCase().includes('people') || n.title.toLowerCase().includes('compensation'))) ||
                   ((previewDivision.name.toLowerCase().includes('finance') || previewDivision.name.toLowerCase().includes('keuangan')) && (n.title.toLowerCase().includes('finance') || n.title.toLowerCase().includes('tax') || n.title.toLowerCase().includes('treasury'))) ||
-                  (((previewDivision.name.toLowerCase().includes('general') || previewDivision.name.toLowerCase().includes('affairs')) && (n.title.toLowerCase().includes('procurement') || n.title.toLowerCase().includes('operations') || n.title.toLowerCase().includes('building') || n.title.toLowerCase().includes('fleet') || n.title.toLowerCase().includes('general affairs'))))
+                  (((previewDivision.name.toLowerCase().includes('general') || previewDivision.name.toLowerCase().includes('affairs')) && (n.title.toLowerCase().includes('procurement') || n.title.toLowerCase().includes('operations') || n.title.toLowerCase().includes('building') || n.title.toLowerCase().includes('fleet') || n.title.toLowerCase().includes('general affairs')))) ||
+                  (((previewDivision.name.toLowerCase().includes('commercial') || previewDivision.name.toLowerCase().includes('bisnis') || previewDivision.name.toLowerCase().includes('business')) && (n.title.toLowerCase().includes('sales') || n.title.toLowerCase().includes('account') || n.title.toLowerCase().includes('business') || n.title.toLowerCase().includes('commercial') || n.title.toLowerCase().includes('marketing'))))
                 );
 
                 return (
@@ -4322,7 +4324,7 @@ export const OrganizationManagement: React.FC = () => {
                                 <span className="text-[10px] text-slate-400 font-mono">[{dept.code}]</span>
                               </div>
                               <span className="text-[11px] text-slate-600 font-medium shrink-0 whitespace-nowrap">
-                                {entityNodes.filter((n) => n.department?.toLowerCase() === dept.name.toLowerCase() || n.department?.toLowerCase().includes(dept.name.toLowerCase())).length} Posisi
+                                {activeNodes.filter((n) => n.department?.toLowerCase() === dept.name.toLowerCase() || n.department?.toLowerCase().includes(dept.name.toLowerCase()) || dept.name.toLowerCase().includes(n.department?.toLowerCase() || '')).length} Posisi
                               </span>
                             </div>
                           ))}
@@ -4469,17 +4471,17 @@ export const OrganizationManagement: React.FC = () => {
             {/* Scrollable Content Body */}
             <div className="p-4 sm:p-5 space-y-4 text-xs overflow-y-auto flex-1">
               <div className="p-4 bg-emerald-50/70 rounded-xl border border-emerald-200 space-y-2.5">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-emerald-200/60">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="font-mono font-bold text-emerald-800 bg-emerald-100 px-2.5 py-0.5 rounded-md border border-emerald-300 text-xs shadow-xs">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2.5 border-b border-emerald-200/60">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono font-bold text-emerald-800 bg-emerald-100 px-2.5 py-1 rounded-md border border-emerald-300 text-xs shadow-2xs">
                       {previewDepartment.code}
                     </span>
                     <span className="text-[10px] uppercase font-bold text-emerald-700 bg-white px-2 py-0.5 rounded border border-emerald-200">
                       Departemen
                     </span>
                   </div>
-                  <div className="text-[11px] text-slate-500 flex items-center gap-1 min-w-0">
-                    <span className="shrink-0 text-slate-400">Entitas:</span>
+                  <div className="inline-flex items-center gap-1.5 text-[11px] bg-white/80 px-2.5 py-1 rounded-lg border border-emerald-100 self-start sm:self-auto max-w-full min-w-0">
+                    <span className="shrink-0 text-slate-400 font-medium">Entitas:</span>
                     <span className="font-semibold text-slate-800 truncate" title={currentEntity.name}>
                       {currentEntity.name}
                     </span>
@@ -4519,6 +4521,7 @@ export const OrganizationManagement: React.FC = () => {
                   if (deptNameLower.includes('procurement') && n.title.toLowerCase().includes('procurement')) return true;
                   if ((deptNameLower.includes('facility') || deptNameLower.includes('asset')) && (n.title.toLowerCase().includes('inventory') || n.title.toLowerCase().includes('maintenance') || n.title.toLowerCase().includes('fleet'))) return true;
                   if ((deptNameLower.includes('secretary') || deptNameLower.includes('governance')) && (n.title.toLowerCase().includes('ceo') || n.title.toLowerCase().includes('audit') || n.title.toLowerCase().includes('director'))) return true;
+                  if ((deptNameLower.includes('sales') || deptNameLower.includes('account') || deptNameLower.includes('bisnis') || deptNameLower.includes('commercial')) && (n.title.toLowerCase().includes('sales') || n.title.toLowerCase().includes('account') || n.title.toLowerCase().includes('business') || n.title.toLowerCase().includes('marketing'))) return true;
                   return false;
                 });
                 return (

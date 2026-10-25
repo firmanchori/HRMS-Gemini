@@ -662,7 +662,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [candidates, setCandidates] = useState<Candidate[]>(() => {
-    const saved = localStorage.getItem('nusahr_candidates_v3');
+    const saved = localStorage.getItem('nusahr_candidates_v4');
     return saved ? JSON.parse(saved) : INITIAL_CANDIDATES;
   });
 
@@ -1044,7 +1044,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [jobGradingScheme]);
 
   useEffect(() => {
-    localStorage.setItem('nusahr_candidates_v3', JSON.stringify(candidates));
+    localStorage.setItem('nusahr_candidates_v4', JSON.stringify(candidates));
   }, [candidates]);
 
   useEffect(() => {
@@ -1828,6 +1828,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
           interviewTypeName: evalData.interviewTypeName,
           interviewDate: evalData.interviewDate,
           interviewer: evalData.interviewer,
+          interviewers: evalData.interviewers || c.interviewers,
           meetingPlatform: evalData.platform as any,
           meetingLink: evalData.meetingLink,
           interviewScore: avgScore,

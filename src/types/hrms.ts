@@ -39,6 +39,7 @@ export type RecruitmentStage =
   | 'Screening'
   | 'Assessment'
   | 'Interview'
+  | 'Medical Check-Up'
   | 'Offered'
   | 'Hired'
   | 'TalentPool'
@@ -568,6 +569,46 @@ export interface CandidateCompetencyScore {
   details?: Record<string, any>;
 }
 
+export interface CandidateAssignedTest {
+  id: string;
+  testTypeId: string;
+  testTypeName: string;
+  category: string;
+  format: 'Online' | 'Offline';
+  durationMinutes: number;
+  testDescription?: string; // Deskripsi konten tes
+  expectedOutput?: string; // Output yang diharapkan dari tes
+  testUrlOrRepo?: string; // Tautan portal tes atau starter kit
+  testToken?: string; // Token unik link tes sekali pakai
+  tokenExpiresAt?: string; // Batas limit waktu berlaku link
+  isTokenUsed?: boolean; // Tanda apakah link sudah disubmit / hangus
+  testStartedAt?: string; // Waktu kandidat klik mulai tes
+  submittedUrl?: string; // Tautan hasil pengerjaan yang disubmit pelamar
+  submittedNotes?: string; // Catatan solusi / penjelasan teknis dari pelamar
+  submittedAt?: string; // Waktu submit hasil tes
+  offlineRoomName?: string; // Ruangan / fasilitas yang dibooking
+  offlineTestDate?: string; // Tanggal tes offline
+  offlineStartTime?: string; // Jam mulai
+  offlineEndTime?: string; // Jam selesai
+  offlineFacilities?: string[]; // Fasilitas yang disediakan di ruangan
+  offlineDefaultFacilities?: string[]; // Fasilitas & peralatan bawaan default ruangan
+  offlineRequestedFacilities?: string[]; // Fasilitas & peralatan tambahan yang diminta by request
+  offlineRequestNotes?: string; // Catatan tambahan kebutuhan khusus ke GA/IT
+  offlineEquipmentNotes?: string; // Catatan perlengkapan untuk pelamar
+  locationOrSandboxNotes?: string;
+  assessorName: string;
+  assessorRole?: string;
+  assessorEmail?: string;
+  invitationSent?: boolean;
+  invitationSentAt?: string;
+  passingGrade: number;
+  score?: number;
+  status?: 'Belum Dinilai' | 'Lulus' | 'Tidak Lulus';
+  evaluatedAt?: string;
+  evaluationNotes?: string;
+  criteriaScores?: Record<string, number>;
+}
+
 export interface CompetencyTestTypeSetting {
   id: string;
   name: string;
@@ -604,10 +645,28 @@ export interface AssignedInterviewer {
   title: string;
   department: string;
   email: string;
+  phone?: string;
   avatar?: string;
   role?: string;
   status?: 'Terkonfirmasi' | 'Menunggu Respon' | 'Reschedule Diminta' | 'Berhalangan';
   notes?: string;
+  // Per-interviewer individual evaluation:
+  scorecardRatings?: Record<string, number>;
+  averageStars?: number;
+  calculatedScore?: number;
+  recommendation?: 'Sangat cocok' | 'Dipertimbangkan' | 'Kurang cocok' | 'Tidak cocok';
+  evaluationNotes?: string;
+  evaluatedAt?: string;
+}
+
+export interface InterviewerChangeHistory {
+  id: string;
+  timestamp: string;
+  action: 'Ganti Pewawancara' | 'Pewawancara Berhalangan' | 'Tambah Pewawancara' | 'Hapus Pewawancara';
+  previousInterviewer?: string;
+  newInterviewer?: string;
+  reason: string;
+  recordedBy: string;
 }
 
 export interface CandidateInterviewEvaluation {
@@ -671,6 +730,9 @@ export interface Candidate {
   testNotes?: string;
   testAssignedDate?: string;
   competencyScores?: CandidateCompetencyScore[];
+  assignedTests?: CandidateAssignedTest[];
+  overallAssessmentStatus?: 'Belum Ditugaskan' | 'Sedang Berlangsung' | 'Lulus Memenuhi Syarat' | 'Di Bawah Passing Grade';
+  overallAssessmentScore?: number;
 
   // 6. Interview
   interviewDate?: string;
@@ -680,7 +742,16 @@ export interface Candidate {
   interviewScore?: number;
   interviewNotes?: string;
   userRecommendation?: string;
-  meetingPlatform?: 'Google Meet' | 'Microsoft Teams' | 'Ruang Interview Kantor';
+  interviewFormat?: 'Online' | 'Offline';
+  interviewStartTime?: string;
+  interviewFacilityRoom?: string;
+  interviewFacilityRoomBookingId?: string;
+  interviewOfflineRequestedFacilities?: string[];
+  interviewStep?: 1 | 2 | 3;
+  interviewNotificationsSent?: boolean;
+  interviewNotificationsSentAt?: string;
+  interviewerChangeHistory?: InterviewerChangeHistory[];
+  meetingPlatform?: 'Google Meet' | 'Microsoft Teams' | 'Ruang Interview Kantor' | string;
   meetingLink?: string;
   candidateAttendanceStatus?: 'Terkonfirmasi Hadir' | 'Menunggu Respon' | 'Minta Reschedule' | 'Tidak Hadir';
   interviewScheduleStatus?: 'Belum Dijadwalkan' | 'Menunggu Konfirmasi' | 'Terkonfirmasi (Siap Hari-H)' | 'Dijadwalkan' | 'Reschedule Diminta' | 'Jadwal Diperbarui' | 'Selesai' | 'Dibatalkan';
@@ -709,6 +780,15 @@ export interface Candidate {
     recommendation: 'Direkomendasikan Lolos' | 'Dipertimbangkan' | 'Tidak Direkomendasikan';
   };
   interviewEvaluations?: CandidateInterviewEvaluation[];
+
+  // 6b. Medical Check-Up (MCU) - Opsional / Fleksibel
+  mcuStatus?: 'Belum Dijadwalkan' | 'Dijadwalkan' | 'Menunggu Hasil Lab' | 'Fit (Lolos)' | 'Fit with Note' | 'Unfit (Gugur)';
+  mcuDate?: string;
+  mcuClinicOrHospital?: string;
+  mcuPackage?: string;
+  mcuNotes?: string;
+  mcuResultDocument?: string;
+  mcuDecision?: 'Lolos ke Offering' | 'Perlu Pemeriksaan Ulang' | 'Gugur / Unfit';
 
   // 7. Offering
   offeredSalary?: number;
