@@ -146,6 +146,7 @@ export interface DynamicOfferingInsurance {
 
 export 
 function numberToTerbilang(nilai: number): string {
+  if (isNaN(nilai) || !isFinite(nilai) || nilai <= 0) return 'Nol';
   const bilangan = ['', 'Satu', 'Dua', 'Tiga', 'Empat', 'Lima', 'Enam', 'Tujuh', 'Delapan', 'Sembilan', 'Sepuluh', 'Sebelas'];
   const n = Math.floor(Math.abs(nilai));
   if (n < 12) return bilangan[n];
@@ -160,77 +161,9 @@ function numberToTerbilang(nilai: number): string {
   return numberToTerbilang(Math.floor(n / 1000000000000)) + ' Triliun ' + numberToTerbilang(n % 1000000000000);
 }
 
-function formatTerbilangRupiah(n: number): string {
-  if (!n || n <= 0) return 'Nol Rupiah';
+function formatTerbilangRupiah(n: number | null | undefined): string {
+  if (!n || isNaN(n) || !isFinite(n) || n <= 0) return 'Nol Rupiah';
   return (numberToTerbilang(n).trim().replace(/\s+/g, ' ') + ' Rupiah');
-}
-
-function solveGrossFromTargetTHP(
-  targetTHP: number,
-  ptkp: PTKPStatus,
-  basicRatio: number = 0.75,
-  enabledBenefits: { bpjsKes: boolean; bpjsJht: boolean; bpjsJp: boolean } = {
-    bpjsKes: true,
-    bpjsJht: true,
-    bpjsJp: true,
-  }
-) {
-  let low = Math.max(targetTHP, 3000000);
-  let high = targetTHP * 1.6;
-  let bestGross = targetTHP;
-  let bestDiff = Infinity;
-
-  const maxWageKes = 12000000;
-  const maxWageJP = 10042300;
-
-  for (let i = 0; i < 45; i++) {
-    const mid = (low + high) / 2;
-    const basic = Math.round(mid * basicRatio);
-    const wageForKes = Math.min(basic, maxWageKes);
-    const wageForJP = Math.min(basic, maxWageJP);
-
-    const bpjsKesEmp = enabledBenefits.bpjsKes ? Math.round(wageForKes * 0.01) : 0;
-    const bpjsJhtEmp = enabledBenefits.bpjsJht ? Math.round(basic * 0.02) : 0;
-    const bpjsJpEmp = enabledBenefits.bpjsJp ? Math.round(wageForJP * 0.01) : 0;
-    const bpjsEmp = bpjsKesEmp + bpjsJhtEmp + bpjsJpEmp;
-
-    const tax = calculatePPh21TER(mid, ptkp).taxAmount;
-    const net = mid - bpjsEmp - tax;
-
-    if (Math.abs(net - targetTHP) < Math.abs(bestDiff)) {
-      bestDiff = net - targetTHP;
-      bestGross = mid;
-    }
-
-    if (net < targetTHP) {
-      low = mid;
-    } else {
-      high = mid;
-    }
-  }
-
-  const finalGross = Math.round(bestGross);
-  const finalBasic = Math.round(finalGross * basicRatio);
-  const wageForKes = Math.min(finalBasic, maxWageKes);
-  const wageForJP = Math.min(finalBasic, maxWageJP);
-
-  const bpjsKesEmp = enabledBenefits.bpjsKes ? Math.round(wageForKes * 0.01) : 0;
-  const bpjsJhtEmp = enabledBenefits.bpjsJht ? Math.round(finalBasic * 0.02) : 0;
-  const bpjsJpEmp = enabledBenefits.bpjsJp ? Math.round(wageForJP * 0.01) : 0;
-  const bpjsEmp = bpjsKesEmp + bpjsJhtEmp + bpjsJpEmp;
-
-  const finalTax = calculatePPh21TER(finalGross, ptkp).taxAmount;
-  const finalNet = finalGross - bpjsEmp - finalTax;
-
-  return {
-    gross: finalGross,
-    basicSalary: finalBasic,
-    totalAllowances: finalGross - finalBasic,
-    bpjsEmployee: bpjsEmp,
-    taxAmount: finalTax,
-    net: finalNet,
-    diff: finalNet - targetTHP,
-  };
 }
 
 export const COMPANY_GRADES = [
@@ -4877,6 +4810,196 @@ PT Nusantara Multi Talenta Tbk`);
   const talentPoolCount = candidates.filter(
     (c) => c.stage === 'TalentPool' || c.stage === 'Rejected'
   ).length;
+
+interface NormalizedOfferingBreakdown {
+  calculationMode: 'gross' | 'net';
+  targetThpAmount?: number;
+  basicSalary: number;
+  allowances: {
+    id: string;
+    name: string;
+    type: 'fixed' | 'percent';
+    value: number;
+    amount: number;
+    taxable: boolean;
+  }[];
+  totalAllowances: number;
+  grossSalary: number;
+  ptkpCode: string;
+  ptkpCategory: string;
+  terRatePercent: number;
+  taxAmountMonthly: number;
+  bpjsEmployee: {
+    jht: number;
+    jp: number;
+    kesehatan: number;
+    total: number;
+  };
+  bpjsCompany: {
+    jkk: number;
+    jkm: number;
+    jht: number;
+    jp: number;
+    kesehatan: number;
+    total: number;
+  };
+  insurances: {
+    id: string;
+    name: string;
+    provider: string;
+    category: string;
+    coverage: string;
+    premiumEmployee: number;
+    premiumCompany: number;
+  }[];
+  totalEmployeeInsurances: number;
+  totalCompanyInsurances: number;
+  totalDeductionsEmployee: number;
+  thp: number;
+  costToCompany: number;
+}
+
+function getSafeCandidateOfferingBreakdown(
+  candidate: Candidate | null | undefined,
+  currentCalculatedOffering?: any,
+  currentInsurances?: DynamicOfferingInsurance[]
+): NormalizedOfferingBreakdown {
+  if (!candidate) {
+    return {
+      calculationMode: 'gross',
+      basicSalary: 10000000,
+      allowances: [],
+      totalAllowances: 0,
+      grossSalary: 10000000,
+      ptkpCode: 'TK/0',
+      ptkpCategory: 'TER A',
+      terRatePercent: 1.5,
+      taxAmountMonthly: 150000,
+      bpjsEmployee: { jht: 200000, jp: 100000, kesehatan: 100000, total: 400000 },
+      bpjsCompany: { jkk: 24000, jkm: 30000, jht: 370000, jp: 200000, kesehatan: 400000, total: 1024000 },
+      insurances: [],
+      totalEmployeeInsurances: 0,
+      totalCompanyInsurances: 0,
+      totalDeductionsEmployee: 550000,
+      thp: 9450000,
+      costToCompany: 11024000
+    };
+  }
+
+  // Jika candidate sudah memiliki offeringBreakdown
+  const b: any = candidate.offeringBreakdown || {};
+
+  const grossSalary = b.grossSalary || b.grossMonthly || candidate.offeredSalary || candidate.expectedSalary || currentCalculatedOffering?.grossMonthly || 10000000;
+  const basicSalary = b.basicSalary || Math.round(grossSalary * 0.75);
+  const totalAllowances = b.totalAllowances ?? Math.max(0, grossSalary - basicSalary);
+
+  const rawAllowances: any[] = Array.isArray(b.allowances) && b.allowances.length > 0
+    ? b.allowances
+    : (currentCalculatedOffering?.allowances?.filter((a: any) => a.isEnabled) || [
+        {
+          id: 'alw-def-trans',
+          name: 'Tunjangan Transportasi & Mobilitas',
+          type: 'fixed',
+          value: Math.round(totalAllowances * 0.5),
+          amount: Math.round(totalAllowances * 0.5),
+          taxable: true
+        },
+        {
+          id: 'alw-def-meal',
+          name: 'Tunjangan Uang Makan Siang',
+          type: 'fixed',
+          value: Math.max(0, totalAllowances - Math.round(totalAllowances * 0.5)),
+          amount: Math.max(0, totalAllowances - Math.round(totalAllowances * 0.5)),
+          taxable: false
+        }
+      ]);
+
+  const allowances = rawAllowances.map((a: any) => ({
+    id: a.id || String(Math.random()),
+    name: a.name || 'Tunjangan Tambahan',
+    type: (a.type === 'percent' ? 'percent' : 'fixed') as 'fixed' | 'percent',
+    value: Number(a.value) || 0,
+    amount: Number(a.amount || a.value) || 0,
+    taxable: Boolean(a.taxable)
+  }));
+
+  // Hitung TER otomatis jika tidak ada
+  const terRatePercent = b.terRatePercent ?? currentCalculatedOffering?.terRatePercent ?? 1.5;
+  const ptkpCategory = b.ptkpCategory ?? b.terCategory ?? currentCalculatedOffering?.terCategory ?? 'TER A';
+  const ptkpCode = b.ptkpCode ?? candidate.ptkpStatus ?? 'TK/0';
+  const taxAmountMonthly = b.taxAmountMonthly ?? b.taxAmount ?? Math.round(grossSalary * (terRatePercent / 100));
+
+  // BPJS Employee
+  const bpjsEmpRaw = b.bpjsEmployee || currentCalculatedOffering?.bpjsEmployee || {};
+  const bpjsEmpJht = Number(bpjsEmpRaw.jht) || Math.round(basicSalary * 0.02);
+  const bpjsEmpJp = Number(bpjsEmpRaw.jp) || Math.round(Math.min(basicSalary, 10042300) * 0.01);
+  const bpjsEmpKes = Number(bpjsEmpRaw.kesehatan ?? bpjsEmpRaw.kes) || Math.round(Math.min(grossSalary, 12000000) * 0.01);
+  const bpjsEmpTotal = bpjsEmpRaw.total ? Number(bpjsEmpRaw.total) : (bpjsEmpJht + bpjsEmpJp + bpjsEmpKes);
+
+  // BPJS Company
+  const bpjsCompRaw = b.bpjsCompany || currentCalculatedOffering?.bpjsCompany || {};
+  const bpjsCompJkk = Number(bpjsCompRaw.jkk) || Math.round(basicSalary * 0.0024);
+  const bpjsCompJkm = Number(bpjsCompRaw.jkm) || Math.round(basicSalary * 0.0030);
+  const bpjsCompJht = Number(bpjsCompRaw.jht) || Math.round(basicSalary * 0.037);
+  const bpjsCompJp = Number(bpjsCompRaw.jp) || Math.round(Math.min(basicSalary, 10042300) * 0.02);
+  const bpjsCompKes = Number(bpjsCompRaw.kesehatan ?? bpjsCompRaw.kes) || Math.round(Math.min(grossSalary, 12000000) * 0.04);
+  const bpjsCompTotal = bpjsCompRaw.total ? Number(bpjsCompRaw.total) : (bpjsCompJkk + bpjsCompJkm + bpjsCompJht + bpjsCompJp + bpjsCompKes);
+
+  // Insurances
+  const rawInsurances: any[] = Array.isArray(b.insurances) && b.insurances.length > 0
+    ? b.insurances
+    : (currentInsurances?.filter((i: any) => i.isEnabled) || []);
+
+  const insurances = rawInsurances.map((ins: any) => ({
+    id: ins.id || String(Math.random()),
+    name: ins.name || 'Asuransi Kesehatan Karyawan',
+    provider: ins.provider || 'Mandiri Inhealth',
+    category: ins.category || 'Kesehatan Swasta',
+    coverage: ins.coverage || 'Rawat Inap & Jalan Kelas 1',
+    premiumEmployee: Number(ins.premiumEmployee) || 0,
+    premiumCompany: Number(ins.premiumCompany) || 0
+  }));
+
+  const totalEmployeeInsurances = b.totalEmployeeInsurances ?? insurances.reduce((acc: number, cur: any) => acc + cur.premiumEmployee, 0);
+  const totalCompanyInsurances = b.totalCompanyInsurances ?? insurances.reduce((acc: number, cur: any) => acc + cur.premiumCompany, 0);
+
+  const totalDeductionsEmployee = b.totalDeductionsEmployee ?? b.totalEmployeeDeductions ?? (taxAmountMonthly + bpjsEmpTotal + totalEmployeeInsurances);
+  const thp = b.thp ?? b.netTakeHomePay ?? b.takeHomePay ?? Math.max(0, grossSalary - totalDeductionsEmployee);
+  const costToCompany = b.costToCompany ?? (grossSalary + bpjsCompTotal + totalCompanyInsurances);
+
+  return {
+    calculationMode: b.calculationMode || 'gross',
+    targetThpAmount: b.targetThpAmount || thp,
+    basicSalary,
+    allowances,
+    totalAllowances,
+    grossSalary,
+    ptkpCode,
+    ptkpCategory,
+    terRatePercent,
+    taxAmountMonthly,
+    bpjsEmployee: {
+      jht: bpjsEmpJht,
+      jp: bpjsEmpJp,
+      kesehatan: bpjsEmpKes,
+      total: bpjsEmpTotal
+    },
+    bpjsCompany: {
+      jkk: bpjsCompJkk,
+      jkm: bpjsCompJkm,
+      jht: bpjsCompJht,
+      jp: bpjsCompJp,
+      kesehatan: bpjsCompKes,
+      total: bpjsCompTotal
+    },
+    insurances,
+    totalEmployeeInsurances,
+    totalCompanyInsurances,
+    totalDeductionsEmployee,
+    thp,
+    costToCompany
+  };
+}
 
   return (
     <div className="space-y-4">
@@ -16868,44 +16991,13 @@ PT Nusantara Multi Talenta Tbk`);
         </div>
       )}
 
-      {/* ===================== MODAL 7b: PREVIEW CETAK DOKUMEN OFFERING LETTER BER-QR ===================== */}
+      
+
+
+{/* ===================== MODAL 7b: PREVIEW CETAK DOKUMEN OFFERING LETTER BER-QR ===================== */}
       {isOfferingDocPreviewOpen && activeCandidate && (() => {
-        // Retrieve dynamic breakdown from candidate or from current active calculation
-        const breakdown = activeCandidate.offeringBreakdown || {
-          calculationMode: offeringMode,
-          targetThpAmount: calculatedOffering.targetThpAmount,
-          basicSalary: calculatedOffering.basicSalary,
-          allowances: calculatedOffering.allowances.map(a => ({
-            id: a.id,
-            name: a.name,
-            type: a.type,
-            value: a.value,
-            amount: a.amount,
-            taxable: a.taxable
-          })),
-          totalAllowances: calculatedOffering.totalAllowances,
-          grossSalary: calculatedOffering.grossSalary,
-          ptkpCode: calculatedOffering.ptkpCode,
-          ptkpCategory: calculatedOffering.ptkpCategory,
-          terRatePercent: calculatedOffering.terRatePercent,
-          taxAmountMonthly: calculatedOffering.taxAmountMonthly,
-          bpjsEmployee: calculatedOffering.bpjsEmployee,
-          bpjsCompany: calculatedOffering.bpjsCompany,
-          insurances: calculatedOffering.insurances.map(ins => ({
-            id: ins.id,
-            name: ins.name,
-            provider: ins.provider,
-            category: ins.category,
-            coverage: ins.coverage,
-            premiumEmployee: ins.premiumEmployee,
-            premiumCompany: ins.premiumCompany
-          })),
-          totalEmployeeInsurances: calculatedOffering.totalEmployeeInsurances,
-          totalCompanyInsurances: calculatedOffering.totalCompanyInsurances,
-          totalDeductionsEmployee: calculatedOffering.totalDeductionsEmployee,
-          thp: calculatedOffering.thp,
-          costToCompany: calculatedOffering.costToCompany
-        };
+        // Retrieve dynamic breakdown safely without throwing runtime errors
+        const breakdown = getSafeCandidateOfferingBreakdown(activeCandidate, calculatedOffering, offeringInsurances);
 
         const currentVacancy = vacancies.find((v) => v.id === activeCandidate.jobVacancyId);
         const vacancyTitle = currentVacancy?.title || activeCandidate.role || 'Professional Specialist';
