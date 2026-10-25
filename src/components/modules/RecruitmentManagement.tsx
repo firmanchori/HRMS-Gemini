@@ -52,6 +52,7 @@ import {
   Mail,
   MapPin,
   ChevronRight,
+  ChevronLeft,
   ChevronDown,
   LayoutGrid,
   List,
@@ -399,16 +400,16 @@ const EmployeeSelectDropdown: React.FC<EmployeeSelectDropdownProps> = ({
             </div>
           </div>
         ) : (
-          <div className="flex items-center gap-2 text-slate-400 text-xs py-0.5">
+          <div className="flex items-center gap-2 text-slate-400 text-xs py-0.5 flex-1 min-w-0">
             <div className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 shrink-0">
               <User className="w-4 h-4" />
             </div>
-            <span className="truncate">{placeholder}</span>
+            <span className="truncate min-w-0">{placeholder}</span>
           </div>
         )}
 
         <ChevronDown
-          className={`w-4 h-4 text-slate-400 shrink-0 transition-transform ${
+          className={`w-4 h-4 text-slate-400 shrink-0 ml-auto transition-transform ${
             isOpen ? 'rotate-180 text-blue-600' : ''
           }`}
         />
@@ -5433,24 +5434,36 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
 
           {/* 4 Clean Columns: Applied (Screening & Profiling) -> Assessment -> Interview -> Medical Check-Up */}
           {pipelineViewMode === 'board' ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-start w-full">
-              {selectionStages.map((stg) => {
-                const stageCandidates = pipelineCandidates.filter((c) => isCandidateInStage(c, stg.stage));
+            <div className="space-y-2 w-full">
+              {/* Petunjuk Geser Horizontal di Mode Tablet & Mobile */}
+              <div className="lg:hidden flex items-center justify-between px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg text-blue-900 text-[11px] font-medium shadow-2xs">
+                <span className="flex items-center gap-1.5">
+                  <ArrowRight className="w-3.5 h-3.5 text-blue-600 animate-pulse shrink-0" />
+                  <span>Geser horizontal untuk melihat 4 tahapan pipeline rekrutmen lengkap</span>
+                </span>
+                <span className="text-[10px] bg-white px-2 py-0.5 rounded border border-blue-200 font-bold text-blue-800 shrink-0">
+                  Mode Tablet / Mobile
+                </span>
+              </div>
 
-                return (
-                  <div
-                    key={stg.stage}
-                    className="bg-white rounded-xl border border-slate-200 shadow-2xs flex flex-col min-h-[520px]"
-                  >
+              <div className="flex lg:grid lg:grid-cols-4 gap-4 items-start w-full overflow-x-auto pb-4 pt-1">
+                {selectionStages.map((stg) => {
+                  const stageCandidates = pipelineCandidates.filter((c) => isCandidateInStage(c, stg.stage));
+
+                  return (
+                    <div
+                      key={stg.stage}
+                      className="bg-white rounded-xl border border-slate-200 shadow-2xs flex flex-col min-h-[520px] w-[310px] sm:w-[335px] lg:w-auto lg:min-w-0 shrink-0"
+                    >
                     <div className={`p-3 border-b-2 ${stg.headerAccent} bg-slate-50/80 rounded-t-xl`}>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-1.5">
-                          <span className="w-5 h-5 rounded-full bg-slate-200 text-slate-800 text-[10px] font-bold flex items-center justify-center font-mono">
+                      <div className="flex items-center justify-between gap-1.5 flex-wrap">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="w-5 h-5 rounded-full bg-slate-200 text-slate-800 text-[10px] font-bold flex items-center justify-center font-mono shrink-0">
                             {stg.number}
                           </span>
-                          <span className="font-bold text-slate-900 text-xs">{stg.title}</span>
+                          <span className="font-bold text-slate-900 text-xs truncate">{stg.title}</span>
                         </div>
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1.5 shrink-0">
                           {stg.stage === 'Applied' && (
                             <button
                               type="button"
@@ -5458,10 +5471,10 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                                 resetCandidateModal();
                                 setIsCandidateModalOpen(true);
                               }}
-                              className="px-2 py-0.5 rounded bg-blue-700 hover:bg-blue-800 text-white font-semibold text-[10px] shadow-2xs flex items-center gap-1 transition-colors"
+                              className="px-2 py-1 rounded bg-blue-700 hover:bg-blue-800 text-white font-bold text-[10px] shadow-2xs flex items-center gap-1 transition-colors"
                               title="Upload File CV PDF & Registrasi Pelamar"
                             >
-                              <UploadCloud className="w-3 h-3" />
+                              <UploadCloud className="w-3 h-3 shrink-0" />
                               <span>+ Upload CV</span>
                             </button>
                           )}
@@ -5515,7 +5528,7 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                               className="p-3 bg-white border border-slate-200 rounded-lg shadow-2xs hover:shadow-xs transition-shadow space-y-2.5"
                             >
                               <div className="space-y-1">
-                                <div className="flex items-start justify-between gap-2">
+                                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-1">
                                   <h4 className="font-bold text-slate-900 text-xs leading-snug break-words flex-1 min-w-0" title={candidate.name}>
                                     {candidate.name}
                                   </h4>
@@ -5523,18 +5536,18 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                                     const pCfg = getPortalBadgeConfig(candidate.sourcePortal);
                                     return (
                                       <span
-                                        className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border shadow-2xs shrink-0 ${pCfg.badgeClass}`}
+                                        className={`inline-flex items-center gap-1 text-[9.5px] font-semibold px-2 py-0.5 rounded-full border shadow-2xs shrink-0 self-start ${pCfg.badgeClass}`}
                                         title={`Sumber Pelamar: ${candidate.sourcePortal}`}
                                       >
                                         <span className={`w-1.5 h-1.5 rounded-full ${pCfg.dotClass} shrink-0`} />
-                                        <span className="max-w-[85px] truncate">{pCfg.label}</span>
+                                        <span className="max-w-[110px] truncate">{pCfg.label}</span>
                                       </span>
                                     );
                                   })()}
                                 </div>
 
                                 <div className="flex items-center gap-1.5 flex-wrap">
-                                  <span className="text-[10px] text-slate-500 font-medium truncate max-w-[140px]" title={candidate.lastCompany}>
+                                  <span className="text-[10px] text-slate-500 font-medium truncate max-w-[180px]" title={candidate.lastCompany}>
                                     {candidate.lastCompany || 'Pelamar Baru'}
                                   </span>
                                   {candidate.parsedData && candidate.parsedData.totalExperienceYears >= 3 && (
@@ -5556,13 +5569,13 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                                 return (
                                   <div className="space-y-1.5 pt-0.5">
                                     {/* 1. Box Indikator Persentase Hasil Parsing CV */}
-                                    <div className={`p-2 rounded-lg border ${pResult.bgClass} space-y-1`}>
-                                      <div className="flex items-center justify-between text-[10px]">
+                                    <div className={`p-2.5 rounded-lg border ${pResult.bgClass} space-y-1.5`}>
+                                      <div className="flex items-center justify-between gap-1 flex-wrap text-[10px]">
                                         <span className="font-bold text-slate-800 flex items-center gap-1">
-                                          <Sparkles className="w-3 h-3 text-blue-600 shrink-0" />
+                                          <Sparkles className="w-3.5 h-3.5 text-blue-600 shrink-0" />
                                           <span>Hasil Parsing CV</span>
                                         </span>
-                                        <span className={`font-mono font-bold text-[10px] px-1.5 py-0.2 rounded border ${pResult.badgeClass}`}>
+                                        <span className={`font-mono font-bold text-[10px] px-2 py-0.5 rounded border ${pResult.badgeClass}`}>
                                           {pResult.label}
                                         </span>
                                       </div>
@@ -5573,11 +5586,11 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                                           style={{ width: `${pResult.score}%` }}
                                         />
                                       </div>
-                                      <div className="text-[9px] text-slate-600 line-clamp-1" title={pResult.note}>
+                                      <div className="text-[9.5px] text-slate-600 leading-normal" title={pResult.note}>
                                         {pResult.note}
                                       </div>
-                                      {/* Nama file CV diletakkan langsung di bawah hasil parsing & ganti nama jadi Preview CV */}
-                                      <div className="flex items-center justify-between text-[10px] bg-blue-50/70 hover:bg-blue-100/70 text-blue-900 border border-blue-200/80 px-2.5 py-1.5 rounded-lg transition-colors shadow-2xs">
+                                      {/* Preview CV & Download */}
+                                      <div className="flex items-center justify-between text-[10.5px] bg-blue-50/80 hover:bg-blue-100 text-blue-900 border border-blue-200 px-2.5 py-1.5 rounded-lg transition-colors shadow-2xs">
                                         <button
                                           type="button"
                                           onClick={(e) => {
@@ -5589,7 +5602,7 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                                         >
                                           <FileText className="w-3.5 h-3.5 text-blue-600 shrink-0 group-hover:scale-110 transition-transform" />
                                           <span className="truncate">Preview CV</span>
-                                          <span className="text-[9px] text-blue-600 font-normal">({candidate.cvFileSize || 'PDF Terlampir'})</span>
+                                          <span className="text-[9.5px] text-blue-700 font-normal">({candidate.cvFileSize || 'PDF'})</span>
                                         </button>
                                         <button
                                           type="button"
@@ -5597,23 +5610,23 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                                             e.stopPropagation();
                                             handleDownloadCv(candidate);
                                           }}
-                                          className="p-1 hover:bg-blue-200 text-blue-700 rounded transition-colors shrink-0"
+                                          className="p-1 hover:bg-blue-200 text-blue-700 rounded transition-colors shrink-0 ml-1"
                                           title="Download Berkas CV (PDF)"
                                         >
-                                          <Download className="w-3 h-3" />
+                                          <Download className="w-3.5 h-3.5" />
                                         </button>
                                       </div>
                                     </div>
 
                                     {/* 2. Box Hasil Screening Kualifikasi & Keyword Match */}
                                     {isParsingDoubtful ? (
-                                      <div className="p-2 rounded-lg bg-amber-50/80 border border-amber-200 text-amber-900 space-y-1">
-                                        <div className="flex items-center justify-between text-[10px]">
+                                      <div className="p-2.5 rounded-lg bg-amber-50/80 border border-amber-200 text-amber-900 space-y-1">
+                                        <div className="flex items-center justify-between gap-1 flex-wrap text-[10px]">
                                           <span className="font-bold flex items-center gap-1 text-amber-800">
-                                            <AlertTriangle className="w-3 h-3 text-amber-600 shrink-0" />
+                                            <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                                             <span>Screening Ragu</span>
                                           </span>
-                                          <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 border border-amber-300">
+                                          <span className="text-[9.5px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-300">
                                             Data Minim
                                           </span>
                                         </div>
@@ -5622,17 +5635,17 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                                         </p>
                                       </div>
                                     ) : (
-                                      <div className="p-2 rounded-lg bg-sky-50/70 border border-sky-200 space-y-1 text-[10px]">
-                                        <div className="flex items-center justify-between">
+                                      <div className="p-2.5 rounded-lg bg-sky-50/70 border border-sky-200 space-y-1 text-[10px]">
+                                        <div className="flex items-center justify-between gap-1.5 flex-wrap">
                                           <span className="font-semibold text-sky-950 flex items-center gap-1">
-                                            <FileCheck className="w-3 h-3 text-sky-600 shrink-0" />
+                                            <FileCheck className="w-3.5 h-3.5 text-sky-600 shrink-0" />
                                             <span>Screening Kualifikasi:</span>
                                           </span>
-                                          <span className="font-mono font-bold px-1.5 py-0.2 rounded bg-sky-100 text-sky-800 border border-sky-300">
+                                          <span className="font-mono font-bold px-2 py-0.5 rounded bg-sky-100 text-sky-800 border border-sky-300">
                                             {candidate.aiMatchScore || 85}% Match
                                           </span>
                                         </div>
-                                        <div className="text-[9.5px] text-slate-600 line-clamp-1">
+                                        <div className="text-[9.5px] text-slate-600 leading-tight">
                                           {candidate.screeningNotes || 'Kualifikasi cocok dengan requirement lowongan.'}
                                         </div>
                                       </div>
@@ -5807,15 +5820,15 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
 
                                   return (
                                     <>
-                                      {/* 1. Tombol Utama: Hasil Screening, Rincian Profiling & Scoring Keyword Match */}
+                                      {/* 1. Tombol Utama: Hasil Screening, Profiling & Scoring */}
                                       <button
                                         type="button"
                                         onClick={() => handleOpenAppliedProfilingModal(candidate, false)}
-                                        className="w-full py-2 px-2 text-[10px] font-bold bg-blue-50 text-blue-800 hover:bg-blue-100 active:bg-blue-200 border border-blue-300 rounded-lg flex items-center justify-center gap-1.5 transition-colors shadow-2xs group text-center"
+                                        className="w-full py-2 px-2 text-[10.5px] font-bold bg-blue-50 text-blue-900 hover:bg-blue-100 active:bg-blue-200 border border-blue-300 rounded-lg flex items-center justify-center gap-1.5 transition-colors shadow-2xs group text-center"
                                         title="Buka Hasil Screening Kualifikasi, Rincian Profiling CV & Scoring Keyword Match"
                                       >
                                         <Sparkles className="w-3.5 h-3.5 text-blue-600 shrink-0 group-hover:rotate-12 transition-transform" />
-                                        <span className="leading-tight text-center">Hasil Screening, Rincian Profiling & Scoring Keyword Match</span>
+                                        <span className="leading-tight text-center">Hasil Screening, Profiling & Scoring Match</span>
                                       </button>
 
                                       {/* 2. Tombol Koreksi Screening Manual */}
@@ -5832,60 +5845,60 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                                         {isParsingDoubtful ? (
                                           <>
                                             <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                                            <span>Input Screening Manual (Wajib - Data Minim)</span>
+                                            <span>Input Screening Manual (Wajib)</span>
                                           </>
                                         ) : (
                                           <>
-                                            <Pencil className="w-3 h-3 text-slate-500 shrink-0" />
+                                            <Pencil className="w-3.5 h-3.5 text-slate-500 shrink-0" />
                                             <span>Koreksi Screening Manual</span>
                                           </>
                                         )}
                                       </button>
 
-                                      {/* 3. Dua Opsi Shortlist (Wajib ada confirm box): Ke Assessment & Ke Interview */}
+                                      {/* 3. Dua Opsi Shortlist: Ke Assessment & Ke Interview */}
                                       <div className="pt-1 border-t border-slate-100 space-y-1">
                                         <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">Opsi Shortlist:</span>
                                         <div className="grid grid-cols-2 gap-1.5">
                                           <button
                                             type="button"
                                             onClick={() => setConfirmAssessmentCandidate(candidate)}
-                                            className="w-full py-1.5 px-1 text-[9.5px] font-bold bg-blue-700 hover:bg-blue-800 active:bg-blue-900 text-white rounded flex items-center justify-center gap-1 transition-colors shadow-2xs truncate"
+                                            className="w-full py-1.5 px-1.5 text-[10px] font-bold bg-blue-700 hover:bg-blue-800 active:bg-blue-900 text-white rounded flex items-center justify-center gap-1 transition-colors shadow-2xs text-center"
                                             title="Shortlist pelamar ke proses Tes Kompetensi (Asesmen)"
                                           >
                                             <Award className="w-3 h-3 shrink-0" />
-                                            <span className="truncate">Ke Assessment</span>
+                                            <span>Ke Assessment</span>
                                           </button>
                                           <button
                                             type="button"
                                             onClick={() => setConfirmInterviewCandidate(candidate)}
-                                            className="w-full py-1.5 px-1 text-[9.5px] font-bold bg-indigo-700 hover:bg-indigo-800 active:bg-indigo-900 text-white rounded flex items-center justify-center gap-1 transition-colors shadow-2xs truncate"
+                                            className="w-full py-1.5 px-1.5 text-[10px] font-bold bg-indigo-700 hover:bg-indigo-800 active:bg-indigo-900 text-white rounded flex items-center justify-center gap-1 transition-colors shadow-2xs text-center"
                                             title="Langsung Shortlist ke Wawancara (User)"
                                           >
                                             <Video className="w-3 h-3 shrink-0" />
-                                            <span className="truncate">Ke Interview</span>
+                                            <span>Ke Interview</span>
                                           </button>
                                         </div>
                                       </div>
 
-                                      {/* 4. Dibawahnya ada 2 opsi (Wajib ada confirm box): Masukan Talent Pool & Tolak */}
+                                      {/* 4. Dua Opsi: Masukan Talent Pool & Tolak */}
                                       <div className="pt-1 border-t border-slate-100 grid grid-cols-2 gap-1.5">
                                         <button
                                           type="button"
                                           onClick={() => handleOpenTalentPoolModal(candidate)}
-                                          className="w-full py-1.5 px-1 text-[9.5px] font-bold bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 rounded flex items-center justify-center gap-1 transition-colors shadow-2xs truncate"
-                                          title="Pindahkan kandidat ke Talent Pool untuk kebutuhan mendatang (melalui konfirmasi)"
+                                          className="w-full py-1.5 px-1 text-[10px] font-bold bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 rounded flex items-center justify-center gap-1 transition-colors shadow-2xs text-center"
+                                          title="Pindahkan kandidat ke Talent Pool untuk kebutuhan mendatang"
                                         >
                                           <FolderPlus className="w-3 h-3 text-amber-600 shrink-0" />
-                                          <span className="truncate">Masukan Talent Pool</span>
+                                          <span>Talent Pool</span>
                                         </button>
                                         <button
                                           type="button"
                                           onClick={() => handleOpenRejectModal(candidate)}
-                                          className="w-full py-1.5 px-1 text-[9.5px] font-bold bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 rounded flex items-center justify-center gap-1 transition-colors shadow-2xs truncate"
-                                          title="Tolak lamaran kandidat & kirimkan pesan penolakan resmi (melalui konfirmasi)"
+                                          className="w-full py-1.5 px-1 text-[10px] font-bold bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 rounded flex items-center justify-center gap-1 transition-colors shadow-2xs text-center"
+                                          title="Tolak lamaran kandidat & kirimkan pesan penolakan resmi"
                                         >
                                           <UserX className="w-3 h-3 text-rose-600 shrink-0" />
-                                          <span className="truncate">Tolak</span>
+                                          <span>Tolak</span>
                                         </button>
                                       </div>
                                     </>
@@ -6173,6 +6186,7 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                   </div>
                 );
               })}
+              </div>
             </div>
           ) : (
             <div className="bg-white border border-slate-200 rounded-xl shadow-2xs overflow-hidden">
@@ -11281,40 +11295,42 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                                     </span>
                                   </div>
 
-                                  <div className="flex items-center gap-1.5">
+                                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                                     <input
                                       type="text"
                                       readOnly
                                       value={`${window.location.origin}/?testToken=${cfg.testToken || 'token-not-generated'}`}
-                                      className="flex-1 px-3 py-1.5 border border-slate-300 rounded-lg text-xs font-mono bg-slate-50 text-blue-900 font-semibold select-all"
+                                      className="w-full sm:flex-1 px-3 py-2 border border-slate-300 rounded-lg text-xs font-mono bg-slate-50 text-blue-900 font-semibold select-all truncate"
                                     />
-                                    <button
-                                      type="button"
-                                      onClick={() => handleCopyTestLink(cfg.testToken)}
-                                      className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors shrink-0"
-                                      title="Salin Link Halaman Ujian"
-                                    >
-                                      {copyLinkSuccess === cfg.testToken ? (
-                                        <>
-                                          <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
-                                          <span className="text-emerald-700">Tersalin!</span>
-                                        </>
-                                      ) : (
-                                        <>
-                                          <Copy className="w-3.5 h-3.5 text-slate-600" />
-                                          <span>Copy Link</span>
-                                        </>
-                                      )}
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleOpenTestPageInNewTab(cfg.testToken)}
-                                      className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors shrink-0"
-                                      title="Buka halaman ujian langsung di tab baru (Preview)"
-                                    >
-                                      <ExternalLink className="w-3.5 h-3.5 text-blue-600" />
-                                      <span>Buka Halaman</span>
-                                    </button>
+                                    <div className="flex items-center gap-2 shrink-0">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleCopyTestLink(cfg.testToken)}
+                                        className="flex-1 sm:flex-initial px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors shadow-2xs"
+                                        title="Salin Link Halaman Ujian"
+                                      >
+                                        {copyLinkSuccess === cfg.testToken ? (
+                                          <>
+                                            <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
+                                            <span className="text-emerald-700">Tersalin!</span>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <Copy className="w-3.5 h-3.5 text-slate-600" />
+                                            <span>Copy Link</span>
+                                          </>
+                                        )}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleOpenTestPageInNewTab(cfg.testToken)}
+                                        className="flex-1 sm:flex-initial px-3.5 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors shadow-2xs"
+                                        title="Buka halaman ujian langsung di tab baru (Preview)"
+                                      >
+                                        <ExternalLink className="w-3.5 h-3.5 text-blue-600" />
+                                        <span>Buka Halaman</span>
+                                      </button>
+                                    </div>
                                   </div>
 
                                   {/* Baris Tombol Aksi: Generate Ulang & Kirim Konten Lengkap */}
@@ -11476,100 +11492,75 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                                         </div>
                                       </div>
 
-                                      {/* ==================== 2. FASILITAS BY REQUEST SESUAI KEBUTUHAN ==================== */}
-                                      <div className="p-3 bg-indigo-50/50 border border-indigo-200 rounded-xl space-y-2">
+                                      {/* ==================== 2. FASILITAS TAMBAHAN ==================== */}
+                                      <div className="p-3.5 bg-indigo-50/50 border border-indigo-200 rounded-xl space-y-2.5">
                                         <div className="flex items-center justify-between">
                                           <div className="flex items-center gap-1.5">
                                             <Sliders className="w-4 h-4 text-indigo-700" />
                                             <span className="font-bold text-indigo-950 text-xs">
-                                              Fasilitas & Peralatan Tambahan (Disediakan By Request Sesuai Kebutuhan):
+                                              Fasilitas & Peralatan Tambahan:
                                             </span>
                                           </div>
                                           <span className="text-[10px] font-semibold text-indigo-700 bg-indigo-100/70 px-2 py-0.5 rounded">
-                                            {requestedFacs.length} Item Di-request
+                                            {requestedFacs.length} Item Terdaftar
                                           </span>
                                         </div>
 
-                                        <div className="space-y-2">
-                                          <p className="text-[10px] text-slate-500">
-                                            Pilih rekomendasi peralatan GA atau ketik langsung peralatan tambahan yang diperlukan:
-                                          </p>
+                                        <div>
+                                          <textarea
+                                            rows={2}
+                                            value={requestedFacs.join(', ')}
+                                            onChange={(e) => {
+                                              const val = e.target.value;
+                                              const parsed = val
+                                                .split(/[,;]+/)
+                                                .map((s) => s.trim())
+                                                .filter(Boolean);
+                                              handleUpdateAssignedConfig(testId, {
+                                                offlineRequestedFacilities: parsed,
+                                              });
+                                            }}
+                                            placeholder="Ketik fasilitas dan peralatan tambahan yang diperlukan (pisahkan dengan koma atau titik koma)..."
+                                            className="w-full px-3 py-2 border border-indigo-200 rounded-lg text-xs bg-white text-slate-900 placeholder:text-slate-400 focus:ring-1 focus:ring-indigo-500 font-medium"
+                                          />
+                                        </div>
 
-                                          <div className="flex flex-wrap gap-1.5 pt-0.5">
-                                            {availableRequestFacs.map((rfac, rfIdx) => {
-                                              const isSelected = requestedFacs.includes(rfac);
-                                              return (
-                                                <button
-                                                  key={rfIdx}
-                                                  type="button"
-                                                  onClick={() => {
-                                                    const next = isSelected
-                                                      ? requestedFacs.filter((f) => f !== rfac)
-                                                      : [...requestedFacs, rfac];
-                                                    handleUpdateAssignedConfig(testId, {
-                                                      offlineRequestedFacilities: next,
-                                                    });
-                                                  }}
-                                                  className={`px-2.5 py-1 rounded-lg text-[10px] font-semibold border transition-all flex items-center gap-1.5 ${
-                                                    isSelected
-                                                      ? 'bg-indigo-600 text-white border-indigo-700 shadow-2xs'
-                                                      : 'bg-white text-slate-700 border-indigo-200 hover:border-indigo-300'
-                                                  }`}
-                                                >
-                                                  {isSelected ? (
-                                                    <Check className="w-3 h-3 text-white" />
-                                                  ) : (
-                                                    <Plus className="w-3 h-3 text-indigo-500" />
-                                                  )}
-                                                  <span>{rfac}</span>
-                                                </button>
-                                              );
-                                            })}
-                                          </div>
-
-                                          {/* Manual Input Pemisah Koma atau Titik Koma */}
-                                          <div className="pt-2 border-t border-indigo-100">
-                                            <label className="text-[10px] font-bold text-indigo-900 block mb-1">
-                                              Fasilitas & Peralatan Tambahan yang Diperlukan (Input manual pemisah koma ',' atau titik koma ';'):
-                                            </label>
-                                            <textarea
-                                              rows={2}
-                                              value={requestedFacs.join(', ')}
-                                              onChange={(e) => {
-                                                const val = e.target.value;
-                                                const parsed = val
-                                                  .split(/[,;]+/)
-                                                  .map((s) => s.trim())
-                                                  .filter(Boolean);
-                                                handleUpdateAssignedConfig(testId, {
-                                                  offlineRequestedFacilities: parsed,
-                                                });
-                                              }}
-                                              placeholder="Contoh: Laptop Pinjaman Peserta, Sound System & Clip-on Mic; 2 Kabel Roll Ekstensi, Proyektor HDMI..."
-                                              className="w-full px-3 py-1.5 border border-indigo-200 rounded-lg text-xs bg-white text-slate-900 placeholder:text-slate-400 focus:ring-1 focus:ring-indigo-500 font-medium"
-                                            />
-                                            <span className="text-[9.5px] text-slate-500 block mt-0.5">
-                                              💡 Pisahkan dengan koma (,) atau titik koma (;) untuk menambah atau mengubah fasilitas tambahan GA.
+                                        {/* Otomatis ter-list di bawahnya terpisah sesuai isian textarea */}
+                                        {requestedFacs.length > 0 && (
+                                          <div className="space-y-1 pt-1 border-t border-indigo-100">
+                                            <span className="text-[9.5px] text-slate-500 font-semibold block">
+                                              Daftar Fasilitas & Peralatan Tambahan (Otomatis Ter-list):
                                             </span>
+                                            <div className="flex flex-wrap gap-1.5">
+                                              {requestedFacs.map((rfac, rfIdx) => (
+                                                <span
+                                                  key={rfIdx}
+                                                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-semibold bg-white text-indigo-900 border border-indigo-300 shadow-2xs"
+                                                >
+                                                  <Check className="w-3 h-3 text-indigo-600" />
+                                                  <span>{rfac}</span>
+                                                </span>
+                                              ))}
+                                            </div>
                                           </div>
+                                        )}
 
-                                          {/* Catatan Request Khusus GA / IT */}
-                                          <div className="pt-1.5 border-t border-indigo-100">
-                                            <label className="text-[10px] font-bold text-indigo-900 block mb-1">
-                                              Catatan Kebutuhan Khusus Lainnya ke Tim GA & IT:
-                                            </label>
-                                            <input
-                                              type="text"
-                                              value={cfg.offlineRequestNotes || ''}
-                                              onChange={(e) =>
-                                                handleUpdateAssignedConfig(testId, {
-                                                  offlineRequestNotes: e.target.value,
-                                                })
-                                              }
-                                              placeholder="Contoh: Butuh 1 laptop cadangan dan stop kontak ekstensi 5 lubang di meja utama..."
-                                              className="w-full px-3 py-1.5 border border-indigo-200 rounded-lg text-xs bg-white text-slate-900 placeholder:text-slate-400"
-                                            />
-                                          </div>
+                                        {/* Catatan Request Khusus GA / IT */}
+                                        <div className="pt-1.5 border-t border-indigo-100">
+                                          <label className="text-[10px] font-bold text-indigo-900 block mb-1">
+                                            Catatan Kebutuhan Khusus Lainnya ke Tim GA & IT:
+                                          </label>
+                                          <input
+                                            type="text"
+                                            value={cfg.offlineRequestNotes || ''}
+                                            onChange={(e) =>
+                                              handleUpdateAssignedConfig(testId, {
+                                                offlineRequestNotes: e.target.value,
+                                              })
+                                            }
+                                            placeholder="Contoh: Butuh 1 laptop cadangan dan stop kontak ekstensi 5 lubang di meja utama..."
+                                            className="w-full px-3 py-1.5 border border-indigo-200 rounded-lg text-xs bg-white text-slate-900 placeholder:text-slate-400"
+                                          />
                                         </div>
                                       </div>
                                     </div>
@@ -12157,7 +12148,7 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                       </div>
                     </div>
 
-                    {/* Tabel Rincian Semua Tes yang Telah Diuji */}
+                    {/* Rincian Semua Tes yang Telah Diuji (Tabel di Desktop, Card Style di Tablet & Mobile) */}
                     <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-2xs">
                       <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 font-bold text-slate-900 text-xs flex items-center justify-between">
                         <span>Rincian Hasil Penilaian Tiap Jenis Tes</span>
@@ -12165,7 +12156,9 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                           1 Asesor per Jenis Tes
                         </span>
                       </div>
-                      <div className="overflow-x-auto">
+
+                      {/* MODE DESKTOP: TABEL LENGKAP */}
+                      <div className="hidden lg:block overflow-x-auto">
                         <table className="w-full text-left text-xs border-collapse">
                           <thead>
                             <tr className="border-b border-slate-200 bg-slate-50/50 text-[11px] text-slate-500 font-semibold">
@@ -12225,6 +12218,72 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                             })}
                           </tbody>
                         </table>
+                      </div>
+
+                      {/* MODE TABLET & MOBILE: CARD STYLE */}
+                      <div className="block lg:hidden p-3.5 space-y-3 bg-slate-50/50">
+                        {assignedItems.map((item, i) => {
+                          const isPassing = (item.score || 0) >= item.passingGrade;
+                          return (
+                            <div
+                              key={item.id}
+                              className="p-3.5 bg-white rounded-xl border border-slate-200 shadow-2xs space-y-2.5"
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex items-start gap-2">
+                                  <span className="w-6 h-6 rounded-lg bg-indigo-100 text-indigo-800 font-bold flex items-center justify-center text-xs shrink-0 mt-0.5">
+                                    #{i + 1}
+                                  </span>
+                                  <div>
+                                    <h5 className="font-bold text-slate-900 text-xs">{item.testTypeName}</h5>
+                                    <div className="flex items-center gap-1.5 mt-0.5">
+                                      <span className="text-[10px] text-slate-500 font-medium">{item.category}</span>
+                                      <span className="text-[10px] text-slate-300">•</span>
+                                      <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.2 rounded border border-indigo-200">
+                                        {item.format}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+                                <span
+                                  className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
+                                    isPassing
+                                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                      : 'bg-rose-100 text-rose-800 border border-rose-300'
+                                  }`}
+                                >
+                                  {isPassing ? 'Lulus' : 'Tidak Lulus'}
+                                </span>
+                              </div>
+
+                              <div className="grid grid-cols-2 gap-2 p-2.5 bg-slate-50 rounded-lg border border-slate-100 text-[11px]">
+                                <div>
+                                  <span className="text-slate-500 text-[10px] block">Nilai Ujian Pelamar:</span>
+                                  <span className="font-mono font-black text-slate-900 text-sm">
+                                    {item.score ?? '-'} / 100
+                                  </span>
+                                </div>
+                                <div>
+                                  <span className="text-slate-500 text-[10px] block">Passing Grade Acuan:</span>
+                                  <span className="font-mono font-bold text-slate-700 text-xs">
+                                    Min. {item.passingGrade}
+                                  </span>
+                                </div>
+                              </div>
+
+                              <div className="text-[11px] flex items-center justify-between text-slate-700 pt-0.5">
+                                <span className="font-semibold">Asesor: {item.assessorName}</span>
+                                <span className="text-[10px] text-slate-500">[{item.assessorRole || 'Asesor'}]</span>
+                              </div>
+
+                              {item.evaluationNotes && (
+                                <div className="p-2 bg-indigo-50/40 border border-indigo-100 rounded text-[11px] text-slate-600">
+                                  <strong>Catatan Asesor:</strong> {item.evaluationNotes}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
 
@@ -12873,67 +12932,102 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
               </div>
             </div>
 
-            {/* Stepper Wizard Navigation: Tahap 1 -> Tahap 2 -> Tahap 3 */}
-            <div className="px-5 py-2.5 bg-slate-100 border-b border-slate-200 flex items-center justify-between text-xs shrink-0">
-              <div className="flex items-center gap-2 sm:gap-4 overflow-x-auto w-full">
+            {/* Sub-Menu Flow Tabs: Tahap 1 -> Tahap 2 -> Tahap 3 dengan Panah Navigasi Geser */}
+            <div className="px-4 py-2 bg-slate-100 border-b border-slate-200 flex items-center gap-2 text-xs shrink-0 select-none">
+              {/* Tombol Geser Mundur */}
+              <button
+                type="button"
+                onClick={() => setInterviewStep((Math.max(1, interviewStep - 1)) as any)}
+                disabled={interviewStep === 1}
+                className={`p-1.5 rounded-lg border transition-colors shrink-0 ${
+                  interviewStep === 1
+                    ? 'text-slate-300 border-slate-200 bg-slate-50 cursor-not-allowed'
+                    : 'text-indigo-700 border-indigo-200 bg-white hover:bg-indigo-50 shadow-2xs cursor-pointer'
+                }`}
+                title="Geser ke tahap sebelumnya"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+
+              {/* Sub Menu Tab Bar Horizontal Scrollable */}
+              <div className="flex items-center gap-1.5 overflow-x-auto w-full py-0.5 no-scrollbar">
                 {/* Step 1 */}
                 <button
                   type="button"
                   onClick={() => setInterviewStep(1)}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg font-semibold transition-all whitespace-nowrap ${
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg font-bold text-xs transition-all whitespace-nowrap border ${
                     interviewStep === 1
-                      ? 'bg-indigo-600 text-white shadow-2xs'
-                      : 'text-slate-600 hover:bg-slate-200/80'
+                      ? 'bg-indigo-600 text-white border-indigo-700 shadow-2xs'
+                      : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
                   }`}
                 >
-                  <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
-                    interviewStep === 1 ? 'bg-white text-indigo-700' : 'bg-slate-300 text-slate-700'
+                  <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black ${
+                    interviewStep === 1 ? 'bg-white text-indigo-700' : 'bg-slate-100 text-slate-700'
                   }`}>
                     1
                   </span>
                   <span>Jadwal & Tim Panel</span>
                 </button>
 
-                <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
+                <div className="flex items-center text-slate-400 shrink-0 px-0.5">
+                  <ArrowRight className="w-3.5 h-3.5 text-indigo-400" />
+                </div>
 
                 {/* Step 2 */}
                 <button
                   type="button"
                   onClick={() => setInterviewStep(2)}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg font-semibold transition-all whitespace-nowrap ${
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg font-bold text-xs transition-all whitespace-nowrap border ${
                     interviewStep === 2
-                      ? 'bg-indigo-600 text-white shadow-2xs'
-                      : 'text-slate-600 hover:bg-slate-200/80'
+                      ? 'bg-indigo-600 text-white border-indigo-700 shadow-2xs'
+                      : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
                   }`}
                 >
-                  <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
-                    interviewStep === 2 ? 'bg-white text-indigo-700' : 'bg-slate-300 text-slate-700'
+                  <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black ${
+                    interviewStep === 2 ? 'bg-white text-indigo-700' : 'bg-slate-100 text-slate-700'
                   }`}>
                     2
                   </span>
                   <span>Input Nilai per User ({assignedInterviewers.filter(i => i.status !== 'Berhalangan').length} Panelis)</span>
                 </button>
 
-                <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
+                <div className="flex items-center text-slate-400 shrink-0 px-0.5">
+                  <ArrowRight className="w-3.5 h-3.5 text-indigo-400" />
+                </div>
 
                 {/* Step 3 */}
                 <button
                   type="button"
                   onClick={() => setInterviewStep(3)}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg font-semibold transition-all whitespace-nowrap ${
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg font-bold text-xs transition-all whitespace-nowrap border ${
                     interviewStep === 3
-                      ? 'bg-indigo-600 text-white shadow-2xs'
-                      : 'text-slate-600 hover:bg-slate-200/80'
+                      ? 'bg-indigo-600 text-white border-indigo-700 shadow-2xs'
+                      : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
                   }`}
                 >
-                  <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
-                    interviewStep === 3 ? 'bg-white text-indigo-700' : 'bg-slate-300 text-slate-700'
+                  <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black ${
+                    interviewStep === 3 ? 'bg-white text-indigo-700' : 'bg-slate-100 text-slate-700'
                   }`}>
                     3
                   </span>
                   <span>Hasil Akhir & Keputusan Objektif</span>
                 </button>
               </div>
+
+              {/* Tombol Geser Maju */}
+              <button
+                type="button"
+                onClick={() => setInterviewStep((Math.min(3, interviewStep + 1)) as any)}
+                disabled={interviewStep === 3}
+                className={`p-1.5 rounded-lg border transition-colors shrink-0 ${
+                  interviewStep === 3
+                    ? 'text-slate-300 border-slate-200 bg-slate-50 cursor-not-allowed'
+                    : 'text-indigo-700 border-indigo-200 bg-white hover:bg-indigo-50 shadow-2xs cursor-pointer'
+                }`}
+                title="Geser ke tahap selanjutnya"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
             </div>
 
             {/* Modal Body */}
@@ -13207,64 +13301,51 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                                 </div>
                               </div>
 
-                              {/* Available By Request Facilities */}
-                              <div className="space-y-1 pt-1.5">
-                                <span className="text-[10px] uppercase font-bold text-amber-950 tracking-wider block">
-                                  Fasilitas Tambahan yang Disediakan By Request GA:
-                                </span>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                                  {roomData.availableRequestFacilities.map((reqFac, idx) => {
-                                    const isSelected = interviewOfflineRequestedFacilities.includes(reqFac);
-                                    return (
-                                      <label
-                                        key={idx}
-                                        className={`p-1.5 rounded-lg border flex items-center gap-2 cursor-pointer text-[11px] transition-colors ${
-                                          isSelected
-                                            ? 'bg-amber-100 border-amber-400 text-amber-950 font-semibold'
-                                            : 'bg-white border-slate-200 text-slate-700 hover:bg-amber-50'
-                                        }`}
-                                      >
-                                        <input
-                                          type="checkbox"
-                                          checked={isSelected}
-                                          onChange={(e) => {
-                                            if (e.target.checked) {
-                                              setInterviewOfflineRequestedFacilities([...interviewOfflineRequestedFacilities, reqFac]);
-                                            } else {
-                                              setInterviewOfflineRequestedFacilities(interviewOfflineRequestedFacilities.filter(f => f !== reqFac));
-                                            }
-                                          }}
-                                          className="rounded text-amber-600 focus:ring-amber-500 w-3.5 h-3.5"
-                                        />
-                                        <span>{reqFac}</span>
-                                      </label>
-                                    );
-                                  })}
-                                </div>
-
-                                {/* Manual Input Pemisah Koma atau Titik Koma */}
-                                <div className="pt-2 border-t border-amber-200 mt-2">
-                                  <label className="text-[10px] font-bold text-amber-950 block mb-1">
-                                    Fasilitas & Peralatan Tambahan yang Diperlukan (Input manual pemisah koma ',' atau titik koma ';'):
-                                  </label>
-                                  <textarea
-                                    rows={2}
-                                    value={interviewOfflineRequestedFacilities.join(', ')}
-                                    onChange={(e) => {
-                                      const val = e.target.value;
-                                      const parsed = val
-                                        .split(/[,;]+/)
-                                        .map((s) => s.trim())
-                                        .filter(Boolean);
-                                      setInterviewOfflineRequestedFacilities(parsed);
-                                    }}
-                                    placeholder="Contoh: Sound System & Wireless Clip-on Mic; Layar Display TV Monitor 55 Inch, Kabel LAN High-Speed..."
-                                    className="w-full px-3 py-1.5 border border-amber-300 rounded-lg text-xs bg-white text-slate-900 placeholder:text-slate-400 focus:ring-1 focus:ring-amber-500 font-medium"
-                                  />
-                                  <span className="text-[9.5px] text-amber-900 block mt-0.5">
-                                    💡 Pisahkan dengan koma (,) atau titik koma (;) untuk request peralatan tambahan ke modul GA.
+                              {/* Fasilitas Tambahan */}
+                              <div className="space-y-2 pt-1.5 border-t border-amber-200">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-xs font-bold text-amber-950 block">
+                                    Fasilitas & Peralatan Tambahan:
+                                  </span>
+                                  <span className="text-[10px] font-semibold text-amber-800 bg-white px-2 py-0.5 rounded border border-amber-200">
+                                    {interviewOfflineRequestedFacilities.length} Item Terdaftar
                                   </span>
                                 </div>
+
+                                <textarea
+                                  rows={2}
+                                  value={interviewOfflineRequestedFacilities.join(', ')}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    const parsed = val
+                                      .split(/[,;]+/)
+                                      .map((s) => s.trim())
+                                      .filter(Boolean);
+                                    setInterviewOfflineRequestedFacilities(parsed);
+                                  }}
+                                  placeholder="Ketik fasilitas dan peralatan tambahan yang diperlukan (pisahkan dengan koma atau titik koma)..."
+                                  className="w-full px-3 py-2 border border-amber-300 rounded-lg text-xs bg-white text-slate-900 placeholder:text-slate-400 focus:ring-1 focus:ring-amber-500 font-medium"
+                                />
+
+                                {/* Otomatis ter-list di bawahnya terpisah sesuai isian textarea */}
+                                {interviewOfflineRequestedFacilities.length > 0 && (
+                                  <div className="space-y-1 pt-1 border-t border-amber-200">
+                                    <span className="text-[9.5px] text-amber-900 font-semibold block">
+                                      Daftar Fasilitas & Peralatan Tambahan (Otomatis Ter-list):
+                                    </span>
+                                    <div className="flex flex-wrap gap-1.5">
+                                      {interviewOfflineRequestedFacilities.map((reqFac, idx) => (
+                                        <span
+                                          key={idx}
+                                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-semibold bg-white text-amber-900 border border-amber-300 shadow-2xs"
+                                        >
+                                          <Check className="w-3 h-3 text-amber-600" />
+                                          <span>{reqFac}</span>
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             </div>
                           );
@@ -13397,7 +13478,7 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                                 : 'bg-slate-50 border-slate-200 hover:border-indigo-300'
                             }`}
                           >
-                            <div className="flex items-start gap-2.5">
+                            <div className="flex items-start gap-2.5 min-w-0 flex-1">
                               <div className={`w-8 h-8 rounded-lg font-bold flex items-center justify-center text-xs shrink-0 mt-0.5 ${
                                 isBerhalangan
                                   ? 'bg-rose-100 text-rose-700'
@@ -13405,9 +13486,9 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                               }`}>
                                 {index + 1}
                               </div>
-                              <div className="space-y-0.5">
+                              <div className="space-y-0.5 min-w-0 flex-1">
                                 <div className="flex items-center gap-1.5 flex-wrap">
-                                  <span className="font-bold text-slate-900 text-xs">{inv.name}</span>
+                                  <span className="font-bold text-slate-900 text-xs break-words">{inv.name}</span>
                                   <span className={`px-1.5 py-0.2 rounded text-[9px] font-semibold border ${
                                     isBerhalangan
                                       ? 'bg-rose-100 text-rose-800 border-rose-300'
@@ -13416,38 +13497,38 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                                     {inv.status || 'Terkonfirmasi'}
                                   </span>
                                 </div>
-                                <div className="text-[11px] text-slate-600 font-medium">
+                                <div className="text-[11px] text-slate-600 font-medium truncate">
                                   {inv.title}
                                 </div>
-                                <div className="text-[10px] text-slate-500">
+                                <div className="text-[10px] text-slate-500 truncate">
                                   {inv.department} · {inv.email}
                                 </div>
                                 {inv.notes && (
-                                  <div className="text-[10px] text-rose-700 italic">
+                                  <div className="text-[10px] text-rose-700 italic break-words">
                                     Catatan: {inv.notes}
                                   </div>
                                 )}
                               </div>
                             </div>
 
-                            <div className="flex items-center gap-1 shrink-0">
+                            <div className="flex items-center gap-1.5 shrink-0 ml-2">
                               <button
                                 type="button"
                                 onClick={() => handleOpenChangeInterviewer(inv)}
-                                className="px-2 py-1 rounded bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 text-[10px] font-semibold transition-colors flex items-center gap-1"
+                                className="px-2.5 py-1 rounded-lg bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 text-[10px] font-semibold transition-colors flex items-center gap-1 shadow-2xs"
                                 title="Ganti pewawancara atau tandai berhalangan hadir"
                               >
-                                <RefreshCw className="w-3 h-3 text-indigo-600" />
+                                <RefreshCw className="w-3 h-3 text-indigo-600 shrink-0" />
                                 <span>Ganti</span>
                               </button>
                               <button
                                 type="button"
                                 onClick={() => handleRemoveInterviewer(inv.id)}
                                 disabled={assignedInterviewers.length <= 1}
-                                className={`p-1 rounded transition-colors ${
+                                className={`p-1.5 rounded-lg border transition-colors flex items-center justify-center ${
                                   assignedInterviewers.length <= 1
-                                    ? 'text-slate-300 cursor-not-allowed'
-                                    : 'text-slate-400 hover:text-rose-600 hover:bg-rose-50'
+                                    ? 'text-slate-300 border-slate-200 bg-slate-100 cursor-not-allowed'
+                                    : 'text-rose-600 border-rose-200 bg-white hover:bg-rose-50 shadow-2xs'
                                 }`}
                                 title={assignedInterviewers.length <= 1 ? 'Minimal 1 pewawancara' : 'Hapus pewawancara'}
                               >
