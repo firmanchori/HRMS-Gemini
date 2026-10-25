@@ -928,6 +928,7 @@ export const RecruitmentManagement: React.FC = () => {
     onboardingProcesses = [],
     onboardingChecklistTemplates = [],
     updateOnboardingTask,
+    toggleOnboardingSubItem,
     completeOnboardingProcess,
     updateOnboardingChecklistTemplates,
     addChecklistTemplateItem,
@@ -1182,6 +1183,19 @@ export const RecruitmentManagement: React.FC = () => {
   const [newTmplVerif, setNewTmplVerif] = useState<'manual' | 'automated'>('manual');
   const [newTmplAction, setNewTmplAction] = useState<string>('id_card_request');
   const [newTmplMandatory, setNewTmplMandatory] = useState(true);
+  const [newTmplHasSubItems, setNewTmplHasSubItems] = useState(false);
+  const [newTmplSubItems, setNewTmplSubItems] = useState<string[]>([]);
+  const [newTmplSubItemInput, setNewTmplSubItemInput] = useState('');
+
+  const handleAddSubItemToNewTemplate = () => {
+    if (!newTmplSubItemInput.trim()) return;
+    setNewTmplSubItems([...newTmplSubItems, newTmplSubItemInput.trim()]);
+    setNewTmplSubItemInput('');
+  };
+
+  const handleRemoveSubItemFromNewTemplate = (idxToRemove: number) => {
+    setNewTmplSubItems(newTmplSubItems.filter((_, idx) => idx !== idxToRemove));
+  };
 
   const handleAddChecklistTemplate = () => {
     if (!newTmplTitle.trim()) {
@@ -1205,8 +1219,12 @@ export const RecruitmentManagement: React.FC = () => {
       verificationType: isAuto ? 'automatic_action' : 'manual',
       actionType: isAuto ? (newTmplAction as any) : undefined,
       isMandatory: newTmplMandatory,
+      subItems: !isAuto && newTmplHasSubItems && newTmplSubItems.length > 0 ? newTmplSubItems : undefined,
     });
     setNewTmplTitle('');
+    setNewTmplHasSubItems(false);
+    setNewTmplSubItems([]);
+    setNewTmplSubItemInput('');
     setToastFeedback('Item checklist onboarding berhasil ditambahkan ke template!');
   };
 
@@ -5085,6 +5103,13 @@ PT Nusantara Multi Talenta Tbk`);
           : tmpl.targetDepartment === 'Finance'
           ? 'payroll_admin'
           : 'hr_admin',
+      subItems: tmpl.subItems && tmpl.subItems.length > 0
+        ? tmpl.subItems.map((s, sIdx) => ({
+            id: `sub-${tmpl.id}-${Date.now()}-${sIdx}`,
+            title: s,
+            isCompleted: false,
+          }))
+        : undefined,
     }));
 
     addOnboardingProcess({
@@ -8109,6 +8134,52 @@ PT Nusantara Multi Talenta Tbk`);
                                       </span>
                                     )}
                                   </div>
+
+                                  {/* Ceklis Turunan (Sub-Checklist) jika ada */}
+                                  {task.subItems && task.subItems.length > 0 && (
+                                    <div className="mt-2 p-2.5 rounded-lg bg-slate-50/90 border border-slate-200 space-y-1.5">
+                                      <div className="flex items-center justify-between text-[11px] font-bold text-slate-700">
+                                        <span>
+                                          Ceklis Turunan ({task.subItems.filter((s) => s.isCompleted).length} dari {task.subItems.length} selesai):
+                                        </span>
+                                        <span className="text-[10px] text-slate-500 font-normal">
+                                          {task.isCompleted ? '✓ Semua poin terpenuhi' : 'Centang butir yang telah terpenuhi'}
+                                        </span>
+                                      </div>
+                                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                                        {task.subItems.map((sub) => (
+                                          <label
+                                            key={sub.id}
+                                            className={`flex items-center gap-2 p-1.5 rounded-md border text-xs cursor-pointer transition-colors ${
+                                              sub.isCompleted
+                                                ? 'bg-emerald-50/70 border-emerald-200 text-emerald-900 font-medium'
+                                                : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                                            }`}
+                                          >
+                                            <input
+                                              type="checkbox"
+                                              checked={sub.isCompleted}
+                                              onChange={() => {
+                                                if (toggleOnboardingSubItem) {
+                                                  toggleOnboardingSubItem(process.id, task.id, sub.id);
+                                                } else {
+                                                  const updated = task.subItems!.map((s) =>
+                                                    s.id === sub.id ? { ...s, isCompleted: !s.isCompleted } : s
+                                                  );
+                                                  const allDone = updated.every((s) => s.isCompleted);
+                                                  updateOnboardingTask(process.id, task.id, allDone, undefined, updated);
+                                                }
+                                              }}
+                                              className="w-3.5 h-3.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                                            />
+                                            <span className={`text-[11px] ${sub.isCompleted ? 'line-through opacity-85' : ''}`}>
+                                              {sub.title}
+                                            </span>
+                                          </label>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
 
                                   {/* Result Payload Preview if completed */}
                                   {task.isCompleted && task.actionPayload && (
@@ -18352,7 +18423,7 @@ PT Nusantara Multi Talenta Tbk`);
                     />
                   </div>
 
-                  <div className={`grid grid-cols-1 ${newTmplVerif === 'automated' ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-3 transition-all`}>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="font-semibold text-slate-700 block mb-1">Departemen Pelaksana</label>
                       <select
@@ -18378,32 +18449,123 @@ PT Nusantara Multi Talenta Tbk`);
                             setNewTmplAction('id_card_request');
                           }
                         }}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white text-xs focus:ring-1 focus:ring-blue-500 outline-hidden"
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white text-xs focus:ring-1 focus:ring-blue-500 outline-hidden font-medium"
                       >
-                        <option value="manual">📋 Ceklis Manual (Tanpa Form Aksi)</option>
+                        <option value="manual">📋 Ceklis Manual</option>
                         <option value="automated">⚡ Pemeriksaan Otomatis (Dengan Form Aksi)</option>
                       </select>
                     </div>
-
-                    {newTmplVerif === 'automated' && (
-                      <div className="animate-in fade-in duration-150">
-                        <label className="font-semibold text-slate-700 block mb-1">
-                          Jenis Aksi Terkait <span className="text-blue-600 font-normal">(Form Otomatis)</span> *
-                        </label>
-                        <select
-                          value={newTmplAction}
-                          onChange={(e) => setNewTmplAction(e.target.value as any)}
-                          className="w-full px-3 py-2 border border-blue-300 rounded-lg bg-blue-50/50 text-xs focus:ring-1 focus:ring-blue-500 outline-hidden font-medium text-slate-800"
-                        >
-                          <option value="id_card_request">Pengajuan ID Card GA (Modal Form ID Card)</option>
-                          <option value="dossier_verification">Verifikasi Berkas Dossier (Modal Form Dokumen & Data Diri)</option>
-                          <option value="laptop_provisioning">Alokasi Laptop Kerja IT (Modal Form Perangkat IT)</option>
-                          <option value="account_email_setup">Provisioning Akun & Email (Modal Form Sistem & Email)</option>
-                          <option value="contract_signing">Verifikasi TTD Kontrak Digital (Digital Signing QR)</option>
-                        </select>
-                      </div>
-                    )}
                   </div>
+
+                  {/* KONDISIONAL DI BAWAHNYA: Form Aksi Otomatis vs Ceklis Turunan Manual */}
+                  {newTmplVerif === 'automated' ? (
+                    <div className="p-3.5 bg-blue-50/70 border border-blue-200 rounded-xl space-y-2 animate-in fade-in duration-150">
+                      <label className="font-bold text-slate-800 block text-xs flex items-center justify-between">
+                        <span>Jenis Aksi Terkait (Form Otomatis) *</span>
+                        <span className="text-[10px] font-semibold text-blue-700 bg-blue-100/80 px-2 py-0.5 rounded">
+                          Modal Terintegrasi
+                        </span>
+                      </label>
+                      <select
+                        value={newTmplAction}
+                        onChange={(e) => setNewTmplAction(e.target.value as any)}
+                        className="w-full px-3 py-2 border border-blue-300 rounded-lg bg-white text-xs focus:ring-2 focus:ring-blue-500 outline-hidden font-medium text-slate-800 shadow-2xs"
+                      >
+                        <option value="id_card_request">Pengajuan ID Card GA (Modal Form Pembuatan ID Card & Akses Fasilitas Gedung)</option>
+                        <option value="dossier_verification">Verifikasi Berkas Dossier (Modal Form Ceklis Dokumen & Legalitas Identitas)</option>
+                        <option value="laptop_provisioning">Alokasi Laptop Kerja IT (Modal Form Spesifikasi Laptop & Serial Number)</option>
+                        <option value="account_email_setup">Provisioning Akun & Email (Modal Form Email Korporat & Kredensial SSO)</option>
+                        <option value="contract_signing">Verifikasi TTD Kontrak Digital (Verifikasi Penandatanganan QR PKWT/PKWTT)</option>
+                      </select>
+                      <p className="text-[11px] text-slate-500">
+                        Item ini akan menyediakan tombol aksi otomatis ke departemen terkait ({newTmplDept}). Item otomatis selesai saat form disubmit.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-3 animate-in fade-in duration-150">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <label className="flex items-center gap-2 cursor-pointer font-bold text-slate-800 text-xs">
+                            <input
+                              type="checkbox"
+                              checked={newTmplHasSubItems}
+                              onChange={(e) => {
+                                setNewTmplHasSubItems(e.target.checked);
+                                if (!e.target.checked) setNewTmplSubItems([]);
+                              }}
+                              className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                            />
+                            <span>Tambah Ceklis Turunan (Sub-Checklist)</span>
+                          </label>
+                          <p className="text-[11px] text-slate-500 ml-6 mt-0.5">
+                            Opsional: Tambahkan butir-butir ceklis turunan detail yang harus diselesaikan untuk item ini.
+                          </p>
+                        </div>
+                        {newTmplHasSubItems && (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200">
+                            {newTmplSubItems.length} Butir Turunan
+                          </span>
+                        )}
+                      </div>
+
+                      {newTmplHasSubItems && (
+                        <div className="pt-2 border-t border-slate-200 space-y-2.5">
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              value={newTmplSubItemInput}
+                              onChange={(e) => setNewTmplSubItemInput(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  handleAddSubItemToNewTemplate();
+                                }
+                              }}
+                              placeholder="Ketik butir ceklis turunan, lalu tekan Enter / Tambah..."
+                              className="flex-1 px-3 py-1.5 border border-slate-300 rounded-lg bg-white text-xs focus:ring-1 focus:ring-blue-500 outline-hidden"
+                            />
+                            <button
+                              type="button"
+                              onClick={handleAddSubItemToNewTemplate}
+                              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold cursor-pointer shrink-0"
+                            >
+                              + Tambah Turunan
+                            </button>
+                          </div>
+
+                          {newTmplSubItems.length > 0 ? (
+                            <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                              {newTmplSubItems.map((sub, sIdx) => (
+                                <div
+                                  key={sIdx}
+                                  className="flex items-center justify-between p-2 rounded-lg bg-white border border-slate-200 text-xs shadow-2xs"
+                                >
+                                  <span className="flex items-center gap-2 text-slate-700">
+                                    <span className="w-4 h-4 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center text-[10px] font-bold shrink-0">
+                                      {sIdx + 1}
+                                    </span>
+                                    <span>{sub}</span>
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveSubItemFromNewTemplate(sIdx)}
+                                    className="text-slate-400 hover:text-rose-600 p-1 cursor-pointer transition-colors"
+                                    title="Hapus turunan ini"
+                                  >
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-[11px] text-slate-400 italic">
+                              Belum ada ceklis turunan. Ketik teks di atas dan klik Tambah.
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   <div className="flex items-center justify-between pt-1">
                     <label className="flex items-center gap-2 cursor-pointer text-slate-700">
@@ -18481,6 +18643,11 @@ PT Nusantara Multi Talenta Tbk`);
                                 Wajib
                               </span>
                             )}
+                            {item.subItems && item.subItems.length > 0 && (
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
+                                {item.subItems.length} Ceklis Turunan
+                              </span>
+                            )}
                           </div>
                           <p className="text-[11px] text-slate-500">
                             Kategori: {item.category}
@@ -18507,6 +18674,21 @@ PT Nusantara Multi Talenta Tbk`);
                               <span> · Ceklis Manual Mandiri</span>
                             )}
                           </p>
+                          {item.subItems && item.subItems.length > 0 && (
+                            <div className="mt-1.5 p-2 rounded-lg bg-slate-50/80 border border-slate-200/90 text-[11px] space-y-1">
+                              <span className="font-semibold text-slate-700 block text-[10px]">
+                                Ceklis Turunan ({item.subItems.length} butir):
+                              </span>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 text-[11px] text-slate-600">
+                                {item.subItems.map((sub, sIdx) => (
+                                  <div key={sIdx} className="flex items-center gap-1.5">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400 shrink-0" />
+                                    <span>{sub}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
 

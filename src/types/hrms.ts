@@ -1069,6 +1069,12 @@ export type OnboardingActionType =
   | 'contract_signing'
   | 'custom_action';
 
+export interface OnboardingSubItem {
+  id: string;
+  title: string;
+  isCompleted: boolean;
+}
+
 export interface OnboardingChecklistTemplateItem {
   id: string;
   title: string;
@@ -1078,6 +1084,7 @@ export interface OnboardingChecklistTemplateItem {
   actionType?: OnboardingActionType;
   isMandatory: boolean;
   description?: string;
+  subItems?: string[];
 }
 
 export interface OnboardingTask {
@@ -1091,6 +1098,7 @@ export interface OnboardingTask {
   targetDepartment?: OnboardingTargetDepartment;
   actionType?: OnboardingActionType;
   isMandatory?: boolean;
+  subItems?: OnboardingSubItem[];
   actionPayload?: {
     // ID Card request data
     idCardTicketNo?: string;

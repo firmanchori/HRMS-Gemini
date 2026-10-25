@@ -32,6 +32,7 @@ import {
   DocumentTemplateConfig,
   OnboardingProcess,
   OnboardingChecklistTemplateItem,
+  OnboardingSubItem,
   ModuleSettingsConfig,
   CompanyEntity,
   EmployeeStaging,
@@ -297,7 +298,8 @@ interface HrmsContextType {
   onboardingProcesses: OnboardingProcess[];
   onboardingChecklistTemplates: OnboardingChecklistTemplateItem[];
   addOnboardingProcess: (process: Omit<OnboardingProcess, 'id' | 'tenantId' | 'status'>) => OnboardingProcess;
-  updateOnboardingTask: (processId: string, taskId: string, isCompleted: boolean, actionPayload?: any) => void;
+  updateOnboardingTask: (processId: string, taskId: string, isCompleted: boolean, actionPayload?: any, subItems?: OnboardingSubItem[]) => void;
+  toggleOnboardingSubItem?: (processId: string, taskId: string, subItemId: string) => void;
   completeOnboardingProcess: (processId: string) => Employee | null;
   updateOnboardingChecklistTemplates: (templates: OnboardingChecklistTemplateItem[]) => void;
   addChecklistTemplateItem: (item: Omit<OnboardingChecklistTemplateItem, 'id'>) => void;
@@ -2177,6 +2179,9 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
             isMandatory: tmpl.isMandatory,
             isCompleted: false,
             assignedRole: tmpl.targetDepartment === 'GA' ? 'ga_admin' : tmpl.targetDepartment === 'IT' ? 'it_admin' : 'hr_admin',
+            subItems: tmpl.subItems && tmpl.subItems.length > 0
+              ? tmpl.subItems.map((s, idx) => ({ id: `sub-${idx}-${Date.now()}`, title: s, isCompleted: false }))
+              : undefined,
           }));
 
     const newProcess: OnboardingProcess = {
@@ -2194,21 +2199,59 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     processId: string,
     taskId: string,
     isCompleted: boolean,
-    actionPayload?: any
+    actionPayload?: any,
+    subItems?: OnboardingSubItem[]
   ) => {
     setOnboardingProcesses((prev) =>
       prev.map((p) => {
         if (p.id !== processId) return p;
-        const updatedTasks = p.tasks.map((t) =>
-          t.id === taskId
-            ? {
-                ...t,
-                isCompleted,
-                completedAt: isCompleted ? (t.completedAt || new Date().toISOString().split('T')[0]) : undefined,
-                actionPayload: actionPayload ? { ...t.actionPayload, ...actionPayload } : t.actionPayload,
-              }
-            : t
-        );
+        const updatedTasks = p.tasks.map((t) => {
+          if (t.id !== taskId) return t;
+          let finalSubItems = subItems !== undefined ? subItems : t.subItems;
+          if (subItems === undefined && t.subItems && t.subItems.length > 0) {
+            finalSubItems = t.subItems.map((s) => ({ ...s, isCompleted }));
+          }
+          return {
+            ...t,
+            isCompleted,
+            completedAt: isCompleted ? (t.completedAt || new Date().toISOString().split('T')[0]) : undefined,
+            actionPayload: actionPayload ? { ...t.actionPayload, ...actionPayload } : t.actionPayload,
+            subItems: finalSubItems,
+          };
+        });
+        const mandatoryCompleted = updatedTasks
+          .filter((t) => t.isMandatory !== false)
+          .every((t) => t.isCompleted);
+        return {
+          ...p,
+          tasks: updatedTasks,
+          status: mandatoryCompleted ? 'Completed' : 'In Progress',
+        };
+      })
+    );
+  };
+
+  const toggleOnboardingSubItem = (
+    processId: string,
+    taskId: string,
+    subItemId: string
+  ) => {
+    setOnboardingProcesses((prev) =>
+      prev.map((p) => {
+        if (p.id !== processId) return p;
+        const updatedTasks = p.tasks.map((t) => {
+          if (t.id !== taskId || !t.subItems) return t;
+          const updatedSubItems = t.subItems.map((s) =>
+            s.id === subItemId ? { ...s, isCompleted: !s.isCompleted } : s
+          );
+          const allDone = updatedSubItems.length > 0 && updatedSubItems.every((s) => s.isCompleted);
+          return {
+            ...t,
+            subItems: updatedSubItems,
+            isCompleted: allDone,
+            completedAt: allDone ? (t.completedAt || new Date().toISOString().split('T')[0]) : undefined,
+          };
+        });
         const mandatoryCompleted = updatedTasks
           .filter((t) => t.isMandatory !== false)
           .every((t) => t.isCompleted);
@@ -3886,6 +3929,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         onboardingChecklistTemplates,
         addOnboardingProcess,
         updateOnboardingTask,
+        toggleOnboardingSubItem,
         completeOnboardingProcess,
         updateOnboardingChecklistTemplates,
         addChecklistTemplateItem,

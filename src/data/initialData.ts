@@ -2772,6 +2772,12 @@ export const DEFAULT_ONBOARDING_CHECKLIST_TEMPLATES: OnboardingChecklistTemplate
     verificationType: 'manual',
     isMandatory: false,
     description: 'Sesi perkenalan nilai-nilai perusahaan, tur kantor, dan penunjukan buddy kerja.',
+    subItems: [
+      'Office tour & denah fasilitas gedung',
+      'Perkenalan rekan tim kerja & Head of Dept',
+      'Sosialisasi jam kerja, presensi & peraturan perusahaan',
+      'Penunjukan mentor / buddy orientasi',
+    ],
   },
 ];
 
@@ -2872,6 +2878,12 @@ export const INITIAL_ONBOARDING: OnboardingProcess[] = [
         isMandatory: false,
         isCompleted: false,
         assignedRole: 'hr_admin',
+        subItems: [
+          { id: 'sub-ori-1', title: 'Office tour & denah fasilitas gedung', isCompleted: true },
+          { id: 'sub-ori-2', title: 'Perkenalan rekan tim kerja & Head of Dept', isCompleted: true },
+          { id: 'sub-ori-3', title: 'Sosialisasi jam kerja & presensi', isCompleted: false },
+          { id: 'sub-ori-4', title: 'Penunjukan mentor / buddy orientasi', isCompleted: false },
+        ],
       },
     ],
   },
