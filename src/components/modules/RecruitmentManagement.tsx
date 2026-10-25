@@ -827,6 +827,7 @@ export const RecruitmentManagement: React.FC = () => {
   const [mcuSendInvitation, setMcuSendInvitation] = useState(true);
   const [mcuStatus, setMcuStatus] = useState<'Belum Dijadwalkan' | 'Dijadwalkan' | 'Menunggu Hasil Lab' | 'Fit (Lolos)' | 'Fit with Note' | 'Unfit (Gugur)'>('Dijadwalkan');
   const [mcuNotes, setMcuNotes] = useState('Pemeriksaan laboratorium pra-kerja.');
+  const [isPreviewMcuLetterOpen, setIsPreviewMcuLetterOpen] = useState(false);
   const [isChangeInterviewerModalOpen, setIsChangeInterviewerModalOpen] = useState(false);
   const [targetInterviewerToChange, setTargetInterviewerToChange] = useState<AssignedInterviewer | null>(null);
   const [interviewerChangeAction, setInterviewerChangeAction] = useState<'Ganti Pewawancara' | 'Pewawancara Berhalangan'>('Ganti Pewawancara');
@@ -1997,6 +1998,51 @@ Nama Berkas: ${fileName} (${candidate.cvFileSize || '1.2 MB'})
     setMcuStatus(candidate.mcuStatus || 'Dijadwalkan');
     setMcuNotes(candidate.mcuNotes || 'Pemeriksaan laboratorium pra-kerja.');
     setIsMcuModalOpen(true);
+  };
+
+  const handleSendMcuLetterViaWhatsApp = (candidate: Candidate) => {
+    const vac = vacancies.find((v) => v.id === candidate.jobVacancyId);
+    const phoneClean = (candidate.phone || '').replace(/[^0-9]/g, '');
+    const waNumber = phoneClean.startsWith('0') ? '62' + phoneClean.slice(1) : phoneClean;
+    const message = `Yth. Sdr/i *${candidate.name}*,\n\nBerikut terlampir *Surat Pengantar Resmi Medical Check-Up (MCU) Pra-Kerja* untuk posisi *${vac?.title || 'Formasi'}* di PT Nusantara Multi Talenta Tbk.\n\n📅 *Jadwal Pemeriksaan:* ${mcuDate}\n⏰ *Waktu Kunjungan:* ${mcuTime}\n🏥 *Klinik/RS Rujukan:* ${mcuClinic}\n📋 *Paket MCU:* ${mcuPackage}\n\n*Petunjuk & Persiapan Pasien:*\n${mcuInstructions}\n\n*Catatan Penting:* Mohon membawa KTP asli dan tunjukkan surat pengantar ini kepada petugas registrasi RS/Lab. Seluruh biaya pemeriksaan telah dijamin oleh perusahaan (corporate billing).\n\nUnduh E-Surat Pengantar: ${window.location.origin}/?doc=mcu-letter&id=${candidate.id}\n\nSalam hangat,\n*Tim Talent Acquisition & HR Recruitment*\nPT Nusantara Multi Talenta Tbk`;
+
+    if (waNumber) {
+      window.open(`https://wa.me/${waNumber}?text=${encodeURIComponent(message)}`, '_blank');
+      setToastFeedback(`Surat Pengantar MCU dikirim ke WhatsApp ${candidate.name} (${candidate.phone})!`);
+    } else {
+      setToastFeedback(`Nomor WhatsApp kandidat ${candidate.name} belum valid.`);
+    }
+  };
+
+  const handleSendMcuLetterViaEmail = (candidate: Candidate) => {
+    const vac = vacancies.find((v) => v.id === candidate.jobVacancyId);
+    const subject = `[Resmi] Surat Pengantar Medical Check-Up (MCU) Pra-Kerja - ${candidate.name} (${vac?.title || 'Formasi'})`;
+    const body = `Yth. ${candidate.name},\n\nTerima kasih atas partisipasi Anda dalam rangkaian seleksi rekrutmen di PT Nusantara Multi Talenta Tbk.\n\nBerikut kami lampirkan Surat Pengantar Resmi untuk pelaksanaan Medical Check-Up (MCU) Pra-Kerja:\n\n- Tanggal: ${mcuDate}\n- Waktu: ${mcuTime}\n- RS/Lab Rujukan: ${mcuClinic}\n- Paket: ${mcuPackage}\n\nPetunjuk Puasa & Persiapan:\n${mcuInstructions}\n\nSilakan cetak atau simpan dokumen surat pengantar ini untuk ditunjukkan kepada petugas administrasi lab RS rekanan.\n\nSalam hangat,\nHR Recruitment Team PT Nusantara Multi Talenta Tbk`;
+    window.open(`mailto:${candidate.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`);
+    setToastFeedback(`Surat Pengantar MCU berhasil dikirim ke email ${candidate.email}!`);
+  };
+
+  const handleDownloadMcuLetter = (candidate: Candidate) => {
+    const fileName = `Surat_Pengantar_MCU_${candidate.name.replace(/\s+/g, '_')}_Official.pdf`;
+    const vac = vacancies.find((v) => v.id === candidate.jobVacancyId);
+    const letterContent = `========================================================================\nSURAT PENGANTAR MEDICAL CHECK-UP (MCU) PRA-KERJA\nPT NUSANTARA MULTI TALENTA TBK\n========================================================================\n\nNomor Surat: MCU/HRD-REC/2026/X/${candidate.id.substring(0, 5).toUpperCase()}\nTanggal     : ${mcuDate}\nPerihal     : Surat Pengantar Pemeriksaan Kesehatan Calon Karyawan\n\nKepada Yth.\nKepala Bagian Laboratorium & Medical Check-Up\n${mcuClinic}\ndi Tempat\n\nDATA CALON KARYAWAN:\n- Nama Lengkap : ${candidate.name}\n- Posisi Lowongan : ${vac?.title || 'Formasi'}\n- Departemen   : ${vac?.department || 'Umum'}\n- Kontak Telp  : ${candidate.phone}\n- Email        : ${candidate.email}\n\nJADWAL & PAKET PEMERIKSAAN:\n- Hari / Tgl   : ${mcuDate}\n- Waktu        : ${mcuTime}\n- Paket Uji    : ${mcuPackage}\n- Penagihan    : Corporate Billing PT Nusantara Multi Talenta Tbk\n\nPETUNJUK PERSIAPAN:\n${mcuInstructions}\n\nStatus Dokumen : RESMI & TERVERIFIKASI HRMS DIGITAL\n========================================================================`;
+
+    const blob = new Blob([letterContent], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    setToastFeedback(`Dokumen Surat Pengantar MCU (${fileName}) berhasil diunduh!`);
+  };
+
+  const handleShareMcuLetterLink = (candidate: Candidate) => {
+    const link = `${window.location.origin}/?doc=mcu-letter&id=${candidate.id}`;
+    navigator.clipboard.writeText(link);
+    setToastFeedback(`Tautan Surat Pengantar MCU resmi berhasil disalin ke clipboard!`);
   };
 
   const handleSaveMcu = (e: React.FormEvent) => {
@@ -14997,21 +15043,67 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                     />
                   </div>
 
-                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={mcuSendInvitation}
-                        onChange={(e) => setMcuSendInvitation(e.target.checked)}
-                        className="w-4 h-4 text-teal-600 rounded border-slate-300 focus:ring-teal-500"
-                      />
-                      <span className="font-semibold text-slate-800 text-xs">
-                        Kirim Surat Pengantar MCU Resmi ke Kandidat via Email & WhatsApp
-                      </span>
-                    </label>
-                    <p className="text-[10px] text-slate-500 ml-6 mt-0.5">
-                      Sistem akan melampirkan e-surat pengantar resmi, barcode pemeriksaan lab, dan petunjuk puasa langsung ke kontak pelamar.
-                    </p>
+                  {/* Banner & Tombol Pembuatan Dokumen / Preview Surat Pengantar MCU Resmi */}
+                  <div className="p-3.5 bg-gradient-to-r from-teal-50 via-emerald-50 to-slate-50 border border-teal-200 rounded-xl shadow-2xs space-y-2.5">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                      <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                        <div className="w-9 h-9 rounded-xl bg-teal-600 text-white flex items-center justify-center shrink-0 shadow-xs mt-0.5">
+                          <FileText className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <span className="font-bold text-slate-900 text-xs block">
+                            Surat Pengantar MCU Resmi ke Kandidat
+                          </span>
+                          <span className="text-[10px] text-teal-800 leading-tight block mt-0.5">
+                            Dokumen resmi ber-Kop Surat Perusahaan, nomor surat, QR Code & instruksi lab. Bisa di-preview, dicetak (Print), diunduh (Download), serta dikirim langsung via WhatsApp & Email.
+                          </span>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setIsPreviewMcuLetterOpen(true)}
+                        className="px-3.5 py-2 bg-teal-700 hover:bg-teal-800 text-white rounded-lg text-xs font-bold transition-all shadow-2xs flex items-center justify-center gap-1.5 shrink-0 self-stretch sm:self-auto cursor-pointer"
+                        title="Buka Pratinjau Dokumen Surat Pengantar Resmi untuk Cetak, Unduh, dan Share via WA / Email"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        <span>Preview & Kirim Surat →</span>
+                      </button>
+                    </div>
+
+                    <div className="pt-2 border-t border-teal-200/80 flex flex-wrap items-center justify-between gap-2">
+                      <label className="flex items-center gap-2 cursor-pointer text-xs">
+                        <input
+                          type="checkbox"
+                          checked={mcuSendInvitation}
+                          onChange={(e) => setMcuSendInvitation(e.target.checked)}
+                          className="w-4 h-4 text-teal-600 rounded border-slate-300 focus:ring-teal-500"
+                        />
+                        <span className="font-semibold text-slate-800 text-[11px]">
+                          Kirim otomatis surat pengantar saat jadwal disimpan
+                        </span>
+                      </label>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleSendMcuLetterViaWhatsApp(mcuCandidate)}
+                          className="px-2 py-1 rounded bg-emerald-100 hover:bg-emerald-200 text-emerald-800 font-bold text-[10px] flex items-center gap-1 transition-colors"
+                          title="Kirim via WhatsApp"
+                        >
+                          <MessageSquare className="w-3 h-3 text-emerald-700" />
+                          <span>Kirim WA</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleSendMcuLetterViaEmail(mcuCandidate)}
+                          className="px-2 py-1 rounded bg-blue-100 hover:bg-blue-200 text-blue-800 font-bold text-[10px] flex items-center gap-1 transition-colors"
+                          title="Kirim via Email"
+                        >
+                          <Mail className="w-3 h-3 text-blue-700" />
+                          <span>Kirim Email</span>
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
               ) : (
@@ -15205,6 +15297,306 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                 </div>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+            {/* ===================== MODAL 6D: PRATINJAU & PENGIRIMAN SURAT PENGANTAR MCU RESMI ===================== */}
+      {isPreviewMcuLetterOpen && mcuCandidate && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 overflow-y-auto"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsPreviewMcuLetterOpen(false);
+          }}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full border border-slate-200 overflow-hidden my-4 flex flex-col max-h-[95vh] animate-in fade-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header Toolbar */}
+            <div className="px-5 py-3.5 bg-gradient-to-r from-teal-950 via-slate-900 to-teal-900 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-teal-500/20 border border-teal-400/30 flex items-center justify-center text-teal-300 shrink-0">
+                  <FileText className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
+                    <span>Surat Pengantar Medical Check-Up (MCU) Resmi</span>
+                    <span className="text-[9.5px] bg-teal-700 text-teal-100 font-mono px-2 py-0.5 rounded-full border border-teal-500">
+                      Dokumen Sah
+                    </span>
+                  </h3>
+                  <p className="text-[11px] text-teal-200">
+                    {mcuCandidate.name} · {vacancies.find((v) => v.id === mcuCandidate.jobVacancyId)?.title}
+                  </p>
+                </div>
+              </div>
+
+              {/* Action Toolbar: Print, Download, WA, Email, Share, Tutup */}
+              <div className="flex flex-wrap items-center gap-1.5 self-end sm:self-auto">
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors border border-slate-700 cursor-pointer"
+                  title="Cetak Surat Pengantar (Print)"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Cetak</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleDownloadMcuLetter(mcuCandidate)}
+                  className="px-2.5 py-1.5 bg-teal-700 hover:bg-teal-600 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-2xs cursor-pointer"
+                  title="Unduh Dokumen PDF"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Download</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleSendMcuLetterViaWhatsApp(mcuCandidate)}
+                  className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-2xs cursor-pointer"
+                  title="Kirim Surat Pengantar via WhatsApp ke Pelamar"
+                >
+                  <MessageSquare className="w-3.5 h-3.5" />
+                  <span>Kirim WA</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleSendMcuLetterViaEmail(mcuCandidate)}
+                  className="px-2.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-2xs cursor-pointer"
+                  title="Kirim via Email Resmi ke Pelamar"
+                >
+                  <Mail className="w-3.5 h-3.5" />
+                  <span>Kirim Email</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleShareMcuLetterLink(mcuCandidate)}
+                  className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors border border-slate-700 cursor-pointer"
+                  title="Salin Tautan Surat Pengantar"
+                >
+                  <Share2 className="w-3.5 h-3.5" />
+                  <span className="hidden md:inline">Share</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsPreviewMcuLetterOpen(false)}
+                  className="p-1.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors ml-1 cursor-pointer"
+                  title="Tutup Pratinjau"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Document Paper Container */}
+            <div className="p-4 sm:p-6 overflow-y-auto flex-1 bg-slate-200/80">
+              <div className="bg-white rounded-xl shadow-lg border border-slate-300 p-6 sm:p-10 max-w-2xl mx-auto space-y-5 text-slate-800 font-sans">
+                {/* 1. KOP SURAT PERUSAHAAN RESMI */}
+                <div className="border-b-4 border-double border-slate-900 pb-4 flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-xl bg-teal-800 text-white flex items-center justify-center font-black text-xl tracking-wider shadow-sm shrink-0">
+                      NMT
+                    </div>
+                    <div>
+                      <h2 className="text-sm sm:text-base font-black tracking-wide text-slate-900 uppercase">
+                        PT NUSANTARA MULTI TALENTA TBK
+                      </h2>
+                      <p className="text-[10px] font-semibold text-teal-800 tracking-wider uppercase">
+                        DIVISI HUMAN CAPITAL MANAGEMENT & RECRUITMENT
+                      </p>
+                      <p className="text-[9.5px] text-slate-500 leading-tight mt-0.5">
+                        Menara Nusantara Lt. 24, Jl. Jend. Sudirman Kav. 52-53, Jakarta Selatan 12190
+                      </p>
+                      <p className="text-[9px] text-slate-500 font-mono">
+                        Telp: (021) 5088-7700 · Email: recruitment@nusantara-group.co.id · www.nusantara-talenta.co.id
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0 hidden sm:block">
+                    <span className="px-2 py-0.5 rounded bg-teal-50 border border-teal-300 text-teal-800 font-mono text-[9px] font-bold block">
+                      FORM: HR-REC-MCU-04
+                    </span>
+                    <span className="text-[9px] text-slate-400 block mt-1">ISO 9001:2015 Certified</span>
+                  </div>
+                </div>
+
+                {/* 2. NOMOR SURAT & PERIHAL */}
+                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2 text-xs">
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-slate-600 w-20">Nomor</span>
+                      <span>:</span>
+                      <span className="font-mono font-bold text-slate-900">
+                        MCU/HRD-REC/2026/X/{mcuCandidate.id.substring(0, 5).toUpperCase()}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-slate-600 w-20">Lampiran</span>
+                      <span>:</span>
+                      <span>1 (Satu) Berkas Rincian Paket Pemeriksaan</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-slate-600 w-20">Perihal</span>
+                      <span>:</span>
+                      <span className="font-bold text-teal-900 underline">
+                        Surat Pengantar Pemeriksaan Kesehatan Pra-Kerja (Medical Check-Up)
+                      </span>
+                    </div>
+                  </div>
+                  <div className="text-left sm:text-right font-medium text-xs text-slate-700">
+                    Jakarta, {new Date().toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}
+                  </div>
+                </div>
+
+                {/* 3. TUJUAN SURAT */}
+                <div className="text-xs space-y-0.5 pt-1">
+                  <p className="font-semibold text-slate-800">Kepada Yth.</p>
+                  <p className="font-bold text-slate-900 text-sm">{mcuClinic}</p>
+                  <p className="text-slate-600">Bagian Pelayanan Medical Check-Up & Laboratorium Klinis</p>
+                  <p className="text-slate-600">di Tempat</p>
+                </div>
+
+                {/* 4. ISI SURAT */}
+                <div className="text-xs space-y-3 text-slate-700 leading-relaxed text-justify">
+                  <p>Dengan hormat,</p>
+                  <p>
+                    Sehubungan dengan proses seleksi penerimaan karyawan baru di <strong>PT Nusantara Multi Talenta Tbk</strong>, bersama surat ini kami menghadapkan calon karyawan kami guna dilakukan pemeriksaan kesehatan pra-kerja (<em>Pre-Employment Medical Examination</em>) dengan rincian data sebagai berikut:
+                  </p>
+
+                  {/* TABEL DATA PELAMAR */}
+                  <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-1.5 text-xs font-sans">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-slate-600 w-28 shrink-0">Nama Lengkap</span>
+                        <span>:</span>
+                        <strong className="text-slate-900">{mcuCandidate.name}</strong>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-slate-600 w-28 shrink-0">NIK / No. KTP</span>
+                        <span>:</span>
+                        <span className="font-mono text-slate-800">317101{mcuCandidate.id.replace(/[^0-9]/g, "").padEnd(10, "7")}</span>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-slate-600 w-28 shrink-0">Posisi Lowongan</span>
+                        <span>:</span>
+                        <span className="text-teal-900 font-bold">{vacancies.find((v) => v.id === mcuCandidate.jobVacancyId)?.title || "Posisi Terpilih"}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-slate-600 w-28 shrink-0">Departemen</span>
+                        <span>:</span>
+                        <span className="text-slate-800">{vacancies.find((v) => v.id === mcuCandidate.jobVacancyId)?.department || "Umum"}</span>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-slate-600 w-28 shrink-0">No. WhatsApp</span>
+                        <span>:</span>
+                        <span className="font-mono text-slate-800">{mcuCandidate.phone}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-slate-600 w-28 shrink-0">Alamat Email</span>
+                        <span>:</span>
+                        <span className="text-slate-800">{mcuCandidate.email}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* DETAIL JADWAL & PAKET MCU */}
+                  <div className="p-3 bg-teal-50/60 border border-teal-200 rounded-lg space-y-1.5 text-xs">
+                    <span className="font-bold text-teal-950 block">Rincian Pelaksanaan Pemeriksaan Kesehatan:</span>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11.5px]">
+                      <div>
+                        <span className="text-slate-500 block">Jadwal Tanggal Tes:</span>
+                        <strong className="text-slate-900">{new Date(mcuDate).toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</strong>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block">Waktu Kehadiran:</span>
+                        <strong className="text-slate-900">{mcuTime}</strong>
+                      </div>
+                      <div className="sm:col-span-2">
+                        <span className="text-slate-500 block">Paket Pemeriksaan Kesehatan:</span>
+                        <strong className="text-teal-900">{mcuPackage}</strong>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* KETENTUAN PENAGIHAN & PETUNJUK PASIEN */}
+                  <div className="space-y-1 text-[11px] text-slate-600 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                    <p className="font-bold text-slate-800">Petunjuk Khusus & Penagihan Biaya (Corporate Billing):</p>
+                    <ol className="list-decimal pl-4 space-y-0.5">
+                      <li>Seluruh biaya pemeriksaan MCU pra-kerja di atas <strong>menjadi tanggungan PT Nusantara Multi Talenta Tbk</strong> dan akan ditagihkan secara resmi melalui invoice rekanan kepada departemen Human Capital.</li>
+                      <li>Calon karyawan wajib mematuhi protokol puasa 10-12 jam sebelum pengambilan sampel darah dan membawa kartu identitas KTP asli.</li>
+                      <li>Hasil pemeriksaan lab dan surat kesimpulan kelayakan medis (<em>Fit / Unfit to Work</em>) mohon dikirimkan secara langsung dan rahasia ke email: <strong>recruitment@nusantara-group.co.id</strong>.</li>
+                    </ol>
+                  </div>
+
+                  <p>
+                    Demikian surat pengantar ini kami sampaikan. Atas kerja sama dan pelayanan profesional yang diberikan oleh <strong>{mcuClinic}</strong>, kami ucapkan terima kasih.
+                  </p>
+                </div>
+
+                {/* 5. TANDA TANGAN RESMI & STAMP DIGITAL */}
+                <div className="pt-4 border-t border-slate-200 flex items-end justify-between gap-4">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 p-2 bg-slate-50 border border-slate-200 rounded-lg">
+                      <div className="w-10 h-10 bg-slate-900 text-white rounded flex items-center justify-center font-mono font-bold text-[9px] p-1 text-center shrink-0">
+                        QR HRMS
+                      </div>
+                      <div className="text-[9px] text-slate-500 leading-tight">
+                        <span className="font-bold text-slate-800 block">VERIFIKASI DIGITAL SAH</span>
+                        ID Dokumen: NMT-MCU-{mcuCandidate.id.substring(0, 8)}<br />
+                        Tervalidasi Sistem Rekrutmen HRMS
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="text-right text-xs space-y-1 shrink-0">
+                    <p className="text-slate-600">Hormat kami,</p>
+                    <p className="font-bold text-slate-900">PT NUSANTARA MULTI TALENTA TBK</p>
+                    <div className="h-14 flex items-center justify-end">
+                      <div className="px-3 py-1 rounded border-2 border-teal-700 bg-teal-50/50 text-teal-800 text-[9.5px] font-black uppercase tracking-wider rotate-[-2deg] shadow-2xs">
+                        [TERVALIDASI HRD / TTD DIGITAL]
+                      </div>
+                    </div>
+                    <p className="font-bold text-slate-900 underline">Aditya Pratama, S.Psi., CHRP</p>
+                    <p className="text-[10px] text-slate-500">Head of Talent Acquisition & People Operations</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-5 py-3 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 shrink-0">
+              <span className="text-[11px] text-slate-500">
+                Surat Pengantar MCU dapat dicetak langsung untuk pelamar atau dikirimkan via WhatsApp & Email.
+              </span>
+              <div className="flex items-center gap-2 self-end sm:self-auto">
+                <button
+                  type="button"
+                  onClick={() => setIsPreviewMcuLetterOpen(false)}
+                  className="px-4 py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg font-semibold text-xs transition-colors"
+                >
+                  Tutup Pratinjau
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSendMcuLetterViaWhatsApp(mcuCandidate)}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-xs transition-colors flex items-center gap-1.5 shadow-2xs"
+                >
+                  <MessageSquare className="w-3.5 h-3.5" />
+                  <span>Kirim ke WhatsApp Pelamar</span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
