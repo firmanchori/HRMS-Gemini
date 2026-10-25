@@ -20022,16 +20022,20 @@ PT Nusantara Multi Talenta Tbk`);
                 </button>
               </div>
 
-              {/* Tab Navigation Riwayat & Profiling dengan Kusen / Frame Sub Menu */}
-              <div className="px-6 py-2.5 bg-slate-100/90 border-b border-slate-200 shrink-0">
-                <div className="bg-white p-1 rounded-xl border border-slate-200 shadow-2xs flex items-center gap-1 overflow-x-auto">
+              {/* Tab Navigation Riwayat & Profiling dengan ScrollableTabNav & Tanda Panah */}
+              <div className="bg-slate-50/90 px-4 sm:px-6 border-b border-slate-200 shrink-0">
+                <ScrollableTabNav
+                  activeKey={talentModalTab}
+                  className="border-b-0"
+                  containerClassName="pt-2 gap-2 sm:gap-3"
+                >
                   <button
                     type="button"
                     onClick={() => setTalentModalTab('overview')}
-                    className={`py-2 px-3.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+                    className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px cursor-pointer whitespace-nowrap ${
                       talentModalTab === 'overview'
-                        ? 'bg-blue-700 text-white shadow-2xs'
-                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                        ? 'border-blue-700 text-blue-900 font-bold'
+                        : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
                     }`}
                   >
                     <Eye className="w-3.5 h-3.5" />
@@ -20041,42 +20045,63 @@ PT Nusantara Multi Talenta Tbk`);
                   <button
                     type="button"
                     onClick={() => setTalentModalTab('test')}
-                    className={`py-2 px-3.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+                    className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px cursor-pointer whitespace-nowrap ${
                       talentModalTab === 'test'
-                        ? 'bg-blue-700 text-white shadow-2xs'
-                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                        ? 'border-blue-700 text-blue-900 font-bold'
+                        : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
                     }`}
                   >
                     <Award className="w-3.5 h-3.5" />
-                    <span>Riwayat Tes ({details.testHistory.testScore}/100)</span>
+                    <span>Riwayat Tes</span>
+                    <span
+                      className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full transition-colors ${
+                        talentModalTab === 'test' ? 'bg-blue-700 text-white' : 'bg-slate-200 text-slate-700'
+                      }`}
+                    >
+                      {details.testHistory.testScore}/100
+                    </span>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => setTalentModalTab('interview')}
-                    className={`py-2 px-3.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+                    className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px cursor-pointer whitespace-nowrap ${
                       talentModalTab === 'interview'
-                        ? 'bg-blue-700 text-white shadow-2xs'
-                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                        ? 'border-blue-700 text-blue-900 font-bold'
+                        : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
                     }`}
                   >
                     <Video className="w-3.5 h-3.5" />
-                    <span>Riwayat Wawancara ({details.interviewHistory.interviewScore}/100)</span>
+                    <span>Riwayat Wawancara</span>
+                    <span
+                      className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full transition-colors ${
+                        talentModalTab === 'interview' ? 'bg-blue-700 text-white' : 'bg-slate-200 text-slate-700'
+                      }`}
+                    >
+                      {details.interviewHistory.interviewScore}/100
+                    </span>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => setTalentModalTab('mcu')}
-                    className={`py-2 px-3.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+                    className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px cursor-pointer whitespace-nowrap ${
                       talentModalTab === 'mcu'
-                        ? 'bg-blue-700 text-white shadow-2xs'
-                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                        ? 'border-blue-700 text-blue-900 font-bold'
+                        : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
                     }`}
                   >
                     <HeartPulse className="w-3.5 h-3.5" />
-                    <span>Riwayat MCU ({details.mcuHistory.mcuStatus.split(' ')[0]})</span>
+                    <span>Riwayat MCU</span>
+                    <span
+                      className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full transition-colors ${
+                        talentModalTab === 'mcu' ? 'bg-blue-700 text-white' : 'bg-slate-200 text-slate-700'
+                      }`}
+                    >
+                      {details.mcuHistory.mcuStatus.split(' ')[0]}
+                    </span>
                   </button>
-                </div>
+                </ScrollableTabNav>
               </div>
 
               {/* Body dengan Ukuran Fix Scrollable */}
