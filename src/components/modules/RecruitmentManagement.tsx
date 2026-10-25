@@ -9181,7 +9181,7 @@ PT Nusantara Multi Talenta Tbk`);
                           className="px-2.5 py-1.5 bg-blue-700 hover:bg-blue-800 text-white rounded-lg font-bold text-xs flex items-center justify-center gap-1 shadow-2xs transition-colors cursor-pointer"
                         >
                           <RefreshCw className="w-3 h-3" />
-                          <span>Hubungi Kembali</span>
+                          <span>Re-Engage Talent and Open Pipeline</span>
                         </button>
                       </div>
                     </div>
@@ -19977,17 +19977,17 @@ PT Nusantara Multi Talenta Tbk`);
 
         return (
           <div
-            className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto"
+            className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
             onClick={() => setSelectedTalentCandidate(null)}
           >
             <div
-              className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full border border-slate-200 overflow-hidden my-6 animate-in fade-in zoom-in-95 duration-200"
+              className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full h-[88vh] max-h-[750px] min-h-[580px] flex flex-col border border-slate-200 overflow-hidden my-auto animate-in fade-in zoom-in-95 duration-200"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}
-              <div className="px-6 py-5 bg-gradient-to-r from-slate-950 via-slate-900 to-blue-950 text-white flex items-start justify-between">
+              <div className="px-6 py-4.5 bg-gradient-to-r from-slate-950 via-slate-900 to-blue-950 text-white flex items-start justify-between shrink-0">
                 <div className="flex items-center gap-3.5">
-                  <div className="w-12 h-12 rounded-full bg-blue-600 text-white font-bold text-base flex items-center justify-center shrink-0 shadow-md border-2 border-white/20">
+                  <div className="w-11 h-11 rounded-full bg-blue-600 text-white font-bold text-base flex items-center justify-center shrink-0 shadow-md border-2 border-white/20">
                     {selectedTalentCandidate.name
                       .split(' ')
                       .map((n) => n[0])
@@ -20022,63 +20022,65 @@ PT Nusantara Multi Talenta Tbk`);
                 </button>
               </div>
 
-              {/* Tab Navigation Riwayat & Profiling */}
-              <div className="flex border-b border-slate-200 px-6 bg-slate-50 gap-2 overflow-x-auto">
-                <button
-                  type="button"
-                  onClick={() => setTalentModalTab('overview')}
-                  className={`py-3 px-3.5 text-xs font-bold border-b-2 transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
-                    talentModalTab === 'overview'
-                      ? 'border-blue-600 text-blue-700 bg-white'
-                      : 'border-transparent text-slate-500 hover:text-slate-800'
-                  }`}
-                >
-                  <Eye className="w-3.5 h-3.5" />
-                  <span>Ringkasan Profiling</span>
-                </button>
+              {/* Tab Navigation Riwayat & Profiling dengan Kusen / Frame Sub Menu */}
+              <div className="px-6 py-2.5 bg-slate-100/90 border-b border-slate-200 shrink-0">
+                <div className="bg-white p-1 rounded-xl border border-slate-200 shadow-2xs flex items-center gap-1 overflow-x-auto">
+                  <button
+                    type="button"
+                    onClick={() => setTalentModalTab('overview')}
+                    className={`py-2 px-3.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+                      talentModalTab === 'overview'
+                        ? 'bg-blue-700 text-white shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                    }`}
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                    <span>Ringkasan Profiling</span>
+                  </button>
 
-                <button
-                  type="button"
-                  onClick={() => setTalentModalTab('test')}
-                  className={`py-3 px-3.5 text-xs font-bold border-b-2 transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
-                    talentModalTab === 'test'
-                      ? 'border-blue-600 text-blue-700 bg-white'
-                      : 'border-transparent text-slate-500 hover:text-slate-800'
-                  }`}
-                >
-                  <Award className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Riwayat Tes ({details.testHistory.testScore}/100)</span>
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => setTalentModalTab('test')}
+                    className={`py-2 px-3.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+                      talentModalTab === 'test'
+                        ? 'bg-blue-700 text-white shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                    }`}
+                  >
+                    <Award className="w-3.5 h-3.5" />
+                    <span>Riwayat Tes ({details.testHistory.testScore}/100)</span>
+                  </button>
 
-                <button
-                  type="button"
-                  onClick={() => setTalentModalTab('interview')}
-                  className={`py-3 px-3.5 text-xs font-bold border-b-2 transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
-                    talentModalTab === 'interview'
-                      ? 'border-blue-600 text-blue-700 bg-white'
-                      : 'border-transparent text-slate-500 hover:text-slate-800'
-                  }`}
-                >
-                  <Video className="w-3.5 h-3.5 text-indigo-600" />
-                  <span>Riwayat Wawancara ({details.interviewHistory.interviewScore}/100)</span>
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => setTalentModalTab('interview')}
+                    className={`py-2 px-3.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+                      talentModalTab === 'interview'
+                        ? 'bg-blue-700 text-white shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                    }`}
+                  >
+                    <Video className="w-3.5 h-3.5" />
+                    <span>Riwayat Wawancara ({details.interviewHistory.interviewScore}/100)</span>
+                  </button>
 
-                <button
-                  type="button"
-                  onClick={() => setTalentModalTab('mcu')}
-                  className={`py-3 px-3.5 text-xs font-bold border-b-2 transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
-                    talentModalTab === 'mcu'
-                      ? 'border-blue-600 text-blue-700 bg-white'
-                      : 'border-transparent text-slate-500 hover:text-slate-800'
-                  }`}
-                >
-                  <HeartPulse className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Riwayat MCU ({details.mcuHistory.mcuStatus.split(' ')[0]})</span>
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => setTalentModalTab('mcu')}
+                    className={`py-2 px-3.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+                      talentModalTab === 'mcu'
+                        ? 'bg-blue-700 text-white shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                    }`}
+                  >
+                    <HeartPulse className="w-3.5 h-3.5" />
+                    <span>Riwayat MCU ({details.mcuHistory.mcuStatus.split(' ')[0]})</span>
+                  </button>
+                </div>
               </div>
 
-              {/* Body */}
-              <div className="p-6 space-y-5 max-h-[75vh] overflow-y-auto text-xs">
+              {/* Body dengan Ukuran Fix Scrollable */}
+              <div className="p-6 space-y-5 flex-1 overflow-y-auto text-xs">
                 {/* ================= TAB 1: OVERVIEW & PROFILING ================= */}
                 {talentModalTab === 'overview' && (
                   <div className="space-y-4">
@@ -20499,7 +20501,7 @@ PT Nusantara Multi Talenta Tbk`);
               </div>
 
               {/* Footer */}
-              <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-3 flex-wrap">
+              <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-3 flex-wrap shrink-0">
                 <div className="flex items-center gap-2">
                   <a
                     href={`https://wa.me/${(selectedTalentCandidate.phone || '').replace(/[^0-9]/g, '')}`}
@@ -20533,7 +20535,7 @@ PT Nusantara Multi Talenta Tbk`);
                     className="px-4 py-2 bg-blue-700 hover:bg-blue-800 text-white rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1.5 transition-colors cursor-pointer"
                   >
                     <RefreshCw className="w-3.5 h-3.5" />
-                    <span>Hubungi & Aktifkan Kembali ke Pipeline →</span>
+                    <span>Re-Engage Talent and Open Pipeline →</span>
                   </button>
                 </div>
               </div>
@@ -20542,7 +20544,7 @@ PT Nusantara Multi Talenta Tbk`);
         );
       })()}
 
-      {/* ===================== MODAL 17: DIALOG HUBUNGI KEMBALI (RE-ENGAGE) ===================== */}
+      {/* ===================== MODAL 17: DIALOG RE-ENGAGE TALENT AND OPEN PIPELINE ===================== */}
       {isReengageModalOpen && candidateToReengage && (
         <div
           className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
@@ -20555,7 +20557,7 @@ PT Nusantara Multi Talenta Tbk`);
             <div className="px-5 py-4 bg-slate-950 text-white flex items-center justify-between">
               <h3 className="text-sm font-bold flex items-center gap-2">
                 <RefreshCw className="w-4 h-4 text-blue-400" />
-                <span>Hubungi Kembali (Re-Engage Talent)</span>
+                <span>Re-Engage Talent and Open Pipeline</span>
               </h3>
               <button
                 type="button"
@@ -20628,7 +20630,7 @@ PT Nusantara Multi Talenta Tbk`);
                 className="px-4 py-1.5 bg-blue-700 hover:bg-blue-800 text-white rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1.5 cursor-pointer"
               >
                 <Check className="w-3.5 h-3.5" />
-                <span>Aktifkan ke Pipeline</span>
+                <span>Re-Engage Talent and Open Pipeline</span>
               </button>
             </div>
           </div>
