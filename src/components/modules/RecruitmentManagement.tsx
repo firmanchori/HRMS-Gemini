@@ -76,6 +76,7 @@ import {
   Laptop,
   CreditCard,
   ShieldCheck,
+  CalendarCheck,
   Key,
   Zap,
 } from 'lucide-react';
@@ -1049,7 +1050,7 @@ export const RecruitmentManagement: React.FC = () => {
   const [interviewNotes, setInterviewNotes] = useState('');
 
   // Enhanced Interview Sequential Workflow States
-  const [interviewActiveTab, setInterviewActiveTab] = useState<'schedule' | 'feedback' | 'scorecard' | 'recommendation'>('schedule');
+  const [interviewActiveTab, setInterviewActiveTab] = useState<'schedule' | 'interviewers' | 'scorecard' | 'recommendation'>('schedule');
   const [candidateAttendanceStatus, setCandidateAttendanceStatus] = useState<'Terkonfirmasi Hadir' | 'Menunggu Respon' | 'Minta Reschedule'>('Terkonfirmasi Hadir');
   const [assignedInterviewers, setAssignedInterviewers] = useState<AssignedInterviewer[]>([
     {

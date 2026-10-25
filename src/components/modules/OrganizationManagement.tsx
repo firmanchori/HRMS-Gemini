@@ -4256,41 +4256,55 @@ export const OrganizationManagement: React.FC = () => {
             {/* Scrollable Content Body */}
             <div className="p-4 sm:p-5 space-y-4 text-xs overflow-y-auto flex-1">
               <div className="p-4 bg-indigo-50/70 rounded-xl border border-indigo-200 space-y-2.5">
-                <div className="flex items-center justify-between gap-2">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-indigo-200/60">
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="font-mono font-bold text-indigo-800 bg-indigo-100 px-2.5 py-0.5 rounded border border-indigo-300 text-xs">
+                    <span className="font-mono font-bold text-indigo-800 bg-indigo-100 px-2.5 py-0.5 rounded-md border border-indigo-300 text-xs shadow-xs">
                       {previewDivision.code}
                     </span>
                     <span className="text-[10px] uppercase font-bold text-indigo-700 bg-white px-2 py-0.5 rounded border border-indigo-200">
                       Divisi
                     </span>
                   </div>
-                  <span className="text-slate-500 text-[11px] truncate max-w-[150px] text-right">
-                    Entitas: <b className="text-slate-800">{currentEntity.name}</b>
-                  </span>
+                  <div className="text-[11px] text-slate-500 flex items-center gap-1 min-w-0">
+                    <span className="shrink-0 text-slate-400">Entitas:</span>
+                    <span className="font-semibold text-slate-800 truncate" title={currentEntity.name}>
+                      {currentEntity.name}
+                    </span>
+                  </div>
                 </div>
 
                 <div>
                   <h4 className="text-base font-bold text-slate-900 leading-snug">{previewDivision.name}</h4>
                 </div>
 
-                <p className="text-slate-600 text-xs pt-1.5 leading-relaxed border-t border-indigo-200/50">
+                <p className="text-slate-600 text-xs pt-1 leading-relaxed">
                   {previewDivision.description || 'Divisi operasional utama di bawah koordinasi Direksi korporasi.'}
                 </p>
               </div>
 
               {/* Departemen & Posisi di bawah divisi */}
               {(() => {
-                const childDepts = departments.filter((d) => 
+                const childDepts = (departments || []).filter((d) => 
                   d.divisionId === previewDivision.id || 
                   d.division === previewDivision.name || 
-                  (d.divisionId && d.divisionId.toLowerCase() === previewDivision.id.toLowerCase())
+                  (d.divisionId && d.divisionId.toLowerCase() === previewDivision.id.toLowerCase()) ||
+                  (previewDivision.name.toLowerCase().includes('teknologi') && (d.name.toLowerCase().includes('software') || d.name.toLowerCase().includes('tech') || d.name.toLowerCase().includes('cloud') || d.name.toLowerCase().includes('devops') || d.name.toLowerCase().includes('ai'))) ||
+                  (previewDivision.name.toLowerCase().includes('human') && (d.name.toLowerCase().includes('talent') || d.name.toLowerCase().includes('people') || d.name.toLowerCase().includes('payroll') || d.name.toLowerCase().includes('culture'))) ||
+                  ((previewDivision.name.toLowerCase().includes('keuangan') || previewDivision.name.toLowerCase().includes('finance')) && (d.name.toLowerCase().includes('tax') || d.name.toLowerCase().includes('treasury') || d.name.toLowerCase().includes('finance') || d.name.toLowerCase().includes('akuntansi'))) ||
+                  ((previewDivision.name.toLowerCase().includes('general') || previewDivision.name.toLowerCase().includes('affairs')) && (d.name.toLowerCase().includes('procurement') || d.name.toLowerCase().includes('facility') || d.name.toLowerCase().includes('asset') || d.name.toLowerCase().includes('ga'))) ||
+                  ((previewDivision.name.toLowerCase().includes('commercial') || previewDivision.name.toLowerCase().includes('bisnis') || previewDivision.name.toLowerCase().includes('business')) && (d.name.toLowerCase().includes('sales') || d.name.toLowerCase().includes('account') || d.name.toLowerCase().includes('bisnis'))) ||
+                  ((previewDivision.name.toLowerCase().includes('direksi') || previewDivision.name.toLowerCase().includes('executive')) && (d.name.toLowerCase().includes('secretary') || d.name.toLowerCase().includes('governance')))
                 );
                 const childDeptNames = new Set(childDepts.map((d) => d.name.toLowerCase()));
-                const childPositions = entityNodes.filter((n) => 
+                const activeNodes = (entityNodes && entityNodes.length > 0) ? entityNodes : orgNodes;
+                const childPositions = activeNodes.filter((n) => 
                   (n.division && n.division.toLowerCase() === previewDivision.name.toLowerCase()) ||
                   (n.department && childDeptNames.has(n.department.toLowerCase())) ||
-                  (previewDivision.name.toLowerCase().includes('direksi') && n.level === 1)
+                  (previewDivision.name.toLowerCase().includes('direksi') && n.level === 1) ||
+                  (previewDivision.name.toLowerCase().includes('teknologi') && (n.title.toLowerCase().includes('cloud') || n.title.toLowerCase().includes('software') || n.title.toLowerCase().includes('architect') || n.title.toLowerCase().includes('engineer') || n.title.toLowerCase().includes('ui/ux'))) ||
+                  (previewDivision.name.toLowerCase().includes('human') && (n.title.toLowerCase().includes('human') || n.title.toLowerCase().includes('talent') || n.title.toLowerCase().includes('people') || n.title.toLowerCase().includes('compensation'))) ||
+                  ((previewDivision.name.toLowerCase().includes('finance') || previewDivision.name.toLowerCase().includes('keuangan')) && (n.title.toLowerCase().includes('finance') || n.title.toLowerCase().includes('tax') || n.title.toLowerCase().includes('treasury'))) ||
+                  (((previewDivision.name.toLowerCase().includes('general') || previewDivision.name.toLowerCase().includes('affairs')) && (n.title.toLowerCase().includes('procurement') || n.title.toLowerCase().includes('operations') || n.title.toLowerCase().includes('building') || n.title.toLowerCase().includes('fleet') || n.title.toLowerCase().includes('general affairs'))))
                 );
 
                 return (
@@ -4455,18 +4469,21 @@ export const OrganizationManagement: React.FC = () => {
             {/* Scrollable Content Body */}
             <div className="p-4 sm:p-5 space-y-4 text-xs overflow-y-auto flex-1">
               <div className="p-4 bg-emerald-50/70 rounded-xl border border-emerald-200 space-y-2.5">
-                <div className="flex items-center justify-between gap-2">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-emerald-200/60">
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="font-mono font-bold text-emerald-800 bg-emerald-100 px-2.5 py-0.5 rounded border border-emerald-300 text-xs">
+                    <span className="font-mono font-bold text-emerald-800 bg-emerald-100 px-2.5 py-0.5 rounded-md border border-emerald-300 text-xs shadow-xs">
                       {previewDepartment.code}
                     </span>
                     <span className="text-[10px] uppercase font-bold text-emerald-700 bg-white px-2 py-0.5 rounded border border-emerald-200">
                       Departemen
                     </span>
                   </div>
-                  <span className="text-slate-500 text-[11px] truncate max-w-[150px] text-right">
-                    Entitas: <b className="text-slate-800">{currentEntity.name}</b>
-                  </span>
+                  <div className="text-[11px] text-slate-500 flex items-center gap-1 min-w-0">
+                    <span className="shrink-0 text-slate-400">Entitas:</span>
+                    <span className="font-semibold text-slate-800 truncate" title={currentEntity.name}>
+                      {currentEntity.name}
+                    </span>
+                  </div>
                 </div>
 
                 <div>
@@ -4479,17 +4496,31 @@ export const OrganizationManagement: React.FC = () => {
                   </div>
                 </div>
 
-                <p className="text-slate-600 text-xs pt-1.5 leading-relaxed border-t border-emerald-200/50">
+                <p className="text-slate-600 text-xs pt-1 leading-relaxed">
                   {previewDepartment.description || 'Unit operasional teknis di bawah naungan Divisi.'}
                 </p>
               </div>
 
               {/* Posisi Jabatan di Departemen ini */}
               {(() => {
-                const deptPositions = entityNodes.filter((n) => 
-                  (n.department && n.department.toLowerCase() === previewDepartment.name.toLowerCase()) ||
-                  (n.department && (n.department.toLowerCase().includes(previewDepartment.name.toLowerCase()) || previewDepartment.name.toLowerCase().includes(n.department.toLowerCase())))
-                );
+                const activeNodes = (entityNodes && entityNodes.length > 0) ? entityNodes : orgNodes;
+                const deptNameLower = previewDepartment.name.toLowerCase();
+                const deptPositions = activeNodes.filter((n) => {
+                  if (!n.department) return false;
+                  const nodeDeptLower = n.department.toLowerCase();
+                  if (nodeDeptLower === deptNameLower) return true;
+                  if (nodeDeptLower.includes(deptNameLower) || deptNameLower.includes(nodeDeptLower)) return true;
+                  // Keyword fallbacks
+                  if (deptNameLower.includes('software') && (n.title.toLowerCase().includes('software') || n.title.toLowerCase().includes('fullstack') || n.title.toLowerCase().includes('ui/ux') || n.title.toLowerCase().includes('ai architect'))) return true;
+                  if (deptNameLower.includes('cloud') && (n.title.toLowerCase().includes('cloud') || n.title.toLowerCase().includes('devops'))) return true;
+                  if (deptNameLower.includes('talent') && (n.title.toLowerCase().includes('talent') || n.title.toLowerCase().includes('recruitment') || n.title.toLowerCase().includes('product & hc'))) return true;
+                  if ((deptNameLower.includes('payroll') || deptNameLower.includes('people')) && (n.title.toLowerCase().includes('human') || n.title.toLowerCase().includes('payroll') || n.title.toLowerCase().includes('compensation'))) return true;
+                  if ((deptNameLower.includes('tax') || deptNameLower.includes('treasury')) && (n.title.toLowerCase().includes('tax') || n.title.toLowerCase().includes('treasury') || n.title.toLowerCase().includes('finance'))) return true;
+                  if (deptNameLower.includes('procurement') && n.title.toLowerCase().includes('procurement')) return true;
+                  if ((deptNameLower.includes('facility') || deptNameLower.includes('asset')) && (n.title.toLowerCase().includes('inventory') || n.title.toLowerCase().includes('maintenance') || n.title.toLowerCase().includes('fleet'))) return true;
+                  if ((deptNameLower.includes('secretary') || deptNameLower.includes('governance')) && (n.title.toLowerCase().includes('ceo') || n.title.toLowerCase().includes('audit') || n.title.toLowerCase().includes('director'))) return true;
+                  return false;
+                });
                 return (
                   <div className="space-y-2">
                     <label className="font-bold text-slate-800 block text-xs uppercase tracking-wider">
