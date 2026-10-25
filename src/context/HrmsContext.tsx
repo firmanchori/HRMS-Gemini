@@ -31,6 +31,7 @@ import {
   AssetRelocationLog,
   DocumentTemplateConfig,
   OnboardingProcess,
+  OnboardingChecklistTemplateItem,
   ModuleSettingsConfig,
   CompanyEntity,
   EmployeeStaging,
@@ -62,6 +63,11 @@ import {
   MasterJobPosition,
   FlexibleNikSettings,
   NikPatternConfig,
+  CandidateCompetencyScore,
+  CompetencyTestTypeSetting,
+  InterviewTypeSetting,
+  InterviewScorecardCriterion,
+  CandidateInterviewEvaluation,
 } from '../types/hrms';
 import {
   INITIAL_TENANTS,
@@ -76,6 +82,8 @@ import {
   INITIAL_JOB_REQUISITIONS,
   INITIAL_JOB_VACANCIES,
   INITIAL_CANDIDATES,
+  INITIAL_COMPETENCY_TEST_TYPES,
+  INITIAL_INTERVIEW_TYPES,
   INITIAL_OFFBOARDING,
   INITIAL_ASSETS,
   INITIAL_PROCUREMENT,
@@ -87,6 +95,7 @@ import {
   INITIAL_APPROVALS,
   INITIAL_VENDORS,
   INITIAL_ONBOARDING,
+  DEFAULT_ONBOARDING_CHECKLIST_TEMPLATES,
   INITIAL_DOCUMENT_TEMPLATES,
   INITIAL_MODULE_SETTINGS,
   INITIAL_ENTITIES,
@@ -221,6 +230,26 @@ interface HrmsContextType {
     extra?: Partial<Candidate>
   ) => void;
   convertCandidateToEmployee: (candidateId: string, joinDate: string) => void;
+  competencyTestTypes: CompetencyTestTypeSetting[];
+  addCompetencyTestType: (testType: Omit<CompetencyTestTypeSetting, 'id'>) => void;
+  updateCompetencyTestType: (id: string, updates: Partial<CompetencyTestTypeSetting>) => void;
+  deleteCompetencyTestType: (id: string) => void;
+  resetCompetencyTestTypes: () => void;
+  saveCandidateCompetencyScore: (
+    candidateId: string,
+    scoreData: Omit<CandidateCompetencyScore, 'id' | 'evaluatedAt'>
+  ) => void;
+  deleteCandidateCompetencyScore: (candidateId: string, scoreId: string) => void;
+  interviewTypeSettings: InterviewTypeSetting[];
+  addInterviewType: (type: Omit<InterviewTypeSetting, 'id'>) => void;
+  updateInterviewType: (id: string, updates: Partial<InterviewTypeSetting>) => void;
+  deleteInterviewType: (id: string) => void;
+  resetInterviewTypes: () => void;
+  saveCandidateInterviewEvaluation: (
+    candidateId: string,
+    evalData: Omit<CandidateInterviewEvaluation, 'id' | 'evaluatedAt'>
+  ) => void;
+  deleteCandidateInterviewEvaluation: (candidateId: string, evalId: string) => void;
 
   // 8. Offboarding
   offboardingRecords: OffboardingRecord[];
@@ -264,11 +293,15 @@ interface HrmsContextType {
   // 12. Migration Wizard
   executeMigrationImport: (rows: MigrationRowPreview[]) => { successCount: number; errorCount: number };
 
-  // 13. Onboarding (Via Rekrutmen vs Direct)
+  // 13. Onboarding (Via Rekrutmen vs Direct) & Checklist Templates
   onboardingProcesses: OnboardingProcess[];
+  onboardingChecklistTemplates: OnboardingChecklistTemplateItem[];
   addOnboardingProcess: (process: Omit<OnboardingProcess, 'id' | 'tenantId' | 'status'>) => OnboardingProcess;
-  updateOnboardingTask: (processId: string, taskId: string, isCompleted: boolean) => void;
+  updateOnboardingTask: (processId: string, taskId: string, isCompleted: boolean, actionPayload?: any) => void;
   completeOnboardingProcess: (processId: string) => Employee | null;
+  updateOnboardingChecklistTemplates: (templates: OnboardingChecklistTemplateItem[]) => void;
+  addChecklistTemplateItem: (item: Omit<OnboardingChecklistTemplateItem, 'id'>) => void;
+  removeChecklistTemplateItem: (id: string) => void;
 
   // 14. Shifts, Roaster & Swap Requests
   shifts: WorkShift[];
@@ -619,7 +652,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [jobRequisitions, setJobRequisitions] = useState<JobRequisition[]>(() => {
-    const saved = localStorage.getItem('nusahr_job_requisitions');
+    const saved = localStorage.getItem('nusahr_job_requisitions_v2');
     return saved ? JSON.parse(saved) : INITIAL_JOB_REQUISITIONS;
   });
 
@@ -629,8 +662,18 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [candidates, setCandidates] = useState<Candidate[]>(() => {
-    const saved = localStorage.getItem('nusahr_candidates');
+    const saved = localStorage.getItem('nusahr_candidates_v3');
     return saved ? JSON.parse(saved) : INITIAL_CANDIDATES;
+  });
+
+  const [competencyTestTypes, setCompetencyTestTypes] = useState<CompetencyTestTypeSetting[]>(() => {
+    const saved = localStorage.getItem('nusahr_competency_test_types_v1');
+    return saved ? JSON.parse(saved) : INITIAL_COMPETENCY_TEST_TYPES;
+  });
+
+  const [interviewTypeSettings, setInterviewTypeSettings] = useState<InterviewTypeSetting[]>(() => {
+    const saved = localStorage.getItem('nusahr_interview_types_v1');
+    return saved ? JSON.parse(saved) : INITIAL_INTERVIEW_TYPES;
   });
 
   const [offboardingRecords, setOffboardingRecords] = useState<OffboardingRecord[]>(() => {
@@ -657,6 +700,15 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const saved = localStorage.getItem('nusahr_onboarding');
     return saved ? JSON.parse(saved) : INITIAL_ONBOARDING;
   });
+
+  const [onboardingChecklistTemplates, setOnboardingChecklistTemplates] = useState<OnboardingChecklistTemplateItem[]>(() => {
+    const saved = localStorage.getItem('nusahr_onboarding_templates_v2');
+    return saved ? JSON.parse(saved) : DEFAULT_ONBOARDING_CHECKLIST_TEMPLATES;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('nusahr_onboarding_templates_v2', JSON.stringify(onboardingChecklistTemplates));
+  }, [onboardingChecklistTemplates]);
 
   const [shifts, setShifts] = useState<WorkShift[]>(() => {
     const saved = localStorage.getItem('nusahr_shifts');
@@ -990,6 +1042,18 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     localStorage.setItem('nusahr_job_grading_scheme', jobGradingScheme);
   }, [jobGradingScheme]);
+
+  useEffect(() => {
+    localStorage.setItem('nusahr_candidates_v3', JSON.stringify(candidates));
+  }, [candidates]);
+
+  useEffect(() => {
+    localStorage.setItem('nusahr_competency_test_types_v1', JSON.stringify(competencyTestTypes));
+  }, [competencyTestTypes]);
+
+  useEffect(() => {
+    localStorage.setItem('nusahr_interview_types_v1', JSON.stringify(interviewTypeSettings));
+  }, [interviewTypeSettings]);
 
   // Filtered scoped items for active tenant
   const tenantEmployees = useMemo(
@@ -1625,6 +1689,176 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   };
 
+  const addCompetencyTestType = (testType: Omit<CompetencyTestTypeSetting, 'id'>) => {
+    const newTest: CompetencyTestTypeSetting = {
+      ...testType,
+      id: `test-${Date.now()}`,
+    };
+    setCompetencyTestTypes((prev) => [newTest, ...prev]);
+  };
+
+  const updateCompetencyTestType = (id: string, updates: Partial<CompetencyTestTypeSetting>) => {
+    setCompetencyTestTypes((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, ...updates } : t))
+    );
+  };
+
+  const deleteCompetencyTestType = (id: string) => {
+    setCompetencyTestTypes((prev) => prev.filter((t) => t.id !== id));
+  };
+
+  const resetCompetencyTestTypes = () => {
+    setCompetencyTestTypes(INITIAL_COMPETENCY_TEST_TYPES);
+    localStorage.setItem('nusahr_competency_test_types_v1', JSON.stringify(INITIAL_COMPETENCY_TEST_TYPES));
+  };
+
+  const saveCandidateCompetencyScore = (
+    candidateId: string,
+    scoreData: Omit<CandidateCompetencyScore, 'id' | 'evaluatedAt'>
+  ) => {
+    setCandidates((prev) =>
+      prev.map((c) => {
+        if (c.id !== candidateId) return c;
+        const newScore: CandidateCompetencyScore = {
+          ...scoreData,
+          id: `score-${Date.now()}`,
+          evaluatedAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
+        };
+        const existingScores = c.competencyScores ? [...c.competencyScores] : [];
+        const existingIndex = existingScores.findIndex(
+          (s) => s.testTypeId === scoreData.testTypeId || s.testTypeName === scoreData.testTypeName
+        );
+        if (existingIndex >= 0) {
+          existingScores[existingIndex] = newScore;
+        } else {
+          existingScores.push(newScore);
+        }
+
+        // Calculate aggregate / average score
+        const totalScore = existingScores.reduce((acc, s) => acc + s.score, 0);
+        const avgScore = Math.round(totalScore / existingScores.length);
+        const allPassed = existingScores.every((s) => s.score >= s.passingGrade);
+
+        return {
+          ...c,
+          competencyScores: existingScores,
+          testType: scoreData.testTypeName,
+          testScore: avgScore,
+          testPassingGrade: scoreData.passingGrade,
+          testStatus: allPassed ? 'Lulus' : 'Tidak Lulus',
+          testNotes: scoreData.notes || c.testNotes,
+        };
+      })
+    );
+  };
+
+  const deleteCandidateCompetencyScore = (candidateId: string, scoreId: string) => {
+    setCandidates((prev) =>
+      prev.map((c) => {
+        if (c.id !== candidateId || !c.competencyScores) return c;
+        const updatedScores = c.competencyScores.filter((s) => s.id !== scoreId);
+        const avgScore =
+          updatedScores.length > 0
+            ? Math.round(updatedScores.reduce((acc, s) => acc + s.score, 0) / updatedScores.length)
+            : 0;
+        const allPassed =
+          updatedScores.length > 0
+            ? updatedScores.every((s) => s.score >= s.passingGrade)
+            : false;
+        return {
+          ...c,
+          competencyScores: updatedScores,
+          testScore: avgScore,
+          testStatus: updatedScores.length > 0 ? (allPassed ? 'Lulus' : 'Tidak Lulus') : 'Belum Ditugaskan',
+        };
+      })
+    );
+  };
+
+  const addInterviewType = (type: Omit<InterviewTypeSetting, 'id'>) => {
+    const newType: InterviewTypeSetting = {
+      ...type,
+      id: `int-${Date.now()}`,
+    };
+    setInterviewTypeSettings((prev) => [newType, ...prev]);
+  };
+
+  const updateInterviewType = (id: string, updates: Partial<InterviewTypeSetting>) => {
+    setInterviewTypeSettings((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, ...updates } : t))
+    );
+  };
+
+  const deleteInterviewType = (id: string) => {
+    setInterviewTypeSettings((prev) => prev.filter((t) => t.id !== id));
+  };
+
+  const resetInterviewTypes = () => {
+    setInterviewTypeSettings(INITIAL_INTERVIEW_TYPES);
+    localStorage.setItem('nusahr_interview_types_v1', JSON.stringify(INITIAL_INTERVIEW_TYPES));
+  };
+
+  const saveCandidateInterviewEvaluation = (
+    candidateId: string,
+    evalData: Omit<CandidateInterviewEvaluation, 'id' | 'evaluatedAt'>
+  ) => {
+    setCandidates((prev) =>
+      prev.map((c) => {
+        if (c.id !== candidateId) return c;
+        const newEval: CandidateInterviewEvaluation = {
+          ...evalData,
+          id: `int-eval-${Date.now()}`,
+          evaluatedAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
+        };
+        const existingEvals = c.interviewEvaluations ? [...c.interviewEvaluations] : [];
+        const existingIdx = existingEvals.findIndex((e) => e.interviewTypeId === evalData.interviewTypeId);
+        if (existingIdx >= 0) {
+          existingEvals[existingIdx] = newEval;
+        } else {
+          existingEvals.push(newEval);
+        }
+
+        const totalScore = existingEvals.reduce((acc, e) => acc + e.calculatedScore, 0);
+        const avgScore = Math.round(totalScore / existingEvals.length);
+
+        return {
+          ...c,
+          interviewEvaluations: existingEvals,
+          interviewTypeId: evalData.interviewTypeId,
+          interviewTypeName: evalData.interviewTypeName,
+          interviewDate: evalData.interviewDate,
+          interviewer: evalData.interviewer,
+          meetingPlatform: evalData.platform as any,
+          meetingLink: evalData.meetingLink,
+          interviewScore: avgScore,
+          interviewNotes: evalData.notes,
+          interviewScorecard: {
+            ratings: evalData.scorecardRatings,
+            recommendation: evalData.recommendation,
+          },
+        };
+      })
+    );
+  };
+
+  const deleteCandidateInterviewEvaluation = (candidateId: string, evalId: string) => {
+    setCandidates((prev) =>
+      prev.map((c) => {
+        if (c.id !== candidateId || !c.interviewEvaluations) return c;
+        const filtered = c.interviewEvaluations.filter((e) => e.id !== evalId);
+        const avgScore =
+          filtered.length > 0
+            ? Math.round(filtered.reduce((acc, e) => acc + e.calculatedScore, 0) / filtered.length)
+            : undefined;
+        return {
+          ...c,
+          interviewEvaluations: filtered,
+          interviewScore: avgScore,
+        };
+      })
+    );
+  };
+
   // 8. Offboarding
   const initiateOffboarding = (
     employeeId: string,
@@ -1905,34 +2139,82 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { successCount, errorCount };
   };
 
-  // 13. Onboarding Actions
+  // 13. Onboarding Actions & Checklist Templates
+  const updateOnboardingChecklistTemplates = (templates: OnboardingChecklistTemplateItem[]) => {
+    setOnboardingChecklistTemplates(templates);
+    logAuditAction('Onboarding Settings', 'UPDATE_TEMPLATES', 'templates', `Memperbarui ${templates.length} template checklist onboarding`);
+  };
+
+  const addChecklistTemplateItem = (item: Omit<OnboardingChecklistTemplateItem, 'id'>) => {
+    const newItem: OnboardingChecklistTemplateItem = {
+      ...item,
+      id: `tmpl-${Date.now()}`,
+    };
+    setOnboardingChecklistTemplates((prev) => [...prev, newItem]);
+    logAuditAction('Onboarding Settings', 'ADD_TEMPLATE_ITEM', newItem.id, `Menambahkan checklist: ${newItem.title}`);
+  };
+
+  const removeChecklistTemplateItem = (id: string) => {
+    setOnboardingChecklistTemplates((prev) => prev.filter((t) => t.id !== id));
+    logAuditAction('Onboarding Settings', 'DELETE_TEMPLATE_ITEM', id, `Menghapus template checklist ID: ${id}`);
+  };
+
   const addOnboardingProcess = (
     data: Omit<OnboardingProcess, 'id' | 'tenantId' | 'status'>
   ): OnboardingProcess => {
+    // Generate tasks from templates if none provided
+    const tasks =
+      data.tasks && data.tasks.length > 0
+        ? data.tasks
+        : onboardingChecklistTemplates.map((tmpl) => ({
+            id: `t-${tmpl.id}-${Date.now()}`,
+            title: tmpl.title,
+            category: tmpl.category as any,
+            targetDepartment: tmpl.targetDepartment,
+            verificationType: tmpl.verificationType,
+            actionType: tmpl.actionType,
+            isMandatory: tmpl.isMandatory,
+            isCompleted: false,
+            assignedRole: tmpl.targetDepartment === 'GA' ? 'ga_admin' : tmpl.targetDepartment === 'IT' ? 'it_admin' : 'hr_admin',
+          }));
+
     const newProcess: OnboardingProcess = {
       ...data,
       id: `onb-${Date.now()}`,
       tenantId: currentTenant.id,
+      tasks,
       status: 'In Progress',
     };
     setOnboardingProcesses((prev) => [newProcess, ...prev]);
     return newProcess;
   };
 
-  const updateOnboardingTask = (processId: string, taskId: string, isCompleted: boolean) => {
+  const updateOnboardingTask = (
+    processId: string,
+    taskId: string,
+    isCompleted: boolean,
+    actionPayload?: any
+  ) => {
     setOnboardingProcesses((prev) =>
       prev.map((p) => {
         if (p.id !== processId) return p;
         const updatedTasks = p.tasks.map((t) =>
           t.id === taskId
-            ? { ...t, isCompleted, completedAt: isCompleted ? new Date().toISOString().split('T')[0] : undefined }
+            ? {
+                ...t,
+                isCompleted,
+                completedAt: isCompleted ? (t.completedAt || new Date().toISOString().split('T')[0]) : undefined,
+                actionPayload: actionPayload ? { ...t.actionPayload, ...actionPayload } : t.actionPayload,
+              }
             : t
         );
-        const allDone = updatedTasks.every((t) => t.isCompleted);
+        const mandatoryCompleted = updatedTasks
+          .filter((t) => t.isMandatory !== false)
+          .every((t) => t.isCompleted);
         return {
           ...p,
           tasks: updatedTasks,
-          status: allDone ? 'Completed' : 'In Progress',
+          status: mandatoryCompleted ? 'Completed' : 'In Progress',
         };
       })
     );
@@ -3571,6 +3853,20 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         addCandidate,
         updateCandidateStage,
         convertCandidateToEmployee,
+        competencyTestTypes,
+        addCompetencyTestType,
+        updateCompetencyTestType,
+        deleteCompetencyTestType,
+        resetCompetencyTestTypes,
+        saveCandidateCompetencyScore,
+        deleteCandidateCompetencyScore,
+        interviewTypeSettings,
+        addInterviewType,
+        updateInterviewType,
+        deleteInterviewType,
+        resetInterviewTypes,
+        saveCandidateInterviewEvaluation,
+        deleteCandidateInterviewEvaluation,
         offboardingRecords: offboardingRecords.filter((o) => o.tenantId === currentTenant.id),
         initiateOffboarding,
         updateOffboardingChecklist,
@@ -3586,9 +3882,13 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         executeMigrationImport,
         // Advanced Modules
         onboardingProcesses: onboardingProcesses.filter((o) => o.tenantId === currentTenant.id),
+        onboardingChecklistTemplates,
         addOnboardingProcess,
         updateOnboardingTask,
         completeOnboardingProcess,
+        updateOnboardingChecklistTemplates,
+        addChecklistTemplateItem,
+        removeChecklistTemplateItem,
         shifts: shifts.filter((s) => s.tenantId === currentTenant.id),
         shiftSwaps: shiftSwaps.filter((s) => s.tenantId === currentTenant.id),
         addShiftSwapRequest,

@@ -1277,6 +1277,58 @@ export const OrganizationManagement: React.FC = () => {
     setIsMasterPositionModalOpen(false);
   };
 
+  // Helper untuk rendering badge Job Grade secara adaptif dan aman di layar tablet / desktop
+  const renderJobGradeBadge = (jobGrade?: string, minGrade?: string, maxGrade?: string) => {
+    if (!jobGrade) {
+      return (
+        <span className="font-mono text-xs font-semibold px-2 py-0.5 bg-slate-100 text-slate-700 rounded border whitespace-nowrap shrink-0">
+          Grade 08
+        </span>
+      );
+    }
+
+    // Hanya dianggap Broadbanding jika eksplisit diset rentang grade atau berformat "Grade X - Grade Y"
+    const isBroadbandRange = Boolean(
+      (minGrade && maxGrade && minGrade !== maxGrade) ||
+      /Grade\s*\d+\s*[-–s\/d]+\s*Grade\s*\d+/i.test(jobGrade)
+    );
+
+    if (isBroadbandRange) {
+      return (
+        <span
+          className="font-mono text-[11px] font-bold px-2 py-0.5 bg-amber-50 text-amber-800 rounded border border-amber-200 inline-flex items-center gap-1 whitespace-nowrap shrink-0"
+          title={`Pita Broadbanding: ${jobGrade}`}
+        >
+          <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block shrink-0" />
+          <span className="truncate max-w-[130px] sm:max-w-none">{jobGrade}</span>
+          <span className="text-[10px] text-amber-600 font-semibold shrink-0">(Band)</span>
+        </span>
+      );
+    }
+
+    // Untuk deskripsi jenjang grade seperti "Grade 4 - Manager / Specialist" atau "Grade 08 — Staf Senior"
+    const parts = jobGrade.split(/\s*[-–—]\s*/);
+    const code = parts[0]?.trim() || jobGrade;
+    const label = parts.length > 1 ? parts.slice(1).join(' - ').trim() : null;
+
+    return (
+      <span
+        className="font-mono text-xs font-semibold px-2 py-0.5 bg-slate-100 text-slate-700 rounded border border-slate-200 inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 max-w-[180px] sm:max-w-none"
+        title={jobGrade}
+      >
+        <span className="font-bold text-slate-900 shrink-0">{code}</span>
+        {label && (
+          <>
+            <span className="text-slate-300 font-normal shrink-0 hidden sm:inline">•</span>
+            <span className="text-slate-500 font-sans font-normal text-[11px] truncate hidden sm:inline max-w-[120px] md:max-w-[140px]">
+              {label}
+            </span>
+          </>
+        )}
+      </span>
+    );
+  };
+
   // Handlers untuk Master Grade & Tabel Rentang Gaji
   const handleOpenAddGrade = () => {
     setGradeFormData({
@@ -2859,19 +2911,10 @@ export const OrganizationManagement: React.FC = () => {
                       >
                         <div>
                           <div className="flex items-center justify-between gap-2 mb-2">
-                            <span className="font-mono text-xs font-bold px-2.5 py-0.5 bg-slate-100 text-slate-800 rounded border border-slate-300">
+                            <span className="font-mono text-xs font-bold px-2.5 py-0.5 bg-slate-100 text-slate-800 rounded border border-slate-300 shrink-0">
                               {pos.code}
                             </span>
-                            {pos.jobGrade && (pos.jobGrade.includes('-') || pos.minGrade) ? (
-                              <span className="font-mono text-[11px] font-bold px-2 py-0.5 bg-amber-50 text-amber-800 rounded border border-amber-200 flex items-center gap-1">
-                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block" />
-                                {pos.jobGrade} (Band)
-                              </span>
-                            ) : (
-                              <span className="font-mono text-xs font-semibold px-2 py-0.5 bg-slate-100 text-slate-700 rounded border">
-                                {pos.jobGrade || 'Grade 08'}
-                              </span>
-                            )}
+                            {renderJobGradeBadge(pos.jobGrade, pos.minGrade, pos.maxGrade)}
                           </div>
 
                           <h4 className="font-bold text-slate-900 text-sm group-hover:text-blue-900 transition-colors">
@@ -4584,14 +4627,14 @@ export const OrganizationManagement: React.FC = () => {
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
                     {previewMasterJobPosition.jobFamily || 'General'}
                   </span>
-                  {previewMasterJobPosition.jobGrade && (previewMasterJobPosition.jobGrade.includes('-') || previewMasterJobPosition.minGrade) ? (
-                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-300 flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block" />
+                  {previewMasterJobPosition.jobGrade && (previewMasterJobPosition.minGrade || /Grade\s*\d+\s*[-–s\/d]+\s*Grade\s*\d+/i.test(previewMasterJobPosition.jobGrade)) ? (
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-300 flex items-center gap-1 whitespace-nowrap shrink-0">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block shrink-0" />
                       Pita Broadbanding: {previewMasterJobPosition.jobGrade}
                     </span>
                   ) : (
-                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
-                      Single Grade: {previewMasterJobPosition.jobGrade || 'Grade 08'}
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200 whitespace-nowrap shrink-0">
+                      Jenjang Grade: {previewMasterJobPosition.jobGrade || 'Grade 08'}
                     </span>
                   )}
                   <span className="px-2 py-0.5 rounded font-bold text-[10px] bg-purple-100 text-purple-800">
@@ -4692,10 +4735,10 @@ export const OrganizationManagement: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => {
-                      const parts = (previewMasterJobPosition.jobGrade || '').split('-').map(s => s.trim());
-                      const minG = previewMasterJobPosition.minGrade || parts[0] || 'Grade 07';
-                      const maxG = previewMasterJobPosition.maxGrade || parts[1] || 'Grade 09';
-                      const isBand = (previewMasterJobPosition.jobGrade || '').includes('-') || !!previewMasterJobPosition.minGrade;
+                      const isBand = !!previewMasterJobPosition.minGrade || /Grade\s*\d+\s*[-–s\/d]+\s*Grade\s*\d+/i.test(previewMasterJobPosition.jobGrade || '');
+                      const parts = (previewMasterJobPosition.jobGrade || '').split(/\s*[-–—]\s*/).map(s => s.trim());
+                      const minG = previewMasterJobPosition.minGrade || (isBand ? parts[0] : 'Grade 07');
+                      const maxG = previewMasterJobPosition.maxGrade || (isBand ? parts[1] : 'Grade 09');
 
                       setMasterPositionFormData({
                         id: previewMasterJobPosition.id,

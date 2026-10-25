@@ -505,12 +505,16 @@ export interface JobRequisition {
   approvalNotes?: string;
   signatories?: FptkSignatory[]; // Daftar penanda tangan / approval berjenjang yang fleksibel
 
-  status: 'Disetujui' | 'Menunggu Approval' | 'Draft' | 'Ditolak' | 'Dibatalkan';
+  retractedAt?: string; // Tanggal & waktu pencabutan FPTK setelah disetujui
+  retractedReason?: string; // Alasan pencabutan (Budget freeze, restrukturisasi, pembatalan direksi)
+  retractedBy?: string; // Nama otoritas yang mencabut pengajuan FPTK
+
+  status: 'Disetujui' | 'Menunggu Approval' | 'Draft' | 'Ditolak' | 'Dibatalkan' | 'Dicabut (Retracted)';
   createdAt: string;
 }
 
 // 2. Sourcing & Multi-Channel Job Posting
-export type JobPostingChannel = 'Jobstreet' | 'LinkedIn' | 'Glints' | 'Kalibrr' | 'Website Karir';
+export type JobPostingChannel = 'Jobstreet' | 'LinkedIn' | 'Glints' | 'Kalibrr' | 'Website Karir' | 'Website Karir Internal';
 
 export interface JobVacancy {
   id: string;
@@ -550,6 +554,87 @@ export interface CandidateParsedData {
   parsedAt: string;
 }
 
+export interface CandidateCompetencyScore {
+  id: string;
+  testTypeId: string;
+  testTypeName: string;
+  category: string;
+  score: number;
+  passingGrade: number;
+  status: 'Lulus' | 'Tidak Lulus';
+  evaluatedAt: string;
+  evaluator?: string;
+  notes?: string;
+  details?: Record<string, any>;
+}
+
+export interface CompetencyTestTypeSetting {
+  id: string;
+  name: string;
+  category: 'Hard Skill' | 'Soft Skill' | 'Kognitif & Logika' | 'Bahasa' | 'Studi Kasus' | 'Praktik Kerja';
+  passingGrade: number;
+  durationMinutes: number;
+  method: 'Online Test' | 'Live Coding' | 'Presentasi' | 'Tatap Muka' | 'Studi Kasus Mandiri';
+  description: string;
+  weightPercent?: number;
+  isActive: boolean;
+}
+
+export interface InterviewScorecardCriterion {
+  id: string;
+  name: string;
+  description?: string;
+  weightPercent?: number;
+}
+
+export interface InterviewTypeSetting {
+  id: string;
+  name: string;
+  targetRole?: string;
+  description: string;
+  interviewerRoles?: string;
+  criteria: InterviewScorecardCriterion[];
+  isActive: boolean;
+}
+
+export interface AssignedInterviewer {
+  id: string;
+  employeeId?: string;
+  name: string;
+  title: string;
+  department: string;
+  email: string;
+  avatar?: string;
+  role?: string;
+  status?: 'Terkonfirmasi' | 'Menunggu Respon' | 'Reschedule Diminta' | 'Berhalangan';
+  notes?: string;
+}
+
+export interface CandidateInterviewEvaluation {
+  id: string;
+  interviewTypeId: string;
+  interviewTypeName: string;
+  interviewDate: string;
+  interviewer: string;
+  interviewers?: AssignedInterviewer[];
+  platform: 'Google Meet' | 'Microsoft Teams' | 'Ruang Interview Kantor' | string;
+  meetingLink?: string;
+  scorecardRatings: Record<string, number>;
+  averageStars: number;
+  calculatedScore: number;
+  recommendation: 'Direkomendasikan Lolos' | 'Dipertimbangkan' | 'Tidak Direkomendasikan';
+  userRecommendation?: string;
+  systemObjectiveRecommendation?: {
+    compositeScore: number;
+    testScore: number;
+    interviewScore: number;
+    status: 'Sangat Direkomendasikan' | 'Dipertimbangkan' | 'Tidak Direkomendasikan';
+    rationale: string;
+  };
+  notes: string;
+  evaluatedAt: string;
+}
+
 export interface Candidate {
   id: string;
   tenantId: string;
@@ -579,31 +664,60 @@ export interface Candidate {
   screeningNotes?: string;
 
   // 5. Assessment / Test
-  testType?: 'Tes Teknis / Coding' | 'Psikotes (DISC / MBTI)' | 'Tes Logika & Numerik' | 'Case Study' | 'Bahasa Inggris';
+  testType?: string;
   testScore?: number; // 0 - 100
   testPassingGrade?: number;
   testStatus?: 'Belum Ditugaskan' | 'Terkirim' | 'Sedang Mengerjakan' | 'Lulus' | 'Tidak Lulus';
   testNotes?: string;
   testAssignedDate?: string;
+  competencyScores?: CandidateCompetencyScore[];
 
   // 6. Interview
   interviewDate?: string;
+  interviewTimeEnd?: string;
   interviewer?: string;
+  interviewers?: AssignedInterviewer[];
   interviewScore?: number;
   interviewNotes?: string;
+  userRecommendation?: string;
   meetingPlatform?: 'Google Meet' | 'Microsoft Teams' | 'Ruang Interview Kantor';
   meetingLink?: string;
+  candidateAttendanceStatus?: 'Terkonfirmasi Hadir' | 'Menunggu Respon' | 'Minta Reschedule' | 'Tidak Hadir';
+  interviewScheduleStatus?: 'Belum Dijadwalkan' | 'Menunggu Konfirmasi' | 'Terkonfirmasi (Siap Hari-H)' | 'Dijadwalkan' | 'Reschedule Diminta' | 'Jadwal Diperbarui' | 'Selesai' | 'Dibatalkan';
+  rescheduleReason?: string;
+  rescheduleHistory?: Array<{
+    previousDate: string;
+    newDate: string;
+    reason: string;
+    requestedBy: string;
+    rescheduledAt: string;
+  }>;
+  systemObjectiveRecommendation?: {
+    compositeScore: number;
+    testScore: number;
+    interviewScore: number;
+    status: 'Sangat Direkomendasikan' | 'Dipertimbangkan' | 'Tidak Direkomendasikan';
+    rationale: string;
+  };
+  interviewTypeId?: string;
+  interviewTypeName?: string;
   interviewScorecard?: {
-    technical: number;
-    culturalFit: number;
-    communication: number;
+    technical?: number;
+    culturalFit?: number;
+    communication?: number;
+    ratings?: Record<string, number>;
     recommendation: 'Direkomendasikan Lolos' | 'Dipertimbangkan' | 'Tidak Direkomendasikan';
   };
+  interviewEvaluations?: CandidateInterviewEvaluation[];
 
   // 7. Offering
   offeredSalary?: number;
   offeringDocNumber?: string;
   offeringSentDate?: string;
+  offeringStatus?: 'Draft' | 'Terkirim' | 'Diterima' | 'Negosiasi' | 'Ditolak';
+  offeringCandidateResponse?: 'Cocok' | 'Nego' | 'Tidak Cocok';
+  offeringResponseNotes?: string;
+  offeringResponseDate?: string;
 
   // 8. Hired / Disqualified / Talent Pool
   joinedDate?: string;
@@ -824,13 +938,65 @@ export interface MigrationRowPreview {
 }
 
 // Onboarding Types (Via Rekrutmen vs Direct Onboarding)
+export type OnboardingChecklistType = 'automatic_action' | 'manual';
+export type OnboardingTargetDepartment = 'GA' | 'IT' | 'HR' | 'Finance' | 'UserDept';
+export type OnboardingActionType =
+  | 'id_card_request'
+  | 'dossier_verification'
+  | 'laptop_provisioning'
+  | 'account_email_setup'
+  | 'contract_signing'
+  | 'custom_action';
+
+export interface OnboardingChecklistTemplateItem {
+  id: string;
+  title: string;
+  category: string;
+  targetDepartment: OnboardingTargetDepartment;
+  verificationType: OnboardingChecklistType;
+  actionType?: OnboardingActionType;
+  isMandatory: boolean;
+  description?: string;
+}
+
 export interface OnboardingTask {
   id: string;
   title: string;
-  category: 'Legalitas & Dokumen' | 'Fasilitas & IT' | 'Pengenalan & HR' | 'Payroll & Rekening';
+  category: 'Legalitas & Dokumen' | 'Fasilitas & IT' | 'Pengenalan & HR' | 'Payroll & Rekening' | 'Fasilitas & GA' | 'Inventaris & IT';
   isCompleted: boolean;
   completedAt?: string;
   assignedRole: string;
+  verificationType?: OnboardingChecklistType;
+  targetDepartment?: OnboardingTargetDepartment;
+  actionType?: OnboardingActionType;
+  isMandatory?: boolean;
+  actionPayload?: {
+    // ID Card request data
+    idCardTicketNo?: string;
+    idCardType?: string;
+    idCardAccessRooms?: string[];
+    idCardPhotoUrl?: string;
+    // Dossier data
+    dossierUploadedDocs?: string[];
+    dossierKtpNumber?: string;
+    dossierNpwpNumber?: string;
+    dossierBpjsTkNumber?: string;
+    dossierBpjsKesNumber?: string;
+    dossierAddressKtp?: string;
+    dossierEmergencyContact?: string;
+    dossierCompleted?: boolean;
+    // Laptop data
+    laptopDeviceType?: string;
+    laptopSerialNo?: string;
+    laptopAssetTag?: string;
+    laptopAccessories?: string[];
+    // Account & Corporate Email data
+    corporateEmail?: string;
+    temporaryPassword?: string;
+    provisionedAccounts?: Array<{ systemName: string; username: string; status: string }>;
+    notes?: string;
+    submittedAt?: string;
+  };
 }
 
 export interface OnboardingProcess {
