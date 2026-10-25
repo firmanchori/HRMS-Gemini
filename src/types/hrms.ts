@@ -839,6 +839,10 @@ export interface Candidate {
     takeHomePay: number;
     costToCompany: number;
   };
+  offeringPosition?: string;
+  offeringUnitKerja?: string;
+  offeringStartDate?: string;
+  offeringEmploymentStatus?: string;
 
   // 8. Hired / Disqualified / Talent Pool
   joinedDate?: string;

@@ -1160,6 +1160,26 @@ export const RecruitmentManagement: React.FC = () => {
   const [pipelineScoreFilter, setPipelineScoreFilter] = useState<'all' | '90' | '80' | '70' | 'under70'>('all');
   const [pipelineResultStatusFilter, setPipelineResultStatusFilter] = useState<'all' | 'passed' | 'review' | 'failed'>('all');
 
+  // Tab 6 Onboarding Filters (Filter per Karyawan, Search, Status)
+  const [onboardingEmployeeFilter, setOnboardingEmployeeFilter] = useState<string>('all');
+  const [onboardingSearchQuery, setOnboardingSearchQuery] = useState<string>('');
+  const [onboardingStatusFilter, setOnboardingStatusFilter] = useState<'all' | 'In Progress' | 'Completed'>('all');
+
+  // Offering Agreement & Term Updates Modal (Cocok Flow: Jabatan, Unit Kerja, Tanggal Mulai, Status Kerja)
+  const [isOfferingAgreementModalOpen, setIsOfferingAgreementModalOpen] = useState<boolean>(false);
+  const [candidateForAgreement, setCandidateForAgreement] = useState<Candidate | null>(null);
+  const [agreementRole, setAgreementRole] = useState<string>('');
+  const [agreementUnitKerja, setAgreementUnitKerja] = useState<string>('');
+  const [agreementStartDate, setAgreementStartDate] = useState<string>('');
+  const [agreementEmploymentStatus, setAgreementEmploymentStatus] = useState<string>('PKWTT (Tetap)');
+  const [agreementNotes, setAgreementNotes] = useState<string>('');
+
+  // Offering Rejection Modal (Tolak Flow: Tolak Saja vs Tolak & Masukkan ke Talent Pool)
+  const [isOfferingRejectModalOpen, setIsOfferingRejectModalOpen] = useState<boolean>(false);
+  const [candidateForReject, setCandidateForReject] = useState<Candidate | null>(null);
+  const [rejectActionType, setRejectActionType] = useState<'reject_only' | 'reject_talent_pool'>('reject_talent_pool');
+  const [rejectReasonNotes, setRejectReasonNotes] = useState<string>('');
+
   // Active items for modals
   const [activeCandidate, setActiveCandidate] = useState<Candidate | null>(null);
   const [activeRequisition, setActiveRequisition] = useState<JobRequisition | null>(null);
@@ -5307,41 +5327,172 @@ PT Nusantara Multi Talenta Tbk`);
     );
   };
 
-  const handleRecordCandidateResponse = (
-    candidate: Candidate,
-    response: 'Cocok' | 'Nego' | 'Tidak Cocok',
-    notes?: string
-  ) => {
-    const todayStr = new Date().toISOString().split('T')[0];
-    const newStatus: Candidate['offeringStatus'] =
-      response === 'Cocok' ? 'Diterima' : response === 'Nego' ? 'Negosiasi' : 'Ditolak';
+  // Handler untuk Buka Modal Kesepakatan Offering & Form Ketentuan Jabatan (Cocok)
+  const handleOpenOfferingAgreementModal = (candidate: Candidate) => {
+    const vac = vacancies.find((v) => v.id === candidate.jobVacancyId);
+    setCandidateForAgreement(candidate);
+    setAgreementRole(candidate.offeringPosition || vac?.title || 'Posisi Jabatan');
+    setAgreementUnitKerja(candidate.offeringUnitKerja || vac?.department || 'Departemen Operasional');
+    setAgreementStartDate(
+      candidate.offeringStartDate ||
+      candidate.joinedDate ||
+      new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0]
+    );
+    setAgreementEmploymentStatus(
+      candidate.offeringEmploymentStatus ||
+      vac?.employmentType ||
+      'PKWTT (Tetap)'
+    );
+    setAgreementNotes(candidate.offeringResponseNotes || '');
+    setIsOfferingAgreementModalOpen(true);
+  };
 
+  // Simpan Kesepakatan Offering Final (Jabatan, Unit Kerja, Tanggal Mulai, Status Kerja)
+  const handleConfirmOfferingAgreement = () => {
+    if (!candidateForAgreement) return;
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    updateCandidateStage(candidateForAgreement.id, 'Offered', {
+      offeringStatus: 'Diterima',
+      offeringCandidateResponse: 'Cocok',
+      offeringPosition: agreementRole,
+      offeringUnitKerja: agreementUnitKerja,
+      offeringStartDate: agreementStartDate,
+      offeringEmploymentStatus: agreementEmploymentStatus,
+      offeringResponseNotes: agreementNotes,
+      offeringResponseDate: todayStr,
+      joinedDate: agreementStartDate,
+    });
+
+    setActiveCandidate((prev) =>
+      prev?.id === candidateForAgreement.id
+        ? {
+            ...prev,
+            offeringStatus: 'Diterima',
+            offeringCandidateResponse: 'Cocok',
+            offeringPosition: agreementRole,
+            offeringUnitKerja: agreementUnitKerja,
+            offeringStartDate: agreementStartDate,
+            offeringEmploymentStatus: agreementEmploymentStatus,
+            offeringResponseNotes: agreementNotes,
+            offeringResponseDate: todayStr,
+            joinedDate: agreementStartDate,
+          }
+        : prev
+    );
+
+    setIsOfferingAgreementModalOpen(false);
+    setToastFeedback(
+      `Kesepakatan offering berhasil disimpan! Ketentuan jabatan (${agreementRole}), unit kerja (${agreementUnitKerja}), tanggal bertugas (${agreementStartDate}), dan status (${agreementEmploymentStatus}) telah diperbarui. Calon karyawan kini siap dilanjutkan ke Onboarding (Hired).`
+    );
+  };
+
+  // Handler Proses Nego: Catat status Nego dan Munculkan Ulang Kalkulator Offering & Form
+  const handleProcessOfferingNego = (candidate: Candidate) => {
+    const todayStr = new Date().toISOString().split('T')[0];
     updateCandidateStage(candidate.id, 'Offered', {
-      offeringStatus: newStatus,
-      offeringCandidateResponse: response,
-      offeringResponseNotes: notes !== undefined ? notes : candidate.offeringResponseNotes || '',
+      offeringStatus: 'Negosiasi',
+      offeringCandidateResponse: 'Nego',
       offeringResponseDate: todayStr,
     });
     setActiveCandidate((prev) =>
       prev?.id === candidate.id
         ? {
             ...prev,
-            offeringStatus: newStatus,
-            offeringCandidateResponse: response,
-            offeringResponseNotes: notes !== undefined ? notes : prev.offeringResponseNotes || '',
+            offeringStatus: 'Negosiasi',
+            offeringCandidateResponse: 'Nego',
             offeringResponseDate: todayStr,
           }
         : prev
     );
     setToastFeedback(
-      `Balasan calon karyawan '${response.toUpperCase()}' berhasil dicatat! Keputusan akhir (Hired / Tolak / Revisi) kini siap diproses.`
+      `Kandidat mengajukan negosiasi offering. Membuka ulang kalkulator & formulir penawaran gaji...`
     );
+    // Buka ulang kalkulator offering
+    handleOpenOfferingModal(candidate);
+  };
+
+  // Handler Buka Modal Tolak Offering (Opsi: Tolak Saja vs Tolak & Masukkan ke Talent Pool)
+  const handleOpenOfferingRejectModal = (candidate: Candidate) => {
+    setCandidateForReject(candidate);
+    setRejectActionType('reject_talent_pool');
+    setRejectReasonNotes('');
+    setIsOfferingRejectModalOpen(true);
+  };
+
+  // Konfirmasi Tindak Lanjut Penolakan Offering
+  const handleConfirmOfferingReject = () => {
+    if (!candidateForReject) return;
+    const todayStr = new Date().toISOString().split('T')[0];
+    const vac = vacancies.find((v) => v.id === candidateForReject.jobVacancyId);
+    const details = getTalentHistoricalDetails(candidateForReject);
+
+    if (rejectActionType === 'reject_talent_pool') {
+      // Tolak dan Masukkan ke Talent Pool Cadangan
+      updateCandidateStage(candidateForReject.id, 'TalentPool', {
+        offeringStatus: 'Ditolak',
+        offeringCandidateResponse: 'Tidak Cocok',
+        offeringResponseDate: todayStr,
+        disqualificationReason:
+          rejectReasonNotes || 'Kandidat menolak penawaran kerja (Offering). Disimpan di Talent Pool Cadangan untuk re-engage di masa depan.',
+        talentPoolCategory: vac?.department || 'Prioritas Cadangan Offering',
+        talentPoolTags: ['Offering Declined', 'Top Candidate', 'Prioritas Talent Pool'],
+        lastStageName: 'Offering Letter',
+        lastStageScore: details.score || 88,
+        lastStageDate: new Date().toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' }),
+        lastStageLocation: 'Kantor Pusat / HR',
+        lastStageInterviewer: 'HR Offering & Negotiation Team',
+        lastStageNotes: rejectReasonNotes || 'Menolak offering namun kualifikasi sangat baik, siap di-reengage.',
+      });
+      setToastFeedback(
+        `Penolakan offering dicatat: ${candidateForReject.name} berhasil disimpan ke basis data Talent Pool Cadangan untuk re-engage sewaktu-waktu!`
+      );
+    } else {
+      // Tolak Saja
+      updateCandidateStage(candidateForReject.id, 'Rejected', {
+        offeringStatus: 'Ditolak',
+        offeringCandidateResponse: 'Tidak Cocok',
+        offeringResponseDate: todayStr,
+        disqualificationReason:
+          rejectReasonNotes || 'Kandidat menolak penawaran kerja (Offering declined)',
+      });
+      setToastFeedback(
+        `Penolakan offering dicatat: ${candidateForReject.name} berstatus tidak lolos (Rejected).`
+      );
+    }
+
+    setActiveCandidate((prev) =>
+      prev?.id === candidateForReject.id
+        ? {
+            ...prev,
+            offeringStatus: 'Ditolak',
+            offeringCandidateResponse: 'Tidak Cocok',
+            offeringResponseDate: todayStr,
+          }
+        : prev
+    );
+
+    setIsOfferingRejectModalOpen(false);
+  };
+
+  const handleRecordCandidateResponse = (
+    candidate: Candidate,
+    response: 'Cocok' | 'Nego' | 'Tidak Cocok',
+    notes?: string
+  ) => {
+    if (response === 'Cocok') {
+      handleOpenOfferingAgreementModal(candidate);
+    } else if (response === 'Nego') {
+      handleProcessOfferingNego(candidate);
+    } else if (response === 'Tidak Cocok') {
+      handleOpenOfferingRejectModal(candidate);
+    }
   };
 
   const handleConfirmHired = (candidate: Candidate) => {
     const vac = vacancies.find((v) => v.id === candidate.jobVacancyId);
-    const pos = vac?.title || 'Senior Specialist';
-    const dept = vac?.department || 'Engineering';
+    const pos = candidate.offeringPosition || vac?.title || 'Senior Specialist';
+    const dept = candidate.offeringUnitKerja || vac?.department || 'Engineering';
 
     const activeTemplates =
       onboardingChecklistTemplates && onboardingChecklistTemplates.length > 0
@@ -5382,15 +5533,15 @@ PT Nusantara Multi Talenta Tbk`);
       phone: candidate.phone,
       position: pos,
       department: dept,
-      employmentType: vac?.employmentType || 'Kontrak',
-      joinDate: candidate.joinedDate || targetJoinDate || '2026-11-01',
+      employmentType: (candidate.offeringEmploymentStatus as any) || vac?.employmentType || 'Kontrak',
+      joinDate: candidate.offeringStartDate || candidate.joinedDate || targetJoinDate || '2026-11-01',
       basicSalary: candidate.offeredSalary ? Math.round(candidate.offeredSalary * 0.75) : components.basicSalary,
       contractDocNumber: candidate.offeringDocNumber || docNumber,
       tasks: dynamicTasks,
     });
 
     updateCandidateStage(candidate.id, 'Hired', {
-      joinedDate: candidate.joinedDate || targetJoinDate || '2026-11-01',
+      joinedDate: candidate.offeringStartDate || candidate.joinedDate || targetJoinDate || '2026-11-01',
     });
     alert(`Keputusan Resmi: ${candidate.name} DITERIMA (HIRED)! Data ditransfer ke Tab On Boarding.`);
     setActiveTab('onboarding');
@@ -8445,20 +8596,177 @@ PT Nusantara Multi Talenta Tbk`);
             </div>
           </div>
 
-          {/* Onboarding Cards Grid */}
-          {onboardingProcesses.length === 0 ? (
-            <div className="bg-white border border-slate-200 rounded-xl p-12 text-center space-y-3">
-              <div className="w-12 h-12 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto">
-                <UserCheck className="w-6 h-6" />
-              </div>
-              <h4 className="font-bold text-slate-800 text-sm">Belum Ada Karyawan dalam Proses Onboarding</h4>
-              <p className="text-xs text-slate-500 max-w-md mx-auto">
-                Kandidat yang telah resmi berstatus <strong>Hired</strong> di Tahap Keputusan (Offering) akan otomatis masuk ke daftar antrean onboarding ini.
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 gap-4">
-              {(onboardingProcesses || []).map((process) => {
+          {/* Panel Filter Onboarding (Filter per Karyawan, Pencarian, & Status) */}
+          {(() => {
+            const allOnboardingList = onboardingProcesses || [];
+            const filteredProcesses = allOnboardingList.filter((process) => {
+              if (onboardingEmployeeFilter !== 'all' && process.employeeName !== onboardingEmployeeFilter) {
+                return false;
+              }
+              if (onboardingStatusFilter !== 'all' && process.status !== onboardingStatusFilter) {
+                return false;
+              }
+              if (onboardingSearchQuery.trim()) {
+                const q = onboardingSearchQuery.toLowerCase();
+                const matchesName = (process.employeeName || '').toLowerCase().includes(q);
+                const matchesPosition = (process.position || '').toLowerCase().includes(q);
+                const matchesDept = (process.department || '').toLowerCase().includes(q);
+                const matchesNik = (process.employeeNik || '').toLowerCase().includes(q);
+                if (!matchesName && !matchesPosition && !matchesDept && !matchesNik) {
+                  return false;
+                }
+              }
+              return true;
+            });
+
+            return (
+              <>
+                <div className="bg-white p-3.5 border border-slate-200 rounded-xl shadow-2xs space-y-3">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                    {/* Filter Per Karyawan Dropdown */}
+                    <div className="flex items-center gap-2 flex-1 min-w-[240px]">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 whitespace-nowrap">
+                        <User className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Filter per Karyawan:</span>
+                      </div>
+                      <select
+                        value={onboardingEmployeeFilter}
+                        onChange={(e) => setOnboardingEmployeeFilter(e.target.value)}
+                        className="bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-800 focus:outline-hidden focus:ring-1 focus:ring-emerald-500 w-full max-w-xs cursor-pointer"
+                      >
+                        <option value="all">Semua Karyawan ({allOnboardingList.length})</option>
+                        {Array.from(new Set(allOnboardingList.map((p) => p.employeeName))).map((name, nIdx) => {
+                          const proc = allOnboardingList.find((p) => p.employeeName === name);
+                          return (
+                            <option key={nIdx} value={name}>
+                              {name} - {proc?.position || 'Karyawan'} ({proc?.department || 'Umum'})
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+
+                    {/* Search Bar & Status Filter */}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <div className="relative min-w-[200px]">
+                        <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <input
+                          type="text"
+                          value={onboardingSearchQuery}
+                          onChange={(e) => setOnboardingSearchQuery(e.target.value)}
+                          placeholder="Cari nama, NIK, posisi..."
+                          className="w-full pl-8 pr-7 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs placeholder:text-slate-400 focus:outline-hidden focus:ring-1 focus:ring-emerald-500"
+                        />
+                        {onboardingSearchQuery && (
+                          <button
+                            type="button"
+                            onClick={() => setOnboardingSearchQuery('')}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
+
+                      <select
+                        value={onboardingStatusFilter}
+                        onChange={(e) => setOnboardingStatusFilter(e.target.value as any)}
+                        className="bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-700 focus:outline-hidden cursor-pointer"
+                      >
+                        <option value="all">Semua Status</option>
+                        <option value="In Progress">Sedang Berjalan</option>
+                        <option value="Completed">Selesai (Aktif)</option>
+                      </select>
+
+                      {(onboardingEmployeeFilter !== 'all' || onboardingSearchQuery !== '' || onboardingStatusFilter !== 'all') && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setOnboardingEmployeeFilter('all');
+                            setOnboardingSearchQuery('');
+                            setOnboardingStatusFilter('all');
+                          }}
+                          className="px-2.5 py-1.5 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg flex items-center gap-1 transition-colors cursor-pointer"
+                        >
+                          <RotateCcw className="w-3 h-3" />
+                          <span>Reset</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Quick Active Employee Chips */}
+                  {allOnboardingList.length > 0 && (
+                    <div className="flex items-center gap-1.5 overflow-x-auto pt-1 border-t border-slate-100 no-scrollbar">
+                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider shrink-0 mr-1">
+                        Karyawan:
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setOnboardingEmployeeFilter('all')}
+                        className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold whitespace-nowrap transition-colors cursor-pointer ${
+                          onboardingEmployeeFilter === 'all'
+                            ? 'bg-emerald-700 text-white shadow-2xs font-bold'
+                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                        }`}
+                      >
+                        Semua ({allOnboardingList.length})
+                      </button>
+                      {allOnboardingList.map((p) => {
+                        const isSelected = onboardingEmployeeFilter === p.employeeName;
+                        const completedTasks = (p.tasks || []).filter((t) => t.isCompleted).length;
+                        const totalTasks = (p.tasks || []).length;
+                        return (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => setOnboardingEmployeeFilter(p.employeeName)}
+                            className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold whitespace-nowrap transition-colors flex items-center gap-1.5 cursor-pointer ${
+                              isSelected
+                                ? 'bg-emerald-700 text-white shadow-2xs font-bold'
+                                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                            }`}
+                          >
+                            <span>{p.employeeName}</span>
+                            <span
+                              className={`text-[9.5px] px-1 rounded-full ${
+                                isSelected ? 'bg-emerald-800 text-emerald-100' : 'bg-slate-200 text-slate-600'
+                              }`}
+                            >
+                              {completedTasks}/{totalTasks}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Onboarding Cards Grid */}
+                {filteredProcesses.length === 0 ? (
+                  <div className="bg-white border border-slate-200 rounded-xl p-12 text-center space-y-3">
+                    <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center mx-auto">
+                      <Search className="w-6 h-6" />
+                    </div>
+                    <h4 className="font-bold text-slate-800 text-sm">Tidak Ditemukan Karyawan yang Sesuai</h4>
+                    <p className="text-xs text-slate-500 max-w-md mx-auto">
+                      Tidak ada karyawan dalam proses onboarding yang cocok dengan kriteria filter saat ini.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOnboardingEmployeeFilter('all');
+                        setOnboardingSearchQuery('');
+                        setOnboardingStatusFilter('all');
+                      }}
+                      className="px-3.5 py-1.5 bg-emerald-700 text-white rounded-lg text-xs font-semibold cursor-pointer"
+                    >
+                      Reset Filter
+                    </button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-4">
+                    {filteredProcesses.map((process) => {
                 const tasksList = Array.isArray(process.tasks) ? process.tasks : [];
                 const totalTasks = tasksList.length;
                 const completedTasks = tasksList.filter((t) => t.isCompleted).length;
@@ -8847,8 +9155,11 @@ PT Nusantara Multi Talenta Tbk`);
               })}
             </div>
           )}
-        </div>
-      )}
+        </>
+      );
+    })()}
+  </div>
+)}
 
       {/* ===================== TAB 7: TALENT POOL ===================== */}
       {activeTab === 'talent_pool' && (
@@ -18128,19 +18439,19 @@ PT Nusantara Multi Talenta Tbk`);
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs">
                     <div>
                       <span className="text-slate-500 text-[10px] block">Jabatan / Role</span>
-                      <span className="font-bold text-slate-900">{vacancyTitle}</span>
+                      <span className="font-bold text-slate-900">{activeCandidate.offeringPosition || vacancyTitle}</span>
                     </div>
                     <div>
                       <span className="text-slate-500 text-[10px] block">Unit Kerja</span>
-                      <span className="font-bold text-slate-900">{departmentTitle}</span>
+                      <span className="font-bold text-slate-900">{activeCandidate.offeringUnitKerja || departmentTitle}</span>
                     </div>
                     <div>
                       <span className="text-slate-500 text-[10px] block">Tanggal Mulai Bertugas</span>
-                      <span className="font-mono font-bold text-blue-900">{joinDate}</span>
+                      <span className="font-mono font-bold text-blue-900">{activeCandidate.offeringStartDate || joinDate}</span>
                     </div>
                     <div>
                       <span className="text-slate-500 text-[10px] block">Status Kerja</span>
-                      <span className="font-bold text-emerald-800">PKWTT (Tetap) / PKWT</span>
+                      <span className="font-bold text-emerald-800">{activeCandidate.offeringEmploymentStatus || 'PKWTT (Tetap)'}</span>
                     </div>
                   </div>
                 </div>
@@ -18720,6 +19031,286 @@ PT Nusantara Multi Talenta Tbk`);
           </div>
         );
       })()}
+
+      {/* ===================== MODAL KESEPAKATAN OFFERING & FORM KETENTUAN JABATAN ===================== */}
+      {isOfferingAgreementModalOpen && candidateForAgreement && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto"
+          onClick={() => setIsOfferingAgreementModalOpen(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl max-w-xl w-full border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-200 my-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header Modal */}
+            <div className="px-6 py-4 bg-slate-950 text-white flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-emerald-600/30 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                  <CheckCircle className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold tracking-tight">Konfirmasi Kesepakatan Offering & Ketentuan Kerja</h3>
+                  <p className="text-[11px] text-slate-400">
+                    Calon Karyawan & HR Saling Sepakat (Cocok) · Lengkapi Ketentuan Kerja
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsOfferingAgreementModalOpen(false)}
+                className="text-slate-400 hover:text-white cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 space-y-4 text-xs max-h-[75vh] overflow-y-auto">
+              {/* Highlight Kandidat & Gaji Disepakati */}
+              <div className="p-3.5 bg-emerald-50/70 border border-emerald-200 rounded-xl space-y-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] text-emerald-700 font-bold uppercase tracking-wider block">Calon Karyawan Terpilih</span>
+                    <h4 className="font-bold text-slate-900 text-sm">{candidateForAgreement.name}</h4>
+                    <p className="text-[11px] text-slate-600">{candidateForAgreement.email} · {candidateForAgreement.phone}</p>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[10px] text-emerald-700 font-bold uppercase tracking-wider block">Gaji Disepakati</span>
+                    <span className="text-sm font-mono font-bold text-emerald-800">
+                      {formatRupiah(candidateForAgreement.offeredSalary || candidateForAgreement.expectedSalary)}
+                    </span>
+                    <span className="text-[10px] text-slate-500 block">/bulan (Gross)</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Ketentuan Jabatan & Waktu Bertugas Form */}
+              <div className="border border-slate-200 rounded-xl p-4 bg-slate-50/50 space-y-3.5">
+                <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
+                  <Briefcase className="w-4 h-4 text-blue-700" />
+                  <span className="font-bold text-slate-900 text-xs uppercase tracking-wide">
+                    I. Ketentuan Jabatan & Waktu Bertugas
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <div>
+                    <label className="font-semibold text-slate-700 block mb-1">
+                      Jabatan / Role <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={agreementRole}
+                      onChange={(e) => setAgreementRole(e.target.value)}
+                      placeholder="Contoh: Senior Frontend Developer"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white text-xs focus:ring-1 focus:ring-blue-500 outline-hidden font-medium"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="font-semibold text-slate-700 block mb-1">
+                      Unit Kerja / Departemen <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={agreementUnitKerja}
+                      onChange={(e) => setAgreementUnitKerja(e.target.value)}
+                      placeholder="Contoh: IT & Digital Engineering"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white text-xs focus:ring-1 focus:ring-blue-500 outline-hidden font-medium"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="font-semibold text-slate-700 block mb-1">
+                      Tanggal Mulai Bertugas <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={agreementStartDate}
+                      onChange={(e) => setAgreementStartDate(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white text-xs focus:ring-1 focus:ring-blue-500 outline-hidden font-medium"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="font-semibold text-slate-700 block mb-1">
+                      Status Hubungan Kerja <span className="text-rose-500">*</span>
+                    </label>
+                    <select
+                      value={agreementEmploymentStatus}
+                      onChange={(e) => setAgreementEmploymentStatus(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white text-xs focus:ring-1 focus:ring-blue-500 outline-hidden font-medium cursor-pointer"
+                    >
+                      <option value="PKWTT (Tetap)">PKWTT (Karyawan Tetap)</option>
+                      <option value="PKWT (Kontrak 1 Tahun)">PKWT (Kontrak 1 Tahun)</option>
+                      <option value="PKWT (Kontrak 6 Bulan)">PKWT (Kontrak 6 Bulan)</option>
+                      <option value="Probation 3 Bulan">Probation 3 Bulan (Masa Percobaan)</option>
+                      <option value="Magang / Internship">Magang / Internship</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Catatan Kesepakatan Tambahan */}
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">
+                  Catatan Kesepakatan Offering & Fasilitas (Opsional)
+                </label>
+                <textarea
+                  value={agreementNotes}
+                  onChange={(e) => setAgreementNotes(e.target.value)}
+                  rows={2}
+                  placeholder="Catatan tunjangan khusus, jadwal first-day onboarding, atau perlengkapan kerja..."
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white text-xs focus:ring-1 focus:ring-blue-500 outline-hidden resize-none"
+                />
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-3 shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsOfferingAgreementModalOpen(false)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmOfferingAgreement}
+                className="px-5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <Check className="w-4 h-4" />
+                <span>Simpan Kesepakatan & Terbitkan Surat Offering</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===================== MODAL TOLAK PENAWARAN KERJA (OFFERING) ===================== */}
+      {isOfferingRejectModalOpen && candidateForReject && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto"
+          onClick={() => setIsOfferingRejectModalOpen(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl max-w-md w-full border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-200 my-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header Modal */}
+            <div className="px-5 py-4 bg-slate-950 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-rose-500/20 border border-rose-500/30 flex items-center justify-center text-rose-400">
+                  <XCircle className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold tracking-tight">Tolak Penawaran Kerja (Offering)</h3>
+                  <p className="text-[11px] text-slate-400">Calon Karyawan Tidak Cocok / Menolak Offering</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsOfferingRejectModalOpen(false)}
+                className="text-slate-400 hover:text-white cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-5 space-y-4 text-xs">
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
+                <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Kandidat:</span>
+                <p className="font-bold text-slate-900 text-sm">{candidateForReject.name}</p>
+                <p className="text-slate-500 text-[11px]">{candidateForReject.email} · {candidateForReject.phone}</p>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-800 block mb-2">Pilih Tindak Lanjut Data Kandidat:</label>
+                <div className="space-y-2.5">
+                  <label
+                    className={`p-3 rounded-xl border flex items-start gap-3 cursor-pointer transition-all ${
+                      rejectActionType === 'reject_talent_pool'
+                        ? 'border-blue-600 bg-blue-50/70 ring-1 ring-blue-500 text-blue-950'
+                        : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="rejectActionType"
+                      checked={rejectActionType === 'reject_talent_pool'}
+                      onChange={() => setRejectActionType('reject_talent_pool')}
+                      className="mt-0.5 text-blue-600 focus:ring-blue-500"
+                    />
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-xs text-slate-900">Tolak dan Masukkan ke Talent Pool</span>
+                        <span className="px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-blue-100 text-blue-800">Direkomendasikan</span>
+                      </div>
+                      <p className="text-[11px] text-slate-600 leading-relaxed">
+                        Data profil, nilai tes, dan evaluasi wawancara disimpan ke <b>Talent Pool Cadangan</b> sehingga dapat dihubungi dan diaktifkan kembali (<i>Re-Engage</i>) di masa depan.
+                      </p>
+                    </div>
+                  </label>
+
+                  <label
+                    className={`p-3 rounded-xl border flex items-start gap-3 cursor-pointer transition-all ${
+                      rejectActionType === 'reject_only'
+                        ? 'border-rose-600 bg-rose-50/70 ring-1 ring-rose-500 text-rose-950'
+                        : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="rejectActionType"
+                      checked={rejectActionType === 'reject_only'}
+                      onChange={() => setRejectActionType('reject_only')}
+                      className="mt-0.5 text-rose-600 focus:ring-rose-500"
+                    />
+                    <div className="space-y-1">
+                      <span className="font-bold text-xs text-slate-900">Tolak Saja (Disqualified)</span>
+                      <p className="text-[11px] text-slate-600 leading-relaxed">
+                        Tandai kandidat berstatus gugur permanen di tahap offering tanpa disimpan ke basis data cadangan talent pool.
+                      </p>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">Alasan Penolakan / Catatan HR:</label>
+                <textarea
+                  value={rejectReasonNotes}
+                  onChange={(e) => setRejectReasonNotes(e.target.value)}
+                  rows={2}
+                  placeholder="Contoh: Ekspektasi gaji belum sesuai, memilih tawaran perusahaan lain..."
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white text-xs focus:ring-1 focus:ring-blue-500 outline-hidden resize-none"
+                />
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-5 py-3.5 bg-slate-50 border-t border-slate-200 flex justify-end gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsOfferingRejectModalOpen(false)}
+                className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmOfferingReject}
+                className="px-4 py-1.5 bg-rose-700 hover:bg-rose-800 text-white rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1.5 cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+                <span>Konfirmasi Penolakan</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ===================== MODAL 8: TAMBAH PELAMAR & UPLOAD CV MANUAL ===================== */}
       {isCandidateModalOpen && (
