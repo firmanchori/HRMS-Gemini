@@ -1326,6 +1326,151 @@ export const RecruitmentManagement: React.FC = () => {
   ]);
   const [notifyPersonalEmail, setNotifyPersonalEmail] = useState(true);
 
+  // 5. Modal Terbitkan Kontrak & NDA untuk Karyawan Onboarding
+  const [isContractNdaModalOpen, setIsContractNdaModalOpen] = useState(false);
+  const [selectedContractProcess, setSelectedContractProcess] = useState<OnboardingProcess | null>(null);
+  const [selectedContractTask, setSelectedContractTask] = useState<OnboardingTask | null>(null);
+  const [contractDocTab, setContractDocTab] = useState<'contract' | 'nda'>('contract');
+
+  const openContractNdaModal = (process: OnboardingProcess, task?: OnboardingTask) => {
+    setSelectedContractProcess(process);
+    if (task) {
+      setSelectedContractTask(task);
+    } else {
+      const cTask = (process.tasks || []).find(
+        (t) =>
+          t.actionType === 'contract_signing' ||
+          t.title.toLowerCase().includes('kontrak') ||
+          t.title.toLowerCase().includes('nda')
+      );
+      setSelectedContractTask(cTask || null);
+    }
+    setContractDocTab('contract');
+    setIsContractNdaModalOpen(true);
+  };
+
+  const handleDownloadContractNda = (process: OnboardingProcess, docType: 'contract' | 'nda') => {
+    const isNda = docType === 'nda';
+    const docTitle = isNda
+      ? `Perjanjian Kerahasiaan (NDA) - ${process.employeeName}`
+      : `Surat Perjanjian Kerja (${process.employmentType || 'PKWT'}) - ${process.employeeName}`;
+    const docNum = isNda
+      ? process.contractDocNumber
+        ? process.contractDocNumber.replace('PKWT', 'NDA')
+        : '001/NDA-HRD/NTM/X/2026'
+      : process.contractDocNumber || '001/PKWT-HRD/NTM/X/2026';
+
+    const htmlContent = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>${docTitle}</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 40px; color: #1e293b; line-height: 1.6; font-size: 13px; }
+    .header { border-bottom: 2px solid #0f172a; padding-bottom: 12px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; }
+    .title { text-align: center; margin-bottom: 24px; }
+    .title h2 { margin: 0; font-size: 16px; text-transform: uppercase; text-decoration: underline; }
+    .title p { margin: 4px 0 0; font-family: monospace; font-size: 12px; color: #475569; }
+    .box { background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; margin-bottom: 16px; }
+    h4 { margin: 16px 0 8px; font-size: 13px; text-transform: uppercase; color: #0f172a; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; }
+    table { width: 100%; border-collapse: collapse; margin: 12px 0; }
+    th, td { border: 1px solid #cbd5e1; padding: 6px 10px; text-align: left; }
+    th { background: #f1f5f9; }
+    .signatures { margin-top: 40px; display: flex; justify-content: space-between; page-break-inside: avoid; }
+    .sig-col { text-align: center; width: 45%; }
+    .sig-space { height: 80px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <h3 style="margin:0;font-size:16px;">${safeTenant.name}</h3>
+      <div style="font-size:11px;color:#64748b;">Gedung Menara Palma Lt. 18, Jl. H.R. Rasuna Said, Jakarta · NPWP: ${safeTenant.npwp || '01.345.678.9-012.000'}</div>
+    </div>
+    <div style="text-align:right;font-size:11px;font-family:monospace;">
+      ${isNda ? 'NON-DISCLOSURE AGREEMENT' : 'PERJANJIAN KERJA RESMI'}<br>
+      ${new Date().toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' })}
+    </div>
+  </div>
+
+  <div class="title">
+    <h2>${isNda ? 'PERJANJIAN KERAHASIAAN INFORMASI & DATA RAHASIA (NDA)' : `SURAT PERJANJIAN KERJA WAKTU TERTENTU (${process.employmentType || 'PKWT'})`}</h2>
+    <p>Nomor Dokumen: ${docNum}</p>
+  </div>
+
+  <p>Pada hari ini, bertempat di kantor ${safeTenant.name}, telah dibuat dan disepakati perjanjian kerja antara pihak-pihak sebagai berikut:</p>
+  <div class="box">
+    <b>Pihak Pertama (Perusahaan):</b> PT ${safeTenant.name}, beralamat di Menara Palma Lt. 18, Jakarta Selatan.<br>
+    <b>Pihak Kedua (Karyawan):</b> <b>${process.employeeName}</b>, Jabatan: <b>${process.position}</b>, Unit Kerja: <b>${process.department}</b>, Email: ${process.email}.
+  </div>
+
+  ${isNda ? `
+    <h4>Pasal 1: Definisi Data & Kerahasiaan</h4>
+    <p>Informasi Rahasia mencakup seluruh rahasia dagang, kode sumber, basis data, strategi bisnis, daftar klien, formula, metodologi dan rencana internal yang diperoleh Pihak Kedua selama bertugas di ${safeTenant.name}.</p>
+    <h4>Pasal 2: Kewajiban Menjaga Kerahasiaan</h4>
+    <p>Pihak Kedua dilarang membocorkan, menduplikasi, membagikan, atau memanfaatkan Informasi Rahasia kepada pihak ketiga tanpa persetujuan tertulis dari Direksi Perusahaan.</p>
+    <h4>Pasal 3: Masa Berlaku & Sanksi Hukum</h4>
+    <p>Kewajiban kerahasiaan ini mengikat secara hukum selama masa kerja dan tetap berlaku hingga minimal 3 (tiga) tahun setelah berakhirnya hubungan kerja.</p>
+  ` : `
+    <h4>Pasal 1: Jabatan & Tanggal Mulai Bertugas</h4>
+    <p>Pihak Pertama mempekerjakan Pihak Kedua sebagai <b>${process.position}</b> pada Unit Kerja <b>${process.department}</b> terhitung sejak tanggal <b>${process.joinDate}</b> dengan status hubungan kerja <b>${process.employmentType || 'PKWT'}</b>.</p>
+    <h4>Pasal 2: Hak Kompensasi & Fasilitas Upah</h4>
+    <p>Pihak Kedua berhak menerima upah pokok sebesar <b>${formatRupiah(process.basicSalary)}</b> per bulan, fasilitas kepesertaan BPJS Ketenagakerjaan (JHT, JKK, JKM, JP), serta jaminan BPJS Kesehatan.</p>
+    <h4>Pasal 3: Waktu Kerja & Tata Tertib</h4>
+    <p>Pihak Kedua bersedia mematuhi waktu kerja 40 jam per minggu, tata tertib perusahaan, serta kode etik dan pakta integritas yang berlaku di lingkungan ${safeTenant.name}.</p>
+  `}
+
+  <div class="signatures">
+    <div class="sig-col">
+      <div>Pihak Pertama (Perusahaan)</div>
+      <div style="font-size:10px;color:#64748b;margin-top:2px;">PT ${safeTenant.name}</div>
+      <div class="sig-space"></div>
+      <div style="font-weight:bold;text-decoration:underline;">( Direktur HR & Legal )</div>
+      <div style="font-size:10px;color:#64748b;">QR Verification: VALID #${docNum}</div>
+    </div>
+    <div class="sig-col">
+      <div>Pihak Kedua (Karyawan)</div>
+      <div style="font-size:10px;color:#64748b;margin-top:2px;">Karyawan Yang Bersangkutan</div>
+      <div class="sig-space"></div>
+      <div style="font-weight:bold;text-decoration:underline;">( ${process.employeeName} )</div>
+      <div style="font-size:10px;color:#64748b;">NIK: ${process.employeeNik || 'Terverifikasi Digital'}</div>
+    </div>
+  </div>
+</body>
+</html>`;
+
+    const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${isNda ? 'NDA' : 'Kontrak_Kerja'}_${process.employeeName.replace(/\s+/g, '_')}.html`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    setToastFeedback(`Dokumen ${isNda ? 'NDA' : 'Kontrak Kerja'} untuk ${process.employeeName} berhasil diunduh!`);
+  };
+
+  const handlePublishAndCompleteContract = (process: OnboardingProcess) => {
+    const contractTask = (process.tasks || []).find(
+      (t) =>
+        t.actionType === 'contract_signing' ||
+        t.title.toLowerCase().includes('kontrak') ||
+        t.title.toLowerCase().includes('nda')
+    );
+    if (contractTask) {
+      updateOnboardingTask(process.id, contractTask.id, true, {
+        publishedAt: new Date().toISOString(),
+        contractDocNumber: process.contractDocNumber || '001/PKWT/NTM/2026',
+        ndaDocNumber: process.contractDocNumber ? process.contractDocNumber.replace('PKWT', 'NDA') : '001/NDA/NTM/2026',
+      });
+    }
+    setIsContractNdaModalOpen(false);
+    setToastFeedback(
+      `Dokumen Kontrak Kerja (${process.contractDocNumber || '001/PKWT/2026'}) & NDA untuk ${process.employeeName} berhasil diterbitkan & disahkan!`
+    );
+  };
+
   // Handlers for Onboarding Action Modals
   const openIdCardModal = (process: OnboardingProcess, task: OnboardingTask) => {
     setSelectedOnboardingProcess(process);
@@ -8811,17 +8956,28 @@ PT Nusantara Multi Talenta Tbk`);
                         </div>
                       </div>
 
-                      {/* Meta Info Pill */}
-                      <div className="flex items-center gap-3 text-xs bg-slate-50 border border-slate-200 rounded-lg p-2.5">
-                        <div>
-                          <span className="text-[10px] text-slate-500 block uppercase font-semibold">Mulai Bertugas</span>
-                          <span className="font-mono font-bold text-slate-800">{process.joinDate}</span>
+                      {/* Meta Info Pill & Terbitkan Kontrak/NDA Button */}
+                      <div className="flex items-center gap-2.5 flex-wrap">
+                        <div className="flex items-center gap-3 text-xs bg-slate-50 border border-slate-200 rounded-lg p-2.5">
+                          <div>
+                            <span className="text-[10px] text-slate-500 block uppercase font-semibold">Mulai Bertugas</span>
+                            <span className="font-mono font-bold text-slate-800">{process.joinDate}</span>
+                          </div>
+                          <div className="h-6 w-px bg-slate-200" />
+                          <div>
+                            <span className="text-[10px] text-slate-500 block uppercase font-semibold">No. Kontrak</span>
+                            <span className="font-mono font-semibold text-blue-900">{process.contractDocNumber || '001/PKWT/NTM/2026'}</span>
+                          </div>
                         </div>
-                        <div className="h-6 w-px bg-slate-200" />
-                        <div>
-                          <span className="text-[10px] text-slate-500 block uppercase font-semibold">No. Kontrak</span>
-                          <span className="font-mono font-semibold text-blue-900">{process.contractDocNumber || '001/PKWT/NTM/2026'}</span>
-                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => openContractNdaModal(process)}
+                          className="px-3.5 py-2.5 bg-blue-700 hover:bg-blue-800 text-white rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
+                        >
+                          <FileText className="w-3.5 h-3.5" />
+                          <span>Terbitkan Kontrak dan NDA</span>
+                        </button>
                       </div>
                     </div>
 
@@ -9066,22 +9222,33 @@ PT Nusantara Multi Talenta Tbk`);
                                   </button>
                                 )}
 
-                                {task.actionType === 'contract_signing' && (
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      updateOnboardingTask(process.id, task.id, !task.isCompleted);
-                                      setToastFeedback(`Status tanda tangan kontrak digital berhasil diperbarui.`);
-                                    }}
-                                    className={`px-3 py-1.5 rounded-lg text-xs font-bold border flex items-center gap-1.5 transition-colors shadow-2xs cursor-pointer ${
-                                      task.isCompleted
-                                        ? 'bg-white hover:bg-slate-50 text-slate-700 border-slate-300'
-                                        : 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-700'
-                                    }`}
-                                  >
-                                    <FileText className="w-3.5 h-3.5" />
-                                    <span>{task.isCompleted ? 'Batalkan TTD Kontrak' : 'Verifikasi TTD Kontrak Digital QR'}</span>
-                                  </button>
+                                {(task.actionType === 'contract_signing' ||
+                                  task.title.toLowerCase().includes('kontrak') ||
+                                  task.title.toLowerCase().includes('nda')) && (
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <button
+                                      type="button"
+                                      onClick={() => openContractNdaModal(process, task)}
+                                      className="px-3 py-1.5 bg-blue-700 hover:bg-blue-800 text-white rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
+                                    >
+                                      <FileText className="w-3.5 h-3.5" />
+                                      <span>Terbitkan Kontrak dan NDA →</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        updateOnboardingTask(process.id, task.id, !task.isCompleted);
+                                        setToastFeedback(`Status tanda tangan kontrak digital berhasil diperbarui.`);
+                                      }}
+                                      className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-colors cursor-pointer whitespace-nowrap ${
+                                        task.isCompleted
+                                          ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                                          : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
+                                      }`}
+                                    >
+                                      {task.isCompleted ? '✓ Ditandatangani' : 'Tandai Manual'}
+                                    </button>
+                                  </div>
                                 )}
 
                                 {task.verificationType === 'manual' && (
@@ -19181,7 +19348,7 @@ PT Nusantara Multi Talenta Tbk`);
                 className="px-5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1.5 transition-colors cursor-pointer"
               >
                 <Check className="w-4 h-4" />
-                <span>Simpan Kesepakatan & Terbitkan Surat Offering</span>
+                <span>Simpan Kesepakatan</span>
               </button>
             </div>
           </div>
@@ -20555,6 +20722,383 @@ PT Nusantara Multi Talenta Tbk`);
           </div>
         </div>
       )}
+
+      {/* ===================== MODAL 15b: TERBITKAN KONTRAK KERJA & NON-DISCLOSURE AGREEMENT (NDA) ===================== */}
+      {isContractNdaModalOpen && selectedContractProcess && (() => {
+        const docNumContract = selectedContractProcess.contractDocNumber || '001/PKWT-HRD/NTM/X/2026';
+        const docNumNda = selectedContractProcess.contractDocNumber
+          ? selectedContractProcess.contractDocNumber.replace('PKWT', 'NDA')
+          : '001/NDA-HRD/NTM/X/2026';
+        const empType = selectedContractProcess.employmentType || 'PKWT (Perjanjian Kerja Waktu Tertentu)';
+
+        return (
+          <div
+            className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto"
+            onClick={() => setIsContractNdaModalOpen(false)}
+          >
+            <div
+              className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full border border-slate-200 overflow-hidden flex flex-col max-h-[94vh] animate-in fade-in zoom-in-95 duration-200"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header Modal */}
+              <div className="px-6 py-4 bg-slate-950 text-white flex items-center justify-between gap-3 shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-blue-600/30 border border-blue-500/30 flex items-center justify-center text-blue-400">
+                    <FileText className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="text-sm font-bold tracking-tight">
+                        Penerbitan Dokumen Kontrak Kerja & Non-Disclosure Agreement (NDA)
+                      </h3>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/20 text-blue-300 border border-blue-500/40">
+                        {selectedContractProcess.employeeName}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400">
+                      {selectedContractProcess.position} · {selectedContractProcess.department} · Mulai Bertugas: {selectedContractProcess.joinDate}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleDownloadContractNda(selectedContractProcess, contractDocTab)}
+                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 border border-slate-700 transition-colors cursor-pointer"
+                    title="Unduh file dokumen resmi"
+                  >
+                    <Download className="w-3.5 h-3.5 text-emerald-400" />
+                    <span className="hidden sm:inline">Download</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => window.print()}
+                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 border border-slate-700 transition-colors cursor-pointer"
+                    title="Cetak lembar resmi"
+                  >
+                    <Printer className="w-3.5 h-3.5 text-blue-400" />
+                    <span className="hidden sm:inline">Print</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsContractNdaModalOpen(false)}
+                    className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Sub-Tab Selector: Kontrak Kerja vs NDA */}
+              <div className="px-6 py-2.5 bg-slate-100 border-b border-slate-200 flex items-center justify-between gap-3 shrink-0 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setContractDocTab('contract')}
+                    className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                      contractDocTab === 'contract'
+                        ? 'bg-blue-700 text-white shadow-2xs'
+                        : 'bg-white text-slate-700 hover:bg-slate-50 border border-slate-200'
+                    }`}
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    <span>1. Dokumen Kontrak Kerja ({empType.includes('Tetap') ? 'PKWTT' : 'PKWT'})</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setContractDocTab('nda')}
+                    className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                      contractDocTab === 'nda'
+                        ? 'bg-blue-700 text-white shadow-2xs'
+                        : 'bg-white text-slate-700 hover:bg-slate-50 border border-slate-200'
+                    }`}
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                    <span>2. Perjanjian Kerahasiaan (NDA)</span>
+                  </button>
+                </div>
+
+                <div className="text-[11px] font-mono text-slate-500 bg-white px-2.5 py-1 rounded border border-slate-200">
+                  No: {contractDocTab === 'contract' ? docNumContract : docNumNda}
+                </div>
+              </div>
+
+              {/* Document Sheet Body */}
+              <div className="p-6 overflow-y-auto space-y-6 bg-slate-50 flex-1">
+                <div className="bg-white border border-slate-300 rounded-xl p-8 shadow-sm space-y-6 max-w-3xl mx-auto print:shadow-none print:border-none print:p-0">
+                  {/* Kop Surat Perusahaan */}
+                  <div className="border-b-2 border-slate-900 pb-4 flex items-center justify-between gap-4">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <Building2 className="w-6 h-6 text-blue-700" />
+                        <h2 className="text-base font-extrabold uppercase tracking-tight text-slate-950">
+                          {safeTenant.name}
+                        </h2>
+                      </div>
+                      <p className="text-[11px] text-slate-500 leading-tight">
+                        Head Office: Gedung Menara Palma Lt. 18, Jl. H.R. Rasuna Said Kav. 6, Jakarta Selatan<br />
+                        Telp: (021) 5290-8800 · Email: hrd@{safeTenant.name.toLowerCase().replace(/[^a-z0-9]/g, '')}.co.id · NPWP: {safeTenant.npwp || '01.345.678.9-012.000'}
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-widest">
+                        Dokumen Resmi
+                      </span>
+                      <span className="text-xs font-mono font-bold text-slate-800">
+                        {contractDocTab === 'contract' ? 'HRD-PKWT-2026' : 'LEGAL-NDA-2026'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* KONTEN DOKUMEN 1: KONTRAK KERJA (PKWT/PKWTT) */}
+                  {contractDocTab === 'contract' && (
+                    <div className="space-y-5 text-xs text-slate-800 leading-relaxed font-sans">
+                      <div className="text-center space-y-1">
+                        <h3 className="font-extrabold text-sm uppercase tracking-wide text-slate-900 underline decoration-2 underline-offset-4">
+                          SURAT PERJANJIAN KERJA WAKTU TERTENTU (PKWT)
+                        </h3>
+                        <p className="text-[11px] font-mono text-slate-600">
+                          Nomor: {docNumContract}
+                        </p>
+                      </div>
+
+                      <p>
+                        Pada hari ini, bertempat di kantor pusat <b>{safeTenant.name}</b>, telah dibuat dan disepakati perjanjian kerja oleh dan antara pihak-pihak sebagai berikut:
+                      </p>
+
+                      <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-2 text-[11px]">
+                        <div>
+                          <span className="font-bold text-slate-900 block">I. PIHAK PERTAMA (PENGUSAHA / PERUSAHAAN):</span>
+                          <span className="text-slate-600">
+                            <b>{safeTenant.name}</b>, berkedudukan di Gedung Menara Palma Lt. 18, Jakarta Selatan, dalam hal ini diwakili secara sah oleh Direktur HR & Legal Management Nusantara Group.
+                          </span>
+                        </div>
+                        <div className="border-t border-slate-200 pt-2">
+                          <span className="font-bold text-slate-900 block">II. PIHAK KEDUA (KARYAWAN):</span>
+                          <div className="grid grid-cols-2 gap-1.5 text-slate-700 mt-1">
+                            <div>Nama Lengkap: <b>{selectedContractProcess.employeeName}</b></div>
+                            <div>Posisi / Jabatan: <b>{selectedContractProcess.position}</b></div>
+                            <div>Unit Kerja / Dept: <b>{selectedContractProcess.department}</b></div>
+                            <div>Email: <b>{selectedContractProcess.email}</b></div>
+                            <div>NIK / No. KTP: <span className="font-mono font-semibold">{selectedContractProcess.employeeNik || '3171012304950001'}</span></div>
+                            <div>Mulai Bertugas: <span className="font-mono font-semibold text-blue-900">{selectedContractProcess.joinDate}</span></div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <p>
+                        Pihak Pertama dan Pihak Kedua secara bersama-sama disebut <b>"Para Pihak"</b>, menyatakan sepakat untuk mengikatkan diri dalam Perjanjian Kerja dengan syarat dan ketentuan sebagai berikut:
+                      </p>
+
+                      {/* Pasal 1 */}
+                      <div className="space-y-1">
+                        <h4 className="font-bold text-slate-900 uppercase text-[11px] border-b border-slate-200 pb-0.5">
+                          Pasal 1: Posisi, Jabatan & Penempatan Tugas
+                        </h4>
+                        <p>
+                          1. Pihak Pertama mempekerjakan Pihak Kedua dan Pihak Kedua menerima pekerjaan dari Pihak Pertama sebagai <b>{selectedContractProcess.position}</b> pada Unit Kerja <b>{selectedContractProcess.department}</b>.<br />
+                          2. Pihak Kedua bersedia menjalankan tugas dan tanggung jawab sesuai Job Description serta mematuhi arahan manajemen perusahaan dengan penuh dedikasi dan profesionalisme.
+                        </p>
+                      </div>
+
+                      {/* Pasal 2 */}
+                      <div className="space-y-1">
+                        <h4 className="font-bold text-slate-900 uppercase text-[11px] border-b border-slate-200 pb-0.5">
+                          Pasal 2: Jangka Waktu Perjanjian Kerja
+                        </h4>
+                        <p>
+                          1. Hubungan kerja ini disepakati dengan status <b>{empType}</b> terhitung sejak tanggal <b>{selectedContractProcess.joinDate}</b>.<br />
+                          2. Perpanjangan jangka waktu atau pengangkatan status hubungan kerja akan dievaluasi oleh Pihak Pertama berdasarkan pencapaian Key Performance Indicators (KPI) dan kepatuhan kerja Pihak Kedua.
+                        </p>
+                      </div>
+
+                      {/* Pasal 3 */}
+                      <div className="space-y-1">
+                        <h4 className="font-bold text-slate-900 uppercase text-[11px] border-b border-slate-200 pb-0.5">
+                          Pasal 3: Waktu Kerja & Tata Tertib
+                        </h4>
+                        <p>
+                          1. Hari dan jam kerja operasional adalah 5 (lima) hari kerja per minggu dengan total 40 (empat puluh) jam kerja per minggu sesuai ketentuan perundang-undangan ketenagakerjaan RI.<br />
+                          2. Pihak Kedua wajib mematuhi seluruh Peraturan Perusahaan (PP), SOP keselamatan kerja, dan menjaga nama baik perusahaan.
+                        </p>
+                      </div>
+
+                      {/* Pasal 4 */}
+                      <div className="space-y-1">
+                        <h4 className="font-bold text-slate-900 uppercase text-[11px] border-b border-slate-200 pb-0.5">
+                          Pasal 4: Hak Upah Pokok, Kompensasi & Jaminan Sosial
+                        </h4>
+                        <p>
+                          1. Pihak Pertama memberikan imbalan upah pokok bulanan kepada Pihak Kedua sebesar <b>{formatRupiah(selectedContractProcess.basicSalary)}</b> yang dibayarkan pada tanggal cut-off penggajian tiap akhir bulan.<br />
+                          2. Pihak Kedua diikutsertakan dalam program jaminan sosial ketenagakerjaan dan jaminan kesehatan nasional yang meliputi BPJS Kesehatan serta BPJS Ketenagakerjaan (JKK, JKM, JHT, JP) sesuai ketentuan peraturan perundang-undangan.<br />
+                          3. Pemotongan pajak penghasilan PPh Pasal 21 dan iuran jaminan sosial dilakukan secara transparan melalui slip gaji resmi HRMS.
+                        </p>
+                      </div>
+
+                      {/* Pasal 5 */}
+                      <div className="space-y-1">
+                        <h4 className="font-bold text-slate-900 uppercase text-[11px] border-b border-slate-200 pb-0.5">
+                          Pasal 5: Tanda Tangan & QR Pengesahan Digital Legal
+                        </h4>
+                        <p>
+                          Perjanjian ini dibuat dalam rangkap yang memiliki kekuatan hukum yang sama dan ditandatangani secara sah oleh Para Pihak dengan verifikasi QR Stempel Keaslian Dokumen.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* KONTEN DOKUMEN 2: NON-DISCLOSURE AGREEMENT (NDA) */}
+                  {contractDocTab === 'nda' && (
+                    <div className="space-y-5 text-xs text-slate-800 leading-relaxed font-sans">
+                      <div className="text-center space-y-1">
+                        <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200 text-[10px] font-bold uppercase tracking-wider mb-1">
+                          <Lock className="w-3 h-3" />
+                          <span>Strictly Confidential & Legally Binding</span>
+                        </div>
+                        <h3 className="font-extrabold text-sm uppercase tracking-wide text-slate-900 underline decoration-2 underline-offset-4">
+                          PERJANJIAN KERAHASIAAN INFORMASI & DATA RAHASIA PERUSAHAAN (NON-DISCLOSURE AGREEMENT - NDA)
+                        </h3>
+                        <p className="text-[11px] font-mono text-slate-600">
+                          Nomor: {docNumNda}
+                        </p>
+                      </div>
+
+                      <p>
+                        Perjanjian Kerahasiaan Informasi (Non-Disclosure Agreement) ini dibuat dan disepakati oleh dan antara <b>{safeTenant.name}</b> (selanjutnya disebut <i>"Pihak Pengungkap"</i>) dan <b>{selectedContractProcess.employeeName}</b> (selanjutnya disebut <i>"Pihak Penerima"</i>).
+                      </p>
+
+                      {/* Ringkasan Profil Karyawan */}
+                      <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-[11px] grid grid-cols-2 gap-2">
+                        <div>Nama Pihak Penerima: <b>{selectedContractProcess.employeeName}</b></div>
+                        <div>Jabatan / Divisi: <b>{selectedContractProcess.position} ({selectedContractProcess.department})</b></div>
+                        <div>Alamat Email Resmi: <b>{selectedContractProcess.email}</b></div>
+                        <div>Tanggal Efektif NDA: <b>{selectedContractProcess.joinDate}</b></div>
+                      </div>
+
+                      {/* Pasal 1 NDA */}
+                      <div className="space-y-1">
+                        <h4 className="font-bold text-slate-900 uppercase text-[11px] border-b border-slate-200 pb-0.5">
+                          Pasal 1: Definisi Data & Informasi Rahasia
+                        </h4>
+                        <p>
+                          1. <b>"Informasi Rahasia"</b> mencakup namun tidak terbatas pada seluruh rahasia dagang, kode sumber (source code), struktur basis data, metodologi perangkat lunak, data finansial, data kompensasi, daftar klien, strategi pemasaran, formula bisnis, dan segala aset tak berwujud yang dimiliki oleh {safeTenant.name}.<br />
+                          2. Seluruh dokumen tertulis, berkas digital, rekaman, maupun komunikasi lisan yang disampaikan kepada Pihak Penerima merupakan hak milik eksklusif Pihak Pengungkap.
+                        </p>
+                      </div>
+
+                      {/* Pasal 2 NDA */}
+                      <div className="space-y-1">
+                        <h4 className="font-bold text-slate-900 uppercase text-[11px] border-b border-slate-200 pb-0.5">
+                          Pasal 2: Kewajiban Non-Disclosure & Batasan Pihak Penerima
+                        </h4>
+                        <p>
+                          1. Pihak Penerima berkewajiban menjaga kerahasiaan Informasi Rahasia dengan standar kehati-hatian tertinggi dan dilarang membocorkan, menerbitkan, menyebarluaskan, atau membagikan Informasi Rahasia kepada pihak ketiga mana pun tanpa izin tertulis dari Direksi.<br />
+                          2. Pihak Penerima tidak diperbolehkan memanfaatkan Informasi Rahasia untuk kepentingan komersial pribadi atau pihak ketiga di luar lingkup tugas pekerjaannya di {safeTenant.name}.
+                        </p>
+                      </div>
+
+                      {/* Pasal 3 NDA */}
+                      <div className="space-y-1">
+                        <h4 className="font-bold text-slate-900 uppercase text-[11px] border-b border-slate-200 pb-0.5">
+                          Pasal 3: Hak Kekayaan Intelektual (Intellectual Property)
+                        </h4>
+                        <p>
+                          Seluruh ide, hasil karya, penemuan, desain, arsitektur sistem, dan inovasi yang dihasilkan oleh Pihak Penerima selama masa hubungan kerja di {safeTenant.name} secara mutlak dan otomatis menjadi Hak Kekayaan Intelektual milik Perusahaan (Work Made for Hire).
+                        </p>
+                      </div>
+
+                      {/* Pasal 4 NDA */}
+                      <div className="space-y-1">
+                        <h4 className="font-bold text-slate-900 uppercase text-[11px] border-b border-slate-200 pb-0.5">
+                          Pasal 4: Jangka Waktu Kerahasiaan & Konsekuensi Hukum
+                        </h4>
+                        <p>
+                          1. Kewajiban kerahasiaan ini berlaku efektif sejak tanggal penandatanganan dan tetap mengikat secara hukum hingga 3 (tiga) tahun setelah hubungan kerja Pihak Penerima dengan Perusahaan berakhir karena alasan apa pun.<br />
+                          2. Pelanggaran terhadap perjanjian ini memberikan hak kepada Pihak Pengungkap untuk menuntut ganti rugi materiil maupun immateriil serta menempuh jalur hukum sesuai UU Informasi dan Transaksi Elektronik (UU ITE) dan ketentuan hukum yang berlaku di Indonesia.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Signatures & QR Code Section */}
+                  <div className="pt-6 border-t border-slate-300 mt-6 grid grid-cols-2 gap-6 text-center text-xs">
+                    <div className="space-y-2">
+                      <span className="text-slate-500 text-[11px] block">Pihak Pertama (Perusahaan):</span>
+                      <span className="font-bold text-slate-900 block">PT {safeTenant.name}</span>
+                      <div className="w-24 h-24 mx-auto bg-slate-50 border border-slate-200 rounded-lg p-1.5 flex flex-col items-center justify-center">
+                        <div className="w-full h-full border border-dashed border-blue-400 rounded flex flex-col items-center justify-center text-blue-700 bg-blue-50/50">
+                          <CheckCircle className="w-6 h-6 text-blue-600 mb-0.5" />
+                          <span className="text-[8px] font-mono font-bold uppercase">VERIFIED HRD</span>
+                          <span className="text-[7px] text-slate-500 font-mono">ID: {docNumContract.slice(0, 10)}</span>
+                        </div>
+                      </div>
+                      <div>
+                        <span className="font-bold text-slate-900 underline block">( Direktur HR & Legal )</span>
+                        <span className="text-[10px] text-slate-500 font-mono">Digital Corporate Signature</span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <span className="text-slate-500 text-[11px] block">Pihak Kedua (Karyawan):</span>
+                      <span className="font-bold text-slate-900 block">{selectedContractProcess.employeeName}</span>
+                      <div className="w-24 h-24 mx-auto bg-slate-50 border border-slate-200 rounded-lg p-1.5 flex flex-col items-center justify-center">
+                        <div className="w-full h-full border border-dashed border-emerald-400 rounded flex flex-col items-center justify-center text-emerald-700 bg-emerald-50/50">
+                          <CheckCircle2 className="w-6 h-6 text-emerald-600 mb-0.5" />
+                          <span className="text-[8px] font-mono font-bold uppercase">TANDA TANGAN</span>
+                          <span className="text-[7px] text-slate-500 font-mono">NIK: {selectedContractProcess.employeeNik || 'RESMI'}</span>
+                        </div>
+                      </div>
+                      <div>
+                        <span className="font-bold text-slate-900 underline block">( {selectedContractProcess.employeeName} )</span>
+                        <span className="text-[10px] text-slate-500 font-mono">Karyawan Yang Bersangkutan</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Modal Footer Actions */}
+              <div className="px-6 py-4 bg-slate-100 border-t border-slate-200 flex items-center justify-between gap-3 shrink-0 flex-wrap">
+                <div className="text-[11px] text-slate-500 flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                  <span>Dokumen berstandar hukum ketenagakerjaan RI & siap ditandatangani secara sah.</span>
+                </div>
+
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => handleDownloadContractNda(selectedContractProcess, contractDocTab)}
+                    className="px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Download className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Download ({contractDocTab === 'contract' ? 'Kontrak' : 'NDA'})</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => window.print()}
+                    className="px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Printer className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Print Dokumen</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handlePublishAndCompleteContract(selectedContractProcess)}
+                    className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1.5 cursor-pointer transition-colors"
+                  >
+                    <Check className="w-4 h-4" />
+                    <span>Sahkan & Terbitkan Kontrak (Tandai Selesai)</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ===================== MODAL 16: TALENT PROFILING & HISTORICAL DOSSIER ===================== */}
       {selectedTalentCandidate && (() => {
