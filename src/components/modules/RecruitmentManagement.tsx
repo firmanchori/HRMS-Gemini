@@ -930,6 +930,8 @@ export const RecruitmentManagement: React.FC = () => {
     updateOnboardingTask,
     toggleOnboardingSubItem,
     completeOnboardingProcess,
+    updateOnboardingProcess,
+    cancelOnboardingProcess,
     updateOnboardingChecklistTemplates,
     addChecklistTemplateItem,
     removeChecklistTemplateItem,
@@ -1468,6 +1470,116 @@ export const RecruitmentManagement: React.FC = () => {
     setIsContractNdaModalOpen(false);
     setToastFeedback(
       `Dokumen Kontrak Kerja (${process.contractDocNumber || '001/PKWT/2026'}) & NDA untuk ${process.employeeName} berhasil diterbitkan & disahkan!`
+    );
+  };
+
+  // 6. Regenerate & Lock Nomor Kontrak & NDA
+  const handleRegenerateContractDocNumber = (process: OnboardingProcess) => {
+    if (process.isContractLocked) {
+      alert('Nomor kontrak & NDA sudah di-lock secara permanen dan tidak dapat diganti lagi.');
+      return;
+    }
+    const randomSeq = String(Math.floor(100 + Math.random() * 900));
+    const romanMonths = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII'];
+    const currentMonthRoman = romanMonths[new Date().getMonth()];
+    const isTetap = process.employmentType === 'Tetap';
+    const docType = isTetap ? 'PKWTT' : 'PKWT';
+    const code = safeTenant.code || 'NTM';
+    const newContractNum = `${randomSeq}/${docType}-HRD/${code}/${currentMonthRoman}/${new Date().getFullYear()}`;
+    const newNdaNum = `${randomSeq}/NDA-HRD/${code}/${currentMonthRoman}/${new Date().getFullYear()}`;
+
+    updateOnboardingProcess(process.id, {
+      contractDocNumber: newContractNum,
+      ndaDocNumber: newNdaNum,
+    });
+
+    if (selectedContractProcess && selectedContractProcess.id === process.id) {
+      setSelectedContractProcess({
+        ...selectedContractProcess,
+        contractDocNumber: newContractNum,
+        ndaDocNumber: newNdaNum,
+      });
+    }
+
+    setToastFeedback(`Nomor Dokumen diperbarui: ${newContractNum}`);
+  };
+
+  const handleLockContractDocNumber = (process: OnboardingProcess) => {
+    // Syarat: Kontrak harus sudah ditandatangani
+    const isSigned =
+      process.isContractSigned ||
+      (process.tasks || []).some(
+        (t) =>
+          (t.actionType === 'contract_signing' || t.title.toLowerCase().includes('kontrak')) &&
+          t.isCompleted
+      );
+
+    if (!isSigned) {
+      alert(
+        'Syarat Penguncian: Dokumen Kontrak Kerja harus resmi ditandatangani terlebih dahulu sebelum nomor dokumen dapat di-lock!'
+      );
+      return;
+    }
+
+    const lockedAt = new Date().toISOString();
+    updateOnboardingProcess(process.id, {
+      isContractLocked: true,
+      isContractSigned: true,
+      contractLockedAt: lockedAt,
+    });
+
+    if (selectedContractProcess && selectedContractProcess.id === process.id) {
+      setSelectedContractProcess({
+        ...selectedContractProcess,
+        isContractLocked: true,
+        isContractSigned: true,
+        contractLockedAt: lockedAt,
+      });
+    }
+
+    setToastFeedback(
+      `Nomor Kontrak & NDA (${process.contractDocNumber}) berhasil di-lock! Onboarding kini mengikat permanen dan tidak dapat dibatalkan.`
+    );
+  };
+
+  // 7. Modal Batalkan Onboarding State & Handlers
+  const [isCancelOnboardingModalOpen, setIsCancelOnboardingModalOpen] = useState(false);
+  const [processToCancel, setProcessToCancel] = useState<OnboardingProcess | null>(null);
+  const [cancelReasonInput, setCancelReasonInput] = useState('');
+  const [cancelActionTypeOption, setCancelActionTypeOption] = useState<'talent_pool' | 'delete_all'>(
+    'talent_pool'
+  );
+
+  const openCancelOnboardingModal = (process: OnboardingProcess) => {
+    if (process.isContractLocked) {
+      alert(
+        'Onboarding tidak dapat dibatalkan karena kontrak kerja telah resmi ditandatangani dan nomor dokumen telah di-lock secara permanen.'
+      );
+      return;
+    }
+    setProcessToCancel(process);
+    setCancelReasonInput('');
+    setCancelActionTypeOption('talent_pool');
+    setIsCancelOnboardingModalOpen(true);
+  };
+
+  const handleConfirmCancelOnboarding = () => {
+    if (!processToCancel) return;
+    if (!cancelReasonInput.trim()) {
+      alert('Alasan pembatalan onboarding wajib diisi!');
+      return;
+    }
+    if (processToCancel.isContractLocked) {
+      alert('Onboarding tidak dapat dibatalkan karena kontrak kerja telah di-lock!');
+      return;
+    }
+
+    const empName = processToCancel.employeeName;
+    cancelOnboardingProcess(processToCancel.id, cancelReasonInput.trim(), cancelActionTypeOption);
+    setIsCancelOnboardingModalOpen(false);
+    setProcessToCancel(null);
+    setToastFeedback(
+      `Onboarding untuk ${empName} berhasil dibatalkan. Seluruh data terkait di sistem (Personalia/Management Karyawan, permohonan aset & akun) telah dibersihkan secara tuntas.`
     );
   };
 
@@ -8956,9 +9068,9 @@ PT Nusantara Multi Talenta Tbk`);
                         </div>
                       </div>
 
-                      {/* Meta Info Pill & Terbitkan Kontrak/NDA Button */}
-                      <div className="flex items-center gap-2.5 flex-wrap">
-                        <div className="flex items-center gap-3 text-xs bg-slate-50 border border-slate-200 rounded-lg p-2.5">
+                      {/* Meta Info Pill, Status Lock, Terbitkan Kontrak/NDA, & Batalkan Onboarding */}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <div className="flex items-center gap-3 text-xs bg-slate-50 border border-slate-200 rounded-lg p-2">
                           <div>
                             <span className="text-[10px] text-slate-500 block uppercase font-semibold">Mulai Bertugas</span>
                             <span className="font-mono font-bold text-slate-800">{process.joinDate}</span>
@@ -8970,14 +9082,59 @@ PT Nusantara Multi Talenta Tbk`);
                           </div>
                         </div>
 
+                        {/* Status Lock Badge atau Tombol Regenerate No. */}
+                        {process.isContractLocked ? (
+                          <div
+                            className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-amber-50 text-amber-800 border border-amber-300 flex items-center gap-1.5 shadow-2xs"
+                            title="Nomor dokumen telah resmi di-lock permanen. Onboarding tidak dapat dibatalkan."
+                          >
+                            <Lock className="w-3.5 h-3.5 text-amber-600" />
+                            <span>Kontrak Di-Lock</span>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleRegenerateContractDocNumber(process)}
+                            className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 flex items-center gap-1 transition-colors cursor-pointer"
+                            title="Klik untuk acak/ganti nomor kontrak & NDA sebelum di-lock"
+                          >
+                            <RotateCcw className="w-3 h-3 text-slate-500" />
+                            <span className="text-[11px]">Ganti No.</span>
+                          </button>
+                        )}
+
+                        {/* Tombol Terbitkan Kontrak dan NDA */}
                         <button
                           type="button"
                           onClick={() => openContractNdaModal(process)}
-                          className="px-3.5 py-2.5 bg-blue-700 hover:bg-blue-800 text-white rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
+                          className="px-3.5 py-2 bg-blue-700 hover:bg-blue-800 text-white rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
                         >
                           <FileText className="w-3.5 h-3.5" />
                           <span>Terbitkan Kontrak dan NDA</span>
                         </button>
+
+                        {/* Tombol Batalkan Onboarding */}
+                        {process.isContractLocked ? (
+                          <button
+                            type="button"
+                            disabled
+                            className="px-3 py-2 bg-slate-100 text-slate-400 border border-slate-200 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-not-allowed whitespace-nowrap"
+                            title="Onboarding tidak dapat dibatalkan karena kontrak kerja telah resmi ditandatangani dan nomor dokumen telah di-lock."
+                          >
+                            <Lock className="w-3.5 h-3.5" />
+                            <span>Batal Onboarding (Terkunci)</span>
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => openCancelOnboardingModal(process)}
+                            className="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
+                            title="Batalkan proses onboarding, bersihkan seluruh data sistem, dan pilih apakah dimasukkan ke Talent Pool atau dihapus."
+                          >
+                            <UserX className="w-3.5 h-3.5 text-rose-600" />
+                            <span>Batalkan Onboarding</span>
+                          </button>
+                        )}
                       </div>
                     </div>
 
@@ -20820,8 +20977,62 @@ PT Nusantara Multi Talenta Tbk`);
                   </button>
                 </div>
 
-                <div className="text-[11px] font-mono text-slate-500 bg-white px-2.5 py-1 rounded border border-slate-200">
-                  No: {contractDocTab === 'contract' ? docNumContract : docNumNda}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <div className="text-[11px] font-mono text-slate-700 bg-white px-2.5 py-1 rounded border border-slate-200 flex items-center gap-1.5">
+                    <span className="text-slate-400">No:</span>
+                    <span className="font-bold text-blue-900">{contractDocTab === 'contract' ? docNumContract : docNumNda}</span>
+                  </div>
+
+                  {!selectedContractProcess.isContractLocked ? (
+                    <button
+                      type="button"
+                      onClick={() => handleRegenerateContractDocNumber(selectedContractProcess)}
+                      className="px-2.5 py-1 bg-white hover:bg-slate-50 text-slate-700 rounded border border-slate-300 text-[11px] font-semibold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                      title="Nomor dokumen dapat berganti-ganti secara dinamis sebelum di-lock"
+                    >
+                      <RotateCcw className="w-3 h-3 text-slate-500" />
+                      <span>Ganti No. Dokumen</span>
+                    </button>
+                  ) : null}
+
+                  {selectedContractProcess.isContractLocked ? (
+                    <div
+                      className="px-2.5 py-1 bg-amber-50 text-amber-900 border border-amber-300 rounded text-[11px] font-bold flex items-center gap-1"
+                      title="Nomor Kontrak & NDA telah resmi di-lock permanen."
+                    >
+                      <Lock className="w-3 h-3 text-amber-600" />
+                      <span>Nomor Terkunci (Resmi)</span>
+                    </div>
+                  ) : (() => {
+                    const isSigned =
+                      selectedContractProcess.isContractSigned ||
+                      (selectedContractProcess.tasks || []).some(
+                        (t) =>
+                          (t.actionType === 'contract_signing' ||
+                            t.title.toLowerCase().includes('kontrak')) &&
+                          t.isCompleted
+                      );
+
+                    return isSigned ? (
+                      <button
+                        type="button"
+                        onClick={() => handleLockContractDocNumber(selectedContractProcess)}
+                        className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded text-[11px] font-bold flex items-center gap-1 shadow-2xs cursor-pointer transition-colors"
+                        title="Klik untuk mengunci nomor kontrak & NDA secara permanen (kontrak telah ditandatangani)"
+                      >
+                        <Lock className="w-3 h-3" />
+                        <span>Lock Nomor Kontrak & NDA</span>
+                      </button>
+                    ) : (
+                      <div
+                        className="px-2.5 py-1 bg-slate-100 text-slate-400 border border-slate-200 rounded text-[11px] font-medium flex items-center gap-1 cursor-not-allowed"
+                        title="Tanda tangani kontrak terlebih dahulu agar nomor kontrak & NDA dapat di-lock"
+                      >
+                        <Lock className="w-3 h-3 text-slate-400" />
+                        <span>Lock (Menunggu TTD)</span>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
 
@@ -21099,6 +21310,159 @@ PT Nusantara Multi Talenta Tbk`);
           </div>
         );
       })()}
+
+      {/* ===================== MODAL 15c: BATALKAN ONBOARDING ===================== */}
+      {isCancelOnboardingModalOpen && processToCancel && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto"
+          onClick={() => setIsCancelOnboardingModalOpen(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl max-w-xl w-full border border-slate-200 overflow-hidden flex flex-col my-auto animate-in fade-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header Modal */}
+            <div className="px-6 py-4 bg-rose-950 text-white flex items-center justify-between gap-3 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-rose-600/30 border border-rose-500/30 flex items-center justify-center text-rose-400">
+                  <UserX className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold tracking-tight text-white">
+                    Batalkan Proses Onboarding Karyawan
+                  </h3>
+                  <p className="text-[11px] text-rose-200">
+                    {processToCancel.employeeName} · {processToCancel.position} ({processToCancel.department})
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsCancelOnboardingModalOpen(false)}
+                className="text-rose-300 hover:text-white p-1 rounded-lg hover:bg-rose-900 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 space-y-5 overflow-y-auto max-h-[75vh]">
+              {/* Alert Pembersihan Data Otomatis */}
+              <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 text-xs space-y-2 text-rose-900">
+                <div className="flex items-center gap-2 font-bold text-rose-950">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>Pembersihan Data Sistem Otomatis</span>
+                </div>
+                <p className="text-rose-800 leading-relaxed text-[11px]">
+                  Pembatalan onboarding akan secara otomatis membersihkan dan mereset seluruh data yang berkaitan dengan karyawan ini:
+                </p>
+                <ul className="list-disc list-inside space-y-1 text-[11px] text-rose-700 pl-1">
+                  <li>Menghapus data karyawan dari modul <b>Management Karyawan (Personalia)</b> jika sudah tercatat.</li>
+                  <li>Membatalkan seluruh permohonan logistik & aset (ID Card GA, Alokasi Laptop IT, Berkas Dossier, Akun Sistem).</li>
+                  <li>Membatalkan draf surat penawaran & kontrak kerja yang belum di-lock.</li>
+                </ul>
+              </div>
+
+              {/* Form Input Alasan Pembatalan (Wajib) */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-800 flex items-center justify-between">
+                  <span>Alasan Pembatalan Onboarding <span className="text-rose-600">* (Wajib)</span></span>
+                  <span className="text-[10px] text-slate-400 font-normal">Minimal 5 karakter</span>
+                </label>
+                <textarea
+                  value={cancelReasonInput}
+                  onChange={(e) => setCancelReasonInput(e.target.value)}
+                  placeholder="Contoh: Calon karyawan mengundurkan diri sepihak sebelum hari kerja pertama, menerima tawaran di tempat lain, atau terdapat ketidaksesuaian berkas identitas..."
+                  rows={3}
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500/30 focus:border-rose-500 transition-all text-slate-800 placeholder-slate-400"
+                />
+              </div>
+
+              {/* Pilihan Tindak Lanjut Data Kandidat */}
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-800 block">
+                  Tindak Lanjut Data Pelamar / Profil:
+                </label>
+                <div className="grid grid-cols-1 gap-2.5">
+                  {/* Opsi 1: Talent Pool */}
+                  <label
+                    className={`flex items-start gap-3 p-3.5 rounded-xl border transition-all cursor-pointer ${
+                      cancelActionTypeOption === 'talent_pool'
+                        ? 'border-blue-600 bg-blue-50/60 ring-1 ring-blue-600'
+                        : 'border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="cancel_action_type"
+                      checked={cancelActionTypeOption === 'talent_pool'}
+                      onChange={() => setCancelActionTypeOption('talent_pool')}
+                      className="mt-0.5 text-blue-600 focus:ring-blue-500"
+                    />
+                    <div className="space-y-0.5">
+                      <span className="text-xs font-bold text-slate-900 block">
+                        Batal Onboarding & Masukkan ke Talent Pool (Disarankan)
+                      </span>
+                      <p className="text-[11px] text-slate-600 leading-snug">
+                        Menghapus proses onboarding dan membersihkan data sistem, namun menyimpan rekam jejak serta CV pelamar ke dalam <b>Talent Pool</b> untuk peluang rekrutmen masa depan.
+                      </p>
+                    </div>
+                  </label>
+
+                  {/* Opsi 2: Hapus Semua */}
+                  <label
+                    className={`flex items-start gap-3 p-3.5 rounded-xl border transition-all cursor-pointer ${
+                      cancelActionTypeOption === 'delete_all'
+                        ? 'border-rose-600 bg-rose-50/60 ring-1 ring-rose-600'
+                        : 'border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="cancel_action_type"
+                      checked={cancelActionTypeOption === 'delete_all'}
+                      onChange={() => setCancelActionTypeOption('delete_all')}
+                      className="mt-0.5 text-rose-600 focus:ring-rose-500"
+                    />
+                    <div className="space-y-0.5">
+                      <span className="text-xs font-bold text-slate-900 block">
+                        Batal Onboarding & Hapus Semua Data
+                      </span>
+                      <p className="text-[11px] text-slate-600 leading-snug">
+                        Menghapus seluruh rekam jejak onboarding dan data kandidat secara menyeluruh dari database rekrutmen.
+                      </p>
+                    </div>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer Modal */}
+            <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsCancelOnboardingModalOpen(false)}
+                className="px-4 py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg text-xs font-semibold cursor-pointer transition-colors"
+              >
+                Tutup / Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmCancelOnboarding}
+                disabled={!cancelReasonInput.trim()}
+                className={`px-4 py-2 rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1.5 transition-all ${
+                  cancelReasonInput.trim()
+                    ? 'bg-rose-600 hover:bg-rose-700 text-white cursor-pointer'
+                    : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                }`}
+              >
+                <UserX className="w-3.5 h-3.5" />
+                <span>Konfirmasi Pembatalan Onboarding</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ===================== MODAL 16: TALENT PROFILING & HISTORICAL DOSSIER ===================== */}
       {selectedTalentCandidate && (() => {

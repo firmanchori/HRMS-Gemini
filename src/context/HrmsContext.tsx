@@ -163,6 +163,7 @@ interface HrmsContextType {
   personaliaLogs: PersonaliaLog[];
   addEmployee: (emp: Omit<Employee, 'id' | 'tenantId'>) => Employee;
   updateEmployee: (id: string, updates: Partial<Employee>) => void;
+  deleteEmployee: (id: string) => void;
   processPersonaliaAction: (action: {
     employeeId: string;
     type: PersonaliaActionType | string;
@@ -301,6 +302,8 @@ interface HrmsContextType {
   updateOnboardingTask: (processId: string, taskId: string, isCompleted: boolean, actionPayload?: any, subItems?: OnboardingSubItem[]) => void;
   toggleOnboardingSubItem?: (processId: string, taskId: string, subItemId: string) => void;
   completeOnboardingProcess: (processId: string) => Employee | null;
+  updateOnboardingProcess: (processId: string, updates: Partial<OnboardingProcess>) => void;
+  cancelOnboardingProcess: (processId: string, reason: string, actionType: 'talent_pool' | 'delete_all') => void;
   updateOnboardingChecklistTemplates: (templates: OnboardingChecklistTemplateItem[]) => void;
   addChecklistTemplateItem: (item: Omit<OnboardingChecklistTemplateItem, 'id'>) => void;
   removeChecklistTemplateItem: (id: string) => void;
@@ -1076,6 +1079,10 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const updateEmployee = (id: string, updates: Partial<Employee>) => {
     setEmployees((prev) => prev.map((e) => (e.id === id ? { ...e, ...updates } : e)));
+  };
+
+  const deleteEmployee = (id: string) => {
+    setEmployees((prev) => prev.filter((e) => e.id !== id));
   };
 
   const processPersonaliaAction = (action: {
@@ -2363,6 +2370,72 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
 
     return newEmp;
+  };
+
+  const updateOnboardingProcess = (processId: string, updates: Partial<OnboardingProcess>) => {
+    setOnboardingProcesses((prev) =>
+      prev.map((p) => (p.id === processId ? { ...p, ...updates } : p))
+    );
+  };
+
+  const cancelOnboardingProcess = (
+    processId: string,
+    reason: string,
+    actionType: 'talent_pool' | 'delete_all'
+  ) => {
+    const process = onboardingProcesses.find((p) => p.id === processId);
+    if (!process) return;
+
+    // 1. Bersihkan seluruh data karyawan di Management Karyawan jika sudah terbuat/tertaut
+    if (process.createdEmployeeId) {
+      setEmployees((prev) => prev.filter((e) => e.id !== process.createdEmployeeId));
+    }
+    setEmployees((prev) =>
+      prev.filter(
+        (e) =>
+          !(
+            e.fullName.toLowerCase() === process.employeeName.toLowerCase() &&
+            (e.email.toLowerCase() === process.email.toLowerCase() || e.position === process.position)
+          )
+      )
+    );
+
+    // 2. Tindak lanjut data pelamar / Talent Pool
+    if (process.candidateId) {
+      if (actionType === 'talent_pool') {
+        setCandidates((prev) =>
+          prev.map((c) =>
+            c.id === process.candidateId
+              ? {
+                  ...c,
+                  stage: 'Disqualified',
+                  status: 'Disqualified',
+                  disqualificationReason: `Batal Onboarding: ${reason}`,
+                  isTalentPool: true,
+                  talentPoolNotes: `Batal Onboarding: ${reason} (Mulai bertugas awal: ${process.joinDate})`,
+                }
+              : c
+          )
+        );
+      } else {
+        setCandidates((prev) =>
+          prev.map((c) =>
+            c.id === process.candidateId
+              ? {
+                  ...c,
+                  stage: 'Disqualified',
+                  status: 'Disqualified',
+                  disqualificationReason: `Batal Onboarding (Dihapus): ${reason}`,
+                  isTalentPool: false,
+                }
+              : c
+          )
+        );
+      }
+    }
+
+    // 3. Hapus proses onboarding dari daftar aktif
+    setOnboardingProcesses((prev) => prev.filter((p) => p.id !== processId));
   };
 
   // 14. Shifts & Roaster Actions
@@ -3869,6 +3942,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         personaliaLogs: personaliaLogs.filter((p) => p.tenantId === currentTenant.id),
         addEmployee,
         updateEmployee,
+        deleteEmployee,
         processPersonaliaAction,
         attendance: attendance.filter((a) => a.tenantId === currentTenant.id),
         leaveRequests: leaveRequests.filter((l) => l.tenantId === currentTenant.id),
@@ -3931,6 +4005,8 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updateOnboardingTask,
         toggleOnboardingSubItem,
         completeOnboardingProcess,
+        updateOnboardingProcess,
+        cancelOnboardingProcess,
         updateOnboardingChecklistTemplates,
         addChecklistTemplateItem,
         removeChecklistTemplateItem,

@@ -1152,9 +1152,16 @@ export interface OnboardingProcess {
   joinDate: string;
   basicSalary: number;
   contractDocNumber: string;
+  ndaDocNumber?: string;
+  isContractSigned?: boolean;
+  isContractLocked?: boolean;
+  contractLockedAt?: string;
   tasks: OnboardingTask[];
-  status: 'In Progress' | 'Completed';
+  status: 'In Progress' | 'Completed' | 'Cancelled';
   createdEmployeeId?: string;
+  officialNik?: string;
+  cancellationReason?: string;
+  cancelledAt?: string;
 }
 
 // Module Configuration Settings
