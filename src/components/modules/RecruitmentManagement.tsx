@@ -1180,10 +1180,7 @@ export const RecruitmentManagement: React.FC = () => {
   // Explicit states used in Modal 11 (Pengaturan Template Checklist Onboarding)
   const [newTmplTitle, setNewTmplTitle] = useState('');
   const [newTmplDept, setNewTmplDept] = useState<'HR' | 'GA' | 'IT' | 'Finance'>('HR');
-  const [newTmplVerif, setNewTmplVerif] = useState<'manual' | 'automated'>('manual');
-  const [newTmplAction, setNewTmplAction] = useState<string>('id_card_request');
   const [newTmplMandatory, setNewTmplMandatory] = useState(true);
-  const [newTmplHasSubItems, setNewTmplHasSubItems] = useState(false);
   const [newTmplSubItems, setNewTmplSubItems] = useState<string[]>([]);
   const [newTmplSubItemInput, setNewTmplSubItemInput] = useState('');
 
@@ -1206,23 +1203,20 @@ export const RecruitmentManagement: React.FC = () => {
       newTmplDept === 'GA'
         ? 'Fasilitas & GA'
         : newTmplDept === 'IT'
-        ? 'Perangkat & Akun IT'
+        ? 'Inventaris & IT'
         : newTmplDept === 'Finance'
         ? 'Payroll & Pajak'
         : 'Legalitas & Dokumen';
 
-    const isAuto = newTmplVerif === 'automated';
     addChecklistTemplateItem({
       title: newTmplTitle.trim(),
       category,
       targetDepartment: newTmplDept,
-      verificationType: isAuto ? 'automatic_action' : 'manual',
-      actionType: isAuto ? (newTmplAction as any) : undefined,
+      verificationType: 'manual',
       isMandatory: newTmplMandatory,
-      subItems: !isAuto && newTmplHasSubItems && newTmplSubItems.length > 0 ? newTmplSubItems : undefined,
+      subItems: newTmplSubItems.length > 0 ? newTmplSubItems : undefined,
     });
     setNewTmplTitle('');
-    setNewTmplHasSubItems(false);
     setNewTmplSubItems([]);
     setNewTmplSubItemInput('');
     setToastFeedback('Item checklist onboarding berhasil ditambahkan ke template!');
@@ -8121,16 +8115,27 @@ PT Nusantara Multi Talenta Tbk`);
                                     </span>
                                     {/* Department Badge */}
                                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${deptStyle}`}>
-                                      Pihak: {task.targetDepartment || 'HR'}
+                                      Pelaksana: {task.targetDepartment || 'HR'}
                                     </span>
                                     {/* Verification Mode Badge */}
                                     <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
-                                      {task.verificationType === 'automated' ? '⚡ Pemeriksaan Otomatis' : '📋 Ceklis Manual'}
+                                      📋 Ceklis Manual
                                     </span>
                                     {/* Mandatory Badge */}
                                     {task.isMandatory && (
                                       <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200">
                                         Wajib
+                                      </span>
+                                    )}
+                                    {task.subItems && task.subItems.length > 0 && (
+                                      <span
+                                        className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
+                                          task.subItems.every((s) => s.isCompleted)
+                                            ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                            : 'bg-blue-50 text-blue-700 border-blue-200'
+                                        }`}
+                                      >
+                                        {task.subItems.filter((s) => s.isCompleted).length}/{task.subItems.length} Selesai
                                       </span>
                                     )}
                                   </div>
@@ -18423,13 +18428,24 @@ PT Nusantara Multi Talenta Tbk`);
                     />
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="sm:col-span-2">
+                      <label className="font-semibold text-slate-700 block mb-1">Judul / Tugas Ceklis *</label>
+                      <input
+                        type="text"
+                        value={newTmplTitle}
+                        onChange={(e) => setNewTmplTitle(e.target.value)}
+                        placeholder="Contoh: Pemeriksaan Dokumen"
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white text-xs focus:ring-1 focus:ring-blue-500 outline-hidden"
+                      />
+                    </div>
+
                     <div>
-                      <label className="font-semibold text-slate-700 block mb-1">Departemen Pelaksana</label>
+                      <label className="font-semibold text-slate-700 block mb-1">Departemen Pelaksana *</label>
                       <select
                         value={newTmplDept}
                         onChange={(e) => setNewTmplDept(e.target.value as any)}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white text-xs focus:ring-1 focus:ring-blue-500 outline-hidden"
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white text-xs focus:ring-1 focus:ring-blue-500 outline-hidden font-medium"
                       >
                         <option value="HR">HR (Human Resources)</option>
                         <option value="GA">GA (General Affairs)</option>
@@ -18437,135 +18453,73 @@ PT Nusantara Multi Talenta Tbk`);
                         <option value="Finance">Finance & Payroll</option>
                       </select>
                     </div>
-
-                    <div>
-                      <label className="font-semibold text-slate-700 block mb-1">Jenis Pemeriksaan</label>
-                      <select
-                        value={newTmplVerif}
-                        onChange={(e) => {
-                          const val = e.target.value as 'manual' | 'automated';
-                          setNewTmplVerif(val);
-                          if (val === 'automated' && (!newTmplAction || newTmplAction === 'none')) {
-                            setNewTmplAction('id_card_request');
-                          }
-                        }}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white text-xs focus:ring-1 focus:ring-blue-500 outline-hidden font-medium"
-                      >
-                        <option value="manual">📋 Ceklis Manual</option>
-                        <option value="automated">⚡ Pemeriksaan Otomatis (Dengan Form Aksi)</option>
-                      </select>
-                    </div>
                   </div>
 
-                  {/* KONDISIONAL DI BAWAHNYA: Form Aksi Otomatis vs Ceklis Turunan Manual */}
-                  {newTmplVerif === 'automated' ? (
-                    <div className="p-3.5 bg-blue-50/70 border border-blue-200 rounded-xl space-y-2 animate-in fade-in duration-150">
-                      <label className="font-bold text-slate-800 block text-xs flex items-center justify-between">
-                        <span>Jenis Aksi Terkait (Form Otomatis) *</span>
-                        <span className="text-[10px] font-semibold text-blue-700 bg-blue-100/80 px-2 py-0.5 rounded">
-                          Modal Terintegrasi
-                        </span>
+                  {/* Bagian Ceklis Turunan di Dalamnya */}
+                  <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <label className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                        <CheckSquare className="w-3.5 h-3.5 text-blue-600" />
+                        <span>Ceklis Turunan di Dalam Tugas Ini</span>
                       </label>
-                      <select
-                        value={newTmplAction}
-                        onChange={(e) => setNewTmplAction(e.target.value as any)}
-                        className="w-full px-3 py-2 border border-blue-300 rounded-lg bg-white text-xs focus:ring-2 focus:ring-blue-500 outline-hidden font-medium text-slate-800 shadow-2xs"
-                      >
-                        <option value="id_card_request">Pengajuan ID Card GA (Modal Form Pembuatan ID Card & Akses Fasilitas Gedung)</option>
-                        <option value="dossier_verification">Verifikasi Berkas Dossier (Modal Form Ceklis Dokumen & Legalitas Identitas)</option>
-                        <option value="laptop_provisioning">Alokasi Laptop Kerja IT (Modal Form Spesifikasi Laptop & Serial Number)</option>
-                        <option value="account_email_setup">Provisioning Akun & Email (Modal Form Email Korporat & Kredensial SSO)</option>
-                        <option value="contract_signing">Verifikasi TTD Kontrak Digital (Verifikasi Penandatanganan QR PKWT/PKWTT)</option>
-                      </select>
-                      <p className="text-[11px] text-slate-500">
-                        Item ini akan menyediakan tombol aksi otomatis ke departemen terkait ({newTmplDept}). Item otomatis selesai saat form disubmit.
-                      </p>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200">
+                        {newTmplSubItems.length} Butir Ditambahkan
+                      </span>
                     </div>
-                  ) : (
-                    <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-3 animate-in fade-in duration-150">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <label className="flex items-center gap-2 cursor-pointer font-bold text-slate-800 text-xs">
-                            <input
-                              type="checkbox"
-                              checked={newTmplHasSubItems}
-                              onChange={(e) => {
-                                setNewTmplHasSubItems(e.target.checked);
-                                if (!e.target.checked) setNewTmplSubItems([]);
-                              }}
-                              className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                            />
-                            <span>Tambah Ceklis Turunan (Sub-Checklist)</span>
-                          </label>
-                          <p className="text-[11px] text-slate-500 ml-6 mt-0.5">
-                            Opsional: Tambahkan butir-butir ceklis turunan detail yang harus diselesaikan untuk item ini.
-                          </p>
-                        </div>
-                        {newTmplHasSubItems && (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200">
-                            {newTmplSubItems.length} Butir Turunan
-                          </span>
-                        )}
-                      </div>
 
-                      {newTmplHasSubItems && (
-                        <div className="pt-2 border-t border-slate-200 space-y-2.5">
-                          <div className="flex items-center gap-2">
-                            <input
-                              type="text"
-                              value={newTmplSubItemInput}
-                              onChange={(e) => setNewTmplSubItemInput(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  e.preventDefault();
-                                  handleAddSubItemToNewTemplate();
-                                }
-                              }}
-                              placeholder="Ketik butir ceklis turunan, lalu tekan Enter / Tambah..."
-                              className="flex-1 px-3 py-1.5 border border-slate-300 rounded-lg bg-white text-xs focus:ring-1 focus:ring-blue-500 outline-hidden"
-                            />
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={newTmplSubItemInput}
+                        onChange={(e) => setNewTmplSubItemInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleAddSubItemToNewTemplate();
+                          }
+                        }}
+                        placeholder="Ketik butir ceklis turunan (misal: KTP Asli, Foto ID Card, dsb.), lalu tekan Enter / Tambah..."
+                        className="flex-1 px-3 py-2 border border-slate-300 rounded-lg bg-white text-xs focus:ring-1 focus:ring-blue-500 outline-hidden"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAddSubItemToNewTemplate}
+                        className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold cursor-pointer shrink-0"
+                      >
+                        + Tambah Turunan
+                      </button>
+                    </div>
+
+                    {newTmplSubItems.length > 0 ? (
+                      <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                        {newTmplSubItems.map((sub, sIdx) => (
+                          <div
+                            key={sIdx}
+                            className="flex items-center justify-between p-2 rounded-lg bg-white border border-slate-200 text-xs shadow-2xs"
+                          >
+                            <span className="flex items-center gap-2 text-slate-700">
+                              <span className="w-4 h-4 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-[10px] font-bold shrink-0">
+                                {sIdx + 1}
+                              </span>
+                              <span>{sub}</span>
+                            </span>
                             <button
                               type="button"
-                              onClick={handleAddSubItemToNewTemplate}
-                              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold cursor-pointer shrink-0"
+                              onClick={() => handleRemoveSubItemFromNewTemplate(sIdx)}
+                              className="text-slate-400 hover:text-rose-600 p-1 cursor-pointer transition-colors"
+                              title="Hapus turunan ini"
                             >
-                              + Tambah Turunan
+                              <X className="w-3.5 h-3.5" />
                             </button>
                           </div>
-
-                          {newTmplSubItems.length > 0 ? (
-                            <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
-                              {newTmplSubItems.map((sub, sIdx) => (
-                                <div
-                                  key={sIdx}
-                                  className="flex items-center justify-between p-2 rounded-lg bg-white border border-slate-200 text-xs shadow-2xs"
-                                >
-                                  <span className="flex items-center gap-2 text-slate-700">
-                                    <span className="w-4 h-4 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center text-[10px] font-bold shrink-0">
-                                      {sIdx + 1}
-                                    </span>
-                                    <span>{sub}</span>
-                                  </span>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleRemoveSubItemFromNewTemplate(sIdx)}
-                                    className="text-slate-400 hover:text-rose-600 p-1 cursor-pointer transition-colors"
-                                    title="Hapus turunan ini"
-                                  >
-                                    <X className="w-3.5 h-3.5" />
-                                  </button>
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <p className="text-[11px] text-slate-400 italic">
-                              Belum ada ceklis turunan. Ketik teks di atas dan klik Tambah.
-                            </p>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )}
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-slate-400 italic">
+                        Belum ada butir ceklis turunan. Ketik teks di atas lalu klik Tambah Turunan.
+                      </p>
+                    )}
+                  </div>
 
                   <div className="flex items-center justify-between pt-1">
                     <label className="flex items-center gap-2 cursor-pointer text-slate-700">
@@ -18581,10 +18535,10 @@ PT Nusantara Multi Talenta Tbk`);
                     <button
                       type="button"
                       onClick={handleAddChecklistTemplate}
-                      className="px-3.5 py-1.5 bg-blue-700 hover:bg-blue-800 text-white rounded-lg font-bold text-xs shadow-2xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                      className="px-4 py-2 bg-blue-700 hover:bg-blue-800 text-white rounded-lg font-bold text-xs shadow-2xs flex items-center gap-1.5 transition-colors cursor-pointer"
                     >
                       <Plus className="w-3.5 h-3.5" />
-                      <span>Tambahkan Item</span>
+                      <span>Tambahkan Item Template</span>
                     </button>
                   </div>
                 </div>
@@ -18603,7 +18557,7 @@ PT Nusantara Multi Talenta Tbk`);
                     className="text-[11px] font-semibold text-slate-500 hover:text-slate-800 flex items-center gap-1 underline cursor-pointer"
                   >
                     <RotateCcw className="w-3 h-3" />
-                    <span>Reset ke Default SOP Perusahaan</span>
+                    <span>Reset ke Default SOP Perusahaan (7 Item Standar)</span>
                   </button>
                 </div>
 
@@ -18631,12 +18585,10 @@ PT Nusantara Multi Talenta Tbk`);
                                   : 'bg-blue-50 text-blue-800 border-blue-200'
                               }`}
                             >
-                              {item.targetDepartment}
+                              Pelaksana: {item.targetDepartment}
                             </span>
                             <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-700">
-                              {item.verificationType === 'automatic_action' || (item.verificationType as any) === 'automated'
-                                ? '⚡ Pemeriksaan Otomatis'
-                                : '📋 Ceklis Manual'}
+                              📋 Ceklis Manual
                             </span>
                             {item.isMandatory && (
                               <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200">
@@ -18650,39 +18602,17 @@ PT Nusantara Multi Talenta Tbk`);
                             )}
                           </div>
                           <p className="text-[11px] text-slate-500">
-                            Kategori: {item.category}
-                            {item.verificationType === 'automatic_action' || (item.verificationType as any) === 'automated' ? (
-                              <span>
-                                {' · '}Form Aksi:{' '}
-                                <strong className="text-slate-700 font-semibold">
-                                  {item.actionType === 'id_card_request'
-                                    ? 'Pengajuan ID Card GA'
-                                    : item.actionType === 'dossier_verification'
-                                    ? 'Verifikasi Berkas Dossier'
-                                    : item.actionType === 'laptop_provisioning'
-                                    ? 'Alokasi Laptop Kerja IT'
-                                    : item.actionType === 'account_email_setup'
-                                    ? 'Provisioning Akun & Email'
-                                    : item.actionType === 'contract_signing'
-                                    ? 'Verifikasi TTD Kontrak Digital'
-                                    : item.actionType && item.actionType !== 'none'
-                                    ? item.actionType
-                                    : '-'}
-                                </strong>
-                              </span>
-                            ) : (
-                              <span> · Ceklis Manual Mandiri</span>
-                            )}
+                            Kategori: {item.category} · Departemen Pelaksana: {item.targetDepartment}
                           </p>
                           {item.subItems && item.subItems.length > 0 && (
                             <div className="mt-1.5 p-2 rounded-lg bg-slate-50/80 border border-slate-200/90 text-[11px] space-y-1">
                               <span className="font-semibold text-slate-700 block text-[10px]">
-                                Ceklis Turunan ({item.subItems.length} butir):
+                                Butir Ceklis Turunan ({item.subItems.length}):
                               </span>
                               <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 text-[11px] text-slate-600">
                                 {item.subItems.map((sub, sIdx) => (
                                   <div key={sIdx} className="flex items-center gap-1.5">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400 shrink-0" />
+                                    <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />
                                     <span>{sub}</span>
                                   </div>
                                 ))}
