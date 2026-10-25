@@ -1176,6 +1176,53 @@ export const RecruitmentManagement: React.FC = () => {
   const [tmplIsMandatory, setTmplIsMandatory] = useState(true);
   const [tmplDescription, setTmplDescription] = useState('');
 
+  // Explicit states used in Modal 11 (Pengaturan Template Checklist Onboarding)
+  const [newTmplTitle, setNewTmplTitle] = useState('');
+  const [newTmplDept, setNewTmplDept] = useState<'HR' | 'GA' | 'IT' | 'Finance'>('HR');
+  const [newTmplVerif, setNewTmplVerif] = useState<'manual' | 'automated'>('manual');
+  const [newTmplAction, setNewTmplAction] = useState<string>('none');
+  const [newTmplMandatory, setNewTmplMandatory] = useState(true);
+
+  const handleAddChecklistTemplate = () => {
+    if (!newTmplTitle.trim()) {
+      alert('Mohon isi judul tugas checklist!');
+      return;
+    }
+    const category =
+      newTmplDept === 'GA'
+        ? 'Fasilitas & GA'
+        : newTmplDept === 'IT'
+        ? 'Perangkat & Akun IT'
+        : newTmplDept === 'Finance'
+        ? 'Payroll & Pajak'
+        : 'Legalitas & Dokumen';
+
+    addChecklistTemplateItem({
+      title: newTmplTitle.trim(),
+      category,
+      targetDepartment: newTmplDept,
+      verificationType: newTmplVerif === 'automated' ? 'automatic_action' : 'manual',
+      actionType: newTmplAction as any,
+      isMandatory: newTmplMandatory,
+    });
+    setNewTmplTitle('');
+    setToastFeedback('Item checklist onboarding berhasil ditambahkan ke template!');
+  };
+
+  const handleDeleteChecklistTemplate = (id: string) => {
+    if (confirm('Apakah Anda yakin ingin menghapus item template checklist ini?')) {
+      removeChecklistTemplateItem(id);
+      setToastFeedback('Item template checklist berhasil dihapus.');
+    }
+  };
+
+  const handleResetChecklistTemplates = () => {
+    if (confirm('Kembalikan template ke standar SOP default perusahaan?')) {
+      updateOnboardingChecklistTemplates(DEFAULT_ONBOARDING_CHECKLIST_TEMPLATES);
+      setToastFeedback('Template checklist onboarding berhasil direset ke standar SOP perusahaan.');
+    }
+  };
+
   // 1. Modal Form Pengajuan ID Card ke GA
   const [isIdCardModalOpen, setIsIdCardModalOpen] = useState(false);
   const [idCardType, setIdCardType] = useState('RFID Smart Card + Lanyard Standar NusaHR');
