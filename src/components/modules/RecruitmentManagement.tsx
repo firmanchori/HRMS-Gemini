@@ -1155,6 +1155,11 @@ export const RecruitmentManagement: React.FC = () => {
   const [reengageStage, setReengageStage] = useState<RecruitmentStage>('Screening');
   const [reengageNotes, setReengageNotes] = useState<string>('');
 
+  // Additional Pipeline Filters (Tahap Berapa, Score / Hasilnya)
+  const [pipelineInterviewStepFilter, setPipelineInterviewStepFilter] = useState<'all' | '1' | '2' | '3'>('all');
+  const [pipelineScoreFilter, setPipelineScoreFilter] = useState<'all' | '90' | '80' | '70' | 'under70'>('all');
+  const [pipelineResultStatusFilter, setPipelineResultStatusFilter] = useState<'all' | 'passed' | 'review' | 'failed'>('all');
+
   // Active items for modals
   const [activeCandidate, setActiveCandidate] = useState<Candidate | null>(null);
   const [activeRequisition, setActiveRequisition] = useState<JobRequisition | null>(null);
@@ -2056,16 +2061,63 @@ export const RecruitmentManagement: React.FC = () => {
     return matchesVacancy && (searchLower === '' || nameMatch || emailMatch || companyMatch);
   });
 
-  // Grouped candidates for 7 tabs
-  const pipelineCandidates = filteredCandidates.filter(
-    (c) =>
+  // Grouped candidates for 7 tabs with additional pipeline filters
+  const pipelineCandidates = filteredCandidates.filter((c) => {
+    const inPipeline =
       c.stage === 'Incoming' ||
       c.stage === 'Applied' ||
       c.stage === 'Screening' ||
       c.stage === 'Assessment' ||
       c.stage === 'Interview' ||
-      c.stage === 'Medical Check-Up'
-  );
+      c.stage === 'Medical Check-Up';
+    if (!inPipeline) return false;
+
+    // 1. Filter Tahap Berapa (khusus interview)
+    if (pipelineInterviewStepFilter !== 'all') {
+      const stepNum = Number(pipelineInterviewStepFilter);
+      if (c.stage === 'Interview') {
+        const cStep = c.interviewStep || 2;
+        if (cStep !== stepNum) return false;
+      }
+    }
+
+    // 2. Filter Score / Hasilnya
+    if (pipelineScoreFilter !== 'all') {
+      let candScore = 0;
+      if (c.stage === 'Assessment') {
+        candScore = c.testScore ?? c.overallAssessmentScore ?? 0;
+      } else if (c.stage === 'Interview') {
+        candScore = c.interviewScore ?? 0;
+      } else if (c.stage === 'Medical Check-Up') {
+        candScore = c.mcuStatus?.includes('Fit') ? 95 : 60;
+      } else {
+        candScore = c.aiMatchScore ?? 85;
+      }
+
+      if (pipelineScoreFilter === '90' && candScore < 90) return false;
+      if (pipelineScoreFilter === '80' && (candScore < 80 || candScore >= 90)) return false;
+      if (pipelineScoreFilter === '70' && (candScore < 70 || candScore >= 80)) return false;
+      if (pipelineScoreFilter === 'under70' && candScore >= 70) return false;
+    }
+
+    // 3. Filter Status Kelulusan / Hasil
+    if (pipelineResultStatusFilter !== 'all') {
+      if (pipelineResultStatusFilter === 'passed') {
+        if (c.stage === 'Assessment' && c.testStatus !== 'Lulus' && (c.testScore ?? 0) < 75) return false;
+        if (c.stage === 'Interview' && c.interviewScorecard?.recommendation === 'Tidak Direkomendasikan') return false;
+        if (c.stage === 'Medical Check-Up' && c.mcuStatus === 'Unfit (Gugur)') return false;
+      } else if (pipelineResultStatusFilter === 'review') {
+        if (c.stage === 'Interview' && c.interviewScorecard?.recommendation !== 'Dipertimbangkan') return false;
+        if (c.stage === 'Medical Check-Up' && c.mcuStatus !== 'Fit with Note') return false;
+      } else if (pipelineResultStatusFilter === 'failed') {
+        if (c.stage === 'Assessment' && c.testStatus !== 'Tidak Lulus' && (c.testScore ?? 0) >= 75) return false;
+        if (c.stage === 'Interview' && c.interviewScorecard?.recommendation !== 'Tidak Direkomendasikan') return false;
+        if (c.stage === 'Medical Check-Up' && c.mcuStatus !== 'Unfit (Gugur)') return false;
+      }
+    }
+
+    return true;
+  });
 
   const offeringCandidates = filteredCandidates.filter((c) => c.stage === 'Offered');
   const decisionCandidates = filteredCandidates.filter(
@@ -6734,78 +6786,156 @@ PT Nusantara Multi Talenta Tbk`);
             </div>
           </div>
 
-          {/* Filter Pipeline & Kanban Board: Mode Tablet 2 per row (2 cols per row) */}
-          {pipelineViewMode === 'board' ? (
-            <div className="space-y-3.5 w-full">
-              {/* ===================== FILTER PIPELINE TAHAPAN ===================== */}
-              <div className="bg-white p-3 sm:p-3.5 border border-slate-200 rounded-xl shadow-2xs space-y-2.5">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-1 border-b border-slate-100">
-                  <div className="flex items-center gap-2">
-                    <Filter className="w-4 h-4 text-blue-600 shrink-0" />
-                    <span className="font-bold text-xs text-slate-800">Filter Tahapan Pipeline:</span>
-                    <span className="text-[11px] text-slate-500 hidden md:inline">
-                      (Pilih 1, 2, 3 atau semua tahapan untuk ditampilkan di board)
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 self-start sm:self-auto">
-                    <button
-                      type="button"
-                      onClick={handleSelectAllStages}
-                      className={`px-2.5 py-1 text-[11px] font-bold rounded-lg border transition-all ${
-                        pipelineStageFilter.length === 4
-                          ? 'bg-blue-700 text-white border-blue-800 shadow-2xs'
-                          : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+          {/* ===================== FILTER PIPELINE TAHAPAN & SUB-FILTER SCORE/HASIL ===================== */}
+          <div className="bg-white p-3 sm:p-3.5 border border-slate-200 rounded-xl shadow-2xs space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-1 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <Filter className="w-4 h-4 text-blue-600 shrink-0" />
+                <span className="font-bold text-xs text-slate-800">Filter Tahapan Pipeline:</span>
+                <span className="text-[11px] text-slate-500 hidden md:inline">
+                  (Pilih 1, 2, 3 atau semua tahapan untuk ditampilkan)
+                </span>
+              </div>
+              <div className="flex items-center gap-2 self-start sm:self-auto">
+                <button
+                  type="button"
+                  onClick={handleSelectAllStages}
+                  className={`px-2.5 py-1 text-[11px] font-bold rounded-lg border transition-all cursor-pointer ${
+                    pipelineStageFilter.length === 4
+                      ? 'bg-blue-700 text-white border-blue-800 shadow-2xs'
+                      : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+                  }`}
+                >
+                  Tampilkan Semua (4)
+                </button>
+                <span className="text-[11px] text-slate-400">·</span>
+                <span className="text-[11px] text-slate-600 font-semibold">
+                  Aktif: <strong className="text-blue-800">{pipelineStageFilter.length}/4 Tahapan</strong>
+                </span>
+              </div>
+            </div>
+
+            {/* Tombol Checklist / Pills Tahapan */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+              {selectionStages.map((stg) => {
+                const isSelected = pipelineStageFilter.includes(stg.stage);
+                const stageCandidateCount = pipelineCandidates.filter((c) => isCandidateInStage(c, stg.stage)).length;
+                return (
+                  <button
+                    key={stg.stage}
+                    type="button"
+                    onClick={() => handleTogglePipelineStage(stg.stage)}
+                    className={`p-2 rounded-lg border text-left transition-all flex items-center justify-between gap-2 shadow-2xs cursor-pointer ${
+                      isSelected
+                        ? 'bg-slate-900 text-white border-slate-900 ring-2 ring-blue-500/30'
+                        : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100 opacity-60'
+                    }`}
+                    title={`Klik untuk ${isSelected ? 'sembunyikan' : 'tampilkan'} tahap ${stg.title}`}
+                  >
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span
+                        className={`w-4 h-4 rounded-full flex items-center justify-center text-[9.5px] font-bold shrink-0 ${
+                          isSelected ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-600'
+                        }`}
+                      >
+                        {stg.number}
+                      </span>
+                      <span className="text-xs font-bold truncate">{stg.title}</span>
+                    </div>
+                    <span
+                      className={`px-1.5 py-0.2 rounded-full font-mono text-[9.5px] font-bold shrink-0 ${
+                        isSelected ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
                       }`}
                     >
-                      Tampilkan Semua (4)
-                    </button>
-                    <span className="text-[11px] text-slate-400">·</span>
-                    <span className="text-[11px] text-slate-600 font-semibold">
-                      Aktif: <strong className="text-blue-800">{pipelineStageFilter.length}/4 Tahapan</strong>
+                      {stageCandidateCount}
                     </span>
-                  </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Sub-Filters: Tahap Berapa (Interview Step), Score / Nilai, & Status Kelulusan */}
+            <div className="pt-2.5 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2.5">
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                {/* Filter Tahap Berapa (Khusus Interview) */}
+                <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-lg">
+                  <Clock className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                  <span className="text-[11px] font-semibold text-slate-700">Wawancara Tahap:</span>
+                  <select
+                    value={pipelineInterviewStepFilter}
+                    onChange={(e) => setPipelineInterviewStepFilter(e.target.value as any)}
+                    className="bg-transparent text-[11px] font-bold text-slate-900 border-none outline-hidden cursor-pointer"
+                  >
+                    <option value="all">Semua Tahap Wawancara</option>
+                    <option value="1">Tahap 1: Screening HR</option>
+                    <option value="2">Tahap 2: User / Tech Lead</option>
+                    <option value="3">Tahap 3: BOD / Direksi</option>
+                  </select>
                 </div>
 
-                {/* Tombol Checklist / Pills Tahapan */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                  {selectionStages.map((stg) => {
-                    const isSelected = pipelineStageFilter.includes(stg.stage);
-                    const stageCandidateCount = pipelineCandidates.filter((c) => isCandidateInStage(c, stg.stage)).length;
-                    return (
-                      <button
-                        key={stg.stage}
-                        type="button"
-                        onClick={() => handleTogglePipelineStage(stg.stage)}
-                        className={`p-2 rounded-lg border text-left transition-all flex items-center justify-between gap-2 shadow-2xs cursor-pointer ${
-                          isSelected
-                            ? 'bg-slate-900 text-white border-slate-900 ring-2 ring-blue-500/30'
-                            : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100 opacity-60'
-                        }`}
-                        title={`Klik untuk ${isSelected ? 'sembunyikan' : 'tampilkan'} tahap ${stg.title}`}
-                      >
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          <span
-                            className={`w-4 h-4 rounded-full flex items-center justify-center text-[9.5px] font-bold shrink-0 ${
-                              isSelected ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-600'
-                            }`}
-                          >
-                            {stg.number}
-                          </span>
-                          <span className="text-xs font-bold truncate">{stg.title}</span>
-                        </div>
-                        <span
-                          className={`px-1.5 py-0.2 rounded-full font-mono text-[9.5px] font-bold shrink-0 ${
-                            isSelected ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
-                          }`}
-                        >
-                          {stageCandidateCount}
-                        </span>
-                      </button>
-                    );
-                  })}
+                {/* Filter Score / Hasil */}
+                <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-lg">
+                  <Award className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                  <span className="text-[11px] font-semibold text-slate-700">Filter Score:</span>
+                  <select
+                    value={pipelineScoreFilter}
+                    onChange={(e) => setPipelineScoreFilter(e.target.value as any)}
+                    className="bg-transparent text-[11px] font-bold text-slate-900 border-none outline-hidden cursor-pointer"
+                  >
+                    <option value="all">Semua Rentang Nilai</option>
+                    <option value="90">Skor ≥ 90 (Top Tier)</option>
+                    <option value="80">Skor 80 - 89 (Potensial)</option>
+                    <option value="70">Skor 70 - 79 (Passing Grade)</option>
+                    <option value="under70">Skor &lt; 70 (Di Bawah Min)</option>
+                  </select>
                 </div>
+
+                {/* Filter Status Hasil */}
+                <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-lg">
+                  <CheckCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  <span className="text-[11px] font-semibold text-slate-700">Status Hasil:</span>
+                  <select
+                    value={pipelineResultStatusFilter}
+                    onChange={(e) => setPipelineResultStatusFilter(e.target.value as any)}
+                    className="bg-transparent text-[11px] font-bold text-slate-900 border-none outline-hidden cursor-pointer"
+                  >
+                    <option value="all">Semua Status Hasil</option>
+                    <option value="passed">Lulus / Direkomendasikan / Fit</option>
+                    <option value="review">Dipertimbangkan / Fit with Note</option>
+                    <option value="failed">Tidak Lolos / Unfit</option>
+                  </select>
+                </div>
+
+                <span className="text-[11px] text-slate-500 font-medium pl-1">
+                  (Menampilkan <strong className="text-slate-900">{pipelineCandidates.length}</strong> pelamar)
+                </span>
               </div>
 
+              {/* Tombol Reset Filter */}
+              {(pipelineInterviewStepFilter !== 'all' ||
+                pipelineScoreFilter !== 'all' ||
+                pipelineResultStatusFilter !== 'all' ||
+                pipelineStageFilter.length < 4) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleSelectAllStages();
+                    setPipelineInterviewStepFilter('all');
+                    setPipelineScoreFilter('all');
+                    setPipelineResultStatusFilter('all');
+                  }}
+                  className="px-2.5 py-1 text-[11px] font-semibold text-rose-700 hover:text-rose-800 hover:bg-rose-50 border border-rose-200 rounded-lg flex items-center gap-1 transition-colors cursor-pointer"
+                >
+                  <X className="w-3 h-3" />
+                  <span>Reset Filter Pipeline</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Kanban Board View vs Table View */}
+          {pipelineViewMode === 'board' ? (
+            <div className="space-y-3.5 w-full">
               {/* Grid Pipeline: Jika 1 atau 2 filter, lebar kolom sama persis (md:grid-cols-2). Di Desktop jika 3 atau 4 tahapan menyesuaikan xl:grid-cols-3 atau xl:grid-cols-4 */}
               <div
                 className={`grid grid-cols-1 md:grid-cols-2 ${
@@ -6898,6 +7028,43 @@ PT Nusantara Multi Talenta Tbk`);
                               key={candidate.id}
                               className="p-3 bg-white border border-slate-200 rounded-lg shadow-2xs hover:shadow-xs transition-shadow space-y-2.5"
                             >
+                              {/* Header Score & Hasil Pipeline Transparan */}
+                              <div className="flex items-center justify-between gap-1.5 bg-gradient-to-r from-slate-50 to-blue-50/50 px-2 py-1.5 rounded-lg border border-slate-200/90 text-xs shadow-2xs">
+                                <div className="flex items-center gap-1 min-w-0">
+                                  <span className="text-[10px] font-bold text-slate-600 uppercase tracking-wider truncate">
+                                    {stg.stage === 'Applied' && 'Screening CV'}
+                                    {stg.stage === 'Assessment' && 'Tes Kompetensi'}
+                                    {stg.stage === 'Interview' && `Wawancara Tahap ${candidate.interviewStep || 2}`}
+                                    {stg.stage === 'Medical Check-Up' && 'Hasil Medis MCU'}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  {/* Skor Nilai Angka */}
+                                  <span className="font-mono font-bold text-[11px] text-blue-900 bg-white px-1.5 py-0.5 rounded border border-blue-200 shadow-2xs">
+                                    {stg.stage === 'Applied' && `★ ${candidate.aiMatchScore || 85}/100`}
+                                    {stg.stage === 'Assessment' && `★ ${candidate.testScore || 0}/100`}
+                                    {stg.stage === 'Interview' && `★ ${candidate.interviewScore || 88}/100`}
+                                    {stg.stage === 'Medical Check-Up' && (candidate.mcuStatus?.includes('Fit') ? '★ FIT' : '★ UNFIT')}
+                                  </span>
+                                  {/* Status Hasil */}
+                                  <span
+                                    className={`text-[9.5px] font-bold px-1.5 py-0.5 rounded ${
+                                      (stg.stage === 'Assessment' && candidate.testStatus === 'Lulus') ||
+                                      (stg.stage === 'Interview' && candidate.interviewScorecard?.recommendation === 'Direkomendasikan Lolos') ||
+                                      (stg.stage === 'Medical Check-Up' && candidate.mcuStatus?.includes('Fit')) ||
+                                      (stg.stage === 'Applied' && (candidate.aiMatchScore || 85) >= 75)
+                                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                        : 'bg-amber-100 text-amber-800 border border-amber-200'
+                                    }`}
+                                  >
+                                    {stg.stage === 'Applied' && `${candidate.aiMatchScore || 85}% Match`}
+                                    {stg.stage === 'Assessment' && (candidate.testStatus || 'Lulus')}
+                                    {stg.stage === 'Interview' && (candidate.interviewScorecard?.recommendation ? candidate.interviewScorecard.recommendation.split(' ')[0] : 'Lolos')}
+                                    {stg.stage === 'Medical Check-Up' && (candidate.mcuStatus || 'Fit (Lolos)')}
+                                  </span>
+                                </div>
+                              </div>
+
                               <div className="space-y-1">
                                 <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-1">
                                   <h4 className="font-bold text-slate-900 text-xs leading-snug break-words flex-1 min-w-0" title={candidate.name}>
@@ -7561,61 +7728,128 @@ PT Nusantara Multi Talenta Tbk`);
             </div>
           ) : (
             <div className="bg-white border border-slate-200 rounded-xl shadow-2xs overflow-hidden">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
-                  <tr>
-                    <th className="py-3 px-4">Nama Pelamar</th>
-                    <th className="py-3 px-4">Posisi Lowongan</th>
-                    <th className="py-3 px-4">Tahap Seleksi</th>
-                    <th className="py-3 px-4">Hasil / Evaluasi</th>
-                    <th className="py-3 px-4 text-right"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {pipelineCandidates.map((c) => (
-                    <tr key={c.id} className="hover:bg-slate-50/70">
-                      <td className="py-3 px-4">
-                        <div className="font-bold text-slate-900">{c.name}</div>
-                        <span className="text-[10px] text-slate-500">{c.lastCompany}</span>
-                      </td>
-                      <td className="py-3 px-4 font-semibold text-slate-800">
-                        {vacancies.find((v) => v.id === c.jobVacancyId)?.title}
-                      </td>
-                      <td className="py-3 px-4">
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-800 border border-blue-200">
-                          {c.stage === 'Applied' ? 'Incoming' : c.stage}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 text-slate-700">
-                        {c.stage === 'Screening' && `${c.aiMatchScore || 85}% Match`}
-                        {c.stage === 'Assessment' && `Skor: ${c.testScore || 0}/100`}
-                        {c.stage === 'Interview' && `★ ${c.interviewScore || 90}/100`}
-                        {c.stage === 'Medical Check-Up' && `MCU: ${c.mcuStatus || 'Dijadwalkan'}`}
-                        {(c.stage === 'Incoming' || c.stage === 'Applied') && 'Resume Parsed'}
-                      </td>
-                      <td className="py-3 px-4 text-right">
-                        <button
-                          onClick={() => {
-                            if (c.stage === 'Medical Check-Up') handleOpenMcuModal(c);
-                            else if (c.stage === 'Interview') handlePromoteToOffering(c);
-                            else if (c.stage === 'Assessment') handleOpenAssessmentModal(c);
-                            else if (c.stage === 'Screening') {
-                              setActiveCandidate(c);
-                              setIsScreeningModalOpen(true);
-                            } else {
-                              setActiveCandidate(c);
-                              setIsResumeParserModalOpen(true);
-                            }
-                          }}
-                          className="px-2.5 py-1 bg-blue-700 hover:bg-blue-800 text-white rounded text-[11px] font-semibold"
-                        >
-                          Proses →
-                        </button>
-                      </td>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
+                    <tr>
+                      <th className="py-3 px-4">Nama Pelamar</th>
+                      <th className="py-3 px-4">Posisi Lowongan</th>
+                      <th className="py-3 px-4">Tahapan Pipeline</th>
+                      <th className="py-3 px-4">Tahap Berapa</th>
+                      <th className="py-3 px-4">Score / Nilai</th>
+                      <th className="py-3 px-4">Status & Hasil</th>
+                      <th className="py-3 px-4 text-right">Aksi</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {pipelineCandidates.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="py-8 text-center text-slate-400">
+                          Tidak ada pelamar yang sesuai dengan filter pipeline saat ini.
+                        </td>
+                      </tr>
+                    ) : (
+                      pipelineCandidates.map((c) => {
+                        const vac = vacancies.find((v) => v.id === c.jobVacancyId);
+                        const isApp = c.stage === 'Applied' || c.stage === 'Incoming' || c.stage === 'Screening';
+                        const isAss = c.stage === 'Assessment';
+                        const isInt = c.stage === 'Interview';
+                        const isMcu = c.stage === 'Medical Check-Up';
+
+                        return (
+                          <tr key={c.id} className="hover:bg-slate-50/70">
+                            <td className="py-3 px-4">
+                              <div className="font-bold text-slate-900">{c.name}</div>
+                              <span className="text-[10px] text-slate-500">{c.lastCompany || 'Pelamar'}</span>
+                            </td>
+                            <td className="py-3 px-4">
+                              <span className="font-semibold text-slate-800 block truncate max-w-[180px]">{vac?.title}</span>
+                              <span className="text-[10px] text-slate-500">{vac?.department}</span>
+                            </td>
+                            <td className="py-3 px-4">
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-800 border border-blue-200">
+                                {isApp ? '1. Applied (Screening)' : isAss ? '2. Assessment' : isInt ? '3. Interview' : '4. Medical Check-Up'}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-slate-700 font-medium">
+                              {isInt ? (
+                                <span className="px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 font-bold text-[10px]">
+                                  Tahap {c.interviewStep || 2} ({c.interviewStep === 1 ? 'HR' : c.interviewStep === 2 ? 'User' : 'BOD'})
+                                </span>
+                              ) : isAss ? (
+                                <span className="text-[11px] text-slate-600">Modul Teknis</span>
+                              ) : isMcu ? (
+                                <span className="text-[11px] text-slate-600">Klinik/RS</span>
+                              ) : (
+                                <span className="text-[11px] text-slate-600">Dokumen CV</span>
+                              )}
+                            </td>
+                            <td className="py-3 px-4 font-mono font-bold text-slate-900">
+                              {isApp && (
+                                <span className="px-2 py-0.5 rounded bg-sky-50 text-sky-800 border border-sky-200">
+                                  ★ {c.aiMatchScore || 85}/100
+                                </span>
+                              )}
+                              {isAss && (
+                                <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-200">
+                                  ★ {c.testScore || 0}/100
+                                </span>
+                              )}
+                              {isInt && (
+                                <span className="px-2 py-0.5 rounded bg-indigo-50 text-indigo-800 border border-indigo-200">
+                                  ★ {c.interviewScore || 88}/100
+                                </span>
+                              )}
+                              {isMcu && (
+                                <span className={`px-2 py-0.5 rounded ${c.mcuStatus?.includes('Fit') ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-rose-50 text-rose-800 border border-rose-200'}`}>
+                                  {c.mcuStatus?.includes('Fit') ? '★ FIT' : '★ UNFIT'}
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-3 px-4">
+                              <span
+                                className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                  (isAss && c.testStatus === 'Lulus') ||
+                                  (isInt && c.interviewScorecard?.recommendation === 'Direkomendasikan Lolos') ||
+                                  (isMcu && c.mcuStatus?.includes('Fit')) ||
+                                  (isApp && (c.aiMatchScore || 85) >= 75)
+                                    ? 'bg-emerald-100 text-emerald-800'
+                                    : 'bg-amber-100 text-amber-800'
+                                }`}
+                              >
+                                {isApp && `${c.aiMatchScore || 85}% Match`}
+                                {isAss && (c.testStatus || 'Lulus')}
+                                {isInt && (c.interviewScorecard?.recommendation ? c.interviewScorecard.recommendation.split(' ')[0] : 'Lolos')}
+                                {isMcu && (c.mcuStatus || 'Fit')}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-right">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (c.stage === 'Medical Check-Up') handleOpenMcuModal(c);
+                                  else if (c.stage === 'Interview') handlePromoteToOffering(c);
+                                  else if (c.stage === 'Assessment') handleOpenAssessmentModal(c);
+                                  else if (c.stage === 'Screening') {
+                                    setActiveCandidate(c);
+                                    setIsScreeningModalOpen(true);
+                                  } else {
+                                    setActiveCandidate(c);
+                                    setIsResumeParserModalOpen(true);
+                                  }
+                                }}
+                                className="px-2.5 py-1 bg-blue-700 hover:bg-blue-800 text-white rounded text-[11px] font-semibold cursor-pointer"
+                              >
+                                Proses →
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>
