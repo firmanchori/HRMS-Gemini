@@ -27,6 +27,7 @@ import {
   UserCheck,
   History,
   Network,
+  BarChart3,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -70,6 +71,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { id: 'attendance', label: 'Presensi, Shift & Cuti', icon: Clock },
         { id: 'trips', label: 'Perjalanan Dinas (SPPD)', icon: Plane },
         { id: 'approvals', label: 'Pusat Approval Bertingkat', icon: ShieldCheck },
+      ],
+    },
+    {
+      title: 'PUSAT LAPORAN & ANALITIK',
+      items: [
+        { id: 'reports', label: 'Laporan & Analitik Terpadu', icon: BarChart3, badge: 'New' },
       ],
     },
     {

@@ -24,6 +24,7 @@ import { TenantManagement } from './components/modules/TenantManagement';
 import { EssPortal } from './components/modules/EssPortal';
 import { MssPortal } from './components/modules/MssPortal';
 import { AuditTrailManagement } from './components/modules/AuditTrailManagement';
+import { ReportsManagement } from './components/modules/ReportsManagement';
 import { UniversalFilePreviewModal } from './components/common/UniversalFilePreviewModal';
 import { CommandPaletteModal } from './components/common/CommandPaletteModal';
 import { CandidateOnlineTestPortal } from './components/modules/CandidateOnlineTestPortal';
@@ -155,6 +156,8 @@ const MainLayout: React.FC = () => {
         return <RbacManagement />;
       case 'audit':
         return <AuditTrailManagement />;
+      case 'reports':
+        return <ReportsManagement />;
       case 'tenants':
         return <TenantManagement />;
       default:

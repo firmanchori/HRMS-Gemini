@@ -33,6 +33,7 @@ import {
   Building2,
   History,
   Network,
+  BarChart3,
 } from 'lucide-react';
 import { Employee, GAAsset, OfficialDocument, UserRole } from '../../types/hrms';
 
@@ -63,6 +64,14 @@ const ALL_MODULES: ModuleDefinition[] = [
     description: 'Bagan organisasi interaktif, relasi korporasi Holding/Anak/Cucu, pengaturan Divisi & Departemen fleksibel',
     keywords: ['organisasi', 'struktur', 'tree', 'bagan', 'holding', 'anak perusahaan', 'cucu perusahaan', 'divisi', 'departemen', 'jabatan', 'posisi'],
     icon: Network,
+  },
+  {
+    id: 'reports',
+    name: 'Pusat Laporan & Analitik',
+    group: 'Laporan & Analitik',
+    description: 'Kompilasi laporan terpadu: rekrutmen, rasio pelamar, alur onboarding, dan formasi struktur organisasi',
+    keywords: ['laporan', 'report', 'analitik', 'analytics', 'rekrutmen', 'onboarding', 'organisasi', 'fptk', 'pendaftar', 'pelamar', 'headcount'],
+    icon: BarChart3,
   },
   {
     id: 'employees',
