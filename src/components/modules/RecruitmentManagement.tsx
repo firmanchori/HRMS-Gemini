@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useHrms } from '../../context/HrmsContext';
 import {
+  ClipboardCheck,
   UserPlus,
   Briefcase,
   Plus,
@@ -794,9 +795,13 @@ export const RecruitmentManagement: React.FC = () => {
   // Medical Check-Up (MCU) & Change Interviewer States
   const [isMcuModalOpen, setIsMcuModalOpen] = useState(false);
   const [mcuCandidate, setMcuCandidate] = useState<Candidate | null>(null);
+  const [mcuModalTab, setMcuModalTab] = useState<'schedule' | 'result'>('schedule');
   const [mcuDate, setMcuDate] = useState('2026-10-27');
+  const [mcuTime, setMcuTime] = useState('08:00 - 11:30 WIB');
   const [mcuClinic, setMcuClinic] = useState('RS Siloam Semanggi / Prodia Lab');
   const [mcuPackage, setMcuPackage] = useState('Paket Standar Pra-Kerja (Darah Lengkap, Rontgen Thorax, Urin, Fisik)');
+  const [mcuInstructions, setMcuInstructions] = useState('1. Puasa 10-12 jam sebelum pengambilan sampel darah (hanya diperbolehkan minum air putih murni).\n2. Membawa identitas resmi (KTP) dan surat pengantar MCU resmi dari HRMS.\n3. Istirahat cukup minimal 7 jam pada malam hari sebelum tes, hindari konsumsi suplemen tanpa resep.');
+  const [mcuSendInvitation, setMcuSendInvitation] = useState(true);
   const [mcuStatus, setMcuStatus] = useState<'Belum Dijadwalkan' | 'Dijadwalkan' | 'Menunggu Hasil Lab' | 'Fit (Lolos)' | 'Fit with Note' | 'Unfit (Gugur)'>('Dijadwalkan');
   const [mcuNotes, setMcuNotes] = useState('Pemeriksaan laboratorium pra-kerja.');
   const [isChangeInterviewerModalOpen, setIsChangeInterviewerModalOpen] = useState(false);
@@ -1960,8 +1965,9 @@ Nama Berkas: ${fileName} (${candidate.cvFileSize || '1.2 MB'})
   };
 
   // Medical Check-Up (MCU) Handlers
-  const handleOpenMcuModal = (candidate: Candidate) => {
+  const handleOpenMcuModal = (candidate: Candidate, initialTab: 'schedule' | 'result' = 'schedule') => {
     setMcuCandidate(candidate);
+    setMcuModalTab(initialTab);
     setMcuDate(candidate.mcuDate || new Date().toISOString().split('T')[0]);
     setMcuClinic(candidate.mcuClinicOrHospital || 'RS Siloam Semanggi / Prodia Lab');
     setMcuPackage(candidate.mcuPackage || 'Paket Standar Pra-Kerja (Darah Lengkap, Rontgen Thorax, Urin, Fisik)');
@@ -6016,12 +6022,15 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                                       <div className="grid grid-cols-2 gap-1.5">
                                         <button
                                           type="button"
-                                          onClick={() => setConfirmRevertToScreeningCandidate(candidate)}
+                                          onClick={() => {
+                                            updateCandidateStage(candidate.id, 'Assessment', {});
+                                            setToastFeedback(`Kandidat ${candidate.name} dikembalikan ke tahap Assessment.`);
+                                          }}
                                           className="w-full py-1 px-1 text-[10px] font-semibold bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 rounded flex items-center justify-center gap-1 transition-colors shadow-2xs truncate"
-                                          title="Kembalikan proses pelamar ke tahap Applied"
+                                          title="Kembalikan proses pelamar ke tahap Assessment (pipeline sebelumnya)"
                                         >
                                           <Undo2 className="w-3 h-3 text-amber-600 shrink-0" />
-                                          <span className="truncate">Ke Applied</span>
+                                          <span className="truncate">Ke Assessment</span>
                                         </button>
                                         <button
                                           type="button"
@@ -6042,13 +6051,13 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                                                 mcuStatus: candidate.mcuStatus || 'Dijadwalkan',
                                                 mcuDate: candidate.mcuDate || new Date().toISOString().split('T')[0],
                                               });
-                                              setToastFeedback(`Kandidat ${candidate.name} diloloskan ke tahap Medical Check-Up!`);
+                                              setToastFeedback(`Kandidat ${candidate.name} dipindahkan ke tahap Medical Check-Up!`);
                                             }}
                                             className="w-full py-1.5 text-[10px] font-bold bg-teal-600 hover:bg-teal-700 text-white rounded text-center flex items-center justify-center gap-1 shadow-2xs transition-colors"
-                                            title="Lolos wawancara. Loloskan kandidat ke tahap Medical Check-Up (MCU)."
+                                            title="Ke Medical Check Up"
                                           >
                                             <HeartPulse className="w-3 h-3 shrink-0" />
-                                            <span>Lolos ke Medical Check-Up →</span>
+                                            <span>Ke Medical Check Up</span>
                                           </button>
                                           <button
                                             onClick={() => handlePromoteToOffering(candidate)}
@@ -6075,34 +6084,84 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                                 {stg.stage === 'Medical Check-Up' && (() => {
                                   const isMcuFit = candidate.mcuStatus === 'Fit (Lolos)' || candidate.mcuStatus === 'Fit with Note';
                                   return (
-                                    <>
-                                      <button
-                                        onClick={() => handleOpenMcuModal(candidate)}
-                                        className="w-full py-1 text-[11px] font-semibold bg-teal-50 text-teal-800 hover:bg-teal-100 rounded flex items-center justify-center gap-1 transition-colors"
-                                      >
-                                        <HeartPulse className="w-3 h-3 text-teal-600" />
-                                        <span>Update Hasil MCU / Lab</span>
-                                      </button>
-                                      {isMcuFit ? (
-                                        <button
-                                          onClick={() => handlePromoteToOffering(candidate)}
-                                          className="w-full py-1.5 text-[10px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded text-center flex items-center justify-center gap-1 shadow-2xs transition-colors"
-                                          title="Kandidat dinyatakan Fit to Work. Lanjut ke pembuatan Offering Letter."
+                                    <div className="space-y-1.5">
+                                      {/* Status MCU sebagai TAG INFORMASI (Bukan Button) */}
+                                      <div className="flex items-center justify-between text-[10px] px-2 py-1 bg-slate-50 border border-slate-200 rounded">
+                                        <span className="font-semibold text-slate-600 flex items-center gap-1">
+                                          <HeartPulse className="w-3 h-3 text-teal-600 shrink-0" />
+                                          <span>Status MCU:</span>
+                                        </span>
+                                        <span
+                                          className={`px-1.5 py-0.5 rounded text-[9.5px] font-bold border ${
+                                            candidate.mcuStatus === 'Fit (Lolos)'
+                                              ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                                              : candidate.mcuStatus === 'Fit with Note'
+                                              ? 'bg-amber-50 text-amber-800 border-amber-300'
+                                              : candidate.mcuStatus === 'Unfit (Gugur)'
+                                              ? 'bg-rose-50 text-rose-800 border-rose-300'
+                                              : candidate.mcuStatus === 'Menunggu Hasil Lab'
+                                              ? 'bg-blue-50 text-blue-800 border-blue-300'
+                                              : 'bg-teal-50 text-teal-800 border-teal-300'
+                                          }`}
                                         >
-                                          <CheckCircle className="w-3 h-3 shrink-0" />
-                                          <span>Lanjut ke Tahap Offering →</span>
-                                        </button>
-                                      ) : (
+                                          {candidate.mcuStatus || 'Dijadwalkan'}
+                                        </span>
+                                      </div>
+
+                                      {/* 2 Aksi: 1. Penjadwalan & 2. Update Hasil MCU */}
+                                      <div className="grid grid-cols-2 gap-1.5">
                                         <button
-                                          onClick={() => handleOpenMcuModal(candidate)}
-                                          className="w-full py-1.5 text-[10px] font-semibold bg-slate-100 hover:bg-teal-50 text-slate-500 hover:text-teal-800 border border-slate-200 hover:border-teal-300 rounded text-center flex items-center justify-center gap-1 transition-colors"
-                                          title={`Status MCU: ${candidate.mcuStatus || 'Dijadwalkan'}. Klik untuk input hasil tes.`}
+                                          type="button"
+                                          onClick={() => handleOpenMcuModal(candidate, 'schedule')}
+                                          className="w-full py-1.5 px-1 text-[10px] font-semibold bg-teal-50 hover:bg-teal-100 text-teal-900 border border-teal-200 rounded flex items-center justify-center gap-1 transition-colors shadow-2xs truncate"
+                                          title="Aksi 1: Penjadwalan MCU (RS/Klinik rujukan, tanggal, paket & instruksi puasa)"
                                         >
-                                          <Clock className="w-3 h-3 text-slate-400 shrink-0" />
-                                          <span>Status: {candidate.mcuStatus || 'Menunggu Hasil Lab'}</span>
+                                          <Calendar className="w-3 h-3 text-teal-600 shrink-0" />
+                                          <span className="truncate">Penjadwalan</span>
                                         </button>
-                                      )}
-                                    </>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleOpenMcuModal(candidate, 'result')}
+                                          className="w-full py-1.5 px-1 text-[10px] font-semibold bg-teal-700 hover:bg-teal-800 text-white rounded flex items-center justify-center gap-1 transition-colors shadow-2xs truncate"
+                                          title="Aksi 2: Update Hasil MCU & Evaluasi Kelayakan Medis"
+                                        >
+                                          <ClipboardCheck className="w-3 h-3 text-teal-200 shrink-0" />
+                                          <span className="truncate">Update Hasil MCU</span>
+                                        </button>
+                                      </div>
+
+                                      {/* Tombol Ke Interview (Mengembalikan ke pipeline sebelumnya) */}
+                                      <div className="space-y-1">
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            updateCandidateStage(candidate.id, 'Interview', {});
+                                            setToastFeedback(`Kandidat ${candidate.name} dikembalikan ke tahap Interview.`);
+                                          }}
+                                          className="w-full py-1 px-1 text-[10px] font-semibold bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 rounded flex items-center justify-center gap-1 transition-colors shadow-2xs truncate"
+                                          title="Kembalikan proses pelamar ke tahap Interview (pipeline sebelumnya)"
+                                        >
+                                          <Undo2 className="w-3 h-3 text-amber-600 shrink-0" />
+                                          <span className="truncate">Ke Interview</span>
+                                        </button>
+
+                                        {isMcuFit ? (
+                                          <button
+                                            type="button"
+                                            onClick={() => handlePromoteToOffering(candidate)}
+                                            className="w-full py-1.5 text-[10px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded text-center flex items-center justify-center gap-1 shadow-2xs transition-colors"
+                                            title="Kandidat dinyatakan Fit to Work. Lanjut ke pembuatan Offering Letter."
+                                          >
+                                            <CheckCircle className="w-3 h-3 shrink-0" />
+                                            <span>Lanjut ke Tahap Offering →</span>
+                                          </button>
+                                        ) : (
+                                          <div className="text-[9.5px] text-center text-slate-400 py-0.5">
+                                            Lanjut Offering aktif jika hasil MCU Fit.
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
                                   );
                                 })()}
                               </div>
@@ -14604,9 +14663,9 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                 </div>
                 <div>
                   <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                    <span>Pencatatan & Evaluasi Medical Check-Up (MCU)</span>
+                    <span>Medical Check-Up (MCU) Pelamar</span>
                     <span className="text-[10px] bg-teal-800 text-teal-200 border border-teal-600 font-mono px-2 py-0.5 rounded-full">
-                      Pra-Kerja
+                      {mcuCandidate.mcuStatus || 'Dijadwalkan'}
                     </span>
                   </h3>
                   <p className="text-xs text-teal-200 mt-0.5">
@@ -14620,6 +14679,34 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                 className="p-1 rounded-lg hover:bg-white/10 text-slate-300 hover:text-white transition-colors"
               >
                 <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* 2 Aksi Tab Switcher */}
+            <div className="px-5 pt-3 pb-0 bg-slate-50 border-b border-slate-200 flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setMcuModalTab('schedule')}
+                className={`flex items-center gap-2 px-3.5 py-2 text-xs font-bold border-b-2 transition-all ${
+                  mcuModalTab === 'schedule'
+                    ? 'border-teal-600 text-teal-800 bg-white rounded-t-lg shadow-2xs'
+                    : 'border-transparent text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <Calendar className="w-3.5 h-3.5 text-teal-600" />
+                <span>1. Penjadwalan MCU</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setMcuModalTab('result')}
+                className={`flex items-center gap-2 px-3.5 py-2 text-xs font-bold border-b-2 transition-all ${
+                  mcuModalTab === 'result'
+                    ? 'border-teal-600 text-teal-800 bg-white rounded-t-lg shadow-2xs'
+                    : 'border-transparent text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <ClipboardCheck className="w-3.5 h-3.5 text-teal-600" />
+                <span>2. Update Hasil MCU</span>
               </button>
             </div>
 
@@ -14642,122 +14729,197 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                 </div>
               </div>
 
-              {/* Form Fields */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">
-                    Klinik / Rumah Sakit / Lab Rujukan <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={mcuClinic}
-                    onChange={(e) => setMcuClinic(e.target.value)}
-                    placeholder="Contoh: RS Siloam Semanggi / Prodia Lab"
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs outline-hidden focus:ring-1 focus:ring-teal-500"
-                  />
-                </div>
+              {mcuModalTab === 'schedule' ? (
+                /* TAB 1: PENJADWALAN MCU */
+                <div className="space-y-3.5">
+                  <div className="p-3 bg-teal-50/50 border border-teal-200 rounded-lg text-teal-900">
+                    <div className="font-bold text-xs flex items-center gap-1.5 mb-1">
+                      <Calendar className="w-4 h-4 text-teal-700" />
+                      <span>Atur Jadwal Pemeriksaan Kesehatan Pra-Kerja (MCU)</span>
+                    </div>
+                    <p className="text-[11px] text-teal-800 leading-relaxed">
+                      Tentukan rumah sakit / klinik rekanan, tanggal dan waktu kehadiran, paket pemeriksaan, serta instruksi puasa bagi kandidat.
+                    </p>
+                  </div>
 
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">
-                    Tanggal Pemeriksaan MCU <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    value={mcuDate}
-                    onChange={(e) => setMcuDate(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs outline-hidden focus:ring-1 focus:ring-teal-500"
-                  />
-                </div>
-              </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    <div>
+                      <label className="font-semibold text-slate-700 block mb-1">
+                        Klinik / Rumah Sakit / Lab Rujukan <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={mcuClinic}
+                        onChange={(e) => setMcuClinic(e.target.value)}
+                        placeholder="Contoh: RS Siloam Semanggi / Prodia Lab"
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs outline-hidden focus:ring-1 focus:ring-teal-500"
+                      />
+                    </div>
 
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">
-                  Paket Pemeriksaan Kesehatan Pra-Kerja
-                </label>
-                <select
-                  value={mcuPackage}
-                  onChange={(e) => setMcuPackage(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white text-xs outline-hidden focus:ring-1 focus:ring-teal-500"
-                >
-                  <option value="Paket Standar Pra-Kerja (Darah Lengkap, Rontgen Thorax, Urin, Fisik)">
-                    Paket Standar Pra-Kerja (Darah Lengkap, Rontgen Thorax, Urin, Fisik)
-                  </option>
-                  <option value="Paket Eksekutif (Jantung/EKG, Kolesterol, Liver, Ginjal, Thorax)">
-                    Paket Eksekutif (Jantung/EKG, Kolesterol, Liver, Ginjal, Thorax)
-                  </option>
-                  <option value="Paket Khusus Lapangan, Buta Warna & Skrining Narkotika">
-                    Paket Khusus Lapangan, Buta Warna & Skrining Narkotika
-                  </option>
-                </select>
-              </div>
+                    <div>
+                      <label className="font-semibold text-slate-700 block mb-1">
+                        Tanggal Pemeriksaan MCU <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="date"
+                        required
+                        value={mcuDate}
+                        onChange={(e) => setMcuDate(e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs outline-hidden focus:ring-1 focus:ring-teal-500"
+                      />
+                    </div>
+                  </div>
 
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1.5">
-                  Hasil / Status Kelayakan Medis (Fit to Work) <span className="text-rose-500">*</span>
-                </label>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {(
-                    [
-                      { value: 'Fit (Lolos)', label: 'Fit (Lolos)', desc: 'Lolos Sehat & Siap Bekerja', badge: 'bg-emerald-50 border-emerald-300 text-emerald-800' },
-                      { value: 'Fit with Note', label: 'Fit with Note', desc: 'Layak dengan Catatan Dokter', badge: 'bg-amber-50 border-amber-300 text-amber-800' },
-                      { value: 'Menunggu Hasil Lab', label: 'Menunggu Lab', desc: 'Sampel Sedang Diuji', badge: 'bg-blue-50 border-blue-300 text-blue-800' },
-                      { value: 'Dijadwalkan', label: 'Dijadwalkan', desc: 'Menunggu Tanggal Tes', badge: 'bg-slate-50 border-slate-300 text-slate-700' },
-                      { value: 'Unfit (Gugur)', label: 'Unfit (Gugur)', desc: 'Tidak Memenuhi Standar Medis', badge: 'bg-rose-50 border-rose-300 text-rose-800' },
-                    ] as const
-                  ).map((opt) => (
-                    <label
-                      key={opt.value}
-                      className={`p-2.5 rounded-lg border cursor-pointer transition-all flex flex-col justify-between ${
-                        mcuStatus === opt.value
-                          ? `${opt.badge} ring-2 ring-teal-500/30 font-bold`
-                          : 'bg-white border-slate-200 hover:border-slate-300 text-slate-700'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs">{opt.label}</span>
-                        <input
-                          type="radio"
-                          name="mcuStatus"
-                          value={opt.value}
-                          checked={mcuStatus === opt.value}
-                          onChange={() => setMcuStatus(opt.value)}
-                          className="text-teal-600 focus:ring-teal-500"
-                        />
-                      </div>
-                      <span className="text-[10px] text-slate-500 font-normal mt-1 leading-tight">{opt.desc}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    <div>
+                      <label className="font-semibold text-slate-700 block mb-1">
+                        Waktu / Jam Kunjungan Pemeriksaan
+                      </label>
+                      <input
+                        type="text"
+                        value={mcuTime}
+                        onChange={(e) => setMcuTime(e.target.value)}
+                        placeholder="Contoh: 08:00 - 11:30 WIB"
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs outline-hidden focus:ring-1 focus:ring-teal-500"
+                      />
+                    </div>
 
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">
-                  Catatan Evaluasi Dokter / Laboratorium
-                </label>
-                <textarea
-                  rows={2}
-                  value={mcuNotes}
-                  onChange={(e) => setMcuNotes(e.target.value)}
-                  placeholder="Contoh: Tekanan darah 120/80 mmHg normal, rontgen thorax normal, tes buta warna bebas, bebas zat terlarang. Dinyatakan Fit for Work."
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs outline-hidden focus:ring-1 focus:ring-teal-500 resize-none"
-                />
-              </div>
+                    <div>
+                      <label className="font-semibold text-slate-700 block mb-1">
+                        Paket Pemeriksaan Kesehatan Pra-Kerja
+                      </label>
+                      <select
+                        value={mcuPackage}
+                        onChange={(e) => setMcuPackage(e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white text-xs outline-hidden focus:ring-1 focus:ring-teal-500"
+                      >
+                        <option value="Paket Standar Pra-Kerja (Darah Lengkap, Rontgen Thorax, Urin, Fisik)">
+                          Paket Standar Pra-Kerja (Darah Lengkap, Rontgen Thorax, Urin, Fisik)
+                        </option>
+                        <option value="Paket Eksekutif (Jantung/EKG, Kolesterol, Liver, Ginjal, Thorax)">
+                          Paket Eksekutif (Jantung/EKG, Kolesterol, Liver, Ginjal, Thorax)
+                        </option>
+                        <option value="Paket Khusus Lapangan, Buta Warna & Skrining Narkotika">
+                          Paket Khusus Lapangan, Buta Warna & Skrining Narkotika
+                        </option>
+                        <option value="Paket Komprehensif Manufaktur & Audiometri">
+                          Paket Komprehensif Manufaktur & Audiometri
+                        </option>
+                      </select>
+                    </div>
+                  </div>
 
-              {/* Upload Certificate Mockup */}
-              <div className="p-3 bg-slate-50 border border-dashed border-slate-300 rounded-xl flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <FileCheck2 className="w-5 h-5 text-teal-600 shrink-0" />
                   <div>
-                    <span className="font-semibold text-slate-800 block text-xs">Dokumen Hasil Lab Terlampir</span>
-                    <span className="text-[10px] text-slate-500">Hasil_MCU_{mcuCandidate.name.replace(/\s+/g, '_')}_Official.pdf (Terverifikasi)</span>
+                    <label className="font-semibold text-slate-700 block mb-1">
+                      Petunjuk & Instruksi Persiapan Pasien (Puasa & Berkas)
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={mcuInstructions}
+                      onChange={(e) => setMcuInstructions(e.target.value)}
+                      placeholder="Instruksi puasa dan dokumen yang wajib dibawa saat pemeriksaan..."
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs outline-hidden focus:ring-1 focus:ring-teal-500 resize-none font-mono text-[11px]"
+                    />
+                  </div>
+
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={mcuSendInvitation}
+                        onChange={(e) => setMcuSendInvitation(e.target.checked)}
+                        className="w-4 h-4 text-teal-600 rounded border-slate-300 focus:ring-teal-500"
+                      />
+                      <span className="font-semibold text-slate-800 text-xs">
+                        Kirim Surat Pengantar MCU Resmi ke Kandidat via Email & WhatsApp
+                      </span>
+                    </label>
+                    <p className="text-[10px] text-slate-500 ml-6 mt-0.5">
+                      Sistem akan melampirkan e-surat pengantar resmi, barcode pemeriksaan lab, dan petunjuk puasa langsung ke kontak pelamar.
+                    </p>
                   </div>
                 </div>
-                <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold">
-                  Terverifikasi
-                </span>
-              </div>
+              ) : (
+                /* TAB 2: UPDATE HASIL MCU */
+                <div className="space-y-3.5">
+                  <div className="p-3 bg-teal-50/50 border border-teal-200 rounded-lg text-teal-900">
+                    <div className="font-bold text-xs flex items-center gap-1.5 mb-1">
+                      <ClipboardCheck className="w-4 h-4 text-teal-700" />
+                      <span>Update Hasil Pemeriksaan & Status Kelayakan Medis</span>
+                    </div>
+                    <p className="text-[11px] text-teal-800 leading-relaxed">
+                      Klinik Rujukan: <strong>{mcuClinic}</strong> · Tanggal: <strong>{mcuDate}</strong>. Pilih status kelayakan medis pelamar.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="font-semibold text-slate-700 block mb-1.5">
+                      Hasil / Status Kelayakan Medis (Fit to Work) <span className="text-rose-500">*</span>
+                    </label>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {(
+                        [
+                          { value: 'Fit (Lolos)', label: 'Fit (Lolos)', desc: 'Lolos Sehat & Siap Bekerja', badge: 'bg-emerald-50 border-emerald-300 text-emerald-800' },
+                          { value: 'Fit with Note', label: 'Fit with Note', desc: 'Layak dengan Catatan Dokter', badge: 'bg-amber-50 border-amber-300 text-amber-800' },
+                          { value: 'Menunggu Hasil Lab', label: 'Menunggu Lab', desc: 'Sampel Sedang Diuji', badge: 'bg-blue-50 border-blue-300 text-blue-800' },
+                          { value: 'Dijadwalkan', label: 'Dijadwalkan', desc: 'Menunggu Tanggal Tes', badge: 'bg-slate-50 border-slate-300 text-slate-700' },
+                          { value: 'Unfit (Gugur)', label: 'Unfit (Gugur)', desc: 'Tidak Memenuhi Standar Medis', badge: 'bg-rose-50 border-rose-300 text-rose-800' },
+                        ] as const
+                      ).map((opt) => (
+                        <label
+                          key={opt.value}
+                          className={`p-2.5 rounded-lg border cursor-pointer transition-all flex flex-col justify-between ${
+                            mcuStatus === opt.value
+                              ? `${opt.badge} ring-2 ring-teal-500/30 font-bold`
+                              : 'bg-white border-slate-200 hover:border-slate-300 text-slate-700'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs">{opt.label}</span>
+                            <input
+                              type="radio"
+                              name="mcuStatus"
+                              value={opt.value}
+                              checked={mcuStatus === opt.value}
+                              onChange={() => setMcuStatus(opt.value)}
+                              className="text-teal-600 focus:ring-teal-500"
+                            />
+                          </div>
+                          <span className="text-[10px] text-slate-500 font-normal mt-1 leading-tight">{opt.desc}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="font-semibold text-slate-700 block mb-1">
+                      Catatan Evaluasi Dokter / Laboratorium
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={mcuNotes}
+                      onChange={(e) => setMcuNotes(e.target.value)}
+                      placeholder="Contoh: Tekanan darah 120/80 mmHg normal, rontgen thorax normal, tes buta warna bebas, bebas zat terlarang. Dinyatakan Fit for Work."
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs outline-hidden focus:ring-1 focus:ring-teal-500 resize-none"
+                    />
+                  </div>
+
+                  {/* Upload Certificate Mockup */}
+                  <div className="p-3 bg-slate-50 border border-dashed border-slate-300 rounded-xl flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <FileCheck2 className="w-5 h-5 text-teal-600 shrink-0" />
+                      <div>
+                        <span className="font-semibold text-slate-800 block text-xs">Dokumen Hasil Lab Terlampir</span>
+                        <span className="text-[10px] text-slate-500">Hasil_MCU_{mcuCandidate.name.replace(/\s+/g, '_')}_Official.pdf (Terverifikasi)</span>
+                      </div>
+                    </div>
+                    <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+                      Terverifikasi
+                    </span>
+                  </div>
+                </div>
+              )}
 
               {/* Footer */}
               <div className="pt-3 border-t border-slate-200 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
@@ -14768,36 +14930,93 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                 >
                   Tutup
                 </button>
+
                 <div className="flex items-center gap-2">
-                  <button
-                    type="submit"
-                    className="px-4 py-2 bg-teal-700 hover:bg-teal-800 text-white rounded-lg font-bold text-xs shadow-2xs transition-colors flex items-center justify-center gap-1.5"
-                  >
-                    <Check className="w-3.5 h-3.5" />
-                    <span>Simpan Hasil MCU</span>
-                  </button>
-                  {(mcuStatus === 'Fit (Lolos)' || mcuStatus === 'Fit with Note') && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const isFit = mcuStatus === 'Fit (Lolos)' || mcuStatus === 'Fit with Note';
-                        const decision: Candidate['mcuDecision'] = isFit ? 'Lolos ke Offering' : 'Perlu Pemeriksaan Ulang';
-                        updateCandidateStage(mcuCandidate.id, mcuCandidate.stage, {
-                          mcuDate,
-                          mcuClinicOrHospital: mcuClinic,
-                          mcuPackage,
-                          mcuStatus,
-                          mcuNotes,
-                          mcuDecision: decision,
-                        });
-                        setIsMcuModalOpen(false);
-                        handlePromoteToOffering(mcuCandidate);
-                      }}
-                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-xs shadow-2xs transition-colors flex items-center justify-center gap-1.5"
-                    >
-                      <CheckCircle className="w-3.5 h-3.5" />
-                      <span>Simpan & Lanjut ke Offering →</span>
-                    </button>
+                  {mcuModalTab === 'schedule' ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          updateCandidateStage(mcuCandidate.id, mcuCandidate.stage, {
+                            mcuDate,
+                            mcuClinicOrHospital: mcuClinic,
+                            mcuPackage,
+                            mcuStatus: ((mcuStatus === 'Fit (Lolos)' || mcuStatus === 'Fit with Note' || mcuStatus === 'Unfit (Gugur)') ? mcuStatus : 'Dijadwalkan'),
+                            mcuNotes,
+                          });
+                          setIsMcuModalOpen(false);
+                          setToastFeedback(
+                            mcuSendInvitation
+                              ? `Jadwal MCU untuk ${mcuCandidate.name} disimpan & surat pengantar terkirim via Email/WA.`
+                              : `Jadwal MCU untuk ${mcuCandidate.name} berhasil disimpan.`
+                          );
+                        }}
+                        className="px-4 py-2 bg-teal-700 hover:bg-teal-800 text-white rounded-lg font-bold text-xs shadow-2xs transition-colors flex items-center justify-center gap-1.5"
+                      >
+                        <Calendar className="w-3.5 h-3.5" />
+                        <span>Simpan Jadwal MCU</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          updateCandidateStage(mcuCandidate.id, mcuCandidate.stage, {
+                            mcuDate,
+                            mcuClinicOrHospital: mcuClinic,
+                            mcuPackage,
+                            mcuStatus: ((mcuStatus === 'Fit (Lolos)' || mcuStatus === 'Fit with Note' || mcuStatus === 'Unfit (Gugur)') ? mcuStatus : 'Dijadwalkan'),
+                            mcuNotes,
+                          });
+                          setMcuModalTab('result');
+                          setToastFeedback(`Jadwal tersimpan. Silakan lanjutkan ke update hasil pemeriksaan MCU.`);
+                        }}
+                        className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-bold text-xs shadow-2xs transition-colors flex items-center justify-center gap-1.5"
+                      >
+                        <span>Lanjut ke Update Hasil MCU →</span>
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setMcuModalTab('schedule')}
+                        className="px-3.5 py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg font-semibold text-xs transition-colors"
+                      >
+                        ← Kembali ke Jadwal
+                      </button>
+
+                      <button
+                        type="submit"
+                        className="px-4 py-2 bg-teal-700 hover:bg-teal-800 text-white rounded-lg font-bold text-xs shadow-2xs transition-colors flex items-center justify-center gap-1.5"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        <span>Simpan Hasil MCU</span>
+                      </button>
+
+                      {(mcuStatus === 'Fit (Lolos)' || mcuStatus === 'Fit with Note') && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const isFit = mcuStatus === 'Fit (Lolos)' || mcuStatus === 'Fit with Note';
+                            const decision: Candidate['mcuDecision'] = isFit ? 'Lolos ke Offering' : 'Perlu Pemeriksaan Ulang';
+                            updateCandidateStage(mcuCandidate.id, mcuCandidate.stage, {
+                              mcuDate,
+                              mcuClinicOrHospital: mcuClinic,
+                              mcuPackage,
+                              mcuStatus,
+                              mcuNotes,
+                              mcuDecision: decision,
+                            });
+                            setIsMcuModalOpen(false);
+                            handlePromoteToOffering(mcuCandidate);
+                          }}
+                          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-xs shadow-2xs transition-colors flex items-center justify-center gap-1.5"
+                        >
+                          <CheckCircle className="w-3.5 h-3.5" />
+                          <span>Simpan & Lanjut ke Offering →</span>
+                        </button>
+                      )}
+                    </>
                   )}
                 </div>
               </div>
