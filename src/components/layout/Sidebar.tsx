@@ -63,7 +63,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { id: 'recruitment', label: 'Rekrutmen & Onboarding', icon: UserPlus },
         {
           id: 'employees',
-          label: 'Manajemen Karyawan',
+          label: 'Management Karyawan',
           icon: Users,
           badge: employees.length,
         },

@@ -117,6 +117,7 @@ export interface Employee {
   // 1. Status Kerja & Dokumen Kontrak / SK
   employmentType: EmploymentType;
   contractDocNumber: string;
+  candidateId?: string;
   contractStartDate: string;
   contractEndDate?: string;
   permanentAppointmentDate?: string;
@@ -846,6 +847,8 @@ export interface Candidate {
 
   // 8. Hired / Disqualified / Talent Pool
   joinedDate?: string;
+  isEmployeeCreated?: boolean;
+  createdEmployeeId?: string;
   disqualificationReason?: string;
   talentPoolCategory?: string;
   talentPoolTags?: string[];

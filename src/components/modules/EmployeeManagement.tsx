@@ -37,8 +37,9 @@ import {
   ArrowLeft,
   ArrowRight,
   RotateCcw,
+  Trash2,
 } from 'lucide-react';
-import { EmploymentType, PTKPStatus, Employee, FamilyMember, EmergencyContact, OnboardingProcess } from '../../types/hrms';
+import { EmploymentType, PTKPStatus, Employee, Candidate, FamilyMember, EmergencyContact, OnboardingProcess } from '../../types/hrms';
 import { formatRupiah, getTERCategory } from '../../utils/taxCalculator';
 import { EmployeeSelect } from '../common/EmployeeSelect';
 import { CurrencyInput } from '../common/CurrencyInput';
@@ -79,6 +80,8 @@ export const EmployeeManagement: React.FC = () => {
     currentEntity,
     generateNextNik,
     candidates,
+    vacancies,
+    updateCandidateStage,
     onboardingProcesses,
     addOnboardingProcess,
     updateOnboardingTask,
@@ -89,32 +92,36 @@ export const EmployeeManagement: React.FC = () => {
     personaliaLogs,
   } = useHrms();
 
-  const [activeTab, setActiveTab] = useState<'karyawan' | 'onboarding' | 'probation' | 'contracts' | 'nikformat' | 'pengaturan'>('karyawan');
+  const [activeTab, setActiveTab] = useState<'karyawan' | 'probation' | 'contracts' | 'nikformat' | 'pengaturan'>('karyawan');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<string>('all');
   const [filterDept, setFilterDept] = useState<string>('all');
 
   // Modals
   const [isOnboardingChoiceOpen, setIsOnboardingChoiceOpen] = useState(false);
-  const [isRecruitmentOnboardingOpen, setIsRecruitmentOnboardingOpen] = useState(false);
-  const [isDirectOnboardingOpen, setIsDirectOnboardingOpen] = useState(false);
+  const [isRecruitmentCandidatePickerOpen, setIsRecruitmentCandidatePickerOpen] = useState(false);
+  const [isDossierFormOpen, setIsDossierFormOpen] = useState(false);
+  const [dossierFormMode, setDossierFormMode] = useState<'direct' | 'recruitment'>('direct');
+  const [dossierFormTab, setDossierFormTab] = useState<DossierTabId>('kepegawaian');
+  const [selectedCandidateId, setSelectedCandidateId] = useState<string>('');
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
   const [detailModalTab, setDetailModalTab] = useState<DossierTabId>('kepegawaian');
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
+  const [formTouchStartX, setFormTouchStartX] = useState<number | null>(null);
 
   // Close any active modal on Escape key press
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         if (selectedEmployee) setSelectedEmployee(null);
+        else if (isDossierFormOpen) setIsDossierFormOpen(false);
+        else if (isRecruitmentCandidatePickerOpen) setIsRecruitmentCandidatePickerOpen(false);
         else if (isOnboardingChoiceOpen) setIsOnboardingChoiceOpen(false);
-        else if (isRecruitmentOnboardingOpen) setIsRecruitmentOnboardingOpen(false);
-        else if (isDirectOnboardingOpen) setIsDirectOnboardingOpen(false);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedEmployee, isOnboardingChoiceOpen, isRecruitmentOnboardingOpen, isDirectOnboardingOpen]);
+  }, [selectedEmployee, isDossierFormOpen, isRecruitmentCandidatePickerOpen, isOnboardingChoiceOpen]);
 
   const currentTabIndex = DOSSIER_TABS.findIndex((t) => t.id === detailModalTab);
   const handlePrevTab = () => {
@@ -146,11 +153,56 @@ export const EmployeeManagement: React.FC = () => {
     setTouchStartX(null);
   };
 
-  const offeredCandidates = candidates.filter((c) => c.stage === 'Offered' || c.stage === 'Hired');
-  const [selectedCandidateId, setSelectedCandidateId] = useState(offeredCandidates[0]?.id || '');
+  // Form Dossier Tab Touch & Navigation Handlers
+  const currentFormTabIndex = DOSSIER_TABS.findIndex((t) => t.id === dossierFormTab);
+  const handlePrevFormTab = () => {
+    if (currentFormTabIndex > 0) {
+      setDossierFormTab(DOSSIER_TABS[currentFormTabIndex - 1].id);
+    }
+  };
+  const handleNextFormTab = () => {
+    if (currentFormTabIndex < DOSSIER_TABS.length - 1) {
+      setDossierFormTab(DOSSIER_TABS[currentFormTabIndex + 1].id);
+    }
+  };
+  const handleFormTouchStart = (e: React.TouchEvent) => {
+    setFormTouchStartX(e.targetTouches[0].clientX);
+  };
+  const handleFormTouchEnd = (e: React.TouchEvent) => {
+    if (formTouchStartX === null) return;
+    const diff = formTouchStartX - e.changedTouches[0].clientX;
+    if (diff > 50) handleNextFormTab();
+    else if (diff < -50) handlePrevFormTab();
+    setFormTouchStartX(null);
+  };
 
-  // Direct Onboarding Form State (Pathway 2)
-  const [addStep, setAddStep] = useState<1 | 2 | 3 | 4>(1);
+  // Onboarding via Rekrutmen: Hanya kandidat dengan stage 'Hired' yang belum pernah ditambahkan / diproses ke master karyawan
+  const availableHiredCandidates = candidates.filter((c) => {
+    if (c.stage !== 'Hired') return false;
+    if (c.isEmployeeCreated || c.createdEmployeeId) return false;
+    const alreadyInEmployees = employees.some(
+      (e) =>
+        e.candidateId === c.id ||
+        (e.email && e.email.toLowerCase() === c.email.toLowerCase()) ||
+        (e.fullName && e.fullName.trim().toLowerCase() === c.name.trim().toLowerCase())
+    );
+    return !alreadyInEmployees;
+  });
+
+  const selectedCandidate =
+    availableHiredCandidates.find((c) => c.id === selectedCandidateId) || availableHiredCandidates[0];
+  const selectedCandidateVacancy = vacancies.find((v) => v.id === selectedCandidate?.jobVacancyId);
+
+  useEffect(() => {
+    if (
+      availableHiredCandidates.length > 0 &&
+      (!selectedCandidateId || !availableHiredCandidates.some((c) => c.id === selectedCandidateId))
+    ) {
+      setSelectedCandidateId(availableHiredCandidates[0].id);
+    }
+  }, [availableHiredCandidates, selectedCandidateId]);
+
+  // Dossier Form State (Sama persis dengan Tab & Isi Dossier Karyawan)
   const [newAvatar, setNewAvatar] = useState(AVATAR_PRESETS[0]);
   const [newName, setNewName] = useState('');
   const [newNik, setNewNik] = useState('');
@@ -162,8 +214,13 @@ export const EmployeeManagement: React.FC = () => {
   const [newDept, setNewDept] = useState('Engineering');
   const [newPosition, setNewPosition] = useState('');
   const [newGrade, setNewGrade] = useState('L3');
+  const [newDirectSupervisor, setNewDirectSupervisor] = useState('Ir. Budi Santoso (President Director)');
+  const [newBranchLocation, setNewBranchLocation] = useState('Kantor Pusat Jakarta (Menara Palma)');
   const [newJoinDate, setNewJoinDate] = useState(new Date().toISOString().split('T')[0]);
   const [newProbationStatus, setNewProbationStatus] = useState<'Lolos' | 'Sedang Berjalan' | 'Tanpa Percobaan'>('Sedang Berjalan');
+  const [newPermanentDate, setNewPermanentDate] = useState(new Date().toISOString().split('T')[0]);
+  const [newContractStartDate, setNewContractStartDate] = useState(new Date().toISOString().split('T')[0]);
+  const [newContractEndDate, setNewContractEndDate] = useState('2027-10-31');
 
   // Identitas KTP/KK
   const [newNikKtp, setNewNikKtp] = useState('3174' + Math.floor(100000000000 + Math.random() * 900000000000));
@@ -171,13 +228,17 @@ export const EmployeeManagement: React.FC = () => {
   const [newBirthPlace, setNewBirthPlace] = useState('Jakarta');
   const [newBirthDate, setNewBirthDate] = useState('1995-05-20');
   const [newGender, setNewGender] = useState<'Laki-laki' | 'Perempuan'>('Laki-laki');
+  const [newBloodType, setNewBloodType] = useState<'A' | 'B' | 'AB' | 'O'>('O');
   const [newReligion, setNewReligion] = useState<any>('Islam');
   const [newMaritalStatus, setNewMaritalStatus] = useState<any>('Lajang');
+  const [newWhatsApp, setNewWhatsApp] = useState('');
   const [newKtpAddress, setNewKtpAddress] = useState('Jl. Jenderal Sudirman No. 25, Jakarta Selatan');
+  const [newPostalCode, setNewPostalCode] = useState('12950');
   const [newCurrentAddress, setNewCurrentAddress] = useState('Jl. Jenderal Sudirman No. 25, Jakarta Selatan');
 
   // Pajak & BPJS
   const [newNpwp, setNewNpwp] = useState('12.345.678.9-012.000');
+  const [newNpwp16, setNewNpwp16] = useState('1234567890120000');
   const [newPtkp, setNewPtkp] = useState<PTKPStatus>('TK/0');
   const [newKpp, setNewKpp] = useState('KPP Pratama Jakarta Selatan');
   const [newBpjsTk, setNewBpjsTk] = useState('24' + Math.floor(1000000000 + Math.random() * 9000000000));
@@ -192,12 +253,34 @@ export const EmployeeManagement: React.FC = () => {
   const [newPositionAllow, setNewPositionAllow] = useState<number>(500000);
   const [newBankName, setNewBankName] = useState('BCA');
   const [newBankAccount, setNewBankAccount] = useState(String(Math.floor(1000000000 + Math.random() * 9000000000)));
+  const [newBankAccountHolder, setNewBankAccountHolder] = useState('');
 
   // Pendidikan
   const [newDegree, setNewDegree] = useState<'SMA/SMK' | 'D3' | 'S1' | 'S2' | 'S3'>('S1');
   const [newInstitution, setNewInstitution] = useState('Universitas Indonesia');
   const [newMajor, setNewMajor] = useState('Teknik Informatika');
   const [newGradYear, setNewGradYear] = useState(2018);
+  const [newGpa, setNewGpa] = useState('3.75');
+
+  // Keluarga & Kontak Darurat
+  const [newFamilyMembers, setNewFamilyMembers] = useState<FamilyMember[]>([]);
+  const [newEmergencyContacts, setNewEmergencyContacts] = useState<EmergencyContact[]>([
+    {
+      id: `emg-1`,
+      fullName: 'Kontak Darurat Utama',
+      relation: 'Orang Tua',
+      phone: '0812' + Math.floor(10000000 + Math.random() * 90000000),
+      address: 'Jl. Jenderal Sudirman No. 25, Jakarta Selatan',
+    },
+  ]);
+
+  // Riwayat SK Karier Awal
+  const [newSkSignee, setNewSkSignee] = useState('Aditya Pratama, S.Psi');
+  const [newSkRole, setNewSkRole] = useState('VP of Human Capital & People Operation');
+  const [newSkEffectiveDate, setNewSkEffectiveDate] = useState(new Date().toISOString().split('T')[0]);
+  const [newSkNotes, setNewSkNotes] = useState(
+    'Pengangkatan resmi karyawan baru setelah memenuhi kualifikasi dan verifikasi administrasi kepegawaian standar perusahaan.'
+  );
 
   // Settings tab form state
   const [settNikPrefix, setSettNikPrefix] = useState(moduleSettings.employee.nikPrefix || 'NTM');
@@ -291,145 +374,329 @@ export const EmployeeManagement: React.FC = () => {
     });
   };
 
-  // Handle Pathway 1: Onboarding via Rekrutmen
-  const handleLaunchRecruitmentOnboarding = () => {
-    const candidate = candidates.find((c) => c.id === selectedCandidateId);
-    if (!candidate) return;
+  // Helper: Reset Formulir Dosir Karyawan ke nilai awal / bersih
+  const resetDossierForm = (mode: 'direct' | 'recruitment') => {
+    setDossierFormMode(mode);
+    setDossierFormTab('kepegawaian');
+    setFormError(null);
+    setShowValidationErrors(false);
 
-    const seq = employees.length + onboardingProcesses.length + 1;
-    const code = currentTenant.code;
-    const contractDocNumber = `${String(seq).padStart(3, '0')}/HRD-PKWT/${code}/XI/2026`;
+    const generatedNik = generateNextNik('Tetap', currentEntity?.id);
+    const today = new Date().toISOString().split('T')[0];
+    const seq = employees.length + 1;
+    const docNo = `${String(seq).padStart(3, '0')}/HRD-SK-TETAP/${currentTenant.code}/X/${new Date().getFullYear()}`;
 
-    addOnboardingProcess({
-      type: 'via_recruitment',
-      candidateId: candidate.id,
-      employeeName: candidate.name,
-      email: candidate.email,
-      phone: candidate.phone,
-      position: 'Senior Specialist',
-      department: 'Engineering',
-      employmentType: 'Kontrak',
-      joinDate: new Date().toISOString().split('T')[0],
-      basicSalary: candidate.offeredSalary || candidate.expectedSalary || 15000000,
-      contractDocNumber,
-      tasks: [
-        { id: 't1', title: 'Verifikasi Dokumen KTP, NPWP & BPJS Asli', category: 'Legalitas & Dokumen', isCompleted: true, completedAt: new Date().toISOString().split('T')[0], assignedRole: 'hr_admin' },
-        { id: 't2', title: 'Penandatanganan Kontrak Kerja PKWT Digital QR', category: 'Legalitas & Dokumen', isCompleted: false, assignedRole: 'hr_admin' },
-        { id: 't3', title: 'Penyediaan Laptop Kerja & Akses Sistem Email', category: 'Fasilitas & IT', isCompleted: false, assignedRole: 'ga_admin' },
-        { id: 't4', title: 'Pendaftaran Rekening Payroll & Pajak TER 2024', category: 'Payroll & Rekening', isCompleted: false, assignedRole: 'payroll_admin' },
-        { id: 't5', title: 'Pengenalan Tim Kerja & Budaya Perusahaan (Buddy)', category: 'Pengenalan & HR', isCompleted: false, assignedRole: 'hr_admin' },
-      ],
-    });
+    setNewAvatar(AVATAR_PRESETS[0]);
+    setNewName('');
+    setNewNik(generatedNik);
+    setNewEmail('');
+    setNewPersonalEmail('');
+    setNewPhone('0812' + Math.floor(10000000 + Math.random() * 90000000));
+    setNewType('Tetap');
+    setNewDept('Engineering');
+    setNewPosition('');
+    setNewGrade('L3');
+    setNewDirectSupervisor('Ir. Budi Santoso (President Director)');
+    setNewBranchLocation(`Kantor Pusat ${currentTenant.city || 'Jakarta'} (Menara Palma)`);
+    setNewJoinDate(today);
+    setNewProbationStatus('Sedang Berjalan');
+    setNewPermanentDate(today);
+    setNewContractDoc(docNo);
+    setNewContractStartDate(today);
+    setNewContractEndDate('2027-10-31');
 
-    setIsRecruitmentOnboardingOpen(false);
-    setActiveTab('onboarding');
+    // Identitas
+    setNewNikKtp('3174' + Math.floor(100000000000 + Math.random() * 900000000000));
+    setNewNoKk('3174' + Math.floor(100000000000 + Math.random() * 900000000000));
+    setNewBirthPlace('Jakarta');
+    setNewBirthDate('1996-06-15');
+    setNewGender('Laki-laki');
+    setNewBloodType('O');
+    setNewReligion('Islam');
+    setNewMaritalStatus('Lajang');
+    setNewWhatsApp('');
+    setNewKtpAddress('Jl. Jenderal Sudirman No. 25, Jakarta Selatan');
+    setNewPostalCode('12950');
+    setNewCurrentAddress('Jl. Jenderal Sudirman No. 25, Jakarta Selatan');
+
+    // Pajak & BPJS
+    setNewNpwp('12.345.678.9-012.000');
+    setNewNpwp16('1234567890120000');
+    setNewPtkp('TK/0');
+    setNewKpp(`KPP Pratama ${currentTenant.city || 'Jakarta Selatan'}`);
+    setNewBpjsTk('24' + Math.floor(1000000000 + Math.random() * 9000000000));
+    setNewBpjsKes('0001' + Math.floor(10000000 + Math.random() * 90000000));
+    setNewFaskes('Puskesmas Kecamatan Setiabudi');
+
+    // Gaji & Bank
+    setNewBasicSalary(10000000);
+    setNewFixedAllow(1500000);
+    setNewTransportAllow(800000);
+    setNewMealAllow(700000);
+    setNewPositionAllow(500000);
+    setNewBankName('BCA');
+    setNewBankAccount(String(Math.floor(1000000000 + Math.random() * 9000000000)));
+    setNewBankAccountHolder('');
+
+    // Pendidikan
+    setNewDegree('S1');
+    setNewInstitution('Universitas Indonesia');
+    setNewMajor('Teknik Informatika');
+    setNewGradYear(2020);
+    setNewGpa('3.75');
+
+    // Keluarga & Darurat
+    setNewFamilyMembers([]);
+    setNewEmergencyContacts([
+      {
+        id: `emg-${Date.now()}`,
+        fullName: 'Kontak Darurat Utama',
+        relation: 'Orang Tua',
+        phone: '0812' + Math.floor(10000000 + Math.random() * 90000000),
+        address: 'Jl. Jenderal Sudirman No. 25, Jakarta Selatan',
+      },
+    ]);
+
+    // SK Karier
+    setNewSkSignee('Aditya Pratama, S.Psi');
+    setNewSkRole('VP of Human Capital & People Operation');
+    setNewSkEffectiveDate(today);
+    setNewSkNotes(
+      'Pengangkatan resmi karyawan baru setelah memenuhi kualifikasi dan verifikasi administrasi kepegawaian standar perusahaan.'
+    );
   };
 
-  // Step navigation with strict validation and form errors
-  const handleNextStep = () => {
-    setFormError(null);
-    if (addStep === 1) {
-      if (!newName.trim()) {
-        setFormError('Nama lengkap karyawan sesuai KTP wajib diisi');
-        setShowValidationErrors(true);
-        return;
+  // Helper: Memuat data kandidat berstatus Hired langsung ke form dosir lengkap
+  const loadCandidateIntoDossierForm = (cand: Candidate) => {
+    resetDossierForm('recruitment');
+    setSelectedCandidateId(cand.id);
+
+    const matchedVacancy = vacancies.find((v) => v.id === cand.jobVacancyId);
+    const empType: EmploymentType =
+      (matchedVacancy?.employmentType as EmploymentType) ||
+      (cand.offeringEmploymentStatus as EmploymentType) ||
+      'Tetap';
+    const dep = matchedVacancy?.department || cand.offeringUnitKerja || 'Engineering';
+    const pos = matchedVacancy?.title || cand.offeringPosition || 'Senior Specialist';
+    const salary = cand.offeredSalary || cand.expectedSalary || 15000000;
+    const joinDt = cand.joinedDate || cand.offeringStartDate || new Date().toISOString().split('T')[0];
+    const generatedNik = generateNextNik(empType, currentEntity?.id);
+    const seq = employees.length + 1;
+    const docNo =
+      cand.offeringDocNumber ||
+      `${String(seq).padStart(3, '0')}/HRD-${empType === 'Tetap' ? 'SK-TETAP' : 'PKWT'}/${currentTenant.code}/X/${new Date().getFullYear()}`;
+
+    setNewName(cand.name);
+    setNewNik(generatedNik);
+    setNewEmail(cand.email);
+    setNewPersonalEmail(cand.email);
+    setNewPhone(cand.phone);
+    setNewWhatsApp(cand.phone);
+    setNewType(empType);
+    setNewDept(dep);
+    setNewPosition(pos);
+    setNewJoinDate(joinDt);
+    setNewBasicSalary(salary);
+    setNewContractDoc(docNo);
+    setNewContractStartDate(joinDt);
+    setNewContractEndDate(empType === 'Kontrak' ? '2027-10-31' : '');
+    setNewPermanentDate(empType === 'Tetap' ? joinDt : '');
+    setNewBankAccountHolder(cand.name);
+
+    if (cand.offeringBreakdown) {
+      if (cand.offeringBreakdown.basicSalary) {
+        setNewBasicSalary(cand.offeringBreakdown.basicSalary);
       }
-      if (!newPosition.trim()) {
-        setFormError('Posisi / Jabatan kerja wajib diisi');
-        setShowValidationErrors(true);
-        return;
+      if (cand.offeringBreakdown.ptkp) {
+        setNewPtkp(cand.offeringBreakdown.ptkp);
       }
-      const joinCheck = validateDateString(newJoinDate);
-      if (!joinCheck.isValid) {
-        setFormError(`Tanggal Mulai Kerja tidak valid: ${joinCheck.errorMessage}`);
-        setShowValidationErrors(true);
-        return;
+      const fixed = cand.offeringBreakdown.allowances?.find((a: any) => a.name.toLowerCase().includes('tetap'))?.amount;
+      if (fixed) setNewFixedAllow(fixed);
+      const trans = cand.offeringBreakdown.allowances?.find((a: any) => a.name.toLowerCase().includes('transport'))?.amount;
+      if (trans) setNewTransportAllow(trans);
+      const meal = cand.offeringBreakdown.allowances?.find((a: any) => a.name.toLowerCase().includes('makan'))?.amount;
+      if (meal) setNewMealAllow(meal);
+      const posAll = cand.offeringBreakdown.allowances?.find((a: any) => a.name.toLowerCase().includes('jabatan'))?.amount;
+      if (posAll) setNewPositionAllow(posAll);
+    }
+
+    if (cand.parsedData) {
+      if (cand.parsedData.university) {
+        setNewInstitution(cand.parsedData.university);
       }
-    } else if (addStep === 2) {
-      const birthCheck = validateBirthDate(newBirthDate, 17);
-      if (!birthCheck.isValid) {
-        setFormError(`Validasi Tanggal Lahir: ${birthCheck.errorMessage}`);
-        setShowValidationErrors(true);
-        return;
+      if (typeof cand.parsedData.education === 'string') {
+        const eduStr = cand.parsedData.education.toUpperCase();
+        if (eduStr.includes('S2')) setNewDegree('S2');
+        else if (eduStr.includes('S3')) setNewDegree('S3');
+        else if (eduStr.includes('D3')) setNewDegree('D3');
+        else if (eduStr.includes('SMA') || eduStr.includes('SMK')) setNewDegree('SMA/SMK');
+        else setNewDegree('S1');
       }
     }
-    setShowValidationErrors(false);
-    setFormError(null);
-    setAddStep((addStep + 1) as any);
   };
 
-  // Handle Pathway 2: Direct Onboarding
-  const handleDirectOnboardingSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newName || !newPosition) {
-      setFormError('Nama lengkap dan posisi kerja wajib diisi!');
+  const handleSelectCandidateToDossier = (cand: Candidate) => {
+    loadCandidateIntoDossierForm(cand);
+    setIsRecruitmentCandidatePickerOpen(false);
+    setIsDossierFormOpen(true);
+  };
+
+  const handleOpenDirectOnboarding = () => {
+    resetDossierForm('direct');
+    setSelectedCandidateId('');
+    setIsOnboardingChoiceOpen(false);
+    setIsDossierFormOpen(true);
+  };
+
+  // Family & Emergency Contact list handlers
+  const handleAddFamilyMember = () => {
+    setNewFamilyMembers([
+      ...newFamilyMembers,
+      {
+        id: `fam-${Date.now()}`,
+        fullName: '',
+        relation: 'Anak',
+        nikKtp: '',
+        birthDate: '2015-01-01',
+        gender: 'Laki-laki',
+        isBpjsCovered: true,
+      },
+    ]);
+  };
+
+  const handleRemoveFamilyMember = (idx: number) => {
+    setNewFamilyMembers(newFamilyMembers.filter((_, i) => i !== idx));
+  };
+
+  const handleUpdateFamilyMember = (idx: number, field: keyof FamilyMember, val: any) => {
+    setNewFamilyMembers(newFamilyMembers.map((fam, i) => (i === idx ? { ...fam, [field]: val } : fam)));
+  };
+
+  const handleAddEmergencyContact = () => {
+    setNewEmergencyContacts([
+      ...newEmergencyContacts,
+      {
+        id: `emg-${Date.now()}`,
+        fullName: '',
+        relation: 'Kerabat',
+        phone: '',
+        address: '',
+      },
+    ]);
+  };
+
+  const handleRemoveEmergencyContact = (idx: number) => {
+    setNewEmergencyContacts(newEmergencyContacts.filter((_, i) => i !== idx));
+  };
+
+  const handleUpdateEmergencyContact = (idx: number, field: keyof EmergencyContact, val: any) => {
+    setNewEmergencyContacts(newEmergencyContacts.map((c, i) => (i === idx ? { ...c, [field]: val } : c)));
+  };
+
+  // Submit Handler: Simpan & Proses Tambah Data Karyawan Dosir Lengkap
+  const handleSubmitDossierForm = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setFormError(null);
+    setShowValidationErrors(false);
+
+    // Validasi Kepegawaian
+    if (!newName.trim()) {
+      setFormError('Nama lengkap karyawan sesuai KTP wajib diisi!');
       setShowValidationErrors(true);
-      setAddStep(1);
+      setDossierFormTab('kepegawaian');
       return;
     }
-
+    if (!newPosition.trim()) {
+      setFormError('Posisi / Jabatan kerja wajib diisi!');
+      setShowValidationErrors(true);
+      setDossierFormTab('kepegawaian');
+      return;
+    }
+    if (!newDept.trim()) {
+      setFormError('Departemen / Divisi wajib diisi!');
+      setShowValidationErrors(true);
+      setDossierFormTab('kepegawaian');
+      return;
+    }
     const joinCheck = validateDateString(newJoinDate);
     if (!joinCheck.isValid) {
-      setFormError(`Tanggal Mulai Bertugas: ${joinCheck.errorMessage}`);
+      setFormError(`Tanggal Mulai Kerja tidak valid: ${joinCheck.errorMessage}`);
       setShowValidationErrors(true);
-      setAddStep(1);
+      setDossierFormTab('kepegawaian');
       return;
     }
 
+    // Validasi Identitas
+    if (!newNikKtp.trim()) {
+      setFormError('Nomor NIK KTP (16 digit) wajib diisi!');
+      setShowValidationErrors(true);
+      setDossierFormTab('identitas');
+      return;
+    }
     const birthCheck = validateBirthDate(newBirthDate, 17);
     if (!birthCheck.isValid) {
-      setFormError(`Tanggal Lahir Karyawan: ${birthCheck.errorMessage}`);
+      setFormError(`Validasi Tanggal Lahir: ${birthCheck.errorMessage}`);
       setShowValidationErrors(true);
-      setAddStep(2);
+      setDossierFormTab('identitas');
       return;
     }
 
+    // Validasi Finansial
     if (!newBasicSalary || newBasicSalary <= 0) {
       setFormError('Gaji Pokok wajib diisi dengan angka valid di atas Rp 0!');
       setShowValidationErrors(true);
-      setAddStep(4);
+      setDossierFormTab('finansial');
+      return;
+    }
+    if (!newBankAccount.trim()) {
+      setFormError('Nomor Rekening Bank Payroll wajib diisi!');
+      setShowValidationErrors(true);
+      setDossierFormTab('finansial');
       return;
     }
 
-    setFormError(null);
-    setShowValidationErrors(false);
-
+    // Simpan ke Master Karyawan
     const seq = employees.length + 1;
-    const code = currentTenant.code;
     const docNo =
       newContractDoc ||
-      `${String(seq).padStart(3, '0')}/HRD-${newType === 'Tetap' ? 'SK-TETAP' : 'PKWT'}/${code}/X/2026`;
+      `${String(seq).padStart(3, '0')}/HRD-${newType === 'Tetap' ? 'SK-TETAP' : 'PKWT'}/${currentTenant.code}/X/${new Date().getFullYear()}`;
 
-    // Direct add as complete employee + create onboarding log
-    const newEmp = addEmployee({
+    const createdEmp = addEmployee({
       nik: newNik || generateNextNik(newType, currentEntity?.id),
-      fullName: newName,
+      fullName: newName.trim(),
       avatar: newAvatar,
-      email: newEmail || `${newName.toLowerCase().replace(/\s+/g, '.')}@${code.toLowerCase()}.id`,
-      personalEmail: newPersonalEmail || `${newName.toLowerCase().replace(/\s+/g, '.')}@gmail.com`,
-      phone: newPhone,
+      email: newEmail.trim() || `${newName.toLowerCase().replace(/\s+/g, '.')}@${currentTenant.code.toLowerCase()}.id`,
+      personalEmail: newPersonalEmail.trim() || `${newName.toLowerCase().replace(/\s+/g, '.')}@gmail.com`,
+      phone: newPhone.trim(),
       employmentType: newType,
       contractDocNumber: docNo,
-      contractStartDate: newJoinDate,
-      contractEndDate: newType === 'Kontrak' ? '2027-10-31' : undefined,
-      permanentAppointmentDate: newType === 'Tetap' ? newJoinDate : undefined,
+      contractStartDate: newContractStartDate || newJoinDate,
+      contractEndDate: newType === 'Kontrak' ? newContractEndDate || '2027-10-31' : undefined,
+      permanentAppointmentDate: newType === 'Tetap' ? newPermanentDate || newJoinDate : undefined,
       probationStatus: newProbationStatus,
       department: newDept,
       position: newPosition,
-      grade: newGrade,
+      grade: newGrade || 'L3',
+      directSupervisor: newDirectSupervisor || 'Ir. Budi Santoso (President Director)',
+      branchLocation: newBranchLocation || `Kantor Pusat ${currentTenant.city || 'Jakarta'}`,
       joinDate: newJoinDate,
       status: 'Aktif',
       remainingLeaveDays: 12,
+      candidateId: dossierFormMode === 'recruitment' && selectedCandidateId ? selectedCandidateId : undefined,
       nikKtp: newNikKtp,
       noKk: newNoKk,
-      birthPlace: newBirthPlace,
+      birthPlace: newBirthPlace || 'Jakarta',
       birthDate: newBirthDate,
       gender: newGender,
+      bloodType: newBloodType,
       religion: newReligion,
       maritalStatus: newMaritalStatus,
+      whatsApp: newWhatsApp || newPhone,
       ktpAddress: newKtpAddress,
-      currentAddress: newCurrentAddress,
+      postalCode: newPostalCode || '12950',
+      currentAddress: newCurrentAddress || newKtpAddress,
       npwp: newNpwp,
+      npwp16: newNpwp16 || newNpwp,
       ptkp: newPtkp,
       kppPratama: newKpp,
       bpjsTkNo: newBpjsTk,
@@ -437,50 +704,58 @@ export const EmployeeManagement: React.FC = () => {
       faskes1Bpjs: newFaskes,
       bankName: newBankName,
       bankAccount: newBankAccount,
-      bankAccountHolder: newName,
+      bankAccountHolder: newBankAccountHolder || newName,
       basicSalary: Number(newBasicSalary),
-      fixedAllowance: Number(newFixedAllow),
-      transportAllowance: Number(newTransportAllow),
-      mealAllowance: Number(newMealAllow),
-      positionAllowance: Number(newPositionAllow),
+      fixedAllowance: Number(newFixedAllow || 0),
+      transportAllowance: Number(newTransportAllow || 0),
+      mealAllowance: Number(newMealAllow || 0),
+      positionAllowance: Number(newPositionAllow || 0),
       lastEducationDegree: newDegree,
       institution: newInstitution,
       major: newMajor,
-      graduationYear: Number(newGradYear),
-      familyMembers: [],
-      emergencyContacts: [
-        {
-          id: `emg-${Date.now()}`,
-          fullName: 'Kontak Darurat Utama',
-          relation: 'Orang Tua',
-          phone: newPhone,
-          address: newKtpAddress,
-        },
-      ],
+      graduationYear: Number(newGradYear || 2020),
+      educationGpa: newGpa || '3.75',
+      familyMembers: newFamilyMembers,
+      emergencyContacts: newEmergencyContacts,
     });
 
+    // Buat juga log onboarding process untuk integritas tracking
     addOnboardingProcess({
-      type: 'direct',
-      employeeName: newName,
-      email: newEmail,
-      phone: newPhone,
-      position: newPosition,
-      department: newDept,
-      employmentType: newType,
-      joinDate: newJoinDate,
-      basicSalary: Number(newBasicSalary),
-      contractDocNumber: docNo,
-      createdEmployeeId: newEmp.id,
+      type: dossierFormMode === 'recruitment' ? 'via_recruitment' : 'direct',
+      candidateId: dossierFormMode === 'recruitment' ? selectedCandidateId : undefined,
+      employeeName: createdEmp.fullName,
+      email: createdEmp.email,
+      phone: createdEmp.phone,
+      position: createdEmp.position,
+      department: createdEmp.department,
+      employmentType: createdEmp.employmentType,
+      joinDate: createdEmp.joinDate,
+      basicSalary: createdEmp.basicSalary,
+      contractDocNumber: createdEmp.contractDocNumber,
+      createdEmployeeId: createdEmp.id,
       tasks: [
-        { id: 't1', title: 'Data Master Karyawan Terdaftar', category: 'Legalitas & Dokumen', isCompleted: true, completedAt: newJoinDate, assignedRole: 'hr_admin' },
-        { id: 't2', title: 'Alokasi Fasilitas ID Card & Laptop', category: 'Fasilitas & IT', isCompleted: false, assignedRole: 'ga_admin' },
-        { id: 't3', title: 'Verifikasi Buku Tabungan & Form Pajak TER 2024', category: 'Payroll & Rekening', isCompleted: true, completedAt: newJoinDate, assignedRole: 'payroll_admin' },
+        { id: 't1', title: 'Data Master & Dossier Lengkap Terverifikasi', category: 'Legalitas & Dokumen', isCompleted: true, completedAt: createdEmp.joinDate, assignedRole: 'hr_admin' },
+        { id: 't2', title: 'Pemberian ID Card & Fasilitas Aset Kantor', category: 'Fasilitas & IT', isCompleted: false, assignedRole: 'ga_admin' },
+        { id: 't3', title: 'Registrasi Payroll Bank & Konfigurasi Pajak TER', category: 'Payroll & Rekening', isCompleted: true, completedAt: createdEmp.joinDate, assignedRole: 'payroll_admin' },
       ],
     });
 
-    setIsDirectOnboardingOpen(false);
-    setNewName('');
-    setNewPosition('');
+    // Tandai kandidat Hired telah diproses sebagai karyawan agar tidak muncul lagi di dropdown
+    if (dossierFormMode === 'recruitment' && selectedCandidateId) {
+      updateCandidateStage(selectedCandidateId, 'Hired', {
+        isEmployeeCreated: true,
+        createdEmployeeId: createdEmp.id,
+        joinedDate: newJoinDate,
+      } as any);
+    }
+
+    setIsDossierFormOpen(false);
+    setSelectedCandidateId('');
+    setFeedbackMessage({
+      type: 'success',
+      title: 'Data Karyawan Berhasil Disimpan',
+      description: `${createdEmp.fullName} telah resmi terdaftar di Master Karyawan dengan NIK ${createdEmp.nik}.`,
+    });
   };
 
   const handleSaveSettings = () => {
@@ -535,19 +810,19 @@ export const EmployeeManagement: React.FC = () => {
         <div>
           <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
             <Users className="w-5 h-5 text-indigo-600" />
-            <span>Manajemen Karyawan & Onboarding</span>
+            <span>Management Karyawan</span>
           </h2>
           <p className="text-xs text-slate-500">
-            Dossier master data lengkap, alur penambahan karyawan wajib melalui proses onboarding (via rekrutmen atau langsung), dan foto profil karyawan.
+            Dossier master data lengkap, alur penambahan karyawan baru melalui proses rekrutmen atau direct onboarding.
           </p>
         </div>
 
         <button
           onClick={() => setIsOnboardingChoiceOpen(true)}
-          className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors shrink-0"
+          className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors shrink-0 cursor-pointer"
         >
           <UserPlus className="w-3.5 h-3.5" />
-          <span>+ Tambah Karyawan (Onboarding)</span>
+          <span>+ Tambah Data Karyawan</span>
         </button>
       </div>
 
@@ -571,27 +846,6 @@ export const EmployeeManagement: React.FC = () => {
             }`}
           >
             {employees.length}
-          </span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('onboarding')}
-          className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
-            activeTab === 'onboarding'
-              ? 'border-slate-900 text-slate-950 font-bold'
-              : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
-          }`}
-        >
-          <UserCheck className="w-3.5 h-3.5" />
-          <span>Proses Onboarding</span>
-          <span
-            className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full transition-colors ${
-              activeTab === 'onboarding'
-                ? 'bg-amber-600 text-white'
-                : 'bg-amber-50 text-amber-800 border border-amber-200'
-            }`}
-          >
-            {onboardingProcesses.filter((p) => p.status === 'In Progress').length} Berjalan
           </span>
         </button>
 
@@ -939,21 +1193,16 @@ export const EmployeeManagement: React.FC = () => {
                           const tTasks = onb.tasks.length;
                           return (
                             <div className="mt-1">
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setActiveTab('onboarding');
-                                }}
-                                className={`inline-flex items-center gap-1 text-[9px] font-semibold px-1.5 py-0.5 rounded border transition-colors hover:shadow-2xs ${
+                              <span
+                                className={`inline-flex items-center gap-1 text-[9px] font-semibold px-1.5 py-0.5 rounded border ${
                                   isDone
-                                    ? 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
-                                    : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
+                                    ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                    : 'bg-amber-50 text-amber-700 border-amber-200'
                                 }`}
-                                title="Klik untuk membuka pelacakan proses onboarding"
+                                title="Status proses onboarding karyawan"
                               >
                                 {isDone ? '✓ Onboarding Selesai' : `Onb: ${cTasks}/${tTasks} Tugas`}
-                              </button>
+                              </span>
                             </div>
                           );
                         })()}
@@ -963,227 +1212,6 @@ export const EmployeeManagement: React.FC = () => {
                 </tbody>
               </table>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* Onboarding Tracker Tab */}
-      {activeTab === 'onboarding' && (
-        <div className="space-y-4">
-          <div className="p-4 bg-indigo-50/70 border border-indigo-200/80 rounded-lg text-xs text-indigo-900 leading-relaxed flex items-start gap-2">
-            <Sparkles className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
-            <div>
-              <strong className="block font-bold">Alur Onboarding Karyawan Terstruktur:</strong>
-              Setiap karyawan yang bergabung (baik dari tahapan rekrutmen maupun direct hire) harus menyelesaikan checklist orientasi, verifikasi dokumen legalitas, alokasi aset GA, serta registrasi pajak TER 2024 & BPJS sebelum dinyatakan resmi aktif.
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {(onboardingProcesses || []).map((proc) => {
-              const taskList = Array.isArray(proc.tasks) ? proc.tasks : [];
-              const completedTasks = taskList.filter((t) => t.isCompleted).length;
-              const totalTasks = taskList.length || 1;
-              const percent = Math.round((completedTasks / totalTasks) * 100);
-
-              const linkedEmp = employees.find(
-                (e) =>
-                  e.id === proc.createdEmployeeId ||
-                  (e.fullName || '').toLowerCase() === (proc.employeeName || '').toLowerCase()
-              );
-              const linkedCand = candidates.find((c) => c.id === proc.candidateId);
-
-              return (
-                <div key={proc.id} className="p-4 bg-white border border-slate-200 rounded-lg shadow-xs space-y-3 flex flex-col justify-between">
-                  <div className="space-y-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-3">
-                        {linkedEmp?.avatar ? (
-                          <img
-                            src={linkedEmp.avatar}
-                            alt={proc.employeeName}
-                            className="w-10 h-10 rounded-full object-cover border border-slate-200 shadow-2xs shrink-0"
-                          />
-                        ) : (
-                          <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-700 font-bold text-sm flex items-center justify-center shrink-0">
-                            {(proc.employeeName || 'K').charAt(0)}
-                          </div>
-                        )}
-                        <div>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <h4 className="font-bold text-slate-900 text-sm">{proc.employeeName}</h4>
-                            <span
-                              className={`text-[10px] px-1.5 py-0.2 rounded font-semibold ${
-                                proc.type === 'via_recruitment'
-                                  ? 'bg-purple-100 text-purple-800'
-                                  : 'bg-blue-100 text-blue-800'
-                              }`}
-                            >
-                              {proc.type === 'via_recruitment' ? 'Via Rekrutmen' : 'Direct Onboarding'}
-                            </span>
-                            <span className="text-[10px] px-1.5 py-0.2 rounded font-medium bg-slate-100 text-slate-700">
-                              {proc.employmentType}
-                            </span>
-                          </div>
-                          <div className="text-xs text-slate-600 mt-0.5 font-medium">
-                            {proc.position} · {proc.department}
-                          </div>
-                          <div className="text-[11px] text-slate-400 font-mono flex items-center gap-2 mt-0.5">
-                            {linkedEmp ? (
-                              <>
-                                <span className="font-bold text-indigo-700">NIK: {linkedEmp.nik}</span>
-                                <span>·</span>
-                                <span>KTP: {linkedEmp.nikKtp}</span>
-                              </>
-                            ) : (
-                              <span className="text-purple-700 font-medium">
-                                Staging Kandidat ({linkedCand?.stage || 'Tahap Seleksi'})
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-
-                      <span
-                        className={`text-[10px] px-2 py-0.5 rounded font-bold shrink-0 ${
-                          proc.status === 'Completed'
-                            ? 'bg-emerald-100 text-emerald-800'
-                            : 'bg-amber-100 text-amber-800'
-                        }`}
-                      >
-                        {proc.status === 'Completed' ? '✓ Onboarding Selesai' : 'Sedang Berjalan'}
-                      </span>
-                    </div>
-
-                    {/* Metadata Summary Pill */}
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 p-2.5 bg-slate-50 rounded border border-slate-100 text-[11px]">
-                      <div>
-                        <div className="text-slate-400 text-[10px]">Tgl Mulai Tugas</div>
-                        <div className="font-mono font-semibold text-slate-800">{proc.joinDate}</div>
-                      </div>
-                      <div>
-                        <div className="text-slate-400 text-[10px]">Gaji Pokok</div>
-                        <div className="font-mono font-bold text-slate-800">
-                          {formatRupiah(proc.basicSalary || linkedEmp?.basicSalary || 0)}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-slate-400 text-[10px]">Pajak TER 2024</div>
-                        <div className="font-mono font-semibold text-indigo-700">
-                          {linkedEmp ? `${linkedEmp.ptkp} (${getTERCategory(linkedEmp.ptkp)})` : 'TK/0 (TER A)'}
-                        </div>
-                      </div>
-                      <div className="col-span-2 sm:col-span-3">
-                        <div className="text-slate-400 text-[10px]">No. Dokumen Kontrak/SK</div>
-                        <div className="font-mono text-slate-700 text-[10px] truncate" title={proc.contractDocNumber || linkedEmp?.contractDocNumber}>
-                          {proc.contractDocNumber || linkedEmp?.contractDocNumber || 'Dibuat saat onboarding'}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Progress bar */}
-                    <div className="space-y-1">
-                      <div className="flex justify-between text-[11px] text-slate-500 font-medium">
-                        <span>Checklist Onboarding & Fasilitas</span>
-                        <span className="font-mono font-bold text-slate-800">
-                          {completedTasks}/{totalTasks} ({percent}%)
-                        </span>
-                      </div>
-                      <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                        <div
-                          className={`h-full rounded-full transition-all duration-300 ${
-                            percent === 100 ? 'bg-emerald-600' : 'bg-indigo-600'
-                          }`}
-                          style={{ width: `${percent}%` }}
-                        ></div>
-                      </div>
-                    </div>
-
-                    {/* Tasks List */}
-                    <div className="space-y-1.5 pt-1 border-t border-slate-100">
-                      {(proc.tasks || []).map((task) => (
-                        <button
-                          key={task.id}
-                          type="button"
-                          onClick={() => updateOnboardingTask(proc.id, task.id, !task.isCompleted)}
-                          className="w-full flex items-center justify-between text-left p-1.5 rounded hover:bg-slate-50 text-xs transition-colors"
-                        >
-                          <div className="flex items-center gap-2 min-w-0">
-                            {task.isCompleted ? (
-                              <CheckSquare className="w-4 h-4 text-emerald-600 shrink-0" />
-                            ) : (
-                              <Square className="w-4 h-4 text-slate-400 shrink-0" />
-                            )}
-                            <span
-                              className={`truncate ${
-                                task.isCompleted ? 'text-slate-400 line-through' : 'text-slate-800 font-medium'
-                              }`}
-                            >
-                              {task.title}
-                            </span>
-                          </div>
-                          <span className="text-[10px] text-slate-400 shrink-0 bg-slate-100 px-1.5 py-0.2 rounded font-mono">
-                            {task.assignedRole}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Actions & Dossier Bridge */}
-                  <div className="pt-2 border-t border-slate-100 space-y-2">
-                    <div className="flex items-center justify-between gap-2">
-                      {linkedEmp ? (
-                        <div className="flex items-center gap-1.5 w-full">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setDetailModalTab('kepegawaian');
-                              setSelectedEmployee(linkedEmp);
-                            }}
-                            className="flex-1 py-1.5 px-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold text-xs rounded border border-indigo-200 transition-colors flex items-center justify-center gap-1"
-                            title="Buka dossier lengkap karyawan ini di tab Master Karyawan"
-                          >
-                            <Users className="w-3.5 h-3.5" />
-                            <span>Lihat Dossier Lengkap</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handlePreviewEmployeeContract(linkedEmp)}
-                            className="py-1.5 px-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded transition-colors flex items-center gap-1"
-                            title="Preview Surat Keputusan Pengangkatan"
-                          >
-                            <FileText className="w-3.5 h-3.5 text-slate-500" />
-                            <span>Preview SK</span>
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="text-[11px] text-slate-500 italic py-1">
-                          Kandidat akan otomatis dibuatkan akun master dan dossier setelah checklist selesai.
-                        </div>
-                      )}
-                    </div>
-
-                    {proc.status === 'In Progress' && percent === 100 && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          completeOnboarding(proc.id);
-                          setFeedbackMessage({
-                            type: 'success',
-                            title: 'Onboarding Berhasil Diselesaikan',
-                            description: `Seluruh checklist orientasi ${proc.employeeName} telah terpenuhi 100%. Data master karyawan telah aktif.`,
-                          });
-                        }}
-                        className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-bold text-xs transition-colors flex items-center justify-center gap-1.5 shadow-xs"
-                      >
-                        <CheckCircle className="w-4 h-4" />
-                        <span>Selesaikan Onboarding & Aktifkan Karyawan Resmi</span>
-                      </button>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
           </div>
         </div>
       )}
@@ -1260,7 +1288,7 @@ export const EmployeeManagement: React.FC = () => {
       {/* Modal: Pilihan Jalur Onboarding (Wajib Melalui Onboarding) */}
       {isOnboardingChoiceOpen && (
         <div
-          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn"
           onClick={(e) => {
             if (e.target === e.currentTarget) {
               setIsOnboardingChoiceOpen(false);
@@ -1268,60 +1296,72 @@ export const EmployeeManagement: React.FC = () => {
           }}
         >
           <div
-            className="bg-white rounded-xl shadow-2xl max-w-lg w-full border border-slate-200 overflow-hidden"
+            className="bg-white rounded-xl shadow-2xl max-w-lg w-full border border-slate-200 overflow-hidden animate-scaleUp"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="px-5 py-4 bg-slate-900 text-white flex items-center justify-between">
               <div>
                 <h3 className="text-sm font-bold">Pilih Alur Onboarding Karyawan Baru</h3>
-                <span className="text-[11px] text-slate-400">Penambahan data wajib melalui tahapan onboarding</span>
+                <span className="text-[11px] text-slate-400">Penambahan data karyawan melalui jalur rekrutmen atau direct onboarding</span>
               </div>
-              <button onClick={() => setIsOnboardingChoiceOpen(false)}>
-                <X className="w-4 h-4 text-slate-400 hover:text-white" />
+              <button
+                type="button"
+                onClick={() => setIsOnboardingChoiceOpen(false)}
+                className="p-1 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
+                title="Tutup"
+              >
+                <X className="w-4 h-4" />
               </button>
             </div>
 
             <div className="p-6 space-y-4">
-              {/* Option 1: Via Rekrutmen */}
+              {/* Option 1: Via Rekrutmen Lengkap */}
               <button
+                type="button"
                 onClick={() => {
                   setIsOnboardingChoiceOpen(false);
-                  setIsRecruitmentOnboardingOpen(true);
+                  setIsRecruitmentCandidatePickerOpen(true);
                 }}
-                className="w-full p-4 border-2 border-indigo-200 hover:border-indigo-600 hover:bg-indigo-50/50 rounded-xl text-left transition-all group flex items-start gap-4"
+                className="w-full p-4 border-2 border-indigo-200 hover:border-indigo-600 hover:bg-indigo-50/50 rounded-xl text-left transition-all group flex items-start gap-4 cursor-pointer"
               >
                 <div className="w-10 h-10 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
                   <Sparkles className="w-5 h-5" />
                 </div>
                 <div>
-                  <h4 className="font-bold text-slate-900 text-sm">
-                    1. Onboarding Melalui Rekrutmen Lengkap
-                  </h4>
+                  <div className="flex items-center gap-2">
+                    <h4 className="font-bold text-slate-900 text-sm">
+                      1. Onboarding Melalui Rekrutmen Lengkap
+                    </h4>
+                    <span className="text-[10px] bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-full font-bold">
+                      Status Hired
+                    </span>
+                  </div>
                   <p className="text-xs text-slate-500 mt-1 leading-normal">
-                    Pilih kandidat yang telah lolos tahap wawancara dan offering letter. Data gaji, tunjangan, dan posisi otomatis terisi dari hasil seleksi.
+                    Pilih kandidat yang telah resmi berstatus <strong>Hired</strong> dari alur rekrutmen. Data gaji disepakati, tunjangan, jabatan, departemen, dan kontak otomatis terisi ke form dosir lengkap.
                   </p>
                 </div>
               </button>
 
               {/* Option 2: Direct Onboarding */}
               <button
-                onClick={() => {
-                  setIsOnboardingChoiceOpen(false);
-                  setAddStep(1);
-                  setNewNik(generateNextNik(newType || 'Tetap', currentEntity?.id));
-                  setIsDirectOnboardingOpen(true);
-                }}
-                className="w-full p-4 border-2 border-slate-200 hover:border-indigo-600 hover:bg-indigo-50/50 rounded-xl text-left transition-all group flex items-start gap-4"
+                type="button"
+                onClick={handleOpenDirectOnboarding}
+                className="w-full p-4 border-2 border-slate-200 hover:border-indigo-600 hover:bg-indigo-50/50 rounded-xl text-left transition-all group flex items-start gap-4 cursor-pointer"
               >
                 <div className="w-10 h-10 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center shrink-0 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
                   <UserPlus className="w-5 h-5" />
                 </div>
                 <div>
-                  <h4 className="font-bold text-slate-900 text-sm">
-                    2. Onboarding Langsung (Direct Onboarding)
-                  </h4>
+                  <div className="flex items-center gap-2">
+                    <h4 className="font-bold text-slate-900 text-sm">
+                      2. Onboarding Langsung (Direct Onboarding)
+                    </h4>
+                    <span className="text-[10px] bg-slate-100 text-slate-700 px-2 py-0.5 rounded-full font-bold">
+                      Entri Mandiri
+                    </span>
+                  </div>
                   <p className="text-xs text-slate-500 mt-1 leading-normal">
-                    Untuk karyawan baru yang masuk langsung (tanpa proses rekrutmen seperti lateral hire, transfer cabang, atau eksekutif). Isi data profil lengkap secara mandiri.
+                    Untuk karyawan baru yang masuk langsung (tanpa melalui seleksi rekrutmen). Isi formulir dosir lengkap (7 bagian: kepegawaian, identitas, pajak/BPJS, remunerasi, pendidikan, keluarga, dan SK).
                   </p>
                 </div>
               </button>
@@ -1330,136 +1370,307 @@ export const EmployeeManagement: React.FC = () => {
         </div>
       )}
 
-      {/* Modal Pathway 1: Via Rekrutmen */}
-      {isRecruitmentOnboardingOpen && (
+      {/* Modal Pathway 1: Pilih Kandidat Hired dari Rekrutmen */}
+      {isRecruitmentCandidatePickerOpen && (
         <div
-          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn"
           onClick={(e) => {
             if (e.target === e.currentTarget) {
-              setIsRecruitmentOnboardingOpen(false);
+              setIsRecruitmentCandidatePickerOpen(false);
             }
           }}
         >
           <div
-            className="bg-white rounded-xl shadow-xl max-w-md w-full border border-slate-200 overflow-hidden"
+            className="bg-white rounded-xl shadow-2xl max-w-lg w-full border border-slate-200 overflow-hidden animate-scaleUp"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="px-5 py-4 bg-slate-900 text-white flex items-center justify-between">
               <div>
                 <h3 className="text-sm font-bold">Onboarding dari Pipeline Rekrutmen</h3>
-                <span className="text-[11px] text-slate-400">Pilih kandidat berstatus Offered / Hired</span>
+                <span className="text-[11px] text-slate-400">
+                  Hanya menampilkan kandidat berstatus Hired yang belum diproses Tambah Data Karyawan
+                </span>
               </div>
-              <button onClick={() => setIsRecruitmentOnboardingOpen(false)}>
-                <X className="w-4 h-4 text-slate-400 hover:text-white" />
+              <button
+                type="button"
+                onClick={() => setIsRecruitmentCandidatePickerOpen(false)}
+                className="p-1 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
+                title="Tutup"
+              >
+                <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="p-5 space-y-4 text-xs">
-              <div>
-                <label className="font-medium text-slate-700 block mb-1">Pilih Kandidat yang Lolos *</label>
-                <select
-                  value={selectedCandidateId}
-                  onChange={(e) => setSelectedCandidateId(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded bg-white font-medium text-slate-900"
-                >
-                  {offeredCandidates.length > 0 ? (
-                    offeredCandidates.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name} — Gaji Ditawarkan: {formatRupiah(c.offeredSalary || c.expectedSalary)} ({c.stage})
-                      </option>
-                    ))
-                  ) : (
-                    <option value="">Tidak ada kandidat di tahap Offered/Hired</option>
-                  )}
-                </select>
-              </div>
-
-              {selectedCandidateId && (
-                <div className="p-3 bg-slate-50 rounded border border-slate-200 space-y-1 text-slate-700">
-                  <div className="font-semibold text-slate-900">
-                    {candidates.find((c) => c.id === selectedCandidateId)?.name}
-                  </div>
-                  <div>Email: {candidates.find((c) => c.id === selectedCandidateId)?.email}</div>
-                  <div>Telepon: {candidates.find((c) => c.id === selectedCandidateId)?.phone}</div>
+            {availableHiredCandidates.length === 0 ? (
+              <div className="p-8 text-center space-y-3">
+                <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-full flex items-center justify-center mx-auto border border-amber-200">
+                  <UserCheck className="w-6 h-6" />
                 </div>
-              )}
-
-              <div className="pt-3 border-t border-slate-200 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsRecruitmentOnboardingOpen(false)}
-                  className="px-3 py-2 bg-slate-100 text-slate-700 rounded font-semibold"
-                >
-                  Batal
-                </button>
-                <button
-                  onClick={handleLaunchRecruitmentOnboarding}
-                  disabled={!selectedCandidateId}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded font-semibold shadow-xs"
-                >
-                  Luncurkan Onboarding
-                </button>
+                <div>
+                  <h4 className="font-bold text-slate-800 text-sm">Tidak Ada Kandidat Hired yang Perlu Diproses</h4>
+                  <p className="text-xs text-slate-500 mt-1.5 max-w-sm mx-auto leading-relaxed">
+                    Semua kandidat berstatus <strong>Hired</strong> telah berhasil diproses ke Master Karyawan, atau belum ada kandidat baru yang mencapai tahap Hired di modul Rekrutmen.
+                  </p>
+                </div>
+                <div className="pt-3 flex justify-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsRecruitmentCandidatePickerOpen(false)}
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg text-xs transition-colors"
+                  >
+                    Tutup
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsRecruitmentCandidatePickerOpen(false);
+                      handleOpenDirectOnboarding();
+                    }}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg text-xs shadow-xs transition-colors"
+                  >
+                    Gunakan Direct Onboarding
+                  </button>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="p-5 sm:p-6 space-y-4 text-xs">
+                <div>
+                  <label className="font-semibold text-slate-800 block mb-1.5 text-xs">
+                    Pilih Kandidat Hired yang Akan Ditambahkan ke Master Karyawan *
+                  </label>
+                  <select
+                    value={selectedCandidateId}
+                    onChange={(e) => setSelectedCandidateId(e.target.value)}
+                    className="w-full px-3 py-2.5 border-2 border-indigo-200 focus:border-indigo-600 rounded-lg text-xs font-semibold text-slate-900 bg-white shadow-2xs cursor-pointer outline-none transition-all"
+                  >
+                    {availableHiredCandidates.map((c) => {
+                      const v = vacancies.find((vac) => vac.id === c.jobVacancyId);
+                      return (
+                        <option key={c.id} value={c.id}>
+                          {c.name} — {v?.title || 'Posisi Rekrutmen'} ({formatRupiah(c.offeredSalary || c.expectedSalary)})
+                        </option>
+                      );
+                    })}
+                  </select>
+                  <span className="text-[11px] text-slate-500 mt-1 block">
+                    Menampilkan {availableHiredCandidates.length} kandidat Hired yang belum tercatat di Master Karyawan.
+                  </span>
+                </div>
+
+                {/* Candidate Detail Card Preview */}
+                {selectedCandidate && (
+                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center text-sm shadow-2xs shrink-0">
+                          {selectedCandidate.name[0]}
+                        </div>
+                        <div>
+                          <h4 className="font-bold text-slate-900 text-sm">{selectedCandidate.name}</h4>
+                          <div className="text-xs text-indigo-700 font-medium">
+                            {selectedCandidateVacancy?.title || 'Posisi Rekrutmen'} ·{' '}
+                            {selectedCandidateVacancy?.department || 'Engineering'}
+                          </div>
+                        </div>
+                      </div>
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 shrink-0">
+                        Status: Hired
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2.5 pt-2 border-t border-slate-200/80 text-xs">
+                      <div>
+                        <span className="text-[11px] text-slate-500 block">Gaji Disepakati:</span>
+                        <strong className="text-slate-900 font-mono">
+                          {formatRupiah(selectedCandidate.offeredSalary || selectedCandidate.expectedSalary)}
+                        </strong>
+                      </div>
+                      <div>
+                        <span className="text-[11px] text-slate-500 block">Status Hubungan:</span>
+                        <strong className="text-slate-900">
+                          {selectedCandidateVacancy?.employmentType || 'Tetap (PKWTT)'}
+                        </strong>
+                      </div>
+                      <div>
+                        <span className="text-[11px] text-slate-500 block">Email Kandidat:</span>
+                        <span className="text-slate-700 font-mono text-[11px] truncate block">
+                          {selectedCandidate.email}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[11px] text-slate-500 block">Nomor WhatsApp:</span>
+                        <span className="text-slate-700 font-mono text-[11px]">
+                          {selectedCandidate.phone}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="pt-3 border-t border-slate-200 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsRecruitmentCandidatePickerOpen(false)}
+                    className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-semibold text-xs transition-colors"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (selectedCandidate) handleSelectCandidateToDossier(selectedCandidate);
+                    }}
+                    disabled={!selectedCandidate}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg font-semibold text-xs shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <span>Lanjutkan ke Form Dosir Lengkap</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
 
-      {/* Modal Pathway 2: Direct Onboarding Form */}
-      {isDirectOnboardingOpen && (
+      {/* Modal: Formulir Dosir Karyawan Lengkap (Digunakan untuk Direct Onboarding & Rekrutmen Lengkap) */}
+      {isDossierFormOpen && (
         <div
-          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto"
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 overflow-y-auto animate-fadeIn"
           onClick={(e) => {
             if (e.target === e.currentTarget) {
-              setIsDirectOnboardingOpen(false);
+              setIsDossierFormOpen(false);
             }
           }}
         >
           <div
-            className="bg-white rounded-xl shadow-2xl max-w-3xl w-full h-[88vh] sm:h-[84vh] border border-slate-200 overflow-hidden flex flex-col"
+            className="bg-white rounded-xl shadow-2xl max-w-4xl w-full h-[90vh] sm:h-[86vh] border border-slate-200 overflow-hidden flex flex-col animate-scaleUp"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="px-5 sm:px-6 py-3.5 bg-slate-900 text-white flex items-center justify-between shrink-0">
-              <div>
-                <h3 className="text-sm font-bold">Onboarding Langsung (Direct Onboarding Tanpa Rekrutmen)</h3>
-                <span className="text-xs text-slate-400">Tahap {addStep} dari 4</span>
+            {/* Header Form Dosir Lengkap */}
+            <div className="px-4 sm:px-6 py-3.5 bg-slate-900 text-white flex items-center justify-between gap-3 border-b border-slate-800 shrink-0">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-bold text-sm shrink-0 shadow-xs">
+                  {dossierFormMode === 'recruitment' ? (
+                    <Sparkles className="w-5 h-5" />
+                  ) : (
+                    <UserPlus className="w-5 h-5" />
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-sm sm:text-base font-bold text-white tracking-tight truncate">
+                      {dossierFormMode === 'recruitment'
+                        ? `Onboarding Rekrutmen: ${newName || 'Kandidat Hired'}`
+                        : 'Tambah Karyawan — Direct Onboarding'}
+                    </h3>
+                    <span
+                      className={`px-2 py-0.5 rounded text-[10px] font-bold shrink-0 ${
+                        dossierFormMode === 'recruitment'
+                          ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
+                          : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                      }`}
+                    >
+                      {dossierFormMode === 'recruitment' ? 'Pipeline Rekrutmen Hired' : 'Direct Onboarding'}
+                    </span>
+                  </div>
+                  <span className="text-[11px] text-slate-400 block truncate">
+                    Formulir dosir master data komprehensif (7 bagian sesuai dossier karyawan resmi)
+                  </span>
+                </div>
               </div>
-              <button onClick={() => setIsDirectOnboardingOpen(false)}>
-                <X className="w-5 h-5 text-slate-400 hover:text-white" />
+
+              <button
+                type="button"
+                onClick={() => setIsDossierFormOpen(false)}
+                className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors shrink-0"
+                title="Tutup Formulir"
+              >
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Stepper Header */}
-            <div className="bg-slate-50 border-b border-slate-200 px-4 sm:px-6 py-2.5 flex items-center justify-between text-xs shrink-0 overflow-x-auto">
-              {[
-                { num: 1, label: '1. Profil & Jabatan' },
-                { num: 2, label: '2. Identitas KTP/KK' },
-                { num: 3, label: '3. Pajak & BPJS' },
-                { num: 4, label: '4. Gaji & Rekening' },
-              ].map((s) => (
-                <button
-                  key={s.num}
-                  type="button"
-                  onClick={() => setAddStep(s.num as any)}
-                  className={`font-semibold flex items-center gap-1.5 whitespace-nowrap ${
-                    addStep === s.num ? 'text-indigo-600' : 'text-slate-400 hover:text-slate-700'
-                  }`}
-                >
-                  <span
-                    className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-mono ${
-                      addStep === s.num ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-600'
+            {/* Banner Khusus Mode Rekrutmen: Terhubung ke Data Kandidat */}
+            {dossierFormMode === 'recruitment' && (
+              <div className="bg-indigo-50/90 border-b border-indigo-100 px-4 sm:px-6 py-2 flex items-center justify-between gap-3 text-xs shrink-0">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Sparkles className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                  <span className="text-slate-700 truncate">
+                    Data terisi otomatis dari hasil seleksi kandidat <strong>{newName}</strong> (Status: Hired)
+                  </span>
+                </div>
+                {availableHiredCandidates.length > 1 && (
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span className="text-[11px] text-slate-500 hidden sm:inline">Ganti:</span>
+                    <select
+                      value={selectedCandidateId}
+                      onChange={(e) => {
+                        const c = availableHiredCandidates.find((cand) => cand.id === e.target.value);
+                        if (c) loadCandidateIntoDossierForm(c);
+                      }}
+                      className="text-[11px] py-1 px-2 border border-indigo-200 rounded bg-white text-indigo-900 font-medium cursor-pointer"
+                    >
+                      {availableHiredCandidates.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Enterprise Tabs Navigation (Identik dengan DOSSIER_TABS) */}
+            <ScrollableTabNav className="bg-slate-50 border-b border-slate-200" containerClassName="pt-1 px-2 sm:px-4">
+              {DOSSIER_TABS.map((tab, idx) => {
+                const Icon = tab.icon;
+                const isActive = dossierFormTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setDossierFormTab(tab.id)}
+                    className={`pb-2.5 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px cursor-pointer ${
+                      isActive
+                        ? 'border-indigo-600 text-indigo-700 font-bold bg-white rounded-t-md shadow-2xs'
+                        : 'border-transparent text-slate-600 hover:text-slate-900 hover:border-slate-300'
                     }`}
                   >
-                    {s.num}
-                  </span>
-                  <span>{s.label}</span>
-                </button>
-              ))}
+                    <span
+                      className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-mono ${
+                        isActive ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-600'
+                      }`}
+                    >
+                      {idx + 1}
+                    </span>
+                    <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-indigo-600' : 'text-slate-400'}`} />
+                    <span className="hidden sm:inline">{tab.label}</span>
+                    <span className="sm:hidden">{tab.shortLabel}</span>
+                  </button>
+                );
+              })}
+            </ScrollableTabNav>
+
+            {/* Sub-Header Indikator Bagian Tab */}
+            <div className="px-4 sm:px-6 py-1.5 bg-indigo-50/60 border-b border-indigo-100 flex items-center justify-between text-[11px] font-mono text-indigo-900 shrink-0">
+              <span className="font-semibold flex items-center gap-1.5">
+                <span className="text-indigo-600">Bagian {currentFormTabIndex + 1} dari {DOSSIER_TABS.length}:</span>
+                <strong className="text-slate-900">{DOSSIER_TABS[currentFormTabIndex]?.label}</strong>
+              </span>
+              <span className="text-[10px] text-indigo-600 hidden sm:inline">
+                Dapat digeser antar-tab atau klik tab di atas
+              </span>
             </div>
 
-            <form onSubmit={handleDirectOnboardingSubmit} className="flex-1 flex flex-col min-h-0">
-              <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 text-xs">
-                {/* Form Validation Error Notice */}
+            {/* Form Modal Body (Scrollable, Responsive Touch Swipe) */}
+            <form onSubmit={handleSubmitDossierForm} className="flex-1 flex flex-col min-h-0">
+              <div
+                onTouchStart={handleFormTouchStart}
+                onTouchEnd={handleFormTouchEnd}
+                className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 text-xs bg-slate-50/50"
+              >
+                {/* Validation Error Banner */}
                 {formError && (
                   <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg flex items-center gap-2 text-rose-800 text-xs font-semibold animate-fadeIn">
                     <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
@@ -1467,414 +1678,1027 @@ export const EmployeeManagement: React.FC = () => {
                   </div>
                 )}
 
-              {/* STEP 1: Profil & Jabatan */}
-              {addStep === 1 && (
-                <div className="space-y-4">
-                  {/* Photo Profile File Uploader */}
-                  <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
-                    <label className="font-semibold text-slate-800 block text-xs">
-                      Upload Foto Profil Karyawan (Photo Profile) *
-                    </label>
-                    <div className="flex items-center gap-3.5 flex-wrap sm:flex-nowrap">
-                      <div className="relative group shrink-0">
-                        <img
-                          src={newAvatar || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150'}
-                          alt="Preview Foto Karyawan"
-                          className="w-14 h-14 rounded-full object-cover border-2 border-slate-300 shadow-sm"
-                        />
-                        <label
-                          htmlFor="employee-photo-upload"
-                          className="absolute inset-0 rounded-full bg-slate-950/40 text-white opacity-0 group-hover:opacity-100 flex items-center justify-center cursor-pointer transition-opacity"
-                          title="Klik untuk ganti foto"
-                        >
-                          <Camera className="w-4 h-4 text-white" />
-                        </label>
-                      </div>
-
-                      <div className="flex-1 space-y-1.5 min-w-0">
-                        <input
-                          id="employee-photo-upload"
-                          type="file"
-                          accept="image/png, image/jpeg, image/jpg, image/webp"
-                          className="hidden"
-                          onChange={handlePhotoUpload}
-                        />
-                        <div className="flex items-center gap-2">
+                {/* TAB 1: KEPEGAWAIAN & POSISI */}
+                {dossierFormTab === 'kepegawaian' && (
+                  <div className="space-y-4">
+                    {/* Photo Profile Uploader */}
+                    <div className="p-4 bg-white border border-slate-200 rounded-xl space-y-2.5 shadow-2xs">
+                      <label className="font-semibold text-slate-800 block text-xs">
+                        Upload Foto Profil Karyawan (Photo Profile) *
+                      </label>
+                      <div className="flex items-center gap-3.5 flex-wrap sm:flex-nowrap">
+                        <div className="relative group shrink-0">
+                          <img
+                            src={newAvatar || AVATAR_PRESETS[0]}
+                            alt="Preview Foto Karyawan"
+                            className="w-14 h-14 rounded-full object-cover border-2 border-slate-300 shadow-sm"
+                          />
                           <label
                             htmlFor="employee-photo-upload"
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg text-xs font-semibold cursor-pointer shadow-2xs transition-colors"
+                            className="absolute inset-0 rounded-full bg-slate-950/40 text-white opacity-0 group-hover:opacity-100 flex items-center justify-center cursor-pointer transition-opacity"
+                            title="Klik untuk ganti foto"
                           >
-                            <Camera className="w-3.5 h-3.5 text-slate-600" />
-                            <span>Pilih File Foto Karyawan</span>
+                            <Camera className="w-4 h-4 text-white" />
                           </label>
-                          {newAvatar && (
+                        </div>
+
+                        <div className="flex-1 space-y-1.5 min-w-0">
+                          <input
+                            id="employee-photo-upload"
+                            type="file"
+                            accept="image/png, image/jpeg, image/jpg, image/webp"
+                            className="hidden"
+                            onChange={handlePhotoUpload}
+                          />
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <label
+                              htmlFor="employee-photo-upload"
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg text-xs font-semibold cursor-pointer shadow-2xs transition-colors"
+                            >
+                              <Camera className="w-3.5 h-3.5 text-slate-600" />
+                              <span>Pilih File Foto Karyawan</span>
+                            </label>
+                            {newAvatar && (
+                              <button
+                                type="button"
+                                onClick={() => setNewAvatar(AVATAR_PRESETS[0])}
+                                className="px-2 py-1 text-slate-500 hover:text-rose-600 text-xs font-medium"
+                              >
+                                Reset Foto
+                              </button>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-slate-500">
+                            Format: JPG, PNG, atau WEBP (Maks. 5 MB). Foto ini akan digunakan di dossier, kartu nama digital, dan slip gaji.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-3.5">
+                      <h4 className="font-bold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-2">
+                        <Briefcase className="w-4 h-4 text-indigo-600" />
+                        <span>Struktur Jabatan & Hubungan Kerja</span>
+                      </h4>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                        <div>
+                          <label className="font-medium text-slate-700 block mb-1">
+                            Nama Lengkap Sesuai KTP *
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="Contoh: Dimas Anggara, S.Kom."
+                            value={newName}
+                            onChange={(e) => setNewName(e.target.value)}
+                            className={`w-full px-3 py-2 border rounded font-medium ${
+                              showValidationErrors && !newName.trim()
+                                ? 'border-rose-500 bg-rose-50/30'
+                                : 'border-slate-300'
+                            }`}
+                          />
+                        </div>
+
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="font-semibold text-slate-700 block text-xs">
+                              Nomor Induk Karyawan (NIK) *
+                            </label>
                             <button
                               type="button"
-                              onClick={() => setNewAvatar('https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150')}
-                              className="px-2 py-1 text-slate-500 hover:text-rose-600 text-xs font-medium"
+                              onClick={() => setNewNik(generateNextNik(newType, currentEntity?.id))}
+                              className="text-[10px] text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1 cursor-pointer"
+                              title="Generate ulang NIK otomatis sesuai format pola aktif"
                             >
-                              Reset
+                              <RotateCcw className="w-3 h-3" />
+                              <span>Generate NIK</span>
                             </button>
-                          )}
+                          </div>
+                          <input
+                            type="text"
+                            placeholder="Otomatis terisi jika kosong"
+                            value={newNik}
+                            onChange={(e) => setNewNik(e.target.value)}
+                            className="w-full px-3 py-2 border-2 border-indigo-200 focus:border-indigo-600 rounded-lg font-mono font-bold text-indigo-900 bg-indigo-50/20"
+                          />
+                          <span className="text-[10px] text-slate-400 mt-0.5 block">
+                            Format penomoran otomatis untuk status {newType}
+                          </span>
                         </div>
-                        <p className="text-[11px] text-slate-500">
-                          Format: <strong>JPG, PNG, atau WEBP</strong> (Maks. 5 MB). Foto ini akan digunakan di dossier, kartu nama digital, dan slip gaji.
-                        </p>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                        <div>
+                          <label className="font-medium text-slate-700 block mb-1">Email Kantor Resmi</label>
+                          <input
+                            type="email"
+                            placeholder="nama@perusahaan.id"
+                            value={newEmail}
+                            onChange={(e) => setNewEmail(e.target.value)}
+                            className="w-full px-3 py-2 border border-slate-300 rounded font-mono"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="font-medium text-slate-700 block mb-1">Email Pribadi</label>
+                          <input
+                            type="email"
+                            placeholder="nama@gmail.com"
+                            value={newPersonalEmail}
+                            onChange={(e) => setNewPersonalEmail(e.target.value)}
+                            className="w-full px-3 py-2 border border-slate-300 rounded font-mono"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                        <div>
+                          <label className="font-medium text-slate-700 block mb-1">Nomor HP / WhatsApp *</label>
+                          <input
+                            type="tel"
+                            required
+                            value={newPhone}
+                            onChange={(e) => setNewPhone(e.target.value)}
+                            className="w-full px-3 py-2 border border-slate-300 rounded font-mono"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="font-medium text-slate-700 block mb-1">Status Hubungan Kerja</label>
+                          <select
+                            value={newType}
+                            onChange={(e) => {
+                              const t = e.target.value as any;
+                              setNewType(t);
+                              setNewNik(generateNextNik(t, currentEntity?.id));
+                            }}
+                            className="w-full px-3 py-2 border border-slate-300 rounded bg-white font-medium cursor-pointer"
+                          >
+                            <option value="Tetap">Tetap (PKWTT)</option>
+                            <option value="Kontrak">Kontrak (PKWT)</option>
+                            <option value="Outsource">Outsource</option>
+                            <option value="Magang">Magang (Intern)</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="font-medium text-slate-700 block mb-1">Grade Eselon</label>
+                          <select
+                            value={newGrade}
+                            onChange={(e) => setNewGrade(e.target.value)}
+                            className="w-full px-3 py-2 border border-slate-300 rounded bg-white font-medium cursor-pointer"
+                          >
+                            <option value="L1">L1 - Entry Level / Pelaksana</option>
+                            <option value="L2">L2 - Junior Staff</option>
+                            <option value="L3">L3 - Senior Specialist</option>
+                            <option value="L4">L4 - Principal / Lead</option>
+                            <option value="M1">M1 - Assistant Manager</option>
+                            <option value="M2">M2 - Manager</option>
+                            <option value="M3">M3 - Senior Manager</option>
+                            <option value="D1">D1 - Director / C-Level</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                        <div>
+                          <label className="font-medium text-slate-700 block mb-1">Divisi / Departemen *</label>
+                          <input
+                            type="text"
+                            required
+                            value={newDept}
+                            onChange={(e) => setNewDept(e.target.value)}
+                            className="w-full px-3 py-2 border border-slate-300 rounded font-medium"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="font-medium text-slate-700 block mb-1">Posisi / Jabatan Resmi *</label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="Contoh: Senior DevOps Engineer"
+                            value={newPosition}
+                            onChange={(e) => setNewPosition(e.target.value)}
+                            className={`w-full px-3 py-2 border rounded font-medium ${
+                              showValidationErrors && !newPosition.trim()
+                                ? 'border-rose-500 bg-rose-50/30'
+                                : 'border-slate-300'
+                            }`}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                        <div>
+                          <label className="font-medium text-slate-700 block mb-1">Atasan Langsung (Direct Supervisor)</label>
+                          <input
+                            type="text"
+                            value={newDirectSupervisor}
+                            onChange={(e) => setNewDirectSupervisor(e.target.value)}
+                            className="w-full px-3 py-2 border border-slate-300 rounded"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="font-medium text-slate-700 block mb-1">Lokasi Kerja / Cabang</label>
+                          <input
+                            type="text"
+                            value={newBranchLocation}
+                            onChange={(e) => setNewBranchLocation(e.target.value)}
+                            className="w-full px-3 py-2 border border-slate-300 rounded"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-2 border-t border-slate-100">
+                        <ValidatedDateInput
+                          id="formNewJoinDate"
+                          label="Tanggal Mulai Bertugas (Join Date) *"
+                          value={newJoinDate}
+                          onChange={(val) => setNewJoinDate(val)}
+                          required
+                          showError={showValidationErrors}
+                          helperText="Format YYYY-MM-DD. Tanggal resmi aktif bertugas"
+                        />
+
+                        <div>
+                          <label className="font-medium text-slate-700 block mb-1">Status Evaluasi Percobaan (Probation)</label>
+                          <select
+                            value={newProbationStatus}
+                            onChange={(e) => setNewProbationStatus(e.target.value as any)}
+                            className="w-full px-3 py-2 border border-slate-300 rounded bg-white font-medium cursor-pointer"
+                          >
+                            <option value="Sedang Berjalan">Sedang Berjalan (Probation 3 Bulan)</option>
+                            <option value="Lolos">Lolos Evaluasi (Langsung Lolos)</option>
+                            <option value="Tanpa Percobaan">Tanpa Percobaan</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      {newType === 'Kontrak' && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-2 border-t border-slate-100">
+                          <ValidatedDateInput
+                            id="formContractStart"
+                            label="Tanggal Mulai Kontrak PKWT"
+                            value={newContractStartDate}
+                            onChange={(val) => setNewContractStartDate(val)}
+                          />
+                          <ValidatedDateInput
+                            id="formContractEnd"
+                            label="Tanggal Akhir Kontrak PKWT"
+                            value={newContractEndDate}
+                            onChange={(val) => setNewContractEndDate(val)}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* TAB 2: IDENTITAS KEPENDUDUKAN */}
+                {dossierFormTab === 'identitas' && (
+                  <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-4">
+                    <h4 className="font-bold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-2">
+                      <UserCheck className="w-4 h-4 text-indigo-600" />
+                      <span>Data Kependudukan Resmi Sesuai Dukcapil KTP & KK</span>
+                    </h4>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                      <div>
+                        <label className="font-medium text-slate-700 block mb-1">Nomor NIK KTP (16 Digit) *</label>
+                        <input
+                          type="text"
+                          required
+                          maxLength={16}
+                          value={newNikKtp}
+                          onChange={(e) => setNewNikKtp(e.target.value)}
+                          className="w-full px-3 py-2 border border-slate-300 rounded font-mono font-bold tracking-wider"
+                        />
+                      </div>
+                      <div>
+                        <label className="font-medium text-slate-700 block mb-1">Nomor Kartu Keluarga (KK)</label>
+                        <input
+                          type="text"
+                          maxLength={16}
+                          value={newNoKk}
+                          onChange={(e) => setNewNoKk(e.target.value)}
+                          className="w-full px-3 py-2 border border-slate-300 rounded font-mono tracking-wider"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                      <div>
+                        <label className="font-medium text-slate-700 block mb-1">Tempat Lahir</label>
+                        <input
+                          type="text"
+                          value={newBirthPlace}
+                          onChange={(e) => setNewBirthPlace(e.target.value)}
+                          className="w-full px-3 py-2 border border-slate-300 rounded"
+                        />
+                      </div>
+                      <div>
+                        <ValidatedDateInput
+                          id="formBirthDate"
+                          label="Tanggal Lahir Karyawan *"
+                          value={newBirthDate}
+                          onChange={(val) => setNewBirthDate(val)}
+                          required
+                          validateMode="birthDate"
+                          showError={showValidationErrors}
+                          helperText="Min. 17 tahun sesuai UU Ketenagakerjaan"
+                        />
+                      </div>
+                      <div>
+                        <label className="font-medium text-slate-700 block mb-1">Jenis Kelamin</label>
+                        <select
+                          value={newGender}
+                          onChange={(e) => setNewGender(e.target.value as any)}
+                          className="w-full px-3 py-2 border border-slate-300 rounded bg-white cursor-pointer"
+                        >
+                          <option value="Laki-laki">Laki-laki</option>
+                          <option value="Perempuan">Perempuan</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                      <div>
+                        <label className="font-medium text-slate-700 block mb-1">Golongan Darah</label>
+                        <select
+                          value={newBloodType}
+                          onChange={(e) => setNewBloodType(e.target.value as any)}
+                          className="w-full px-3 py-2 border border-slate-300 rounded bg-white font-mono cursor-pointer"
+                        >
+                          <option value="O">Tipe O (Rhesus +)</option>
+                          <option value="A">Tipe A (Rhesus +)</option>
+                          <option value="B">Tipe B (Rhesus +)</option>
+                          <option value="AB">Tipe AB (Rhesus +)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="font-medium text-slate-700 block mb-1">Agama</label>
+                        <select
+                          value={newReligion}
+                          onChange={(e) => setNewReligion(e.target.value as any)}
+                          className="w-full px-3 py-2 border border-slate-300 rounded bg-white cursor-pointer"
+                        >
+                          <option value="Islam">Islam</option>
+                          <option value="Kristen">Kristen Protestan</option>
+                          <option value="Katolik">Katolik</option>
+                          <option value="Hindu">Hindu</option>
+                          <option value="Buddha">Buddha</option>
+                          <option value="Konghucu">Konghucu</option>
+                          <option value="Lainnya">Lainnya</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="font-medium text-slate-700 block mb-1">Status Pernikahan</label>
+                        <select
+                          value={newMaritalStatus}
+                          onChange={(e) => setNewMaritalStatus(e.target.value as any)}
+                          className="w-full px-3 py-2 border border-slate-300 rounded bg-white cursor-pointer"
+                        >
+                          <option value="Lajang">Lajang (Belum Menikah)</option>
+                          <option value="Menikah">Menikah</option>
+                          <option value="Cerai Hidup">Cerai Hidup</option>
+                          <option value="Cerai Mati">Cerai Mati</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-100 space-y-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                        <div className="sm:col-span-2">
+                          <label className="font-medium text-slate-700 block mb-1">Alamat Sesuai KTP</label>
+                          <textarea
+                            rows={2}
+                            value={newKtpAddress}
+                            onChange={(e) => setNewKtpAddress(e.target.value)}
+                            className="w-full px-3 py-2 border border-slate-300 rounded text-xs"
+                          />
+                        </div>
+                        <div>
+                          <label className="font-medium text-slate-700 block mb-1">Kode Pos</label>
+                          <input
+                            type="text"
+                            value={newPostalCode}
+                            onChange={(e) => setNewPostalCode(e.target.value)}
+                            className="w-full px-3 py-2 border border-slate-300 rounded font-mono"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="font-medium text-slate-700 block">Alamat Domisili Sekarang</label>
+                          <button
+                            type="button"
+                            onClick={() => setNewCurrentAddress(newKtpAddress)}
+                            className="text-[10px] text-indigo-600 hover:text-indigo-800 font-semibold cursor-pointer"
+                          >
+                            Salin dari Alamat KTP
+                          </button>
+                        </div>
+                        <textarea
+                          rows={2}
+                          value={newCurrentAddress}
+                          onChange={(e) => setNewCurrentAddress(e.target.value)}
+                          className="w-full px-3 py-2 border border-slate-300 rounded text-xs"
+                        />
                       </div>
                     </div>
                   </div>
+                )}
 
-                  <div className="grid grid-cols-2 gap-3">
+                {/* TAB 3: PAJAK & BPJS */}
+                {dossierFormTab === 'pajak' && (
+                  <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-4">
+                    <h4 className="font-bold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-2">
+                      <ShieldCheck className="w-4 h-4 text-indigo-600" />
+                      <span>Perpajakan PPh 21 (TER 2024) & Kepesertaan Jaminan BPJS</span>
+                    </h4>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                      <div>
+                        <label className="font-medium text-slate-700 block mb-1">NPWP Format Baru (16 Digit)</label>
+                        <input
+                          type="text"
+                          value={newNpwp16}
+                          onChange={(e) => setNewNpwp16(e.target.value)}
+                          className="w-full px-3 py-2 border border-slate-300 rounded font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="font-medium text-slate-700 block mb-1">NPWP Format Lama (15 Digit)</label>
+                        <input
+                          type="text"
+                          value={newNpwp}
+                          onChange={(e) => setNewNpwp(e.target.value)}
+                          className="w-full px-3 py-2 border border-slate-300 rounded font-mono"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                      <div>
+                        <label className="font-medium text-slate-700 block mb-1">KPP Pratama Terdaftar</label>
+                        <input
+                          type="text"
+                          value={newKpp}
+                          onChange={(e) => setNewKpp(e.target.value)}
+                          className="w-full px-3 py-2 border border-slate-300 rounded"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="font-medium text-slate-700 block mb-1">
+                          Status Pajak PTKP (TER PP 58/2023)
+                        </label>
+                        <select
+                          value={newPtkp}
+                          onChange={(e) => setNewPtkp(e.target.value as any)}
+                          className="w-full px-3 py-2 border border-slate-300 rounded bg-white font-mono font-semibold cursor-pointer"
+                        >
+                          <option value="TK/0">TK/0 (Lajang tanpa tanggungan) - TER A</option>
+                          <option value="TK/1">TK/1 (Lajang 1 tanggungan) - TER A</option>
+                          <option value="TK/2">TK/2 (Lajang 2 tanggungan) - TER B</option>
+                          <option value="TK/3">TK/3 (Lajang 3 tanggungan) - TER B</option>
+                          <option value="K/0">K/0 (Menikah tanpa tanggungan) - TER A</option>
+                          <option value="K/1">K/1 (Menikah 1 tanggungan) - TER B</option>
+                          <option value="K/2">K/2 (Menikah 2 tanggungan) - TER B</option>
+                          <option value="K/3">K/3 (Menikah 3 tanggungan) - TER C</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-2 border-t border-slate-100">
+                      <div>
+                        <label className="font-medium text-slate-700 block mb-1">
+                          No. BPJS Ketenagakerjaan (KPJ)
+                        </label>
+                        <input
+                          type="text"
+                          value={newBpjsTk}
+                          onChange={(e) => setNewBpjsTk(e.target.value)}
+                          className="w-full px-3 py-2 border border-slate-300 rounded font-mono"
+                        />
+                        <span className="text-[10px] text-emerald-600 block mt-0.5">
+                          ✓ JKK, JKM, JHT, JP didaftarkan
+                        </span>
+                      </div>
+                      <div>
+                        <label className="font-medium text-slate-700 block mb-1">
+                          No. Kartu BPJS Kesehatan
+                        </label>
+                        <input
+                          type="text"
+                          value={newBpjsKes}
+                          onChange={(e) => setNewBpjsKes(e.target.value)}
+                          className="w-full px-3 py-2 border border-slate-300 rounded font-mono"
+                        />
+                        <span className="text-[10px] text-emerald-600 block mt-0.5">
+                          ✓ Ditanggung 4% Perusahaan & 1% Karyawan
+                        </span>
+                      </div>
+                    </div>
+
                     <div>
-                      <label className="font-medium text-slate-700 block mb-1">Nama Lengkap Sesuai KTP *</label>
+                      <label className="font-medium text-slate-700 block mb-1">
+                        Fasilitas Kesehatan Tingkat 1 (Faskes BPJS)
+                      </label>
                       <input
                         type="text"
-                        required
-                        placeholder="Contoh: Raditya Pratama"
-                        value={newName}
-                        onChange={(e) => setNewName(e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-300 rounded font-medium"
+                        value={newFaskes}
+                        onChange={(e) => setNewFaskes(e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-300 rounded"
+                        placeholder="Contoh: Puskesmas Kecamatan Setiabudi"
                       />
                     </div>
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="font-semibold text-slate-700 block text-xs">
-                          NIK Internal ({newType}) *
-                        </label>
+                  </div>
+                )}
+
+                {/* TAB 4: REMUNERASI & BANK */}
+                {dossierFormTab === 'finansial' && (
+                  <div className="space-y-4">
+                    <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-3.5">
+                      <h4 className="font-bold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-2">
+                        <CreditCard className="w-4 h-4 text-indigo-600" />
+                        <span>Rincian Struktur Kompensasi & Benefit Bulanan</span>
+                      </h4>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                        <CurrencyInput
+                          id="formBasicSalary"
+                          label="Gaji Pokok Bulanan (IDR) *"
+                          value={newBasicSalary}
+                          onChange={(val) => setNewBasicSalary(val)}
+                          required
+                          min={currentTenant.umr || 3000000}
+                          showError={showValidationErrors}
+                          helperText={`Standar UMR ${currentTenant.city}: ${formatRupiah(currentTenant.umr)}`}
+                        />
+
+                        <CurrencyInput
+                          id="formFixedAllow"
+                          label="Tunjangan Tetap (IDR)"
+                          value={newFixedAllow}
+                          onChange={(val) => setNewFixedAllow(val)}
+                          helperText="Tunjangan tetap keahlian / operasional"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                        <CurrencyInput
+                          id="formPositionAllow"
+                          label="Tunjangan Jabatan (IDR)"
+                          value={newPositionAllow}
+                          onChange={(val) => setNewPositionAllow(val)}
+                        />
+                        <CurrencyInput
+                          id="formTransportAllow"
+                          label="Tunjangan Transport (IDR)"
+                          value={newTransportAllow}
+                          onChange={(val) => setNewTransportAllow(val)}
+                        />
+                        <CurrencyInput
+                          id="formMealAllow"
+                          label="Tunjangan Makan (IDR)"
+                          value={newMealAllow}
+                          onChange={(val) => setNewMealAllow(val)}
+                        />
+                      </div>
+
+                      {/* Total Remunerasi Summary Card */}
+                      <div className="p-3.5 bg-indigo-50/70 rounded-xl border border-indigo-200 flex items-center justify-between">
+                        <div>
+                          <span className="font-bold text-indigo-950 block text-xs">
+                            Total Remunerasi Tetap Bulanan
+                          </span>
+                          <span className="text-[11px] text-indigo-700">
+                            Dasar perhitungan lembur, jamsostek, dan PPh 21 TER
+                          </span>
+                        </div>
+                        <span className="font-mono font-bold text-indigo-950 text-base">
+                          {formatRupiah(
+                            Number(newBasicSalary || 0) +
+                              Number(newFixedAllow || 0) +
+                              Number(newPositionAllow || 0) +
+                              Number(newTransportAllow || 0) +
+                              Number(newMealAllow || 0)
+                          )}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-3.5">
+                      <h4 className="font-bold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-2">
+                        <CreditCard className="w-4 h-4 text-indigo-600" />
+                        <span>Rekening Bank Payroll Karyawan</span>
+                      </h4>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                        <div>
+                          <label className="font-medium text-slate-700 block mb-1">Bank Mitra Payroll</label>
+                          <select
+                            value={newBankName}
+                            onChange={(e) => setNewBankName(e.target.value)}
+                            className="w-full px-3 py-2 border border-slate-300 rounded bg-white font-medium cursor-pointer"
+                          >
+                            <option value="BCA">Bank BCA</option>
+                            <option value="Mandiri">Bank Mandiri</option>
+                            <option value="BNI">Bank BNI</option>
+                            <option value="BRI">Bank BRI</option>
+                            <option value="CIMB">Bank CIMB Niaga</option>
+                            <option value="BSI">Bank Syariah Indonesia (BSI)</option>
+                            <option value="Permata">Bank Permata</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="font-medium text-slate-700 block mb-1">Nomor Rekening Payroll *</label>
+                          <input
+                            type="text"
+                            required
+                            value={newBankAccount}
+                            onChange={(e) => setNewBankAccount(e.target.value)}
+                            className="w-full px-3 py-2 border border-slate-300 rounded font-mono font-bold"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="font-medium text-slate-700 block mb-1">Nama Pemilik Rekening</label>
+                          <input
+                            type="text"
+                            placeholder="Sama dengan nama karyawan jika kosong"
+                            value={newBankAccountHolder}
+                            onChange={(e) => setNewBankAccountHolder(e.target.value)}
+                            className="w-full px-3 py-2 border border-slate-300 rounded"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* TAB 5: PENDIDIKAN & KUALIFIKASI */}
+                {dossierFormTab === 'pendidikan' && (
+                  <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-4">
+                    <h4 className="font-bold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-2">
+                      <GraduationCap className="w-4 h-4 text-indigo-600" />
+                      <span>Riwayat Pendidikan Formal & Kualifikasi Akademik</span>
+                    </h4>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                      <div>
+                        <label className="font-medium text-slate-700 block mb-1">Jenjang Pendidikan Terakhir</label>
+                        <select
+                          value={newDegree}
+                          onChange={(e) => setNewDegree(e.target.value as any)}
+                          className="w-full px-3 py-2 border border-slate-300 rounded bg-white font-semibold cursor-pointer"
+                        >
+                          <option value="SMA/SMK">SMA / SMK / Sederajat</option>
+                          <option value="D3">Diploma 3 (D3)</option>
+                          <option value="S1">Strata 1 (S1) / Sarjana</option>
+                          <option value="S2">Strata 2 (S2) / Magister</option>
+                          <option value="S3">Strata 3 (S3) / Doktor</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="font-medium text-slate-700 block mb-1">Perguruan Tinggi / Universitas</label>
+                        <input
+                          type="text"
+                          value={newInstitution}
+                          onChange={(e) => setNewInstitution(e.target.value)}
+                          className="w-full px-3 py-2 border border-slate-300 rounded"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                      <div>
+                        <label className="font-medium text-slate-700 block mb-1">Program Studi / Jurusan</label>
+                        <input
+                          type="text"
+                          value={newMajor}
+                          onChange={(e) => setNewMajor(e.target.value)}
+                          className="w-full px-3 py-2 border border-slate-300 rounded"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="font-medium text-slate-700 block mb-1">Tahun Kelulusan</label>
+                        <input
+                          type="number"
+                          value={newGradYear}
+                          onChange={(e) => setNewGradYear(Number(e.target.value))}
+                          className="w-full px-3 py-2 border border-slate-300 rounded font-mono"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="font-medium text-slate-700 block mb-1">Indeks Prestasi Kumulatif (IPK)</label>
+                        <input
+                          type="text"
+                          value={newGpa}
+                          onChange={(e) => setNewGpa(e.target.value)}
+                          className="w-full px-3 py-2 border border-slate-300 rounded font-mono font-bold text-emerald-700"
+                          placeholder="3.75"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* TAB 6: KELUARGA & KONTAK DARURAT */}
+                {dossierFormTab === 'keluarga' && (
+                  <div className="space-y-4">
+                    {/* Susunan Anggota Keluarga */}
+                    <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-3">
+                      <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                        <h4 className="font-bold text-slate-900 flex items-center gap-2">
+                          <HeartHandshake className="w-4 h-4 text-indigo-600" />
+                          <span>Susunan Keluarga & Tanggungan BPJS</span>
+                        </h4>
                         <button
                           type="button"
-                          onClick={() => setNewNik(generateNextNik(newType, currentEntity?.id))}
-                          className="text-[10px] text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1"
-                          title="Generate ulang NIK otomatis sesuai format pola aktif"
+                          onClick={handleAddFamilyMember}
+                          className="px-2.5 py-1 text-xs font-semibold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded border border-indigo-200 flex items-center gap-1 cursor-pointer transition-colors"
                         >
-                          <RotateCcw className="w-3 h-3" />
-                          <span>Generate NIK</span>
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Tambah Anggota</span>
                         </button>
                       </div>
-                      <input
-                        type="text"
-                        placeholder="Otomatis terisi jika kosong"
-                        value={newNik}
-                        onChange={(e) => setNewNik(e.target.value)}
-                        className="w-full px-3 py-2 border-2 border-indigo-200 focus:border-indigo-600 rounded-lg font-mono font-bold text-indigo-900 bg-indigo-50/20"
-                      />
-                      <span className="text-[10px] text-slate-400 mt-0.5 block">
-                        Format pola penomoran fleksibel otomatis untuk status {newType}
-                      </span>
+
+                      {newFamilyMembers.length === 0 ? (
+                        <div className="p-3 bg-slate-50 rounded text-slate-500 text-center text-xs">
+                          Belum ada anggota keluarga yang didaftarkan. Klik "+ Tambah Anggota" untuk mendaftarkan tanggungan BPJS.
+                        </div>
+                      ) : (
+                        <div className="space-y-2.5">
+                          {newFamilyMembers.map((fam, idx) => (
+                            <div
+                              key={fam.id || idx}
+                              className="p-3 bg-slate-50 rounded-lg border border-slate-200 grid grid-cols-1 sm:grid-cols-5 gap-2 items-center"
+                            >
+                              <div className="sm:col-span-2">
+                                <label className="text-[10px] text-slate-500 block">Nama Anggota</label>
+                                <input
+                                  type="text"
+                                  value={fam.fullName}
+                                  onChange={(e) => handleUpdateFamilyMember(idx, 'fullName', e.target.value)}
+                                  placeholder="Nama lengkap"
+                                  className="w-full px-2.5 py-1.5 border border-slate-300 rounded bg-white text-xs font-medium"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[10px] text-slate-500 block">Hubungan</label>
+                                <select
+                                  value={fam.relation}
+                                  onChange={(e) => handleUpdateFamilyMember(idx, 'relation', e.target.value as any)}
+                                  className="w-full px-2 py-1.5 border border-slate-300 rounded bg-white text-xs cursor-pointer"
+                                >
+                                  <option value="Pasangan">Pasangan (Suami/Istri)</option>
+                                  <option value="Anak">Anak</option>
+                                  <option value="Orang Tua">Orang Tua</option>
+                                  <option value="Mertua">Mertua</option>
+                                </select>
+                              </div>
+                              <div>
+                                <label className="text-[10px] text-slate-500 block">Tanggungan BPJS</label>
+                                <label className="inline-flex items-center gap-1.5 text-xs text-slate-700 mt-1 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={fam.isBpjsCovered}
+                                    onChange={(e) => handleUpdateFamilyMember(idx, 'isBpjsCovered', e.target.checked)}
+                                    className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                                  />
+                                  <span>Ditanggung</span>
+                                </label>
+                              </div>
+                              <div className="flex justify-end">
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveFamilyMember(idx)}
+                                  className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded transition-colors"
+                                  title="Hapus"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Kontak Darurat (Emergency Contact) */}
+                    <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-3">
+                      <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                        <h4 className="font-bold text-slate-900 flex items-center gap-2">
+                          <Phone className="w-4 h-4 text-indigo-600" />
+                          <span>Kontak Darurat (Emergency Contact)</span>
+                        </h4>
+                        <button
+                          type="button"
+                          onClick={handleAddEmergencyContact}
+                          className="px-2.5 py-1 text-xs font-semibold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded border border-indigo-200 flex items-center gap-1 cursor-pointer transition-colors"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Tambah Kontak</span>
+                        </button>
+                      </div>
+
+                      <div className="space-y-2.5">
+                        {newEmergencyContacts.map((contact, idx) => (
+                          <div
+                            key={contact.id || idx}
+                            className="p-3 bg-slate-50 rounded-lg border border-slate-200 grid grid-cols-1 sm:grid-cols-4 gap-2 items-center"
+                          >
+                            <div>
+                              <label className="text-[10px] text-slate-500 block">Nama Kontak</label>
+                              <input
+                                type="text"
+                                value={contact.fullName}
+                                onChange={(e) => handleUpdateEmergencyContact(idx, 'fullName', e.target.value)}
+                                placeholder="Nama lengkap"
+                                className="w-full px-2.5 py-1.5 border border-slate-300 rounded bg-white text-xs font-medium"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-slate-500 block">Hubungan</label>
+                              <select
+                                value={contact.relation}
+                                onChange={(e) => handleUpdateEmergencyContact(idx, 'relation', e.target.value as any)}
+                                className="w-full px-2 py-1.5 border border-slate-300 rounded bg-white text-xs cursor-pointer"
+                              >
+                                <option value="Orang Tua">Orang Tua</option>
+                                <option value="Suami/Istri">Suami / Istri</option>
+                                <option value="Saudara Kandung">Saudara Kandung</option>
+                                <option value="Anak">Anak</option>
+                                <option value="Kerabat">Kerabat</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-slate-500 block">Nomor HP / WhatsApp</label>
+                              <input
+                                type="tel"
+                                value={contact.phone}
+                                onChange={(e) => handleUpdateEmergencyContact(idx, 'phone', e.target.value)}
+                                placeholder="08..."
+                                className="w-full px-2.5 py-1.5 border border-slate-300 rounded bg-white text-xs font-mono"
+                              />
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <div className="flex-1">
+                                <label className="text-[10px] text-slate-500 block">Alamat Singkat</label>
+                                <input
+                                  type="text"
+                                  value={contact.address}
+                                  onChange={(e) => handleUpdateEmergencyContact(idx, 'address', e.target.value)}
+                                  placeholder="Kota / Alamat"
+                                  className="w-full px-2.5 py-1.5 border border-slate-300 rounded bg-white text-xs"
+                                />
+                              </div>
+                              {newEmergencyContacts.length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveEmergencyContact(idx)}
+                                  className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded mt-3 transition-colors"
+                                  title="Hapus"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   </div>
+                )}
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="font-medium text-slate-700 block mb-1">Email Kantor</label>
-                      <input
-                        type="email"
-                        placeholder="nama@perusahaan.id"
-                        value={newEmail}
-                        onChange={(e) => setNewEmail(e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-300 rounded font-mono"
-                      />
-                    </div>
-                    <div>
-                      <label className="font-medium text-slate-700 block mb-1">Nomor Handphone / WhatsApp *</label>
-                      <input
-                        type="tel"
-                        required
-                        value={newPhone}
-                        onChange={(e) => setNewPhone(e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-300 rounded font-mono"
-                      />
-                    </div>
-                  </div>
+                {/* TAB 7: RIWAYAT SK KARIER & LEGALITAS */}
+                {dossierFormTab === 'riwayat' && (
+                  <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-4">
+                    <h4 className="font-bold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-2">
+                      <FileClock className="w-4 h-4 text-indigo-600" />
+                      <span>Surat Keputusan (SK) Pengangkatan / Hubungan Kerja Awal</span>
+                    </h4>
 
-                  <div className="grid grid-cols-3 gap-3">
-                    <div>
-                      <label className="font-medium text-slate-700 block mb-1">Status Ketenagakerjaan</label>
-                      <select
-                        value={newType}
-                        onChange={(e) => {
-                          const t = e.target.value as any;
-                          setNewType(t);
-                          setNewNik(generateNextNik(t, currentEntity?.id));
-                        }}
-                        className="w-full px-3 py-2 border border-slate-300 rounded bg-white font-medium"
-                      >
-                        <option value="Tetap">Tetap (PKWTT)</option>
-                        <option value="Kontrak">Kontrak (PKWT)</option>
-                        <option value="Outsource">Outsource</option>
-                        <option value="Magang">Magang (Intern)</option>
-                      </select>
-                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                      <div>
+                        <label className="font-medium text-slate-700 block mb-1">
+                          Nomor Dokumen SK / Kontrak Resmi *
+                        </label>
+                        <input
+                          type="text"
+                          value={newContractDoc}
+                          onChange={(e) => setNewContractDoc(e.target.value)}
+                          className="w-full px-3 py-2 border border-slate-300 rounded font-mono font-bold text-slate-900"
+                        />
+                      </div>
 
-                    <div>
-                      <label className="font-medium text-slate-700 block mb-1">Departemen</label>
-                      <input
-                        type="text"
-                        required
-                        value={newDept}
-                        onChange={(e) => setNewDept(e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-300 rounded"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="font-medium text-slate-700 block mb-1">Posisi / Jabatan *</label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="Lead Engineer"
-                        value={newPosition}
-                        onChange={(e) => {
-                          setNewPosition(e.target.value);
-                          if (formError) setFormError(null);
-                        }}
-                        className={`w-full px-3 py-2 border rounded font-medium ${
-                          showValidationErrors && !newPosition.trim()
-                            ? 'border-rose-500 bg-rose-50/20 text-rose-900'
-                            : 'border-slate-300'
-                        }`}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Validated Date Input for Join Date */}
-                  <div className="pt-2 border-t border-slate-100">
-                    <ValidatedDateInput
-                      id="newJoinDate"
-                      label="Tanggal Mulai Bertugas / Bergabung *"
-                      value={newJoinDate}
-                      onChange={(val) => {
-                        setNewJoinDate(val);
-                        if (formError) setFormError(null);
-                      }}
-                      required
-                      showError={showValidationErrors}
-                      helperText="Format YYYY-MM-DD. Tanggal resmi penempatan di entitas tenant"
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* STEP 2: Identitas KTP/KK */}
-              {addStep === 2 && (
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="font-medium text-slate-700 block mb-1">Nomor KTP (16 Digit) *</label>
-                      <input
-                        type="text"
-                        required
-                        value={newNikKtp}
-                        onChange={(e) => setNewNikKtp(e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-300 rounded font-mono"
-                      />
-                    </div>
-                    <div>
-                      <label className="font-medium text-slate-700 block mb-1">Nomor Kartu Keluarga (KK)</label>
-                      <input
-                        type="text"
-                        value={newNoKk}
-                        onChange={(e) => setNewNoKk(e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-300 rounded font-mono"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-3">
-                    <div>
-                      <label className="font-medium text-slate-700 block mb-1">Tempat Lahir</label>
-                      <input
-                        type="text"
-                        value={newBirthPlace}
-                        onChange={(e) => setNewBirthPlace(e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-300 rounded"
-                      />
-                    </div>
-                    <div>
                       <ValidatedDateInput
-                        id="newBirthDate"
-                        label="Tanggal Lahir *"
-                        value={newBirthDate}
-                        onChange={(val) => {
-                          setNewBirthDate(val);
-                          if (formError) setFormError(null);
-                        }}
-                        required
-                        validateMode="birthDate"
-                        showError={showValidationErrors}
-                        helperText="Min. 17 tahun sesuai UU Ketenagakerjaan"
+                        id="formSkEffective"
+                        label="Tanggal Efektif SK Berlaku *"
+                        value={newSkEffectiveDate}
+                        onChange={(val) => setNewSkEffectiveDate(val)}
                       />
                     </div>
-                    <div>
-                      <label className="font-medium text-slate-700 block mb-1">Jenis Kelamin</label>
-                      <select
-                        value={newGender}
-                        onChange={(e) => setNewGender(e.target.value as any)}
-                        className="w-full px-3 py-2 border border-slate-300 rounded bg-white"
-                      >
-                        <option value="Laki-laki">Laki-laki</option>
-                        <option value="Perempuan">Perempuan</option>
-                      </select>
-                    </div>
-                  </div>
 
-                  <div>
-                    <label className="font-medium text-slate-700 block mb-1">Alamat Sesuai KTP</label>
-                    <textarea
-                      rows={2}
-                      value={newKtpAddress}
-                      onChange={(e) => setNewKtpAddress(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-300 rounded"
-                    />
-                  </div>
-                </div>
-              )}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                      <div>
+                        <label className="font-medium text-slate-700 block mb-1">Pejabat Penandatangan SK</label>
+                        <input
+                          type="text"
+                          value={newSkSignee}
+                          onChange={(e) => setNewSkSignee(e.target.value)}
+                          className="w-full px-3 py-2 border border-slate-300 rounded"
+                        />
+                      </div>
 
-              {/* STEP 3: Pajak & BPJS */}
-              {addStep === 3 && (
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="font-medium text-slate-700 block mb-1">Nomor NPWP</label>
-                      <input
-                        type="text"
-                        value={newNpwp}
-                        onChange={(e) => setNewNpwp(e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-300 rounded font-mono"
-                      />
+                      <div>
+                        <label className="font-medium text-slate-700 block mb-1">Jabatan Pejabat Penandatangan</label>
+                        <input
+                          type="text"
+                          value={newSkRole}
+                          onChange={(e) => setNewSkRole(e.target.value)}
+                          className="w-full px-3 py-2 border border-slate-300 rounded"
+                        />
+                      </div>
                     </div>
-                    <div>
-                      <label className="font-medium text-slate-700 block mb-1">Status PTKP (Ketenagakerjaan)</label>
-                      <select
-                        value={newPtkp}
-                        onChange={(e) => setNewPtkp(e.target.value as any)}
-                        className="w-full px-3 py-2 border border-slate-300 rounded bg-white font-mono font-semibold"
-                      >
-                        <option value="TK/0">TK/0 (Lajang tanpa tanggungan) - TER A</option>
-                        <option value="TK/1">TK/1 (Lajang 1 tanggungan) - TER A</option>
-                        <option value="K/0">K/0 (Menikah tanpa tanggungan) - TER A</option>
-                        <option value="K/1">K/1 (Menikah 1 tanggungan) - TER B</option>
-                        <option value="K/2">K/2 (Menikah 2 tanggungan) - TER B</option>
-                        <option value="K/3">K/3 (Menikah 3 tanggungan) - TER C</option>
-                      </select>
-                    </div>
-                  </div>
 
-                  <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="font-medium text-slate-700 block mb-1">No. BPJS Ketenagakerjaan (KPJ)</label>
-                      <input
-                        type="text"
-                        value={newBpjsTk}
-                        onChange={(e) => setNewBpjsTk(e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-300 rounded font-mono"
-                      />
-                    </div>
-                    <div>
-                      <label className="font-medium text-slate-700 block mb-1">No. Kartu BPJS Kesehatan</label>
-                      <input
-                        type="text"
-                        value={newBpjsKes}
-                        onChange={(e) => setNewBpjsKes(e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-300 rounded font-mono"
+                      <label className="font-medium text-slate-700 block mb-1">
+                        Catatan Legalitas / Ringkasan Keputusan Direksi
+                      </label>
+                      <textarea
+                        rows={3}
+                        value={newSkNotes}
+                        onChange={(e) => setNewSkNotes(e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-300 rounded text-xs"
                       />
                     </div>
                   </div>
-                </div>
-              )}
-
-              {/* STEP 4: Gaji & Rekening (dengan CurrencyInput format ribuan) */}
-              {addStep === 4 && (
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-3">
-                    <CurrencyInput
-                      id="newBasicSalary"
-                      label="Gaji Pokok Bulanan (IDR) *"
-                      value={newBasicSalary}
-                      onChange={(val) => {
-                        setNewBasicSalary(val);
-                        if (formError) setFormError(null);
-                      }}
-                      required
-                      min={currentTenant.umr || 3000000}
-                      showError={showValidationErrors}
-                      helperText={`Standar UMR ${currentTenant.city}: ${formatRupiah(currentTenant.umr)}`}
-                    />
-                    <CurrencyInput
-                      id="newFixedAllow"
-                      label="Tunjangan Tetap (IDR)"
-                      value={newFixedAllow}
-                      onChange={(val) => setNewFixedAllow(val)}
-                      showError={showValidationErrors}
-                      helperText="Tunjangan jabatan atau keahlian"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="font-medium text-slate-700 block mb-1">Bank Payroll</label>
-                      <select
-                        value={newBankName}
-                        onChange={(e) => setNewBankName(e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-300 rounded bg-white font-medium"
-                      >
-                        <option value="BCA">Bank BCA</option>
-                        <option value="Mandiri">Bank Mandiri</option>
-                        <option value="BNI">Bank BNI</option>
-                        <option value="BRI">Bank BRI</option>
-                        <option value="CIMB">Bank CIMB Niaga</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="font-medium text-slate-700 block mb-1">Nomor Rekening Bank *</label>
-                      <input
-                        type="text"
-                        required
-                        value={newBankAccount}
-                        onChange={(e) => setNewBankAccount(e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-300 rounded font-mono font-bold"
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
-
+                )}
               </div>
 
-              {/* Fixed Footer Bar */}
-              <div className="px-5 sm:px-6 py-3.5 bg-slate-50 border-t border-slate-200 flex justify-between shrink-0">
-                {addStep > 1 ? (
+              {/* Fixed Footer Bar: Navigasi Antar-Tab & Tombol Simpan */}
+              <div className="px-4 sm:px-6 py-3 bg-white border-t border-slate-200 flex items-center justify-between gap-2 shrink-0">
+                <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => {
-                      setFormError(null);
-                      setAddStep((addStep - 1) as any);
-                    }}
-                    className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md font-semibold text-xs transition-colors"
+                    onClick={handlePrevFormTab}
+                    disabled={currentFormTabIndex === 0}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold border transition-all ${
+                      currentFormTabIndex === 0
+                        ? 'opacity-40 cursor-not-allowed border-slate-200 text-slate-400 bg-slate-50'
+                        : 'border-slate-300 text-slate-700 bg-white hover:bg-slate-100 hover:text-slate-900 shadow-2xs cursor-pointer'
+                    }`}
                   >
-                    ← Sebelumnya
+                    <ArrowLeft className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Tab Sebelumnya</span>
+                    <span className="sm:hidden">Sebelumnya</span>
                   </button>
-                ) : (
-                  <div></div>
-                )}
 
-                {addStep < 4 ? (
                   <button
                     type="button"
-                    onClick={handleNextStep}
-                    className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md font-semibold text-xs shadow-xs flex items-center gap-1.5 transition-colors"
+                    onClick={handleNextFormTab}
+                    disabled={currentFormTabIndex === DOSSIER_TABS.length - 1}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold border transition-all ${
+                      currentFormTabIndex === DOSSIER_TABS.length - 1
+                        ? 'opacity-40 cursor-not-allowed border-slate-200 text-slate-400 bg-slate-50'
+                        : 'border-indigo-300 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 shadow-2xs cursor-pointer'
+                    }`}
                   >
-                    <span>Lanjutkan</span>
-                    <span>→</span>
+                    <span className="hidden sm:inline">Tab Selanjutnya</span>
+                    <span className="sm:hidden">Selanjutnya</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
                   </button>
-                ) : (
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsDossierFormOpen(false)}
+                    className="px-3.5 py-1.5 text-xs text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-md font-semibold transition-colors cursor-pointer"
+                  >
+                    Batal
+                  </button>
                   <button
                     type="submit"
-                    className="px-5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md font-semibold text-xs shadow-xs transition-colors"
+                    className="flex items-center gap-1.5 px-4 sm:px-5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md font-semibold text-xs shadow-xs transition-colors cursor-pointer"
                   >
-                    Simpan & Daftarkan Onboarding
+                    <CheckCircle className="w-3.5 h-3.5" />
+                    <span>Simpan & Proses Tambah Data Karyawan</span>
                   </button>
-                )}
+                </div>
               </div>
             </form>
           </div>

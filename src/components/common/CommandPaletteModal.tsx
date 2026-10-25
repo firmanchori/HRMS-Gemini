@@ -75,7 +75,7 @@ const ALL_MODULES: ModuleDefinition[] = [
   },
   {
     id: 'employees',
-    name: 'Manajemen Karyawan',
+    name: 'Management Karyawan',
     group: 'Operasional & Personalia',
     description: 'Database karyawan, dosier digital lengkap, riwayat karir, dan data NIK/KTP',
     keywords: ['karyawan', 'pegawai', 'employee', 'dosier', 'nik', 'ktp', 'kontrak', 'staff', 'personel'],
