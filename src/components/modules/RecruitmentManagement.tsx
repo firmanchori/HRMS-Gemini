@@ -1180,7 +1180,7 @@ export const RecruitmentManagement: React.FC = () => {
   const [newTmplTitle, setNewTmplTitle] = useState('');
   const [newTmplDept, setNewTmplDept] = useState<'HR' | 'GA' | 'IT' | 'Finance'>('HR');
   const [newTmplVerif, setNewTmplVerif] = useState<'manual' | 'automated'>('manual');
-  const [newTmplAction, setNewTmplAction] = useState<string>('none');
+  const [newTmplAction, setNewTmplAction] = useState<string>('id_card_request');
   const [newTmplMandatory, setNewTmplMandatory] = useState(true);
 
   const handleAddChecklistTemplate = () => {
@@ -1197,12 +1197,13 @@ export const RecruitmentManagement: React.FC = () => {
         ? 'Payroll & Pajak'
         : 'Legalitas & Dokumen';
 
+    const isAuto = newTmplVerif === 'automated';
     addChecklistTemplateItem({
       title: newTmplTitle.trim(),
       category,
       targetDepartment: newTmplDept,
-      verificationType: newTmplVerif === 'automated' ? 'automatic_action' : 'manual',
-      actionType: newTmplAction as any,
+      verificationType: isAuto ? 'automatic_action' : 'manual',
+      actionType: isAuto ? (newTmplAction as any) : undefined,
       isMandatory: newTmplMandatory,
     });
     setNewTmplTitle('');
@@ -18351,7 +18352,7 @@ PT Nusantara Multi Talenta Tbk`);
                     />
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className={`grid grid-cols-1 ${newTmplVerif === 'automated' ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-3 transition-all`}>
                     <div>
                       <label className="font-semibold text-slate-700 block mb-1">Departemen Pelaksana</label>
                       <select
@@ -18370,29 +18371,38 @@ PT Nusantara Multi Talenta Tbk`);
                       <label className="font-semibold text-slate-700 block mb-1">Jenis Pemeriksaan</label>
                       <select
                         value={newTmplVerif}
-                        onChange={(e) => setNewTmplVerif(e.target.value as any)}
+                        onChange={(e) => {
+                          const val = e.target.value as 'manual' | 'automated';
+                          setNewTmplVerif(val);
+                          if (val === 'automated' && (!newTmplAction || newTmplAction === 'none')) {
+                            setNewTmplAction('id_card_request');
+                          }
+                        }}
                         className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white text-xs focus:ring-1 focus:ring-blue-500 outline-hidden"
                       >
-                        <option value="manual">📋 Ceklis Manual</option>
-                        <option value="automated">⚡ Pemeriksaan Otomatis (Form Aksi)</option>
+                        <option value="manual">📋 Ceklis Manual (Tanpa Form Aksi)</option>
+                        <option value="automated">⚡ Pemeriksaan Otomatis (Dengan Form Aksi)</option>
                       </select>
                     </div>
 
-                    <div>
-                      <label className="font-semibold text-slate-700 block mb-1">Jenis Aksi Terkait</label>
-                      <select
-                        value={newTmplAction}
-                        onChange={(e) => setNewTmplAction(e.target.value as any)}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white text-xs focus:ring-1 focus:ring-blue-500 outline-hidden"
-                      >
-                        <option value="none">Tidak Ada (Ceklis Biasa)</option>
-                        <option value="id_card_request">Pengajuan ID Card GA</option>
-                        <option value="dossier_verification">Verifikasi Dossier</option>
-                        <option value="laptop_provisioning">Alokasi Laptop IT</option>
-                        <option value="account_email_setup">Provisioning Akun/Email</option>
-                        <option value="contract_signing">Verifikasi TTD Kontrak</option>
-                      </select>
-                    </div>
+                    {newTmplVerif === 'automated' && (
+                      <div className="animate-in fade-in duration-150">
+                        <label className="font-semibold text-slate-700 block mb-1">
+                          Jenis Aksi Terkait <span className="text-blue-600 font-normal">(Form Otomatis)</span> *
+                        </label>
+                        <select
+                          value={newTmplAction}
+                          onChange={(e) => setNewTmplAction(e.target.value as any)}
+                          className="w-full px-3 py-2 border border-blue-300 rounded-lg bg-blue-50/50 text-xs focus:ring-1 focus:ring-blue-500 outline-hidden font-medium text-slate-800"
+                        >
+                          <option value="id_card_request">Pengajuan ID Card GA (Modal Form ID Card)</option>
+                          <option value="dossier_verification">Verifikasi Berkas Dossier (Modal Form Dokumen & Data Diri)</option>
+                          <option value="laptop_provisioning">Alokasi Laptop Kerja IT (Modal Form Perangkat IT)</option>
+                          <option value="account_email_setup">Provisioning Akun & Email (Modal Form Sistem & Email)</option>
+                          <option value="contract_signing">Verifikasi TTD Kontrak Digital (Digital Signing QR)</option>
+                        </select>
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex items-center justify-between pt-1">
@@ -18462,7 +18472,9 @@ PT Nusantara Multi Talenta Tbk`);
                               {item.targetDepartment}
                             </span>
                             <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-700">
-                              {item.verificationType === 'automated' ? '⚡ Otomatis' : '📋 Manual'}
+                              {item.verificationType === 'automatic_action' || (item.verificationType as any) === 'automated'
+                                ? '⚡ Pemeriksaan Otomatis'
+                                : '📋 Ceklis Manual'}
                             </span>
                             {item.isMandatory && (
                               <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200">
@@ -18471,7 +18483,29 @@ PT Nusantara Multi Talenta Tbk`);
                             )}
                           </div>
                           <p className="text-[11px] text-slate-500">
-                            Kategori: {item.category} · Aksi: {item.actionType !== 'none' ? item.actionType : 'Tidak ada'}
+                            Kategori: {item.category}
+                            {item.verificationType === 'automatic_action' || (item.verificationType as any) === 'automated' ? (
+                              <span>
+                                {' · '}Form Aksi:{' '}
+                                <strong className="text-slate-700 font-semibold">
+                                  {item.actionType === 'id_card_request'
+                                    ? 'Pengajuan ID Card GA'
+                                    : item.actionType === 'dossier_verification'
+                                    ? 'Verifikasi Berkas Dossier'
+                                    : item.actionType === 'laptop_provisioning'
+                                    ? 'Alokasi Laptop Kerja IT'
+                                    : item.actionType === 'account_email_setup'
+                                    ? 'Provisioning Akun & Email'
+                                    : item.actionType === 'contract_signing'
+                                    ? 'Verifikasi TTD Kontrak Digital'
+                                    : item.actionType && item.actionType !== 'none'
+                                    ? item.actionType
+                                    : '-'}
+                                </strong>
+                              </span>
+                            ) : (
+                              <span> · Ceklis Manual Mandiri</span>
+                            )}
                           </p>
                         </div>
                       </div>
