@@ -118,6 +118,121 @@ import {
 import { DEFAULT_ONBOARDING_CHECKLIST_TEMPLATES } from '../../data/initialData';
 import { formatRupiah, calculatePPh21TER, calculateBPJS } from '../../utils/taxCalculator';
 
+
+// ===================== DYNAMIC OFFERING CALCULATOR ENGINE =====================
+export interface DynamicOfferingAllowance {
+  id: string;
+  name: string;
+  category: 'Tunjangan Tetap' | 'Tunjangan Tidak Tetap' | string;
+  type: 'fixed' | 'percent'; // 'fixed' = Rp, 'percent' = % dari Gaji Pokok
+  value: number; // nominal jika fixed, atau persen jika percent
+  isEnabled: boolean;
+}
+
+export interface DynamicOfferingInsurance {
+  id: string;
+  code: string;
+  name: string;
+  category: 'BPJS Kesehatan' | 'BPJS Ketenagakerjaan' | 'Asuransi Swasta';
+  companyRatePercent?: number;
+  employeeRatePercent?: number;
+  companyFixedAmount?: number;
+  employeeFixedAmount?: number;
+  hasWageCap?: boolean;
+  wageCapAmount?: number;
+  isEnabled: boolean;
+  description?: string;
+}
+
+export 
+function numberToTerbilang(nilai: number): string {
+  const bilangan = ['', 'Satu', 'Dua', 'Tiga', 'Empat', 'Lima', 'Enam', 'Tujuh', 'Delapan', 'Sembilan', 'Sepuluh', 'Sebelas'];
+  const n = Math.floor(Math.abs(nilai));
+  if (n < 12) return bilangan[n];
+  if (n < 20) return numberToTerbilang(n - 10) + ' Belas';
+  if (n < 100) return numberToTerbilang(Math.floor(n / 10)) + ' Puluh ' + numberToTerbilang(n % 10);
+  if (n < 200) return 'Seratus ' + numberToTerbilang(n - 100);
+  if (n < 1000) return numberToTerbilang(Math.floor(n / 100)) + ' Ratus ' + numberToTerbilang(n % 100);
+  if (n < 2000) return 'Seribu ' + numberToTerbilang(n - 1000);
+  if (n < 1000000) return numberToTerbilang(Math.floor(n / 1000)) + ' Ribu ' + numberToTerbilang(n % 1000);
+  if (n < 1000000000) return numberToTerbilang(Math.floor(n / 1000000)) + ' Juta ' + numberToTerbilang(n % 1000000);
+  if (n < 1000000000000) return numberToTerbilang(Math.floor(n / 1000000000)) + ' Miliar ' + numberToTerbilang(n % 1000000000);
+  return numberToTerbilang(Math.floor(n / 1000000000000)) + ' Triliun ' + numberToTerbilang(n % 1000000000000);
+}
+
+function formatTerbilangRupiah(n: number): string {
+  if (!n || n <= 0) return 'Nol Rupiah';
+  return (numberToTerbilang(n).trim().replace(/\s+/g, ' ') + ' Rupiah');
+}
+
+function solveGrossFromTargetTHP(
+  targetTHP: number,
+  ptkp: PTKPStatus,
+  basicRatio: number = 0.75,
+  enabledBenefits: { bpjsKes: boolean; bpjsJht: boolean; bpjsJp: boolean } = {
+    bpjsKes: true,
+    bpjsJht: true,
+    bpjsJp: true,
+  }
+) {
+  let low = Math.max(targetTHP, 3000000);
+  let high = targetTHP * 1.6;
+  let bestGross = targetTHP;
+  let bestDiff = Infinity;
+
+  const maxWageKes = 12000000;
+  const maxWageJP = 10042300;
+
+  for (let i = 0; i < 45; i++) {
+    const mid = (low + high) / 2;
+    const basic = Math.round(mid * basicRatio);
+    const wageForKes = Math.min(basic, maxWageKes);
+    const wageForJP = Math.min(basic, maxWageJP);
+
+    const bpjsKesEmp = enabledBenefits.bpjsKes ? Math.round(wageForKes * 0.01) : 0;
+    const bpjsJhtEmp = enabledBenefits.bpjsJht ? Math.round(basic * 0.02) : 0;
+    const bpjsJpEmp = enabledBenefits.bpjsJp ? Math.round(wageForJP * 0.01) : 0;
+    const bpjsEmp = bpjsKesEmp + bpjsJhtEmp + bpjsJpEmp;
+
+    const tax = calculatePPh21TER(mid, ptkp).taxAmount;
+    const net = mid - bpjsEmp - tax;
+
+    if (Math.abs(net - targetTHP) < Math.abs(bestDiff)) {
+      bestDiff = net - targetTHP;
+      bestGross = mid;
+    }
+
+    if (net < targetTHP) {
+      low = mid;
+    } else {
+      high = mid;
+    }
+  }
+
+  const finalGross = Math.round(bestGross);
+  const finalBasic = Math.round(finalGross * basicRatio);
+  const wageForKes = Math.min(finalBasic, maxWageKes);
+  const wageForJP = Math.min(finalBasic, maxWageJP);
+
+  const bpjsKesEmp = enabledBenefits.bpjsKes ? Math.round(wageForKes * 0.01) : 0;
+  const bpjsJhtEmp = enabledBenefits.bpjsJht ? Math.round(finalBasic * 0.02) : 0;
+  const bpjsJpEmp = enabledBenefits.bpjsJp ? Math.round(wageForJP * 0.01) : 0;
+  const bpjsEmp = bpjsKesEmp + bpjsJhtEmp + bpjsJpEmp;
+
+  const finalTax = calculatePPh21TER(finalGross, ptkp).taxAmount;
+  const finalNet = finalGross - bpjsEmp - finalTax;
+
+  return {
+    gross: finalGross,
+    basicSalary: finalBasic,
+    totalAllowances: finalGross - finalBasic,
+    bpjsEmployee: bpjsEmp,
+    taxAmount: finalTax,
+    net: finalNet,
+    diff: finalNet - targetTHP,
+  };
+}
+
 export const COMPANY_GRADES = [
   'Grade 1 - Staff / Pelaksana',
   'Grade 2 - Officer / Senior Staff',
@@ -1349,13 +1464,153 @@ export const RecruitmentManagement: React.FC = () => {
   const [newCritWeight, setNewCritWeight] = useState(25);
 
   // ===================== 7. FORM OFFERING CALCULATOR =====================
-  const [offeringMode, setOfferingMode] = useState<'gross' | 'net'>('gross');
-  const [targetAmount, setTargetAmount] = useState<number>(18500000);
+  const [offeringMode, setOfferingMode] = useState<'gross' | 'net'>('net');
+  const [targetAmount, setTargetAmount] = useState<number>(15000000);
+  const [targetThpAmount, setTargetThpAmount] = useState<number>(15000000);
+  const [offeringBasicSalary, setOfferingBasicSalary] = useState<number>(12000000);
   const [docNumber, setDocNumber] = useState('');
   const [targetJoinDate, setTargetJoinDate] = useState('2026-11-01');
   const [candidatePtkp, setCandidatePtkp] = useState<PTKPStatus>('TK/0');
   const [offeringFormError, setOfferingFormError] = useState<string | null>(null);
 
+  // Komponen Tunjangan Dinamis (Bisa Ditambah, Dikurangi, Dipilih Jenisnya & Diubah Angka/Persentasenya)
+  const [offeringAllowances, setOfferingAllowances] = useState<DynamicOfferingAllowance[]>([
+    {
+      id: 'alw-1',
+      name: 'Tunjangan Jabatan & Posisi',
+      category: 'Tunjangan Tetap',
+      type: 'fixed',
+      value: 1500000,
+      isEnabled: true,
+    },
+    {
+      id: 'alw-2',
+      name: 'Tunjangan Transportasi & Mobilitas',
+      category: 'Tunjangan Tetap',
+      type: 'fixed',
+      value: 1000000,
+      isEnabled: true,
+    },
+    {
+      id: 'alw-3',
+      name: 'Uang Makan Harian (Meal Allowance)',
+      category: 'Tunjangan Tidak Tetap',
+      type: 'fixed',
+      value: 1000000,
+      isEnabled: true,
+    },
+    {
+      id: 'alw-4',
+      name: 'Tunjangan Komunikasi & Pulsa / Internet',
+      category: 'Tunjangan Tetap',
+      type: 'fixed',
+      value: 500000,
+      isEnabled: true,
+    },
+    {
+      id: 'alw-5',
+      name: 'Tunjangan Kehadiran Kerja',
+      category: 'Tunjangan Tidak Tetap',
+      type: 'fixed',
+      value: 500000,
+      isEnabled: false,
+    },
+    {
+      id: 'alw-6',
+      name: 'Insentif / Tunjangan Kinerja Bulanan',
+      category: 'Tunjangan Tidak Tetap',
+      type: 'percent',
+      value: 5,
+      isEnabled: false,
+    },
+  ]);
+
+  // Form input tambah tunjangan baru
+  const [isAddAllowanceOpen, setIsAddAllowanceOpen] = useState(false);
+  const [newAllowanceName, setNewAllowanceName] = useState('Tunjangan Keahlian Khusus');
+  const [newAllowanceCategory, setNewAllowanceCategory] = useState<'Tunjangan Tetap' | 'Tunjangan Tidak Tetap'>('Tunjangan Tetap');
+  const [newAllowanceType, setNewAllowanceType] = useState<'fixed' | 'percent'>('fixed');
+  const [newAllowanceValue, setNewAllowanceValue] = useState<number>(750000);
+
+  // Komponen Asuransi & Jaminan Sosial (BPJS & Swasta)
+  const [offeringInsurances, setOfferingInsurances] = useState<DynamicOfferingInsurance[]>([
+    {
+      id: 'ins-bpjs-kes',
+      code: 'BPJS-KES',
+      name: 'BPJS Kesehatan',
+      category: 'BPJS Kesehatan',
+      companyRatePercent: 4,
+      employeeRatePercent: 1,
+      hasWageCap: true,
+      wageCapAmount: 12000000,
+      isEnabled: true,
+      description: 'Plafon upah maks Rp 12.000.000 (1% pekerja, 4% pemberi kerja)',
+    },
+    {
+      id: 'ins-bpjs-jht',
+      code: 'BPJS-TK-JHT',
+      name: 'BPJS Ketenagakerjaan - JHT (Hari Tua)',
+      category: 'BPJS Ketenagakerjaan',
+      companyRatePercent: 3.7,
+      employeeRatePercent: 2,
+      hasWageCap: false,
+      isEnabled: true,
+      description: 'Akumulasi saldo tabungan pensiun (2% pekerja, 3.7% pemberi kerja)',
+    },
+    {
+      id: 'ins-bpjs-jp',
+      code: 'BPJS-TK-JP',
+      name: 'BPJS Ketenagakerjaan - JP (Pensiun)',
+      category: 'BPJS Ketenagakerjaan',
+      companyRatePercent: 2,
+      employeeRatePercent: 1,
+      hasWageCap: true,
+      wageCapAmount: 10042300,
+      isEnabled: true,
+      description: 'Plafon upah maks Rp 10.042.300 (1% pekerja, 2% pemberi kerja)',
+    },
+    {
+      id: 'ins-bpjs-jkk',
+      code: 'BPJS-TK-JKK',
+      name: 'BPJS Ketenagakerjaan - JKK (Kecelakaan Kerja)',
+      category: 'BPJS Ketenagakerjaan',
+      companyRatePercent: 0.24,
+      employeeRatePercent: 0,
+      hasWageCap: false,
+      isEnabled: true,
+      description: 'Ditanggung 100% oleh perusahaan (0.24%)',
+    },
+    {
+      id: 'ins-bpjs-jkm',
+      code: 'BPJS-TK-JKM',
+      name: 'BPJS Ketenagakerjaan - JKM (Kematian)',
+      category: 'BPJS Ketenagakerjaan',
+      companyRatePercent: 0.3,
+      employeeRatePercent: 0,
+      hasWageCap: false,
+      isEnabled: true,
+      description: 'Ditanggung 100% oleh perusahaan (0.3%)',
+    },
+    {
+      id: 'ins-swasta-allianz',
+      code: 'ASR-SWASTA',
+      name: 'Asuransi Kesehatan Swasta Tambahan (VIP Inpatient)',
+      category: 'Asuransi Swasta',
+      companyFixedAmount: 750000,
+      employeeFixedAmount: 0,
+      hasWageCap: false,
+      isEnabled: true,
+      description: 'Benefit rawat inap kamar VIP dan limit tahunan corporate',
+    },
+  ]);
+
+  // Form input tambah asuransi swasta baru
+  const [isAddInsuranceOpen, setIsAddInsuranceOpen] = useState(false);
+  const [newInsuranceName, setNewInsuranceName] = useState('Asuransi Jiwa & Cacat Total (Life Insurance)');
+  const [newInsuranceCompanyAmount, setNewInsuranceCompanyAmount] = useState<number>(350000);
+  const [newInsuranceEmployeeAmount, setNewInsuranceEmployeeAmount] = useState<number>(0);
+
+  // Backward compatibility dummy components object
   const [components, setComponents] = useState({
     basicSalary: 14000000,
     fixedAllowance: 1500000,
@@ -1521,28 +1776,200 @@ export const RecruitmentManagement: React.FC = () => {
   const hiredCandidates = filteredCandidates.filter((c) => c.stage === 'Hired');
   const talentPoolCandidates = filteredCandidates.filter((c) => c.stage === 'TalentPool' || c.stage === 'Rejected');
 
-  // Calculation Logic for Offering Calculator
-  const activeAllowances =
-    (enabledComponents.fixedAllowance ? components.fixedAllowance : 0) +
-    (enabledComponents.positionAllowance ? components.positionAllowance : 0) +
-    (enabledComponents.transportAllowance ? components.transportAllowance : 0) +
-    (enabledComponents.mealAllowance ? components.mealAllowance : 0) +
-    (enabledComponents.communicationAllowance ? components.communicationAllowance : 0) +
-    (enabledComponents.performanceBonus ? components.performanceBonus : 0);
+  // ===================== TWO-WAY SYNCHRONIZED OFFERING CALCULATOR =====================
+  const calculatedOffering = React.useMemo(() => {
+    const isBpjsKesEnabled = offeringInsurances.find((i) => i.code === 'BPJS-KES')?.isEnabled ?? true;
+    const isBpjsJhtEnabled = offeringInsurances.find((i) => i.code === 'BPJS-TK-JHT')?.isEnabled ?? true;
+    const isBpjsJpEnabled = offeringInsurances.find((i) => i.code === 'BPJS-TK-JP')?.isEnabled ?? true;
 
-  const grossMonthly =
-    offeringMode === 'gross'
-      ? components.basicSalary + activeAllowances
-      : targetAmount + 1500000;
+    if (offeringMode === 'net') {
+      // -------------------------------------------------------------
+      // MODE NET (TARGET THP) -> REVERSE SOLVER
+      // -------------------------------------------------------------
+      const targetNet = Math.max(targetThpAmount || targetAmount || 0, 1000000);
+      const solved = solveGrossFromTargetTHP(targetNet, candidatePtkp, 0.75, {
+        bpjsKes: isBpjsKesEnabled,
+        bpjsJht: isBpjsJhtEnabled,
+        bpjsJp: isBpjsJpEnabled,
+      });
 
-  const bpjsCalc = calculateBPJS(components.basicSalary);
-  const bpjsEmployeeDeduction =
-    (enabledBenefits.bpjsKesehatan ? bpjsCalc.bpjsKesEmployee : 0) +
-    (enabledBenefits.bpjsTkJht ? bpjsCalc.breakdown.jhtEmployee : 0) +
-    (enabledBenefits.bpjsTkJp ? bpjsCalc.breakdown.jpEmployee : 0);
+      const effectiveGross = solved.gross;
+      const effectiveBasic = solved.basicSalary;
+      const targetAllowancesTotal = solved.totalAllowances;
 
-  const terCalc = calculatePPh21TER(grossMonthly, candidatePtkp);
-  const netTakeHomePay = grossMonthly - bpjsEmployeeDeduction - terCalc.taxAmount;
+      // Alokasikan targetAllowancesTotal ke tunjangan yang aktif
+      const activeAllowancesList = offeringAllowances.filter((a) => a.isEnabled);
+      let distributedAllowances = offeringAllowances.map((alw) => {
+        if (!alw.isEnabled) return { ...alw, amount: 0 };
+        if (activeAllowancesList.length === 0) return { ...alw, amount: 0 };
+        const rawWeight = alw.type === 'percent' ? (effectiveBasic * alw.value) / 100 : alw.value;
+        return { ...alw, amount: rawWeight };
+      });
+
+      const currentRawSum = distributedAllowances.reduce((acc, a) => acc + (a.isEnabled ? a.amount : 0), 0);
+      if (currentRawSum > 0 && targetAllowancesTotal > 0) {
+        distributedAllowances = distributedAllowances.map((a) => {
+          if (!a.isEnabled) return a;
+          const ratio = a.amount / currentRawSum;
+          return { ...a, amount: Math.round(targetAllowancesTotal * ratio) };
+        });
+      } else if (activeAllowancesList.length > 0 && targetAllowancesTotal > 0) {
+        const perItem = Math.round(targetAllowancesTotal / activeAllowancesList.length);
+        distributedAllowances = distributedAllowances.map((a) => (a.isEnabled ? { ...a, amount: perItem } : a));
+      }
+
+      const actualAllowancesTotal = distributedAllowances.reduce((acc, a) => acc + (a.isEnabled ? a.amount : 0), 0);
+      const finalBasic = effectiveGross - actualAllowancesTotal;
+
+      const wageForKes = Math.min(finalBasic, 12000000);
+      const wageForJP = Math.min(finalBasic, 10042300);
+
+      const bpjsKesEmployee = isBpjsKesEnabled ? Math.round(wageForKes * 0.01) : 0;
+      const bpjsKesCompany = isBpjsKesEnabled ? Math.round(wageForKes * 0.04) : 0;
+
+      const bpjsJhtEmployee = isBpjsJhtEnabled ? Math.round(finalBasic * 0.02) : 0;
+      const bpjsJhtCompany = isBpjsJhtEnabled ? Math.round(finalBasic * 0.037) : 0;
+
+      const bpjsJpEmployee = isBpjsJpEnabled ? Math.round(wageForJP * 0.01) : 0;
+      const bpjsJpCompany = isBpjsJpEnabled ? Math.round(wageForJP * 0.02) : 0;
+
+      const isJkkEnabled = offeringInsurances.find((i) => i.code === 'BPJS-TK-JKK')?.isEnabled ?? true;
+      const isJkmEnabled = offeringInsurances.find((i) => i.code === 'BPJS-TK-JKM')?.isEnabled ?? true;
+      const bpjsJkkCompany = isJkkEnabled ? Math.round(finalBasic * 0.0024) : 0;
+      const bpjsJkmCompany = isJkmEnabled ? Math.round(finalBasic * 0.003) : 0;
+
+      const privateInsurancesActive = offeringInsurances.filter((i) => i.category === 'Asuransi Swasta' && i.isEnabled);
+      const privateInsuranceEmployeeTotal = privateInsurancesActive.reduce((acc, i) => acc + (i.employeeFixedAmount || 0), 0);
+      const privateInsuranceCompanyTotal = privateInsurancesActive.reduce((acc, i) => acc + (i.companyFixedAmount || 0), 0);
+
+      const ter = calculatePPh21TER(effectiveGross, candidatePtkp);
+
+      const totalEmployeeDeductions =
+        bpjsKesEmployee + bpjsJhtEmployee + bpjsJpEmployee + privateInsuranceEmployeeTotal + ter.taxAmount;
+      const netTHP = effectiveGross - totalEmployeeDeductions;
+
+      const totalCompanyBenefit =
+        bpjsKesCompany + bpjsJhtCompany + bpjsJpCompany + bpjsJkkCompany + bpjsJkmCompany + privateInsuranceCompanyTotal;
+      const costToCompany = effectiveGross + totalCompanyBenefit;
+
+      return {
+        mode: 'net' as const,
+        basicSalary: finalBasic,
+        allowances: distributedAllowances,
+        totalAllowances: actualAllowancesTotal,
+        grossMonthly: effectiveGross,
+        candidatePtkp,
+        terCategory: ter.category,
+        terRatePercent: ter.ratePercent,
+        taxAmount: ter.taxAmount,
+        bpjsEmployee: {
+          kes: bpjsKesEmployee,
+          jht: bpjsJhtEmployee,
+          jp: bpjsJpEmployee,
+          total: bpjsKesEmployee + bpjsJhtEmployee + bpjsJpEmployee,
+        },
+        bpjsCompany: {
+          kes: bpjsKesCompany,
+          jht: bpjsJhtCompany,
+          jp: bpjsJpCompany,
+          jkk: bpjsJkkCompany,
+          jkm: bpjsJkmCompany,
+          total: bpjsKesCompany + bpjsJhtCompany + bpjsJpCompany + bpjsJkkCompany + bpjsJkmCompany,
+        },
+        privateInsuranceEmployeeTotal,
+        privateInsuranceCompanyTotal,
+        totalEmployeeDeductions,
+        netTakeHomePay: netTHP,
+        costToCompany,
+      };
+    } else {
+      // -------------------------------------------------------------
+      // MODE GROSS (GAJI KOTOR) -> FORWARD CALCULATION
+      // -------------------------------------------------------------
+      const basic = Math.max(offeringBasicSalary || 0, 1000000);
+
+      const computedAllowances = offeringAllowances.map((alw) => {
+        if (!alw.isEnabled) return { ...alw, amount: 0 };
+        const amount = alw.type === 'percent' ? Math.round(basic * (alw.value / 100)) : Math.round(alw.value);
+        return { ...alw, amount };
+      });
+
+      const totalAllowances = computedAllowances.reduce((acc, a) => acc + (a.isEnabled ? a.amount : 0), 0);
+      const grossMonthly = basic + totalAllowances;
+
+      const wageForKes = Math.min(basic, 12000000);
+      const wageForJP = Math.min(basic, 10042300);
+
+      const bpjsKesEmployee = isBpjsKesEnabled ? Math.round(wageForKes * 0.01) : 0;
+      const bpjsKesCompany = isBpjsKesEnabled ? Math.round(wageForKes * 0.04) : 0;
+
+      const bpjsJhtEmployee = isBpjsJhtEnabled ? Math.round(basic * 0.02) : 0;
+      const bpjsJhtCompany = isBpjsJhtEnabled ? Math.round(basic * 0.037) : 0;
+
+      const bpjsJpEmployee = isBpjsJpEnabled ? Math.round(wageForJP * 0.01) : 0;
+      const bpjsJpCompany = isBpjsJpEnabled ? Math.round(wageForJP * 0.02) : 0;
+
+      const isJkkEnabled = offeringInsurances.find((i) => i.code === 'BPJS-TK-JKK')?.isEnabled ?? true;
+      const isJkmEnabled = offeringInsurances.find((i) => i.code === 'BPJS-TK-JKM')?.isEnabled ?? true;
+      const bpjsJkkCompany = isJkkEnabled ? Math.round(basic * 0.0024) : 0;
+      const bpjsJkmCompany = isJkmEnabled ? Math.round(basic * 0.003) : 0;
+
+      const privateInsurancesActive = offeringInsurances.filter((i) => i.category === 'Asuransi Swasta' && i.isEnabled);
+      const privateInsuranceEmployeeTotal = privateInsurancesActive.reduce((acc, i) => acc + (i.employeeFixedAmount || 0), 0);
+      const privateInsuranceCompanyTotal = privateInsurancesActive.reduce((acc, i) => acc + (i.companyFixedAmount || 0), 0);
+
+      const ter = calculatePPh21TER(grossMonthly, candidatePtkp);
+
+      const totalEmployeeDeductions =
+        bpjsKesEmployee + bpjsJhtEmployee + bpjsJpEmployee + privateInsuranceEmployeeTotal + ter.taxAmount;
+      const netTakeHomePay = grossMonthly - totalEmployeeDeductions;
+
+      const totalCompanyBenefit =
+        bpjsKesCompany + bpjsJhtCompany + bpjsJpCompany + bpjsJkkCompany + bpjsJkmCompany + privateInsuranceCompanyTotal;
+      const costToCompany = grossMonthly + totalCompanyBenefit;
+
+      return {
+        mode: 'gross' as const,
+        basicSalary: basic,
+        allowances: computedAllowances,
+        totalAllowances,
+        grossMonthly,
+        candidatePtkp,
+        terCategory: ter.category,
+        terRatePercent: ter.ratePercent,
+        taxAmount: ter.taxAmount,
+        bpjsEmployee: {
+          kes: bpjsKesEmployee,
+          jht: bpjsJhtEmployee,
+          jp: bpjsJpEmployee,
+          total: bpjsKesEmployee + bpjsJhtEmployee + bpjsJpEmployee,
+        },
+        bpjsCompany: {
+          kes: bpjsKesCompany,
+          jht: bpjsJhtCompany,
+          jp: bpjsJpCompany,
+          jkk: bpjsJkkCompany,
+          jkm: bpjsJkmCompany,
+          total: bpjsKesCompany + bpjsJhtCompany + bpjsJpCompany + bpjsJkkCompany + bpjsJkmCompany,
+        },
+        privateInsuranceEmployeeTotal,
+        privateInsuranceCompanyTotal,
+        totalEmployeeDeductions,
+        netTakeHomePay,
+        costToCompany,
+      };
+    }
+  }, [offeringMode, targetThpAmount, targetAmount, offeringBasicSalary, offeringAllowances, offeringInsurances, candidatePtkp]);
+
+  const grossMonthly = calculatedOffering.grossMonthly;
+  const netTakeHomePay = calculatedOffering.netTakeHomePay;
+  const activeAllowances = calculatedOffering.totalAllowances;
+  const terCalc = {
+    category: calculatedOffering.terCategory,
+    ratePercent: calculatedOffering.terRatePercent,
+    taxAmount: calculatedOffering.taxAmount,
+  };
+  const bpjsEmployeeDeduction = calculatedOffering.bpjsEmployee.total;
 
   // ===================== ACTION HANDLERS =====================
   const handleCreateFptk = (e: React.FormEvent, directApprove: boolean = false) => {
@@ -2356,14 +2783,39 @@ Nama Berkas: ${fileName} (${candidate.cvFileSize || '1.2 MB'})
     setActiveCandidate(candidate);
     const seq = candidates.filter((c) => c.stage === 'Offered' || c.stage === 'Hired').length + 1;
     const code = safeTenant.code || 'NTM';
-    setDocNumber(`${String(seq).padStart(3, '0')}/OL-HRD/${code}/X/2026`);
+    setDocNumber(candidate.offeringDocNumber || `${String(seq).padStart(3, '0')}/OL-HRD/${code}/X/2026`);
     const salary = candidate.offeredSalary || candidate.expectedSalary || 15000000;
+
+    if (candidate.offeringBreakdown) {
+      const b = candidate.offeringBreakdown;
+      setOfferingMode(b.mode || 'net');
+      setTargetThpAmount(b.takeHomePay || salary);
+      setTargetAmount(b.takeHomePay || salary);
+      setOfferingBasicSalary(b.basicSalary || Math.round(salary * 0.75));
+      setCandidatePtkp(b.ptkp || 'TK/0');
+      if (b.allowances && b.allowances.length > 0) {
+        setOfferingAllowances((prev) =>
+          prev.map((alw) => {
+            const matched = b.allowances.find((x: any) => x.id === alw.id || x.name === alw.name);
+            if (matched) {
+              return { ...alw, value: matched.value, isEnabled: true };
+            }
+            return alw;
+          })
+        );
+      }
+    } else {
+      setOfferingMode('net');
+      setTargetThpAmount(salary);
+      setTargetAmount(salary);
+      setOfferingBasicSalary(Math.round(salary * 0.75));
+    }
+
     setComponents((prev) => ({
       ...prev,
       basicSalary: Math.round(salary * 0.75),
       fixedAllowance: Math.round(salary * 0.1),
     }));
-    setTargetAmount(salary);
     setIsOfferingModalOpen(true);
   };
 
@@ -3993,6 +4445,221 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
     handleOpenOfferingModal(candidate);
   };
 
+  // Handlers untuk Mengelola Tunjangan & Asuransi
+  const handleToggleAllowance = (id: string) => {
+    setOfferingAllowances((prev) =>
+      prev.map((a) => (a.id === id ? { ...a, isEnabled: !a.isEnabled } : a))
+    );
+  };
+
+  const handleUpdateAllowanceValue = (id: string, val: number) => {
+    setOfferingAllowances((prev) =>
+      prev.map((a) => (a.id === id ? { ...a, value: Math.max(0, val) } : a))
+    );
+  };
+
+  const handleDeleteAllowance = (id: string) => {
+    setOfferingAllowances((prev) => prev.filter((a) => a.id !== id));
+  };
+
+  const handleAddAllowanceSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newAllowanceName.trim()) return;
+    const newId = 'alw-' + Date.now();
+    const newAlw: DynamicOfferingAllowance = {
+      id: newId,
+      name: newAllowanceName.trim(),
+      category: newAllowanceCategory,
+      type: newAllowanceType,
+      value: newAllowanceValue,
+      isEnabled: true,
+    };
+    setOfferingAllowances((prev) => [...prev, newAlw]);
+    setIsAddAllowanceOpen(false);
+    setNewAllowanceName('Tunjangan Khusus Proyek');
+    setNewAllowanceValue(500000);
+    setToastFeedback(`Tunjangan '${newAlw.name}' berhasil ditambahkan ke skema penawaran.`);
+  };
+
+  const handleToggleInsurance = (id: string) => {
+    setOfferingInsurances((prev) =>
+      prev.map((ins) => (ins.id === id ? { ...ins, isEnabled: !ins.isEnabled } : ins))
+    );
+  };
+
+  const handleAddInsuranceSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newInsuranceName.trim()) return;
+    const newId = 'ins-' + Date.now();
+    const newIns: DynamicOfferingInsurance = {
+      id: newId,
+      code: 'ASR-' + Date.now().toString().slice(-4),
+      name: newInsuranceName.trim(),
+      category: 'Asuransi Swasta',
+      companyFixedAmount: newInsuranceCompanyAmount,
+      employeeFixedAmount: newInsuranceEmployeeAmount,
+      isEnabled: true,
+      description: 'Program asuransi komersial tambahan penunjang karyawan',
+    };
+    setOfferingInsurances((prev) => [...prev, newIns]);
+    setIsAddInsuranceOpen(false);
+    setNewInsuranceName('Asuransi Jiwa Tambahan (Life Cover)');
+    setNewInsuranceCompanyAmount(250000);
+    setNewInsuranceEmployeeAmount(0);
+    setToastFeedback(`Asuransi '${newIns.name}' berhasil ditambahkan ke daftar skema perlindungan.`);
+  };
+
+  const handleSendOfferingViaWhatsApp = (candidate: Candidate) => {
+    const vacancy = vacancies.find((v) => v.id === candidate.jobVacancyId);
+    const posTitle = vacancy?.title || 'Posisi Terpilih';
+    const breakdown = candidate.offeringBreakdown || calculatedOffering;
+
+    const message = `Halo ${candidate.name}, selamat!
+
+Manajemen PT Nusantara Multi Talenta Tbk secara resmi menyampaikan Surat Penawaran Kerja (Job Offering Letter) untuk posisi: *${posTitle}*.
+
+Berikut ringkasan paket kompensasi & penawaran kerja resmi:
+• Nomor Dokumen : ${candidate.offeringDocNumber || docNumber}
+• Tanggal Mulai Bekerja : ${targetJoinDate}
+• Gaji Pokok : ${formatRupiah(breakdown.basicSalary)}
+• Total Tunjangan Bulanan : ${formatRupiah(breakdown.totalAllowances)}
+• Total Gaji Kotor (Gross) : ${formatRupiah(breakdown.grossMonthly || breakdown.grossSalary)}
+• Take Home Pay Bersih (Nett) : *${formatRupiah(breakdown.netTakeHomePay || breakdown.takeHomePay)}*
+• Fasilitas Perlindungan : BPJS Kesehatan, BPJS Ketenagakerjaan (JHT, JP, JKK, JKM) & Asuransi Rawat Inap Swasta.
+
+Surat Penawaran Kerja resmi lengkap bertanda tangan digital dan kode QR verifikasi dapat Anda akses dan unduh melalui portal rekrutmen kami.
+
+Mohon konfirmasi respon Anda (Cocok / Nego / Tidak Cocok) selambat-lambatnya 3 (tiga) hari kerja sejak surat ini disampaikan. Terima kasih.`;
+
+    const encoded = encodeURIComponent(message);
+    const cleanPhone = (candidate.phone || '').replace(/[^0-9]/g, '');
+    const targetPhone = cleanPhone.startsWith('0') ? '62' + cleanPhone.substring(1) : cleanPhone;
+    window.open(`https://wa.me/${targetPhone}?text=${encoded}`, '_blank');
+    setToastFeedback(`Pesan penawaran kerja resmi berhasil dibuka via WhatsApp untuk ${candidate.name}.`);
+  };
+
+  const handleSendOfferingViaEmail = (candidate: Candidate) => {
+    const vacancy = vacancies.find((v) => v.id === candidate.jobVacancyId);
+    const posTitle = vacancy?.title || 'Posisi Terpilih';
+    const breakdown = candidate.offeringBreakdown || calculatedOffering;
+    const subject = encodeURIComponent(`Official Job Offering Letter - ${posTitle} - PT Nusantara Multi Talenta Tbk (${candidate.name})`);
+    const body = encodeURIComponent(`Yth. ${candidate.name},
+
+Selamat! Berdasarkan hasil evaluasi seluruh tahapan seleksi rekrutmen yang telah Saudara/i lalui secara kompetitif, manajemen PT Nusantara Multi Talenta Tbk bermaksud menawarkan posisi ${posTitle} dengan paket remunerasi berikut:
+
+- Nomor Dokumen: ${candidate.offeringDocNumber || docNumber}
+- Target Join Date: ${targetJoinDate}
+- Gaji Pokok Bulanan: ${formatRupiah(breakdown.basicSalary)}
+- Total Tunjangan Bulanan: ${formatRupiah(breakdown.totalAllowances)}
+- Total Gaji Kotor (Gross): ${formatRupiah(breakdown.grossMonthly || breakdown.grossSalary)}
+- Take Home Pay Bersih (THP): ${formatRupiah(breakdown.netTakeHomePay || breakdown.takeHomePay)}
+- Kepesertaan Jaminan Sosial: BPJS Ketenagakerjaan (JHT, JP, JKK, JKM) & BPJS Kesehatan serta Asuransi Swasta Tambahan.
+
+Surat Penawaran Kerja resmi ber-QR verification seal terlampir pada sistem. Mohon konfirmasi kesediaan Saudara/i.
+
+Hormat kami,
+Talent Acquisition Team
+PT Nusantara Multi Talenta Tbk`);
+
+    window.open(`mailto:${candidate.email}?subject=${subject}&body=${body}`, '_blank');
+    setToastFeedback(`Draf email penawaran kerja resmi dibuka untuk ${candidate.name}.`);
+  };
+
+  const handleDownloadOfferingLetter = (candidate: Candidate) => {
+    const vacancy = vacancies.find((v) => v.id === candidate.jobVacancyId);
+    const posTitle = vacancy?.title || 'Posisi Terpilih';
+    const breakdown = candidate.offeringBreakdown || calculatedOffering;
+
+    const allowancesRows = (breakdown.allowances || [])
+      .filter((a: any) => a.isEnabled)
+      .map((a: any) => `<tr><td style="padding: 6px 10px; border: 1px solid #cbd5e1;">${a.name} (${a.category})</td><td style="padding: 6px 10px; border: 1px solid #cbd5e1; text-align: right; font-family: monospace;">${formatRupiah(a.amount)}</td></tr>`)
+      .join('');
+
+    const htmlContent = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Surat Penawaran Kerja Resmi - ${candidate.name}</title>
+  <style>
+    body { font-family: Arial, sans-serif; color: #0f172a; padding: 40px; line-height: 1.5; font-size: 13px; max-width: 800px; margin: 0 auto; }
+    .header { border-bottom: 2px solid #0f172a; padding-bottom: 12px; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; }
+    .company { font-size: 18px; font-weight: bold; text-transform: uppercase; color: #1e3a8a; }
+    table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+    th { background-color: #f1f5f9; padding: 8px 10px; border: 1px solid #cbd5e1; text-align: left; font-size: 12px; }
+    td { padding: 6px 10px; border: 1px solid #cbd5e1; font-size: 12px; }
+    .highlight { background: #f0fdf4; border: 1px solid #bbf7d0; padding: 12px; border-radius: 6px; margin: 15px 0; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <div class="company">${safeTenant.name}</div>
+      <div style="font-size: 11px; color: #475569;">Menara Palma Lantai 18, Jl. HR Rasuna Said, Jakarta Selatan · Telp: (021) 555-0199</div>
+      <div style="font-size: 10px; color: #64748b;">NPWP: ${safeTenant.npwp || '01.345.678.9-012.000'}</div>
+    </div>
+  </div>
+
+  <h3 style="text-align: center; text-transform: uppercase; margin-bottom: 4px;">SURAT PENAWARAN KERJA RESMI (JOB OFFERING LETTER)</h3>
+  <div style="text-align: center; font-family: monospace; font-size: 12px; color: #475569; margin-bottom: 20px;">Nomor: ${candidate.offeringDocNumber || docNumber}</div>
+
+  <p>Kepada Yth. <strong>${candidate.name}</strong>,</p>
+  <p>Berdasarkan seluruh rangkaian seleksi kompetensi dan wawancara yang telah Saudara/i selesaikan dengan hasil sangat baik, Direksi dan Manajemen <strong>${safeTenant.name}</strong> dengan bangga menyampaikan penawaran kerja resmi untuk posisi <strong>${posTitle}</strong>.</p>
+
+  <h4>1. Rincian Paket Kompensasi Upah & Tunjangan Bulanan</h4>
+  <table>
+    <thead><tr><th>Komponen Upah</th><th style="text-align: right; width: 180px;">Nominal Bulanan</th></tr></thead>
+    <tbody>
+      <tr><td>Gaji Pokok (Basic Salary)</td><td style="text-align: right; font-family: monospace; font-weight: bold;">${formatRupiah(breakdown.basicSalary)}</td></tr>
+      ${allowancesRows}
+      <tr style="background: #f8fafc; font-weight: bold;"><td>Total Gaji Kotor (Gross Monthly)</td><td style="text-align: right; font-family: monospace; color: #1e3a8a;">${formatRupiah(breakdown.grossMonthly || breakdown.grossSalary)}</td></tr>
+    </tbody>
+  </table>
+
+  <h4>2. Estimasi Potongan Wajib & Pajak Penghasilan (PPh 21 TER)</h4>
+  <table>
+    <thead><tr><th>Jenis Potongan Resmi</th><th style="text-align: right; width: 180px;">Nominal Potongan</th></tr></thead>
+    <tbody>
+      <tr><td>Iuran BPJS Ketenagakerjaan (JHT 2% + JP 1%)</td><td style="text-align: right; font-family: monospace; color: #e11d48;">- ${formatRupiah((breakdown.bpjsEmployee?.jht || 0) + (breakdown.bpjsEmployee?.jp || 0))}</td></tr>
+      <tr><td>Iuran BPJS Kesehatan (1%)</td><td style="text-align: right; font-family: monospace; color: #e11d48;">- ${formatRupiah(breakdown.bpjsEmployee?.kes || 0)}</td></tr>
+      <tr><td>Pajak Penghasilan PPh 21 TER (${breakdown.terCategory || 'TER A'} - ${breakdown.terRatePercent || 0}%)</td><td style="text-align: right; font-family: monospace; color: #e11d48;">- ${formatRupiah(breakdown.taxAmount || 0)}</td></tr>
+    </tbody>
+  </table>
+
+  <div class="highlight">
+    <div style="font-size: 11px; color: #166534; font-weight: bold; text-transform: uppercase;">Take Home Pay (THP) Bersih yang Diterima Setiap Bulan:</div>
+    <div style="font-size: 22px; font-weight: bold; font-family: monospace; color: #15803d; margin: 4px 0;">${formatRupiah(breakdown.netTakeHomePay || breakdown.takeHomePay)}</div>
+    <div style="font-size: 11px; color: #166534;">Ditransfer langsung ke rekening bank payroll karyawan pada setiap tanggal pembayaran gaji (cut-off tanggal 25).</div>
+  </div>
+
+  <p>Paket penawaran kerja ini telah mencakup fasilitas perlindungan BPJS Ketenagakerjaan, BPJS Kesehatan, dan Asuransi Rawat Inap Swasta Tambahan yang ditanggung oleh perusahaan.</p>
+
+  <div style="margin-top: 40px; display: flex; justify-content: space-between;">
+    <div style="width: 260px;">
+      <p style="font-size: 11px; color: #64748b;">Diterbitkan oleh Perusahaan:</p>
+      <div style="font-weight: bold; margin-top: 40px;">PT NUSANTARA MULTI TALENTA TBK</div>
+      <div style="font-size: 11px; color: #475569;">Aditya Pratama, S.Psi. · Head of HR</div>
+    </div>
+    <div style="width: 260px; text-align: right;">
+      <p style="font-size: 11px; color: #64748b;">Menyetujui Penawaran Kerja:</p>
+      <div style="font-weight: bold; margin-top: 40px;">${candidate.name}</div>
+      <div style="font-size: 11px; color: #475569;">Tanggal: ${candidate.offeringResponseDate || new Date().toISOString().split('T')[0]}</div>
+    </div>
+  </div>
+</body>
+</html>`;
+
+    const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Surat_Offering_${candidate.name.replace(/\s+/g, '_')}_${docNumber.replace(/[^a-zA-Z0-9]/g, '_')}.html`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    setToastFeedback(`Dokumen Surat Penawaran Resmi (${candidate.name}) berhasil diunduh!`);
+  };
+
   const handleSendOffering = () => {
     if (!activeCandidate) return;
     setOfferingFormError(null);
@@ -4011,31 +4678,60 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
       return;
     }
     const tenantUmr = safeTenant.umr || 3000000;
-    if (components.basicSalary < tenantUmr) {
+    if (calculatedOffering.basicSalary < tenantUmr) {
       setOfferingFormError(`Gaji pokok penawaran minimal setara UMR ${safeTenant.city || 'DKI Jakarta'} (${formatRupiah(tenantUmr)}).`);
       return;
     }
 
+    // Buat objek breakdown detail lengkap untuk disimpan ke data kandidat
+    const breakdownPayload = {
+      mode: offeringMode,
+      basicSalary: calculatedOffering.basicSalary,
+      allowances: calculatedOffering.allowances.filter((a) => a.isEnabled),
+      totalAllowances: calculatedOffering.totalAllowances,
+      grossSalary: calculatedOffering.grossMonthly,
+      grossMonthly: calculatedOffering.grossMonthly,
+      ptkp: candidatePtkp,
+      terCategory: calculatedOffering.terCategory,
+      terRatePercent: calculatedOffering.terRatePercent,
+      taxAmount: calculatedOffering.taxAmount,
+      bpjsEmployee: calculatedOffering.bpjsEmployee,
+      bpjsCompany: calculatedOffering.bpjsCompany,
+      privateInsurances: offeringInsurances
+        .filter((i) => i.category === 'Asuransi Swasta' && i.isEnabled)
+        .map((i) => ({
+          name: i.name,
+          companyAmount: i.companyFixedAmount || 0,
+          employeeAmount: i.employeeFixedAmount || 0,
+        })),
+      totalEmployeeDeductions: calculatedOffering.totalEmployeeDeductions,
+      takeHomePay: calculatedOffering.netTakeHomePay,
+      netTakeHomePay: calculatedOffering.netTakeHomePay,
+      costToCompany: calculatedOffering.costToCompany,
+    };
+
     // Terbitkan dokumen offering (status: Draft / Baru Terbit)
     updateCandidateStage(activeCandidate.id, 'Offered', {
-      offeredSalary: grossMonthly,
+      offeredSalary: calculatedOffering.grossMonthly,
       offeringDocNumber: docNumber,
       offeringStatus: 'Draft',
+      offeringBreakdown: breakdownPayload,
     });
     setActiveCandidate((prev) =>
       prev
         ? {
             ...prev,
             stage: 'Offered',
-            offeredSalary: grossMonthly,
+            offeredSalary: calculatedOffering.grossMonthly,
             offeringDocNumber: docNumber,
             offeringStatus: 'Draft',
+            offeringBreakdown: breakdownPayload,
           }
         : null
     );
     setIsOfferingModalOpen(false);
     setIsOfferingDocPreviewOpen(true);
-    setToastFeedback(`Dokumen Surat Penawaran Kerja (${docNumber}) berhasil diterbitkan! Silakan preview dan kirim ke calon karyawan.`);
+    setToastFeedback(`Dokumen Surat Penawaran Kerja (${docNumber}) berhasil diterbitkan dengan breakdown lengkap! Silakan preview dan kirim ke calon karyawan.`);
   };
 
   const handleSendOfferingToCandidate = (candidate: Candidate) => {
@@ -15602,31 +16298,37 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
       {/* ===================== MODAL 7: ADVANCED OFFERING CALCULATOR ===================== */}
       {isOfferingModalOpen && activeCandidate && (
         <div
-          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto"
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto"
           onClick={(e) => {
             if (e.target === e.currentTarget) setIsOfferingModalOpen(false);
           }}
         >
           <div
-            className="bg-white rounded-xl shadow-2xl max-w-4xl w-full border border-slate-200 overflow-hidden my-6 flex flex-col max-h-[92vh]"
+            className="bg-white rounded-xl shadow-2xl max-w-4xl w-full border border-slate-200 overflow-hidden my-4 sm:my-6 flex flex-col max-h-[92vh]"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="px-6 py-4 bg-slate-950 text-white flex items-center justify-between">
-              <div>
-                <h3 className="text-sm font-bold flex items-center gap-2">
-                  <Calculator className="w-4 h-4 text-blue-400" />
-                  <span>Kalkulator Offering Letter & Simulasi PPh 21 TER</span>
+            {/* Header Modal */}
+            <div className="px-5 py-3.5 bg-slate-950 text-white flex items-center justify-between shrink-0">
+              <div className="min-w-0 flex-1">
+                <h3 className="text-sm font-bold flex items-center gap-2 truncate">
+                  <Calculator className="w-4 h-4 text-blue-400 shrink-0" />
+                  <span>Kalkulator Kompensasi & Paket Offering Letter</span>
                 </h3>
-                <span className="text-xs text-slate-400">
-                  {activeCandidate.name} · Nomor Dokumen: <span className="font-mono text-blue-300">{docNumber}</span>
+                <span className="text-xs text-slate-400 truncate block">
+                  {activeCandidate.name} · No. Dokumen: <span className="font-mono text-blue-300 font-semibold">{docNumber}</span>
                 </span>
               </div>
-              <button onClick={() => setIsOfferingModalOpen(false)}>
-                <X className="w-5 h-5 text-slate-400 hover:text-white" />
+              <button
+                type="button"
+                onClick={() => setIsOfferingModalOpen(false)}
+                className="p-1 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition-colors ml-2"
+              >
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="p-6 overflow-y-auto space-y-5 text-xs">
+            {/* Modal Body */}
+            <div className="p-4 sm:p-6 overflow-y-auto space-y-5 text-xs">
               {offeringFormError && (
                 <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg flex items-center gap-2 text-rose-800 text-xs font-semibold">
                   <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
@@ -15634,179 +16336,528 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                 </div>
               )}
 
-              {/* Verifikasi Status Wawancara */}
-              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center justify-between gap-3 flex-wrap">
+              {/* Status Kelayakan & Info SOP */}
+              <div className="p-3 bg-emerald-50/80 border border-emerald-200 rounded-lg flex items-center justify-between gap-3 flex-wrap">
                 <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse"></span>
+                  <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse shrink-0"></span>
                   <span className="font-bold text-emerald-950 text-xs">Verifikasi SOP Rekrutmen:</span>
                   <span className="text-emerald-800 font-medium text-xs">
-                    Kandidat telah dinyatakan <b>Lolos Wawancara</b> (User Lead / Direksi).
+                    Kandidat terverifikasi <b>Lolos Seleksi</b> dan siap diterbitkan dokumen Job Offering.
                   </span>
                 </div>
-                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 whitespace-nowrap">
                   Layak Diberikan Offering Letter ✓
                 </span>
               </div>
 
-              {/* Mode Switcher */}
-              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between flex-wrap gap-2">
-                <div>
-                  <span className="font-bold text-blue-950 block">Pilih Mode Perhitungan Offering:</span>
-                  <span className="text-[11px] text-blue-800">
-                    Gross (Gaji Kotor) atau Net (Target Take Home Pay).
+              {/* MODE SWITCHER: TARGET THP (NET) vs GAJI KOTOR (GROSS) */}
+              <div className="p-3.5 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl space-y-2.5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <span className="font-bold text-slate-900 text-xs block">
+                      Metode Perhitungan Kompensasi:
+                    </span>
+                    <span className="text-[11px] text-slate-600">
+                      Pilih input berdasarkan <b>Target THP Bersih (Nett)</b> atau <b>Gaji Pokok / Kotor (Gross)</b>.
+                    </span>
+                  </div>
+
+                  <div className="inline-flex rounded-lg border border-blue-300 bg-white p-0.5 shadow-2xs self-start sm:self-auto shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setOfferingMode('net')}
+                      className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 ${
+                        offeringMode === 'net'
+                          ? 'bg-blue-700 text-white shadow-2xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>Target THP (Net)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setOfferingMode('gross')}
+                      className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 ${
+                        offeringMode === 'gross'
+                          ? 'bg-blue-700 text-white shadow-2xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      <DollarSign className="w-3.5 h-3.5" />
+                      <span>Gaji Kotor (Gross)</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Banner Penjelasan Mode */}
+                {offeringMode === 'net' ? (
+                  <div className="p-2.5 bg-white border border-blue-200/80 rounded-lg text-blue-950 text-[11px] flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-blue-600 shrink-0" />
+                    <span>
+                      <b>Mode Target THP:</b> Anda cukup menginput angka Take Home Pay (THP) yang diharapkan. Sistem otomatis menghitung mundur (reverse-calculate) Gaji Pokok, Tunjangan, iuran BPJS, dan PPh 21 TER sehingga THP bersih kandidat <b>tepat sesuai nilai yang diharapkan</b>.
+                    </span>
+                  </div>
+                ) : (
+                  <div className="p-2.5 bg-white border border-blue-200/80 rounded-lg text-blue-950 text-[11px] flex items-center gap-2">
+                    <DollarSign className="w-4 h-4 text-blue-600 shrink-0" />
+                    <span>
+                      <b>Mode Gaji Kotor (Gross):</b> Anda menginput Gaji Pokok + komponen tunjangan-tunjangan. Sistem otomatis menghitung skema potongan BPJS, estimasi pajak PPh 21 TER, dan Take Home Pay bersih.
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* INPUT UTAMA: TARGET THP / GAJI POKOK */}
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  {offeringMode === 'net' ? (
+                    <div>
+                      <label className="font-bold text-slate-800 block mb-1 text-xs">
+                        Target Take Home Pay (THP Bersih yang Diterima Kandidat) *
+                      </label>
+                      <CurrencyInput
+                        value={targetThpAmount}
+                        onChange={(val) => {
+                          setTargetThpAmount(val);
+                          setTargetAmount(val);
+                        }}
+                        className="w-full px-3 py-2 border-2 border-blue-500 rounded-lg bg-white font-mono font-bold text-base text-blue-900 shadow-2xs"
+                      />
+                      <span className="text-[10px] text-slate-500 mt-1 block">
+                        Gaji Pokok otomatis terhitung: <b>{formatRupiah(calculatedOffering.basicSalary)}</b>
+                      </span>
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="font-bold text-slate-800 block mb-1 text-xs">
+                        Gaji Pokok Bulanan (Basic Salary) *
+                      </label>
+                      <CurrencyInput
+                        value={offeringBasicSalary}
+                        onChange={(val) => setOfferingBasicSalary(val)}
+                        className="w-full px-3 py-2 border-2 border-blue-500 rounded-lg bg-white font-mono font-bold text-base text-blue-900 shadow-2xs"
+                      />
+                      <span className="text-[10px] text-slate-500 mt-1 block">
+                        Minimal setara UMR {safeTenant.city || 'DKI Jakarta'} ({formatRupiah(safeTenant.umr || 3000000)})
+                      </span>
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="font-semibold text-slate-700 block mb-1">Status Pajak PTKP Calon Karyawan</label>
+                    <select
+                      value={candidatePtkp}
+                      onChange={(e) => setCandidatePtkp(e.target.value as PTKPStatus)}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white font-mono font-semibold text-slate-800"
+                    >
+                      <option value="TK/0">TK/0 (Lajang Tanpa Tanggungan - TER A)</option>
+                      <option value="TK/1">TK/1 (Lajang Tanggungan 1 - TER A)</option>
+                      <option value="K/0">K/0 (Menikah Tanpa Tanggungan - TER A)</option>
+                      <option value="K/1">K/1 (Menikah Tanggungan 1 - TER B)</option>
+                      <option value="K/2">K/2 (Menikah Tanggungan 2 - TER B)</option>
+                      <option value="K/3">K/3 (Menikah Tanggungan 3 - TER C)</option>
+                    </select>
+                    <span className="text-[10px] text-slate-500 mt-1 block">
+                      Kategori PPh 21: <strong className="text-indigo-700">{calculatedOffering.terCategory} (Tarif {calculatedOffering.terRatePercent}%)</strong>
+                    </span>
+                  </div>
+                </div>
+
+                {/* Metadata Surat */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-200">
+                  <div>
+                    <label className="font-semibold text-slate-700 block mb-1">Nomor Surat Penawaran Resmi *</label>
+                    <input
+                      type="text"
+                      required
+                      value={docNumber}
+                      onChange={(e) => setDocNumber(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold text-slate-800"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-semibold text-slate-700 block mb-1">Target Tanggal Mulai Bekerja (Join Date) *</label>
+                    <input
+                      type="date"
+                      required
+                      value={targetJoinDate}
+                      onChange={(e) => setTargetJoinDate(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono text-slate-800"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* ===================== KOMPONEN TUNJANGAN (TAMBAH, KURANG, PILIH & INPUT) ===================== */}
+              <div className="border border-slate-200 rounded-xl p-4 bg-white shadow-2xs space-y-3">
+                <div className="flex items-center justify-between gap-2 flex-wrap pb-2 border-b border-slate-100">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-slate-900 text-xs">Komponen Tunjangan & Fasilitas Bulanan:</span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800">
+                      {calculatedOffering.allowances.filter((a) => a.isEnabled).length} Tunjangan Aktif
+                    </span>
+                    <span className="text-[11px] text-slate-500 font-mono font-semibold hidden sm:inline">
+                      (Total: {formatRupiah(calculatedOffering.totalAllowances)})
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsAddAllowanceOpen(!isAddAllowanceOpen)}
+                    className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg text-xs font-bold transition-colors flex items-center gap-1 shadow-2xs whitespace-nowrap cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>+ Tambah Tunjangan</span>
+                  </button>
+                </div>
+
+                {/* Form Tambah Tunjangan Baru */}
+                {isAddAllowanceOpen && (
+                  <form onSubmit={handleAddAllowanceSubmit} className="p-3 bg-blue-50/60 border border-blue-200 rounded-xl space-y-3">
+                    <span className="font-bold text-blue-950 block text-xs">Form Tambah Komponen Tunjangan Baru:</span>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                      <div>
+                        <label className="text-[11px] text-slate-600 block mb-0.5 font-semibold">Nama Tunjangan *</label>
+                        <input
+                          type="text"
+                          required
+                          value={newAllowanceName}
+                          onChange={(e) => setNewAllowanceName(e.target.value)}
+                          placeholder="Misal: Tunjangan Khusus / Proyek"
+                          className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white text-xs"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[11px] text-slate-600 block mb-0.5 font-semibold">Kategori Tunjangan</label>
+                        <select
+                          value={newAllowanceCategory}
+                          onChange={(e) => setNewAllowanceCategory(e.target.value as any)}
+                          className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white text-xs"
+                        >
+                          <option value="Tunjangan Tetap">Tunjangan Tetap (Fixed)</option>
+                          <option value="Tunjangan Tidak Tetap">Tunjangan Tidak Tetap (Variable)</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-[11px] text-slate-600 block mb-0.5 font-semibold">Skema Perhitungan</label>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          <select
+                            value={newAllowanceType}
+                            onChange={(e) => setNewAllowanceType(e.target.value as any)}
+                            className="w-full px-2 py-1.5 border border-slate-300 rounded-lg bg-white text-xs font-semibold"
+                          >
+                            <option value="fixed">Nominal (Rp)</option>
+                            <option value="percent">Persen (%)</option>
+                          </select>
+                          <input
+                            type="number"
+                            required
+                            min={0}
+                            value={newAllowanceValue}
+                            onChange={(e) => setNewAllowanceValue(Number(e.target.value))}
+                            className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white text-xs font-mono font-bold"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setIsAddAllowanceOpen(false)}
+                        className="px-3 py-1 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg text-xs font-semibold"
+                      >
+                        Batal
+                      </button>
+                      <button
+                        type="submit"
+                        className="px-3.5 py-1 bg-blue-700 hover:bg-blue-800 text-white rounded-lg text-xs font-bold shadow-2xs"
+                      >
+                        Tambahkan ke Daftar
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                {/* Daftar Tunjangan Dinamis */}
+                <div className="space-y-2">
+                  {calculatedOffering.allowances.map((alw) => (
+                    <div
+                      key={alw.id}
+                      className={`p-2.5 rounded-lg border transition-all flex items-center justify-between gap-3 flex-wrap ${
+                        alw.isEnabled
+                          ? 'bg-slate-50 border-slate-300'
+                          : 'bg-slate-50/40 border-dashed border-slate-200 opacity-60'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <input
+                          type="checkbox"
+                          checked={alw.isEnabled}
+                          onChange={() => handleToggleAllowance(alw.id)}
+                          className="w-4 h-4 text-blue-600 rounded cursor-pointer shrink-0"
+                          title="Centang untuk mengaktifkan tunjangan ini"
+                        />
+                        <div className="min-w-0">
+                          <span className="font-bold text-slate-800 block text-xs truncate">{alw.name}</span>
+                          <div className="flex items-center gap-1.5 text-[10px] text-slate-500">
+                            <span className="px-1.5 py-0.2 rounded bg-slate-200 text-slate-700 font-semibold">
+                              {alw.category}
+                            </span>
+                            <span>·</span>
+                            <span>{alw.type === 'percent' ? `${alw.value}% Gaji Pokok` : 'Nominal Tetap'}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+                        {offeringMode === 'gross' && alw.type === 'fixed' ? (
+                          <div className="w-32">
+                            <CurrencyInput
+                              value={alw.value}
+                              onChange={(val) => handleUpdateAllowanceValue(alw.id, val)}
+                              className="w-full px-2 py-1 border border-slate-300 rounded bg-white font-mono text-xs text-right font-bold"
+                            />
+                          </div>
+                        ) : (
+                          <div className="text-right">
+                            <span className="font-mono font-bold text-slate-900 text-xs block">
+                              {formatRupiah(alw.amount)}
+                            </span>
+                            {alw.type === 'percent' && (
+                              <span className="text-[10px] text-blue-700 font-semibold">
+                                ({alw.value}% Gaji Pokok)
+                              </span>
+                            )}
+                          </div>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteAllowance(alw.id)}
+                          className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
+                          title="Hapus komponen tunjangan ini"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* ===================== KOMPONEN ASURANSI & JAMINAN SOSIAL ===================== */}
+              <div className="border border-slate-200 rounded-xl p-4 bg-white shadow-2xs space-y-3">
+                <div className="flex items-center justify-between gap-2 flex-wrap pb-2 border-b border-slate-100">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span className="font-bold text-slate-900 text-xs">Skema Asuransi & Jaminan Sosial (Setup Gaji Perusahaan):</span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsAddInsuranceOpen(!isAddInsuranceOpen)}
+                    className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg text-xs font-bold transition-colors flex items-center gap-1 shadow-2xs whitespace-nowrap cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>+ Tambah Asuransi Swasta</span>
+                  </button>
+                </div>
+
+                {/* Form Tambah Asuransi Swasta */}
+                {isAddInsuranceOpen && (
+                  <form onSubmit={handleAddInsuranceSubmit} className="p-3 bg-emerald-50/60 border border-emerald-200 rounded-xl space-y-3">
+                    <span className="font-bold text-emerald-950 block text-xs">Tambah Program Asuransi Komersial:</span>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                      <div className="sm:col-span-2">
+                        <label className="text-[11px] text-slate-600 block mb-0.5 font-semibold">Nama Program Asuransi *</label>
+                        <input
+                          type="text"
+                          required
+                          value={newInsuranceName}
+                          onChange={(e) => setNewInsuranceName(e.target.value)}
+                          placeholder="Misal: Asuransi Jiwa & Penyakit Kritis"
+                          className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white text-xs"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[11px] text-slate-600 block mb-0.5 font-semibold">Tanggungan Perusahaan (Rp/bln)</label>
+                        <input
+                          type="number"
+                          required
+                          min={0}
+                          value={newInsuranceCompanyAmount}
+                          onChange={(e) => setNewInsuranceCompanyAmount(Number(e.target.value))}
+                          className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white text-xs font-mono font-bold"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setIsAddInsuranceOpen(false)}
+                        className="px-3 py-1 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg text-xs font-semibold"
+                      >
+                        Batal
+                      </button>
+                      <button
+                        type="submit"
+                        className="px-3.5 py-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold shadow-2xs"
+                      >
+                        Simpan Asuransi
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                {/* Grid Pilihan Asuransi */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {offeringInsurances.map((ins) => (
+                    <div
+                      key={ins.id}
+                      onClick={() => handleToggleInsurance(ins.id)}
+                      className={`p-2.5 rounded-lg border transition-all cursor-pointer flex items-start gap-2.5 ${
+                        ins.isEnabled
+                          ? 'bg-emerald-50/50 border-emerald-300 shadow-2xs'
+                          : 'bg-slate-50 border-slate-200 opacity-60'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={ins.isEnabled}
+                        onChange={() => {}}
+                        className="w-4 h-4 text-emerald-600 rounded mt-0.5 cursor-pointer shrink-0"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="font-bold text-slate-900 text-xs truncate">{ins.name}</span>
+                          <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-white text-emerald-800 border border-emerald-200 shrink-0">
+                            {ins.category}
+                          </span>
+                        </div>
+                        <span className="text-[10px] text-slate-500 block leading-tight mt-0.5">
+                          {ins.description || 'Program perlindungan jaminan sosial'}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* ===================== BREAKDOWN DETAIL & TRANSPARAN ===================== */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-slate-900 text-xs">Breakdown Detail Transparan (Kompensasi & Pajak):</span>
+                  <span className="text-[11px] text-slate-500 font-semibold">
+                    Status: <strong className="text-blue-800">{offeringMode === 'net' ? 'Target THP (Net-to-Gross)' : 'Gaji Kotor (Gross-to-Net)'}</strong>
                   </span>
                 </div>
 
-                <div className="inline-flex rounded-lg border border-blue-300 bg-white p-0.5">
-                  <button
-                    type="button"
-                    onClick={() => setOfferingMode('gross')}
-                    className={`px-3 py-1 rounded text-xs font-semibold transition-colors ${
-                      offeringMode === 'gross' ? 'bg-blue-700 text-white' : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                  >
-                    Gaji Kotor (Gross)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setOfferingMode('net')}
-                    className={`px-3 py-1 rounded text-xs font-semibold transition-colors ${
-                      offeringMode === 'net' ? 'bg-blue-700 text-white' : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                  >
-                    Target THP (Net)
-                  </button>
-                </div>
-              </div>
-
-              {/* Meta Inputs */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Nomor Surat Penawaran *</label>
-                  <input
-                    type="text"
-                    required
-                    value={docNumber}
-                    onChange={(e) => setDocNumber(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold"
-                  />
-                </div>
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Target Tanggal Mulai Bekerja *</label>
-                  <input
-                    type="date"
-                    required
-                    value={targetJoinDate}
-                    onChange={(e) => setTargetJoinDate(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Status Pajak PTKP Calon Karyawan</label>
-                  <select
-                    value={candidatePtkp}
-                    onChange={(e) => setCandidatePtkp(e.target.value as PTKPStatus)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white font-mono"
-                  >
-                    <option value="TK/0">TK/0 (Lajang - Kategori TER A)</option>
-                    <option value="TK/1">TK/1 (Tanggungan 1 - Kategori TER A)</option>
-                    <option value="K/0">K/0 (Menikah - Kategori TER A)</option>
-                    <option value="K/1">K/1 (Menikah Anak 1 - Kategori TER B)</option>
-                    <option value="K/2">K/2 (Menikah Anak 2 - Kategori TER B)</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Salary Components */}
-              <div className="border border-slate-200 rounded-xl p-4 bg-slate-50 space-y-3">
-                <span className="font-bold text-slate-900 block text-xs">
-                  Komponen Upah Bulanan Penawaran:
-                </span>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="font-semibold text-slate-700 block mb-1">Gaji Pokok (Basic Salary) *</label>
-                    <CurrencyInput
-                      value={components.basicSalary}
-                      onChange={(val) => setComponents((prev) => ({ ...prev, basicSalary: val }))}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white font-mono font-bold text-slate-900"
-                    />
+                {/* 4-Panel Summary Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  {/* Panel 1: Gaji Kotor */}
+                  <div className="p-3 bg-slate-900 text-white rounded-xl space-y-1">
+                    <span className="text-[10.5px] text-slate-400 block font-medium">1. Gaji Kotor (Gross)</span>
+                    <span className="text-base font-bold font-mono text-white block">
+                      {formatRupiah(calculatedOffering.grossMonthly)}
+                    </span>
+                    <span className="text-[10px] text-slate-400 block">
+                      Pokok: {formatRupiah(calculatedOffering.basicSalary)} + Tunjangan
+                    </span>
                   </div>
-                  <div>
-                    <label className="font-semibold text-slate-700 block mb-1">Tunjangan Tetap</label>
-                    <CurrencyInput
-                      value={components.fixedAllowance}
-                      onChange={(val) => setComponents((prev) => ({ ...prev, fixedAllowance: val }))}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white font-mono text-slate-900"
-                    />
+
+                  {/* Panel 2: Total Potongan */}
+                  <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl space-y-1">
+                    <span className="text-[10.5px] text-rose-700 block font-medium">2. Potongan Karyawan</span>
+                    <span className="text-base font-bold font-mono text-rose-700 block">
+                      - {formatRupiah(calculatedOffering.totalEmployeeDeductions)}
+                    </span>
+                    <span className="text-[10px] text-rose-600 block">
+                      BPJS: {formatRupiah(calculatedOffering.bpjsEmployee.total)} · Pajak: {formatRupiah(calculatedOffering.taxAmount)}
+                    </span>
+                  </div>
+
+                  {/* Panel 3: Take Home Pay */}
+                  <div className="p-3 bg-emerald-50 border-2 border-emerald-400 rounded-xl space-y-1 shadow-2xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10.5px] text-emerald-800 block font-bold">3. Take Home Pay (THP)</span>
+                      <span className="w-2 h-2 rounded-full bg-emerald-600"></span>
+                    </div>
+                    <span className="text-base font-bold font-mono text-emerald-700 block">
+                      {formatRupiah(calculatedOffering.netTakeHomePay)}
+                    </span>
+                    <span className="text-[10px] text-emerald-800 block font-medium">
+                      THP Bersih masuk rekening
+                    </span>
+                  </div>
+
+                  {/* Panel 4: Cost to Company */}
+                  <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-xl space-y-1">
+                    <span className="text-[10.5px] text-indigo-700 block font-medium">4. Cost to Company (CTC)</span>
+                    <span className="text-base font-bold font-mono text-indigo-900 block">
+                      {formatRupiah(calculatedOffering.costToCompany)}
+                    </span>
+                    <span className="text-[10px] text-indigo-600 block">
+                      Gross + Beban Asuransi Perusahaan
+                    </span>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
-                  <div>
-                    <label className="text-[11px] font-medium text-slate-600 block mb-0.5">Tunjangan Jabatan</label>
-                    <CurrencyInput
-                      value={components.positionAllowance}
-                      onChange={(val) => setComponents((prev) => ({ ...prev, positionAllowance: val }))}
-                      className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white font-mono"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[11px] font-medium text-slate-600 block mb-0.5">Tunjangan Transport</label>
-                    <CurrencyInput
-                      value={components.transportAllowance}
-                      onChange={(val) => setComponents((prev) => ({ ...prev, transportAllowance: val }))}
-                      className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white font-mono"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[11px] font-medium text-slate-600 block mb-0.5">Tunjangan Makan</label>
-                    <CurrencyInput
-                      value={components.mealAllowance}
-                      onChange={(val) => setComponents((prev) => ({ ...prev, mealAllowance: val }))}
-                      className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white font-mono"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[11px] font-medium text-slate-600 block mb-0.5">Tunjangan Komunikasi</label>
-                    <CurrencyInput
-                      value={components.communicationAllowance}
-                      onChange={(val) => setComponents((prev) => ({ ...prev, communicationAllowance: val }))}
-                      className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white font-mono"
-                    />
+                {/* Rincian Rinci Pajak & BPJS */}
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2 text-[11px]">
+                  <span className="font-bold text-slate-800 block">Rincian Komponen Potongan & Iuran:</span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5 text-slate-600">
+                    <div className="flex items-center justify-between">
+                      <span>• BPJS Kesehatan Pekerja (1%):</span>
+                      <strong className="font-mono text-slate-800">{formatRupiah(calculatedOffering.bpjsEmployee.kes)}</strong>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>• BPJS Kesehatan Pemberi Kerja (4%):</span>
+                      <strong className="font-mono text-emerald-800">{formatRupiah(calculatedOffering.bpjsCompany.kes)}</strong>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>• BPJS TK - JHT Pekerja (2%):</span>
+                      <strong className="font-mono text-slate-800">{formatRupiah(calculatedOffering.bpjsEmployee.jht)}</strong>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>• BPJS TK - JHT Pemberi Kerja (3.7%):</span>
+                      <strong className="font-mono text-emerald-800">{formatRupiah(calculatedOffering.bpjsCompany.jht)}</strong>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>• BPJS TK - JP Pekerja (1%):</span>
+                      <strong className="font-mono text-slate-800">{formatRupiah(calculatedOffering.bpjsEmployee.jp)}</strong>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>• BPJS TK - JP Pemberi Kerja (2%):</span>
+                      <strong className="font-mono text-emerald-800">{formatRupiah(calculatedOffering.bpjsCompany.jp)}</strong>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>• Pajak PPh 21 TER ({calculatedOffering.terCategory} - {calculatedOffering.terRatePercent}%):</span>
+                      <strong className="font-mono text-rose-700">{formatRupiah(calculatedOffering.taxAmount)}</strong>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>• BPJS TK - JKK & JKM (0.54% Perusahaan):</span>
+                      <strong className="font-mono text-emerald-800">{formatRupiah(calculatedOffering.bpjsCompany.jkk + calculatedOffering.bpjsCompany.jkm)}</strong>
+                    </div>
                   </div>
                 </div>
               </div>
 
-              {/* Summary Calculation Card */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-4 bg-slate-900 text-white rounded-xl">
-                <div>
-                  <span className="text-[11px] text-slate-400 block mb-0.5">Gaji Kotor Bulanan (Gross)</span>
-                  <span className="text-base font-bold font-mono text-white">{formatRupiah(grossMonthly)}</span>
-                </div>
-                <div>
-                  <span className="text-[11px] text-slate-400 block mb-0.5">Potongan Pajak PPh 21 TER & BPJS</span>
-                  <span className="text-base font-bold font-mono text-rose-300">
-                    - {formatRupiah(terCalc.taxAmount + bpjsEmployeeDeduction)}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-[11px] text-emerald-400 font-bold block mb-0.5">Take Home Pay Bersih (Nett)</span>
-                  <span className="text-base font-bold font-mono text-emerald-400">{formatRupiah(netTakeHomePay)}</span>
-                </div>
-              </div>
-
+              {/* Footer Modal Actions */}
               <div className="pt-3 border-t border-slate-200 flex justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setIsOfferingModalOpen(false)}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-semibold"
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-semibold text-xs whitespace-nowrap"
                 >
                   Batal
                 </button>
                 <button
                   type="button"
                   onClick={handleSendOffering}
-                  className="px-5 py-2 bg-blue-700 hover:bg-blue-800 text-white rounded-lg font-semibold shadow-2xs flex items-center gap-1.5"
+                  className="px-5 py-2 bg-blue-700 hover:bg-blue-800 text-white rounded-lg font-bold text-xs shadow-2xs flex items-center gap-1.5 whitespace-nowrap cursor-pointer"
                 >
                   <FileText className="w-4 h-4" />
                   <span>Terbitkan Dokumen Offering Letter →</span>
@@ -15818,427 +16869,787 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
       )}
 
       {/* ===================== MODAL 7b: PREVIEW CETAK DOKUMEN OFFERING LETTER BER-QR ===================== */}
-      {isOfferingDocPreviewOpen && activeCandidate && (
-        <div
-          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setIsOfferingDocPreviewOpen(false);
-          }}
-        >
+      {isOfferingDocPreviewOpen && activeCandidate && (() => {
+        // Retrieve dynamic breakdown from candidate or from current active calculation
+        const breakdown = activeCandidate.offeringBreakdown || {
+          calculationMode: offeringMode,
+          targetThpAmount: calculatedOffering.targetThpAmount,
+          basicSalary: calculatedOffering.basicSalary,
+          allowances: calculatedOffering.allowances.map(a => ({
+            id: a.id,
+            name: a.name,
+            type: a.type,
+            value: a.value,
+            amount: a.amount,
+            taxable: a.taxable
+          })),
+          totalAllowances: calculatedOffering.totalAllowances,
+          grossSalary: calculatedOffering.grossSalary,
+          ptkpCode: calculatedOffering.ptkpCode,
+          ptkpCategory: calculatedOffering.ptkpCategory,
+          terRatePercent: calculatedOffering.terRatePercent,
+          taxAmountMonthly: calculatedOffering.taxAmountMonthly,
+          bpjsEmployee: calculatedOffering.bpjsEmployee,
+          bpjsCompany: calculatedOffering.bpjsCompany,
+          insurances: calculatedOffering.insurances.map(ins => ({
+            id: ins.id,
+            name: ins.name,
+            provider: ins.provider,
+            category: ins.category,
+            coverage: ins.coverage,
+            premiumEmployee: ins.premiumEmployee,
+            premiumCompany: ins.premiumCompany
+          })),
+          totalEmployeeInsurances: calculatedOffering.totalEmployeeInsurances,
+          totalCompanyInsurances: calculatedOffering.totalCompanyInsurances,
+          totalDeductionsEmployee: calculatedOffering.totalDeductionsEmployee,
+          thp: calculatedOffering.thp,
+          costToCompany: calculatedOffering.costToCompany
+        };
+
+        const currentVacancy = vacancies.find((v) => v.id === activeCandidate.jobVacancyId);
+        const vacancyTitle = currentVacancy?.title || activeCandidate.role || 'Professional Specialist';
+        const departmentTitle = currentVacancy?.department || 'Operations';
+        const docNo = activeCandidate.offeringDocNumber || docNumber;
+        const joinDate = activeCandidate.offeringTargetJoinDate || targetJoinDate;
+
+        return (
           <div
-            className="bg-white rounded-xl shadow-2xl max-w-2xl w-full border border-slate-200 overflow-hidden flex flex-col max-h-[92vh]"
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setIsOfferingDocPreviewOpen(false);
+            }}
           >
-            <div className="px-6 py-4 bg-slate-950 text-white flex items-center justify-between">
-              <div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h3 className="text-sm font-bold">Surat Penawaran Kerja Resmi (Job Offering Letter)</h3>
-                  {(!activeCandidate.offeringStatus || activeCandidate.offeringStatus === 'Draft') && (
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
-                      Draft (Siap Dikirim)
-                    </span>
-                  )}
-                  {activeCandidate.offeringStatus === 'Terkirim' && !activeCandidate.offeringCandidateResponse && (
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/20 text-blue-300 border border-blue-500/40 flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse"></span>
-                      Terkirim · Menunggu Balasan
-                    </span>
-                  )}
-                  {activeCandidate.offeringCandidateResponse === 'Cocok' && (
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-                      ✓ Balasan: Cocok
-                    </span>
-                  )}
-                  {activeCandidate.offeringCandidateResponse === 'Nego' && (
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
-                      ⇄ Balasan: Nego
-                    </span>
-                  )}
-                  {activeCandidate.offeringCandidateResponse === 'Tidak Cocok' && (
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40">
-                      ✕ Balasan: Tidak Cocok
-                    </span>
-                  )}
-                </div>
-                <span className="text-[11px] text-slate-400 font-mono">{activeCandidate.offeringDocNumber || docNumber}</span>
-              </div>
-              <button onClick={() => setIsOfferingDocPreviewOpen(false)}>
-                <X className="w-5 h-5 text-slate-400 hover:text-white" />
-              </button>
-            </div>
-
-            <div className="p-8 overflow-y-auto space-y-5 text-slate-900 font-serif leading-relaxed text-xs">
-              <div className="border-b-2 border-slate-900 pb-4 flex items-center justify-between gap-4">
+            <div
+              className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full border border-slate-200 overflow-hidden flex flex-col max-h-[94vh]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header Modal */}
+              <div className="px-6 py-4 bg-slate-950 text-white flex items-center justify-between gap-3 shrink-0">
                 <div className="flex items-center gap-3">
-                  {safeTenant.documentLogoUrl ? (
-                    <img
-                      src={safeTenant.documentLogoUrl}
-                      alt={safeTenant.name}
-                      className="w-12 h-12 rounded-lg object-contain border border-slate-200 p-0.5 bg-white shadow-xs shrink-0"
-                    />
-                  ) : (
-                    <div className="w-12 h-12 rounded-lg bg-blue-900 text-white flex items-center justify-center font-bold text-xl shadow-xs shrink-0 font-sans">
-                      {safeTenant.logoText || 'N'}
-                    </div>
-                  )}
+                  <div className="w-9 h-9 rounded-xl bg-blue-600/30 border border-blue-500/30 flex items-center justify-center text-blue-400">
+                    <FileText className="w-5 h-5" />
+                  </div>
                   <div>
-                    <h1 className="text-base font-bold tracking-wider font-sans uppercase">
-                      {safeTenant.name}
-                    </h1>
-                    <p className="text-[10px] text-slate-600 font-sans">
-                      Menara Palma Lantai 18, Jl. HR Rasuna Said, {safeTenant.city} · Telp: (021) 555-0199
-                    </p>
-                    <p className="text-[10px] text-slate-500 font-sans">
-                      NPWP Perusahaan: {safeTenant.npwp}
-                    </p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="text-sm font-bold tracking-tight">Surat Penawaran Kerja Resmi (Job Offering Letter)</h3>
+                      {(!activeCandidate.offeringStatus || activeCandidate.offeringStatus === 'Draft') && (
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                          Draft (Siap Dikirim)
+                        </span>
+                      )}
+                      {activeCandidate.offeringStatus === 'Terkirim' && !activeCandidate.offeringCandidateResponse && (
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/20 text-blue-300 border border-blue-500/40 flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse"></span>
+                          Terkirim · Menunggu Balasan
+                        </span>
+                      )}
+                      {activeCandidate.offeringCandidateResponse === 'Cocok' && (
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                          ✓ Balasan: Cocok
+                        </span>
+                      )}
+                      {activeCandidate.offeringCandidateResponse === 'Nego' && (
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                          ⇄ Balasan: Nego
+                        </span>
+                      )}
+                      {activeCandidate.offeringCandidateResponse === 'Tidak Cocok' && (
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40">
+                          ✕ Balasan: Tidak Cocok
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[11px] text-slate-400 font-mono">{docNo}</span>
                   </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleDownloadOfferingLetter(activeCandidate)}
+                    className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors title='Download Dokumen'"
+                  >
+                    <Download className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setIsOfferingDocPreviewOpen(false)}
+                    className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
                 </div>
               </div>
 
-              <div className="text-center space-y-0.5">
-                <h2 className="text-sm font-bold uppercase underline tracking-wide font-sans">
-                  SURAT PENAWARAN KERJA RESMI (JOB OFFERING LETTER)
-                </h2>
-                <div className="font-mono text-slate-600 font-semibold text-[11px]">
-                  Nomor: {activeCandidate.offeringDocNumber || docNumber}
-                </div>
-              </div>
-
-              <div className="space-y-3 font-sans text-xs">
-                <p>Kepada Yth. <strong>{activeCandidate.name}</strong>,</p>
-                <p className="leading-normal">
-                  Sehubungan dengan proses seleksi yang telah Saudara/i lalui secara kompetitif, Manajemen{' '}
-                  <span className="font-semibold">{safeTenant.name}</span> dengan bangga menyampaikan penawaran kerja resmi dengan rincian sebagai berikut:
-                </p>
-
-                <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-1.5">
-                  <div className="grid grid-cols-3">
-                    <span className="text-slate-500">Jabatan Ditawarkan</span>
-                    <span className="col-span-2 font-bold text-slate-900">
-                      {vacancies.find((v) => v.id === activeCandidate.jobVacancyId)?.title || 'Senior Specialist'}
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-3">
-                    <span className="text-slate-500">Tanggal Mulai Bertugas</span>
-                    <span className="col-span-2 font-mono font-semibold text-slate-900">{targetJoinDate}</span>
-                  </div>
-                  <div className="grid grid-cols-3">
-                    <span className="text-slate-500">Gaji Pokok Bulanan</span>
-                    <span className="col-span-2 font-mono font-bold text-slate-900">{formatRupiah(components.basicSalary)}</span>
-                  </div>
-                  <div className="grid grid-cols-3">
-                    <span className="text-slate-500">Total Tunjangan</span>
-                    <span className="col-span-2 font-mono font-medium text-slate-800">{formatRupiah(activeAllowances)}</span>
-                  </div>
-                  <div className="grid grid-cols-3 pt-1 border-t border-slate-200">
-                    <span className="text-slate-700 font-bold">Total Gaji Kotor (Gross)</span>
-                    <span className="col-span-2 font-mono font-bold text-blue-900">
-                      {formatRupiah(activeCandidate.offeredSalary || grossMonthly)}
-                    </span>
-                  </div>
-                </div>
-
-                <p className="leading-normal">
-                  Paket penawaran ini telah mencakup kepesertaan BPJS Ketenagakerjaan (JHT, JKK, JKM, JP), BPJS Kesehatan, dan fasilitas penunjang kerja sesuai regulasi yang berlaku di Republik Indonesia.
-                </p>
-              </div>
-
-              <div className="pt-6 border-t border-slate-200 grid grid-cols-2 gap-8 font-sans items-end">
-                <div className="space-y-2">
-                  <span className="text-[10px] text-slate-500 block">Diterbitkan oleh:</span>
-                  <div className="flex items-center gap-3">
-                    <div className="p-1 bg-white border border-slate-200 rounded">
-                      <QRCodeView
-                        value={`VERIFIED_OFFERING:${activeCandidate.offeringDocNumber || docNumber}:${safeTenant.code}:${activeCandidate.name}`}
-                        size={64}
+              {/* Printable Surat Content */}
+              <div className="p-6 sm:p-8 overflow-y-auto space-y-6 text-slate-800 leading-relaxed text-xs">
+                {/* Kop Surat Resmi */}
+                <div className="border-b-2 border-slate-900 pb-4 flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3.5">
+                    {safeTenant.documentLogoUrl ? (
+                      <img
+                        src={safeTenant.documentLogoUrl}
+                        alt={safeTenant.name}
+                        className="w-14 h-14 rounded-xl object-contain border border-slate-200 p-1 bg-white shadow-xs shrink-0"
                       />
-                    </div>
-                    <div>
-                      <div className="font-bold text-slate-900 text-xs">Aditya Pratama, S.Psi.</div>
-                      <div className="text-[10px] text-slate-500">Head of People & Culture</div>
-                      <div className="text-[9px] font-mono text-emerald-700 font-semibold mt-0.5">
-                        Tervalidasi Digital QR
+                    ) : (
+                      <div className="w-14 h-14 rounded-xl bg-blue-900 text-white flex items-center justify-center font-bold text-2xl shadow-xs shrink-0 font-sans">
+                        {safeTenant.logoText || 'N'}
                       </div>
+                    )}
+                    <div>
+                      <h1 className="text-base font-black tracking-wider uppercase font-sans text-slate-900">
+                        {safeTenant.name}
+                      </h1>
+                      <p className="text-[10px] text-slate-600 font-sans">
+                        Gedung Perkantoran Menara Palma Lt. 18, Jl. H.R. Rasuna Said, {safeTenant.city || 'Jakarta'} · Telp: (021) 555-0199
+                      </p>
+                      <p className="text-[10px] text-slate-500 font-sans">
+                        NPWP Perusahaan: <span className="font-mono font-medium">{safeTenant.npwp || '01.345.678.9-012.000'}</span> · Website: {safeTenant.website || 'www.company.co.id'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right hidden sm:block shrink-0">
+                    <span className="inline-block px-2.5 py-1 rounded bg-slate-100 border border-slate-300 text-[10px] font-mono font-bold text-slate-700">
+                      OFFERING LETTER
+                    </span>
+                    <div className="text-[10px] text-slate-500 mt-1 font-mono">
+                      {new Date().toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' })}
                     </div>
                   </div>
                 </div>
 
-                <div className="text-right space-y-1">
-                  <span className="text-[10px] text-slate-500 block">Menyetujui Penawaran:</span>
-                  <div className="h-12 flex items-center justify-end">
-                    <span className="text-xs text-slate-400 italic">
-                      {activeCandidate.offeringCandidateResponse === 'Cocok'
-                        ? '✓ Telah Ditandatangani Digital (Cocok)'
-                        : '(Tanda Tangan Calon Karyawan)'}
+                {/* Judul & Nomor Surat */}
+                <div className="text-center space-y-1">
+                  <h2 className="text-sm sm:text-base font-black uppercase tracking-wider font-sans text-slate-900 underline underline-offset-4">
+                    SURAT PENAWARAN KERJA RESMI (JOB OFFERING LETTER)
+                  </h2>
+                  <div className="font-mono text-slate-600 font-semibold text-[11px]">
+                    Nomor: {docNo}
+                  </div>
+                </div>
+
+                {/* Pembuka Surat */}
+                <div className="space-y-3 font-sans text-xs">
+                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                    <div>
+                      <span className="text-slate-500 block">Kepada Yth. Calon Karyawan:</span>
+                      <span className="font-bold text-slate-900 text-xs">{activeCandidate.name}</span>
+                      <span className="text-slate-600 block">{activeCandidate.email} · {activeCandidate.phone || '-'}</span>
+                    </div>
+                    <div className="sm:text-right">
+                      <span className="text-slate-500 block">Posisi / Jabatan yang Ditawarkan:</span>
+                      <span className="font-bold text-blue-900 text-xs">{vacancyTitle}</span>
+                      <span className="text-slate-600 block">Departemen: {departmentTitle}</span>
+                    </div>
+                  </div>
+
+                  <p className="leading-relaxed text-slate-700">
+                    Sehubungan dengan hasil evaluasi dan seluruh rangkaian proses seleksi kompetensi dan wawancara yang telah Saudara/i lalui secara cemerlang, Direksi dan Manajemen <b>{safeTenant.name}</b> dengan bangga menyampaikan Penawaran Hubungan Kerja Resmi dengan rincian klausul, skema kompensasi, dan fasilitas sebagai berikut:
+                  </p>
+                </div>
+
+                {/* 1. KETENTUAN PENEMPATAN */}
+                <div className="space-y-2 font-sans">
+                  <div className="flex items-center gap-2 border-b border-slate-200 pb-1">
+                    <Briefcase className="w-4 h-4 text-blue-700" />
+                    <h4 className="font-bold text-slate-900 text-xs uppercase tracking-wide">
+                      I. Ketentuan Jabatan & Waktu Bertugas
+                    </h4>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs">
+                    <div>
+                      <span className="text-slate-500 text-[10px] block">Jabatan / Role</span>
+                      <span className="font-bold text-slate-900">{vacancyTitle}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 text-[10px] block">Unit Kerja</span>
+                      <span className="font-bold text-slate-900">{departmentTitle}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 text-[10px] block">Tanggal Mulai Bertugas</span>
+                      <span className="font-mono font-bold text-blue-900">{joinDate}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 text-[10px] block">Status Kerja</span>
+                      <span className="font-bold text-emerald-800">PKWTT (Tetap) / PKWT</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. RINCIAN STRUKTUR UPAH & TUNJANGAN (BREAKDOWN TRANSPARAN) */}
+                <div className="space-y-2 font-sans">
+                  <div className="flex items-center justify-between border-b border-slate-200 pb-1">
+                    <div className="flex items-center gap-2">
+                      <DollarSign className="w-4 h-4 text-emerald-600" />
+                      <h4 className="font-bold text-slate-900 text-xs uppercase tracking-wide">
+                        II. Rincian Kompensasi & Upah Bulanan (Gross)
+                      </h4>
+                    </div>
+                    <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200">
+                      {breakdown.calculationMode === 'net' ? 'Target THP Netter Disepakati' : 'Perhitungan Standar Gross'}
                     </span>
                   </div>
-                  <div className="font-bold text-slate-900 text-xs">{activeCandidate.name}</div>
-                  <div className="text-[10px] text-slate-500">
-                    Tanggal: {activeCandidate.offeringResponseDate || '___________________'}
+
+                  <div className="border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
+                    <table className="w-full text-xs">
+                      <thead className="bg-slate-100 text-slate-700 text-[11px] font-bold border-b border-slate-200">
+                        <tr>
+                          <th className="py-2 px-3 text-left">Komponen Penghasilan Upah</th>
+                          <th className="py-2 px-3 text-center w-28">Jenis / Skema</th>
+                          <th className="py-2 px-3 text-center w-24">Pajak (Taxable)</th>
+                          <th className="py-2 px-3 text-right w-36">Jumlah (Rupiah)</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 font-sans text-xs">
+                        <tr className="bg-white">
+                          <td className="py-2 px-3 font-semibold text-slate-900">
+                            Gaji Pokok (Basic Salary)
+                          </td>
+                          <td className="py-2 px-3 text-center text-slate-500 font-mono text-[11px]">Upah Dasar</td>
+                          <td className="py-2 px-3 text-center">
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                              Kena Pajak
+                            </span>
+                          </td>
+                          <td className="py-2 px-3 text-right font-mono font-bold text-slate-900">
+                            {formatRupiah(breakdown.basicSalary)}
+                          </td>
+                        </tr>
+
+                        {breakdown.allowances && breakdown.allowances.length > 0 ? (
+                          breakdown.allowances.map((item, idx) => (
+                            <tr key={idx} className="hover:bg-slate-50/50">
+                              <td className="py-1.5 px-3 text-slate-800 font-medium pl-6">
+                                • {item.name}
+                              </td>
+                              <td className="py-1.5 px-3 text-center text-slate-500 font-mono text-[11px]">
+                                {item.type === 'percent' ? `${item.value}% dari Gapok` : 'Nominal Tetap'}
+                              </td>
+                              <td className="py-1.5 px-3 text-center">
+                                {item.taxable ? (
+                                  <span className="text-[10px] text-amber-700 font-medium">Kena Pajak</span>
+                                ) : (
+                                  <span className="text-[10px] text-slate-500">Non-Pajak</span>
+                                )}
+                              </td>
+                              <td className="py-1.5 px-3 text-right font-mono font-medium text-slate-800">
+                                {formatRupiah(item.amount)}
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={4} className="py-2 px-3 text-center text-slate-400 italic text-[11px]">
+                              Tidak ada komponen tunjangan tambahan
+                            </td>
+                          </tr>
+                        )}
+
+                        <tr className="bg-slate-100 font-bold border-t border-slate-300">
+                          <td colSpan={3} className="py-2 px-3 text-slate-900">
+                            TOTAL PENGHASILAN KOTOR BULANAN (GROSS SALARY)
+                          </td>
+                          <td className="py-2 px-3 text-right font-mono text-blue-900 text-xs">
+                            {formatRupiah(breakdown.grossSalary)}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
                   </div>
                 </div>
-              </div>
 
-              {/* ===================== ALUR STATUS PENGIRIMAN & BALASAN KANDIDAT ===================== */}
-              {(!activeCandidate.offeringStatus || activeCandidate.offeringStatus === 'Draft') ? (
-                <div className="p-3.5 bg-blue-50 border border-blue-200 rounded-xl flex items-center justify-between gap-3 text-xs font-sans">
-                  <div className="flex items-center gap-2.5">
-                    <FileText className="w-5 h-5 text-blue-600 shrink-0" />
+                {/* 3. RINCIAN POTONGAN KARYAWAN (BPJS + PPh 21 TER) */}
+                <div className="space-y-2 font-sans">
+                  <div className="flex items-center gap-2 border-b border-slate-200 pb-1">
+                    <ShieldCheck className="w-4 h-4 text-rose-600" />
+                    <h4 className="font-bold text-slate-900 text-xs uppercase tracking-wide">
+                      III. Rincian Estimasi Potongan Wajib Karyawan (Deductions)
+                    </h4>
+                  </div>
+
+                  <div className="border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
+                    <table className="w-full text-xs">
+                      <thead className="bg-rose-50/70 text-rose-950 text-[11px] font-bold border-b border-rose-200">
+                        <tr>
+                          <th className="py-2 px-3 text-left">Komponen Potongan</th>
+                          <th className="py-2 px-3 text-center w-36">Dasar Regulasi</th>
+                          <th className="py-2 px-3 text-right w-36">Jumlah Potongan</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 font-sans text-xs">
+                        <tr>
+                          <td className="py-1.5 px-3 text-slate-800 font-medium">
+                            Pajak Penghasilan (PPh 21 TER Bulanan)
+                          </td>
+                          <td className="py-1.5 px-3 text-center text-slate-500 font-mono text-[11px]">
+                            {breakdown.ptkpCategory} · {breakdown.ptkpCode} ({breakdown.terRatePercent}%)
+                          </td>
+                          <td className="py-1.5 px-3 text-right font-mono font-medium text-rose-700">
+                            -{formatRupiah(breakdown.taxAmountMonthly)}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td className="py-1.5 px-3 text-slate-800 font-medium">
+                            BPJS Ketenagakerjaan: Jaminan Hari Tua (JHT)
+                          </td>
+                          <td className="py-1.5 px-3 text-center text-slate-500 font-mono text-[11px]">2.0% dari Upah</td>
+                          <td className="py-1.5 px-3 text-right font-mono font-medium text-rose-700">
+                            -{formatRupiah(breakdown.bpjsEmployee?.jht || 0)}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td className="py-1.5 px-3 text-slate-800 font-medium">
+                            BPJS Ketenagakerjaan: Jaminan Pensiun (JP)
+                          </td>
+                          <td className="py-1.5 px-3 text-center text-slate-500 font-mono text-[11px]">1.0% (Maks. Plafon)</td>
+                          <td className="py-1.5 px-3 text-right font-mono font-medium text-rose-700">
+                            -{formatRupiah(breakdown.bpjsEmployee?.jp || 0)}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td className="py-1.5 px-3 text-slate-800 font-medium">
+                            BPJS Kesehatan
+                          </td>
+                          <td className="py-1.5 px-3 text-center text-slate-500 font-mono text-[11px]">1.0% (Maks. 12 Juta)</td>
+                          <td className="py-1.5 px-3 text-right font-mono font-medium text-rose-700">
+                            -{formatRupiah(breakdown.bpjsEmployee?.kesehatan || 0)}
+                          </td>
+                        </tr>
+                        {breakdown.totalEmployeeInsurances > 0 && (
+                          <tr>
+                            <td className="py-1.5 px-3 text-slate-800 font-medium">
+                              Iuran Premi Asuransi Tambahan Karyawan
+                            </td>
+                            <td className="py-1.5 px-3 text-center text-slate-500 font-mono text-[11px]">Co-pay Benefit</td>
+                            <td className="py-1.5 px-3 text-right font-mono font-medium text-rose-700">
+                              -{formatRupiah(breakdown.totalEmployeeInsurances)}
+                            </td>
+                          </tr>
+                        )}
+                        <tr className="bg-rose-50 font-bold border-t border-rose-200">
+                          <td colSpan={2} className="py-2 px-3 text-rose-950">
+                            TOTAL POTONGAN KARYAWAN PER BULAN
+                          </td>
+                          <td className="py-2 px-3 text-right font-mono text-rose-700 text-xs">
+                            -{formatRupiah(breakdown.totalDeductionsEmployee)}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* 4. BOX BESAR TAKE HOME PAY (THP) */}
+                <div className="bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white p-5 rounded-2xl shadow-md border border-blue-800 space-y-2">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-white/15 pb-2">
                     <div>
-                      <span className="font-bold text-blue-950 block">Dokumen Penawaran Kerja Baru Saja Diterbitkan:</span>
-                      <span className="text-blue-700 text-[11px]">
-                        Dokumen siap dikirimkan ke calon karyawan via Email / WhatsApp. Klik tombol <b>"Kirim Dokumen Offering"</b> di bawah untuk mengirimkan surat resmi.
+                      <span className="text-[10px] font-bold tracking-wider uppercase text-blue-300 block">
+                        ESTIMASI GAJI BERSIH DITERIMA CALON KARYAWAN
                       </span>
+                      <h3 className="text-sm font-bold text-white">
+                        Take Home Pay (THP) Bersih Bulanan
+                      </h3>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-2xl sm:text-3xl font-black font-mono tracking-tight text-emerald-400">
+                        {formatRupiah(breakdown.thp)}
+                      </span>
+                      <span className="text-[11px] text-blue-200 block">/ bulan</span>
+                    </div>
+                  </div>
+                  <div className="pt-1 flex items-center justify-between flex-wrap gap-2 text-[11px]">
+                    <span className="text-blue-200">
+                      Terbilang: <i className="font-semibold text-white">"{formatTerbilangRupiah(breakdown.thp)}"</i>
+                    </span>
+                    <span className="text-[10px] text-blue-300 bg-white/10 px-2 py-0.5 rounded font-mono">
+                      Gross {formatRupiah(breakdown.grossSalary)} - Potongan {formatRupiah(breakdown.totalDeductionsEmployee)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* 5. PAKET PROTEKSI & ASURANSI PERUSAHAAN (COMPANY BENEFITS) */}
+                <div className="space-y-2 font-sans">
+                  <div className="flex items-center gap-2 border-b border-slate-200 pb-1">
+                    <Building2 className="w-4 h-4 text-indigo-700" />
+                    <h4 className="font-bold text-slate-900 text-xs uppercase tracking-wide">
+                      IV. Perlindungan & Asuransi Ditanggung Perusahaan (Company Contribution)
+                    </h4>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5">
+                      <span className="text-[11px] font-bold text-slate-900 block flex items-center gap-1.5">
+                        <CheckCircle className="w-3.5 h-3.5 text-blue-600" />
+                        Jaminan Sosial Ketenagakerjaan (BPJS):
+                      </span>
+                      <ul className="text-[11px] text-slate-600 space-y-1 pl-4 list-disc">
+                        <li>JKK (Jaminan Kecelakaan Kerja): Ditanggung Perusahaan 0.24%</li>
+                        <li>JKM (Jaminan Kematian): Ditanggung Perusahaan 0.30%</li>
+                        <li>JHT (Jaminan Hari Tua): Ditanggung Perusahaan 3.70%</li>
+                        <li>JP (Jaminan Pensiun): Ditanggung Perusahaan 2.00%</li>
+                        <li>BPJS Kesehatan: Ditanggung Perusahaan 4.00%</li>
+                      </ul>
+                      <div className="pt-1 border-t border-slate-200 text-[10px] text-slate-500 font-mono">
+                        Total BPJS Beban Perusahaan: {formatRupiah(breakdown.bpjsCompany?.total || 0)}/bln
+                      </div>
+                    </div>
+
+                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5">
+                      <span className="text-[11px] font-bold text-slate-900 block flex items-center gap-1.5">
+                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                        Asuransi Tambahan Perusahaan:
+                      </span>
+                      {breakdown.insurances && breakdown.insurances.length > 0 ? (
+                        <div className="space-y-1.5">
+                          {breakdown.insurances.map((ins, idx) => (
+                            <div key={idx} className="p-1.5 bg-white border border-slate-200 rounded text-[11px]">
+                              <div className="font-bold text-slate-800">{ins.name} ({ins.provider})</div>
+                              <div className="text-[10px] text-slate-500">Cakupan: {ins.coverage}</div>
+                              <div className="text-[10px] text-emerald-700 font-medium">
+                                Ditanggung Kantor: {formatRupiah(ins.premiumCompany)}/bln
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-[11px] text-slate-500 italic">
+                          Standar jaminan kesehatan mengacu pada paket BPJS Kesehatan & Ketenagakerjaan Nasional.
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>
-              ) : (
-                <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3 font-sans">
-                  <div className="flex items-center justify-between flex-wrap gap-2">
-                    <div className="flex items-center gap-2">
-                      <Send className="w-4 h-4 text-blue-600 shrink-0" />
+
+                {/* Klausul Legal Penutup */}
+                <div className="p-3 bg-amber-50/60 border border-amber-200 rounded-xl text-[11px] text-amber-950 font-sans leading-relaxed">
+                  <b>Catatan Hukum & Ketentuan Kerahasiaan:</b> Seluruh rincian penawaran kerja ini bersifat sangat rahasia (Strictly Confidential) dan mengikat kedua belah pihak setelah surat ini ditandatangani. Apabila Saudara/i menyetujui penawaran ini, mohon memberikan konfirmasi melalui sistem sebelum batas waktu 7 (tujuh) hari kerja terhitung sejak surat ini diterbitkan.
+                </div>
+
+                {/* Tanda Tangan & QR Verification */}
+                <div className="pt-4 border-t-2 border-slate-900 grid grid-cols-2 gap-8 font-sans items-end">
+                  <div className="space-y-2">
+                    <span className="text-[10px] text-slate-500 block uppercase font-bold">Diterbitkan Secara Sah:</span>
+                    <div className="flex items-center gap-3">
+                      <div className="p-1 bg-white border border-slate-300 rounded-lg shadow-2xs shrink-0">
+                        <QRCodeView
+                          value={`VERIFIED_OFFERING:${docNo}:${safeTenant.code}:${activeCandidate.name}:${breakdown.thp}`}
+                          size={64}
+                        />
+                      </div>
                       <div>
-                        <span className="font-bold text-slate-900 text-xs block">
-                          Surat Penawaran Terkirim ke Calon Karyawan
-                        </span>
-                        <span className="text-[11px] text-slate-500">
-                          Terkirim ke <b>{activeCandidate.email}</b> pada {activeCandidate.offeringSentDate || 'Hari ini'}.
-                        </span>
+                        <div className="font-bold text-slate-900 text-xs">Aditya Pratama, S.Psi., CHRP</div>
+                        <div className="text-[10px] text-slate-600 font-medium">Head of People & Culture</div>
+                        <div className="text-[9px] font-mono text-emerald-700 font-semibold mt-0.5 flex items-center gap-1">
+                          <CheckCircle className="w-3 h-3" />
+                          Tervalidasi Digital Legal
+                        </div>
                       </div>
                     </div>
-                    <span className="text-[11px] font-bold text-slate-700 bg-white px-2.5 py-1 rounded-md border border-slate-200 shadow-2xs">
-                      Catat Balasan Calon Karyawan:
-                    </span>
                   </div>
 
-                  {/* 3 Opsi Balasan: Cocok, Nego, Tidak Cocok */}
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => handleRecordCandidateResponse(activeCandidate, 'Cocok')}
-                      className={`p-3 rounded-lg border text-left transition-all ${
-                        activeCandidate.offeringCandidateResponse === 'Cocok'
-                          ? 'bg-emerald-50 border-emerald-400 text-emerald-950 ring-2 ring-emerald-500/20 font-bold'
-                          : 'bg-white border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/30 text-slate-700'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-700">
-                          <CheckCircle className="w-4 h-4" />
-                          <span>1. Cocok</span>
-                        </div>
-                        {activeCandidate.offeringCandidateResponse === 'Cocok' && (
-                          <span className="w-2 h-2 rounded-full bg-emerald-600"></span>
-                        )}
-                      </div>
-                      <span className="text-[11px] text-slate-500 block mt-1">Setuju seluruh paket penawaran kerja</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => handleRecordCandidateResponse(activeCandidate, 'Nego')}
-                      className={`p-3 rounded-lg border text-left transition-all ${
-                        activeCandidate.offeringCandidateResponse === 'Nego'
-                          ? 'bg-amber-50 border-amber-400 text-amber-950 ring-2 ring-amber-500/20 font-bold'
-                          : 'bg-white border-slate-200 hover:border-amber-300 hover:bg-amber-50/30 text-slate-700'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-1.5 text-xs font-bold text-amber-700">
-                          <RefreshCw className="w-4 h-4" />
-                          <span>2. Nego</span>
-                        </div>
-                        {activeCandidate.offeringCandidateResponse === 'Nego' && (
-                          <span className="w-2 h-2 rounded-full bg-amber-600"></span>
-                        )}
-                      </div>
-                      <span className="text-[11px] text-slate-500 block mt-1">Minta negosiasi gaji / tunjangan</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => handleRecordCandidateResponse(activeCandidate, 'Tidak Cocok')}
-                      className={`p-3 rounded-lg border text-left transition-all ${
-                        activeCandidate.offeringCandidateResponse === 'Tidak Cocok'
-                          ? 'bg-rose-50 border-rose-400 text-rose-950 ring-2 ring-rose-500/20 font-bold'
-                          : 'bg-white border-slate-200 hover:border-rose-300 hover:bg-rose-50/30 text-slate-700'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-1.5 text-xs font-bold text-rose-700">
-                          <XCircle className="w-4 h-4" />
-                          <span>3. Tidak Cocok</span>
-                        </div>
-                        {activeCandidate.offeringCandidateResponse === 'Tidak Cocok' && (
-                          <span className="w-2 h-2 rounded-full bg-rose-600"></span>
-                        )}
-                      </div>
-                      <span className="text-[11px] text-slate-500 block mt-1">Menolak paket penawaran kerja</span>
-                    </button>
-                  </div>
-
-                  {/* Banner feedback penjelasan status */}
-                  {activeCandidate.offeringCandidateResponse === 'Cocok' && (
-                    <div className="p-3 bg-emerald-100/80 border border-emerald-300 rounded-lg text-emerald-950 text-xs flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-2">
-                        <CheckCircle className="w-4 h-4 text-emerald-700 shrink-0" />
-                        <span><b>Kandidat Cocok (Setuju):</b> Calon karyawan menyetujui offering letter. Silakan klik tombol <b>Konfirmasi Terima (Hired & Onboard)</b> di bawah.</span>
-                      </div>
-                    </div>
-                  )}
-
-                  {activeCandidate.offeringCandidateResponse === 'Nego' && (
-                    <div className="p-3 bg-amber-100/80 border border-amber-300 rounded-lg text-amber-950 text-xs space-y-1.5">
-                      <div className="flex items-center gap-2 font-bold text-amber-900">
-                        <AlertCircle className="w-4 h-4 text-amber-700 shrink-0" />
-                        <span>Kandidat Mengajukan Negosiasi (Nego):</span>
-                      </div>
-                      <p className="text-[11px] text-amber-800">
-                        {activeCandidate.offeringResponseNotes || 'Kandidat mengajukan permohonan penyesuaian paket kompensasi atau fasilitas penunjang.'}
-                      </p>
-                      <p className="text-[11px] text-amber-900 font-medium">
-                        Anda dapat memilih <b>"Revisi Paket Penawaran"</b> (menyesuaikan rincian gaji) atau <b>"Sepakati Nego & Terima"</b> atau <b>"Tolak Nego"</b>.
-                      </p>
-                    </div>
-                  )}
-
-                  {activeCandidate.offeringCandidateResponse === 'Tidak Cocok' && (
-                    <div className="p-3 bg-rose-100/80 border border-rose-300 rounded-lg text-rose-950 text-xs flex items-center gap-2">
-                      <XCircle className="w-4 h-4 text-rose-700 shrink-0" />
-                      <span><b>Kandidat Tidak Cocok (Menolak Penawaran):</b> Anda dapat memproses keputusan Tolak (Disqualified) dan memindahkan berkas kandidat ke Talent Pool.</span>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* ===================== FOOTER ACTIONS DENGAN FLOW KIRIM -> RESPON -> HIRED/TOLAK ===================== */}
-              <div className="pt-3 border-t border-slate-200 flex flex-wrap items-center justify-between gap-2 font-sans">
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsOfferingDocPreviewOpen(false);
-                      handleOpenOfferingModal(activeCandidate);
-                    }}
-                    className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg font-semibold flex items-center gap-1.5 text-xs transition-colors"
-                  >
-                    <Calculator className="w-3.5 h-3.5 text-indigo-600" />
-                    <span>Kalkulator & Form Offering</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => window.print()}
-                    className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-semibold flex items-center gap-1.5 text-xs transition-colors"
-                  >
-                    <Printer className="w-3.5 h-3.5" />
-                    <span>Cetak Dokumen</span>
-                  </button>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  {/* KONDISI 1: Dokumen baru terbit / Draft -> Tombol KIRIM OFFERING */}
-                  {(!activeCandidate.offeringStatus || activeCandidate.offeringStatus === 'Draft') && (
-                    <button
-                      type="button"
-                      onClick={() => handleSendOfferingToCandidate(activeCandidate)}
-                      className="px-4 py-2 bg-blue-700 hover:bg-blue-800 text-white rounded-lg font-semibold shadow-xs flex items-center gap-2 text-xs transition-colors"
-                    >
-                      <Send className="w-3.5 h-3.5" />
-                      <span>Kirim Dokumen Offering ke Kandidat</span>
-                    </button>
-                  )}
-
-                  {/* KONDISI 2: Terkirim, tapi belum ada balasan */}
-                  {activeCandidate.offeringStatus === 'Terkirim' && !activeCandidate.offeringCandidateResponse && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-[11px] text-slate-500 italic hidden sm:inline">
-                        Pilih balasan (Cocok / Nego / Tidak Cocok) di atas
+                  <div className="text-right space-y-1">
+                    <span className="text-[10px] text-slate-500 block uppercase font-bold">Pernyataan Calon Karyawan:</span>
+                    <div className="h-14 flex items-center justify-end">
+                      <span className="text-xs font-semibold italic text-slate-500">
+                        {activeCandidate.offeringCandidateResponse === 'Cocok'
+                          ? '✓ Telah Ditandatangani & Disetujui (Cocok)'
+                          : activeCandidate.offeringCandidateResponse === 'Nego'
+                          ? '⇄ Pengajuan Negosiasi Dicatat'
+                          : activeCandidate.offeringCandidateResponse === 'Tidak Cocok'
+                          ? '✕ Penawaran Ditolak'
+                          : '(Tanda Tangan & Persetujuan Calon Karyawan)'}
                       </span>
+                    </div>
+                    <div className="font-bold text-slate-900 text-xs">{activeCandidate.name}</div>
+                    <div className="text-[10px] text-slate-500">
+                      Tanggal: {activeCandidate.offeringResponseDate || new Date().toLocaleDateString('id-ID')}
+                    </div>
+                  </div>
+                </div>
+
+                {/* ===================== ALUR STATUS PENGIRIMAN & BALASAN KANDIDAT ===================== */}
+                {(!activeCandidate.offeringStatus || activeCandidate.offeringStatus === 'Draft') ? (
+                  <div className="p-3.5 bg-blue-50 border border-blue-200 rounded-xl flex items-center justify-between gap-3 text-xs font-sans">
+                    <div className="flex items-center gap-2.5">
+                      <FileText className="w-5 h-5 text-blue-600 shrink-0" />
+                      <div>
+                        <span className="font-bold text-blue-950 block">Dokumen Penawaran Kerja Baru Saja Diterbitkan:</span>
+                        <span className="text-blue-700 text-[11px]">
+                          Dokumen siap dikirimkan ke calon karyawan via Email / WhatsApp dengan rincian breakdown transparan.
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3 font-sans">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex items-center gap-2">
+                        <Send className="w-4 h-4 text-blue-600 shrink-0" />
+                        <div>
+                          <span className="font-bold text-slate-900 text-xs block">
+                            Surat Penawaran Terkirim ke Calon Karyawan
+                          </span>
+                          <span className="text-[11px] text-slate-500">
+                            Terkirim ke <b>{activeCandidate.email}</b> pada {activeCandidate.offeringSentDate || 'Hari ini'}.
+                          </span>
+                        </div>
+                      </div>
+                      <span className="text-[11px] font-bold text-slate-700 bg-white px-2.5 py-1 rounded-md border border-slate-200 shadow-2xs">
+                        Catat Balasan Calon Karyawan:
+                      </span>
+                    </div>
+
+                    {/* 3 Opsi Balasan: Cocok, Nego, Tidak Cocok */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                       <button
                         type="button"
-                        onClick={() => handleSendOfferingToCandidate(activeCandidate)}
-                        className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-semibold flex items-center gap-1.5 text-xs transition-colors"
+                        onClick={() => handleRecordCandidateResponse(activeCandidate, 'Cocok')}
+                        className={`p-3 rounded-lg border text-left transition-all ${
+                          activeCandidate.offeringCandidateResponse === 'Cocok'
+                            ? 'bg-emerald-50 border-emerald-400 text-emerald-950 ring-2 ring-emerald-500/20 font-bold'
+                            : 'bg-white border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/30 text-slate-700'
+                        }`}
                       >
-                        <Send className="w-3.5 h-3.5" />
-                        <span>Kirim Ulang (Resend)</span>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-700">
+                            <CheckCircle className="w-4 h-4" />
+                            <span>1. Cocok</span>
+                          </div>
+                          {activeCandidate.offeringCandidateResponse === 'Cocok' && (
+                            <span className="w-2 h-2 rounded-full bg-emerald-600"></span>
+                          )}
+                        </div>
+                        <span className="text-[11px] text-slate-500 block mt-1">Setuju seluruh paket penawaran kerja</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleRecordCandidateResponse(activeCandidate, 'Nego')}
+                        className={`p-3 rounded-lg border text-left transition-all ${
+                          activeCandidate.offeringCandidateResponse === 'Nego'
+                            ? 'bg-amber-50 border-amber-400 text-amber-950 ring-2 ring-amber-500/20 font-bold'
+                            : 'bg-white border-slate-200 hover:border-amber-300 hover:bg-amber-50/30 text-slate-700'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5 text-xs font-bold text-amber-700">
+                            <RefreshCw className="w-4 h-4" />
+                            <span>2. Nego</span>
+                          </div>
+                          {activeCandidate.offeringCandidateResponse === 'Nego' && (
+                            <span className="w-2 h-2 rounded-full bg-amber-600"></span>
+                          )}
+                        </div>
+                        <span className="text-[11px] text-slate-500 block mt-1">Minta negosiasi gaji / tunjangan</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleRecordCandidateResponse(activeCandidate, 'Tidak Cocok')}
+                        className={`p-3 rounded-lg border text-left transition-all ${
+                          activeCandidate.offeringCandidateResponse === 'Tidak Cocok'
+                            ? 'bg-rose-50 border-rose-400 text-rose-950 ring-2 ring-rose-500/20 font-bold'
+                            : 'bg-white border-slate-200 hover:border-rose-300 hover:bg-rose-50/30 text-slate-700'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5 text-xs font-bold text-rose-700">
+                            <XCircle className="w-4 h-4" />
+                            <span>3. Tidak Cocok</span>
+                          </div>
+                          {activeCandidate.offeringCandidateResponse === 'Tidak Cocok' && (
+                            <span className="w-2 h-2 rounded-full bg-rose-600"></span>
+                          )}
+                        </div>
+                        <span className="text-[11px] text-slate-500 block mt-1">Menolak paket penawaran kerja</span>
                       </button>
                     </div>
-                  )}
 
-                  {/* KONDISI 3: Balasan COCOK -> Tombol DITERIMA (HIRED) AKTIF */}
-                  {activeCandidate.offeringCandidateResponse === 'Cocok' && (
+                    {/* Feedback Status Balasan */}
+                    {activeCandidate.offeringCandidateResponse === 'Cocok' && (
+                      <div className="p-3 bg-emerald-100/80 border border-emerald-300 rounded-lg text-emerald-950 text-xs flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle className="w-4 h-4 text-emerald-700 shrink-0" />
+                          <span><b>Kandidat Cocok (Setuju):</b> Calon karyawan menyetujui offering letter. Silakan klik tombol <b>Konfirmasi Terima (Hired & Onboard)</b> di bawah.</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {activeCandidate.offeringCandidateResponse === 'Nego' && (
+                      <div className="p-3 bg-amber-100/80 border border-amber-300 rounded-lg text-amber-950 text-xs space-y-1.5">
+                        <div className="flex items-center gap-2 font-bold text-amber-900">
+                          <AlertCircle className="w-4 h-4 text-amber-700 shrink-0" />
+                          <span>Kandidat Mengajukan Negosiasi (Nego):</span>
+                        </div>
+                        <p className="text-[11px] text-amber-800">
+                          {activeCandidate.offeringResponseNotes || 'Kandidat mengajukan permohonan penyesuaian paket kompensasi atau fasilitas penunjang.'}
+                        </p>
+                        <p className="text-[11px] text-amber-900 font-medium">
+                          Anda dapat memilih <b>"Revisi Paket Penawaran"</b> (menyesuaikan rincian gaji di Kalkulator) atau <b>"Sepakati Nego & Terima"</b> atau <b>"Tolak Nego"</b>.
+                        </p>
+                      </div>
+                    )}
+
+                    {activeCandidate.offeringCandidateResponse === 'Tidak Cocok' && (
+                      <div className="p-3 bg-rose-100/80 border border-rose-300 rounded-lg text-rose-950 text-xs flex items-center gap-2">
+                        <XCircle className="w-4 h-4 text-rose-700 shrink-0" />
+                        <span><b>Kandidat Tidak Cocok (Menolak Penawaran):</b> Anda dapat memproses keputusan Tolak (Disqualified) dan memindahkan berkas kandidat ke Talent Pool.</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ===================== FOOTER ACTIONS DENGAN FLOW KIRIM -> RESPON -> HIRED/TOLAK ===================== */}
+                <div className="pt-4 border-t border-slate-200 flex flex-wrap items-center justify-between gap-2 font-sans">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <button
                       type="button"
                       onClick={() => {
-                        handleConfirmHired(activeCandidate);
                         setIsOfferingDocPreviewOpen(false);
+                        handleOpenOfferingModal(activeCandidate);
                       }}
-                      className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg font-semibold shadow-xs flex items-center gap-1.5 text-xs transition-colors"
+                      className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg font-semibold flex items-center gap-1.5 text-xs transition-colors whitespace-nowrap"
                     >
-                      <CheckCircle className="w-3.5 h-3.5" />
-                      <span>Konfirmasi Terima (Hired & Onboard)</span>
+                      <Calculator className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>Kalkulator & Form</span>
                     </button>
-                  )}
+                    <button
+                      type="button"
+                      onClick={() => window.print()}
+                      className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-semibold flex items-center gap-1.5 text-xs transition-colors whitespace-nowrap"
+                    >
+                      <Printer className="w-3.5 h-3.5" />
+                      <span>Cetak</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDownloadOfferingLetter(activeCandidate)}
+                      className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-semibold flex items-center gap-1.5 text-xs transition-colors whitespace-nowrap"
+                    >
+                      <Download className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>Download</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSendOfferingViaWhatsApp(activeCandidate)}
+                      className="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-lg font-semibold flex items-center gap-1.5 text-xs transition-colors whitespace-nowrap"
+                    >
+                      <MessageSquare className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>Kirim WA</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSendOfferingViaEmail(activeCandidate)}
+                      className="px-3.5 py-2 bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-300 rounded-lg font-semibold flex items-center gap-1.5 text-xs transition-colors whitespace-nowrap"
+                    >
+                      <Mail className="w-3.5 h-3.5 text-blue-600" />
+                      <span>Kirim Email</span>
+                    </button>
+                  </div>
 
-                  {/* KONDISI 4: Balasan NEGO -> Opsi Revisi / Terima Nego / Tolak Nego */}
-                  {activeCandidate.offeringCandidateResponse === 'Nego' && (
-                    <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {/* KONDISI 1: Dokumen baru terbit / Draft -> Tombol KIRIM OFFERING */}
+                    {(!activeCandidate.offeringStatus || activeCandidate.offeringStatus === 'Draft') && (
                       <button
                         type="button"
-                        onClick={() => {
-                          handleConfirmDisqualified(activeCandidate, 'Negosiasi penawaran kerja tidak mencapai kesepakatan.');
-                          setIsOfferingDocPreviewOpen(false);
-                        }}
-                        className="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg font-semibold flex items-center gap-1.5 text-xs transition-colors"
+                        onClick={() => handleSendOfferingToCandidate(activeCandidate)}
+                        className="px-4 py-2 bg-blue-700 hover:bg-blue-800 text-white rounded-lg font-semibold shadow-xs flex items-center gap-2 text-xs transition-colors whitespace-nowrap"
                       >
-                        <XCircle className="w-3.5 h-3.5" />
-                        <span>Tolak Nego</span>
+                        <Send className="w-3.5 h-3.5" />
+                        <span>Kirim ke Kandidat</span>
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsOfferingDocPreviewOpen(false);
-                          handleOpenOfferingModal(activeCandidate);
-                        }}
-                        className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-semibold flex items-center gap-1.5 text-xs transition-colors shadow-2xs"
-                      >
-                        <Calculator className="w-3.5 h-3.5" />
-                        <span>Revisi Paket Penawaran</span>
-                      </button>
+                    )}
+
+                    {/* KONDISI 2: Terkirim, tapi belum ada balasan */}
+                    {activeCandidate.offeringStatus === 'Terkirim' && !activeCandidate.offeringCandidateResponse && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] text-slate-500 italic hidden sm:inline">
+                          Pilih balasan (Cocok / Nego / Tidak Cocok) di atas
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleSendOfferingToCandidate(activeCandidate)}
+                          className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-semibold flex items-center gap-1.5 text-xs transition-colors whitespace-nowrap"
+                        >
+                          <Send className="w-3.5 h-3.5" />
+                          <span>Kirim Ulang</span>
+                        </button>
+                      </div>
+                    )}
+
+                    {/* KONDISI 3: Balasan COCOK -> Tombol DITERIMA (HIRED) AKTIF */}
+                    {activeCandidate.offeringCandidateResponse === 'Cocok' && (
                       <button
                         type="button"
                         onClick={() => {
                           handleConfirmHired(activeCandidate);
                           setIsOfferingDocPreviewOpen(false);
                         }}
-                        className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg font-semibold flex items-center gap-1.5 text-xs transition-colors shadow-2xs"
+                        className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg font-semibold shadow-xs flex items-center gap-1.5 text-xs transition-colors whitespace-nowrap"
                       >
                         <CheckCircle className="w-3.5 h-3.5" />
-                        <span>Sepakati Nego & Terima (Hired)</span>
+                        <span>Konfirmasi Terima (Hired & Onboard)</span>
                       </button>
-                    </div>
-                  )}
+                    )}
 
-                  {/* KONDISI 5: Balasan TIDAK COCOK -> Tombol TOLAK AKTIF */}
-                  {activeCandidate.offeringCandidateResponse === 'Tidak Cocok' && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        handleConfirmDisqualified(activeCandidate, 'Kandidat menyatakan Tidak Cocok / Menolak paket penawaran kerja.');
-                        setIsOfferingDocPreviewOpen(false);
-                      }}
-                      className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg font-semibold shadow-xs flex items-center gap-1.5 text-xs transition-colors"
-                    >
-                      <XCircle className="w-3.5 h-3.5" />
-                      <span>Tolak (Disqualified / Talent Pool)</span>
-                    </button>
-                  )}
+                    {/* KONDISI 4: Balasan NEGO -> Opsi Revisi / Terima Nego / Tolak Nego */}
+                    {activeCandidate.offeringCandidateResponse === 'Nego' && (
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            handleConfirmDisqualified(activeCandidate, 'Negosiasi penawaran kerja tidak mencapai kesepakatan.');
+                            setIsOfferingDocPreviewOpen(false);
+                          }}
+                          className="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg font-semibold flex items-center gap-1.5 text-xs transition-colors whitespace-nowrap"
+                        >
+                          <XCircle className="w-3.5 h-3.5" />
+                          <span>Tolak Nego</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsOfferingDocPreviewOpen(false);
+                            handleOpenOfferingModal(activeCandidate);
+                          }}
+                          className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-semibold flex items-center gap-1.5 text-xs transition-colors shadow-2xs whitespace-nowrap"
+                        >
+                          <Calculator className="w-3.5 h-3.5" />
+                          <span>Revisi Paket</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            handleConfirmHired(activeCandidate);
+                            setIsOfferingDocPreviewOpen(false);
+                          }}
+                          className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg font-semibold flex items-center gap-1.5 text-xs transition-colors shadow-2xs whitespace-nowrap"
+                        >
+                          <CheckCircle className="w-3.5 h-3.5" />
+                          <span>Sepakati & Terima (Hired)</span>
+                        </button>
+                      </div>
+                    )}
+
+                    {/* KONDISI 5: Balasan TIDAK COCOK -> Tombol TOLAK AKTIF */}
+                    {activeCandidate.offeringCandidateResponse === 'Tidak Cocok' && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleConfirmDisqualified(activeCandidate, 'Kandidat menyatakan Tidak Cocok / Menolak paket penawaran kerja.');
+                          setIsOfferingDocPreviewOpen(false);
+                        }}
+                        className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg font-semibold shadow-xs flex items-center gap-1.5 text-xs transition-colors whitespace-nowrap"
+                      >
+                        <XCircle className="w-3.5 h-3.5" />
+                        <span>Tolak (Disqualified)</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ===================== MODAL 8: TAMBAH PELAMAR & UPLOAD CV MANUAL ===================== */}
       {isCandidateModalOpen && (

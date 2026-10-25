@@ -798,6 +798,47 @@ export interface Candidate {
   offeringCandidateResponse?: 'Cocok' | 'Nego' | 'Tidak Cocok';
   offeringResponseNotes?: string;
   offeringResponseDate?: string;
+  offeringBreakdown?: {
+    mode: 'gross' | 'net';
+    basicSalary: number;
+    allowances: Array<{
+      id: string;
+      name: string;
+      category: string;
+      type: 'fixed' | 'percent';
+      value: number;
+      amount: number;
+    }>;
+    totalAllowances: number;
+    grossSalary: number;
+    ptkp: PTKPStatus;
+    terCategory: string;
+    terRatePercent: number;
+    taxAmount: number;
+    bpjsEmployee: {
+      kes: number;
+      jht: number;
+      jp: number;
+      total: number;
+    };
+    bpjsCompany: {
+      kes: number;
+      jht: number;
+      jkk: number;
+      jkm: number;
+      jp: number;
+      total: number;
+    };
+    privateInsurances: Array<{
+      id?: string;
+      name: string;
+      companyAmount: number;
+      employeeAmount: number;
+    }>;
+    totalEmployeeDeductions: number;
+    takeHomePay: number;
+    costToCompany: number;
+  };
 
   // 8. Hired / Disqualified / Talent Pool
   joinedDate?: string;
