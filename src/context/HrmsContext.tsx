@@ -2230,7 +2230,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const existing = employees.find((e) => e.id === process.createdEmployeeId);
       if (existing) {
         setOnboardingProcesses((prev) =>
-          prev.map((p) => (p.id === processId ? { ...p, status: 'Completed' } : p))
+          prev.map((p) => (p.id === processId ? { ...p, status: 'Completed', officialNik: existing.nik } : p))
         );
         return existing;
       }
@@ -2242,7 +2242,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (existingByName) {
       setOnboardingProcesses((prev) =>
         prev.map((p) =>
-          p.id === processId ? { ...p, status: 'Completed', createdEmployeeId: existingByName.id } : p
+          p.id === processId ? { ...p, status: 'Completed', createdEmployeeId: existingByName.id, officialNik: existingByName.nik } : p
         )
       );
       return existingByName;
@@ -2315,7 +2315,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     setOnboardingProcesses((prev) =>
       prev.map((p) =>
-        p.id === processId ? { ...p, status: 'Completed', createdEmployeeId: newEmp.id } : p
+        p.id === processId ? { ...p, status: 'Completed', createdEmployeeId: newEmp.id, officialNik: newEmp.nik } : p
       )
     );
 

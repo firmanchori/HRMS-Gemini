@@ -1279,15 +1279,17 @@ export const RecruitmentManagement: React.FC = () => {
   const openIdCardModal = (process: OnboardingProcess, task: OnboardingTask) => {
     setSelectedOnboardingProcess(process);
     setSelectedOnboardingTask(task);
-    if (task.actionPayload) {
-      if (task.actionPayload.idCardType) setIdCardType(task.actionPayload.idCardType);
-      if (task.actionPayload.idCardAccessRooms) setIdCardAccessRooms(task.actionPayload.idCardAccessRooms);
-      if (task.actionPayload.idCardSpecialNotes) setIdCardSpecialNotes(task.actionPayload.idCardSpecialNotes);
-    } else {
-      setIdCardType('RFID Smart Card + Lanyard Standar NusaHR');
-      setIdCardAccessRooms(['Lantai Kerja (Working Area)', 'Kantin Karyawan & Breakroom', 'Lobby Utama & Gate Masuk']);
-      setIdCardSpecialNotes('');
-    }
+    const p = task.actionPayload || {};
+    setIdCardType(p.idCardType || 'RFID Smart Card (Standard Access)');
+    const rooms = Array.isArray(p.idCardAccessRooms) && p.idCardAccessRooms.length > 0
+      ? p.idCardAccessRooms
+      : [
+          'Pintu Lobby & Turnstile Utama',
+          'Akses Working Floor & Meeting Room',
+          'Kantin Perusahaan & Pantry',
+        ];
+    setIdCardAccessRooms(rooms);
+    setIdCardSpecialNotes(p.idCardSpecialNotes || '');
     setIsIdCardModalOpen(true);
   };
 
@@ -1309,27 +1311,26 @@ export const RecruitmentManagement: React.FC = () => {
   const openDossierModal = (process: OnboardingProcess, task: OnboardingTask) => {
     setSelectedOnboardingProcess(process);
     setSelectedOnboardingTask(task);
-    if (task.actionPayload) {
-      if (task.actionPayload.dossierKtpNumber) setDossierKtpNumber(task.actionPayload.dossierKtpNumber);
-      if (task.actionPayload.dossierNpwpNumber) setDossierNpwpNumber(task.actionPayload.dossierNpwpNumber);
-      if (task.actionPayload.dossierBpjsTkNumber) setDossierBpjsTkNumber(task.actionPayload.dossierBpjsTkNumber);
-      if (task.actionPayload.dossierBpjsKesNumber) setDossierBpjsKesNumber(task.actionPayload.dossierBpjsKesNumber);
-      if (task.actionPayload.dossierAddressKtp) setDossierAddressKtp(task.actionPayload.dossierAddressKtp);
-      if (task.actionPayload.dossierEmergencyContactName) setDossierEmergencyContactName(task.actionPayload.dossierEmergencyContactName);
-      if (task.actionPayload.dossierEmergencyContactPhone) setDossierEmergencyContactPhone(task.actionPayload.dossierEmergencyContactPhone);
-      if (task.actionPayload.dossierEmergencyContactRelation) setDossierEmergencyContactRelation(task.actionPayload.dossierEmergencyContactRelation);
-      if (task.actionPayload.dossierVerifiedDocs) setDossierVerifiedDocs(task.actionPayload.dossierVerifiedDocs);
-    } else {
-      setDossierKtpNumber('3174092408940003');
-      setDossierNpwpNumber('09.234.567.8-012.000');
-      setDossierBpjsTkNumber('23098172654');
-      setDossierBpjsKesNumber('000192837465');
-      setDossierAddressKtp('Jl. Gandaria Tengah III No. 12, Jakarta Selatan');
-      setDossierEmergencyContactName('Budi Santoso');
-      setDossierEmergencyContactPhone('081234567890');
-      setDossierEmergencyContactRelation('Orang Tua');
-      setDossierVerifiedDocs(['KTP (Kartu Tanda Penduduk)', 'Kartu Keluarga (KK)', 'NPWP', 'BPJS Ketenagakerjaan', 'BPJS Kesehatan', 'Ijazah Terakhir']);
-    }
+    const p = task.actionPayload || {};
+    setDossierKtpNumber(p.dossierKtpNumber || '3174092408940003');
+    setDossierNpwpNumber(p.dossierNpwpNumber || '09.234.567.8-012.000');
+    setDossierBpjsTkNumber(p.dossierBpjsTkNumber || '23098172654');
+    setDossierBpjsKesNumber(p.dossierBpjsKesNumber || '000192837465');
+    setDossierAddressKtp(p.dossierAddressKtp || 'Jl. Gandaria Tengah III No. 12, Jakarta Selatan');
+    setDossierEmergencyContactName(p.dossierEmergencyContactName || 'Budi Santoso');
+    setDossierEmergencyContactPhone(p.dossierEmergencyContactPhone || '081234567890');
+    setDossierEmergencyContactRelation(p.dossierEmergencyContactRelation || 'Orang Tua');
+    const docs = Array.isArray(p.dossierVerifiedDocs) && p.dossierVerifiedDocs.length > 0
+      ? p.dossierVerifiedDocs
+      : Array.isArray(p.dossierUploadedDocs) && p.dossierUploadedDocs.length > 0
+      ? p.dossierUploadedDocs
+      : [
+          'KTP & Kartu Keluarga Asli telah dicocokkan dengan salinan PDF',
+          'Ijazah Terakhir & Transkrip Akademik telah diverifikasi keasliannya',
+          'Buku Tabungan / Rekening Bank Penggajian (Payroll) telah tervalidasi',
+          'Surat Keterangan Bebas Narkoba / Hasil Medical Check-up (MCU) Lengkap',
+        ];
+    setDossierVerifiedDocs(docs);
     setIsDossierModalOpen(true);
   };
 
@@ -1355,21 +1356,21 @@ export const RecruitmentManagement: React.FC = () => {
   const openLaptopModal = (process: OnboardingProcess, task: OnboardingTask) => {
     setSelectedOnboardingProcess(process);
     setSelectedOnboardingTask(task);
-    if (task.actionPayload) {
-      if (task.actionPayload.laptopDeviceType) setLaptopDeviceType(task.actionPayload.laptopDeviceType);
-      if (task.actionPayload.laptopSerialNo) setLaptopSerialNo(task.actionPayload.laptopSerialNo);
-      if (task.actionPayload.laptopAssetTag) setLaptopAssetTag(task.actionPayload.laptopAssetTag);
-      if (task.actionPayload.laptopAccessories) setLaptopAccessories(task.actionPayload.laptopAccessories);
-      if (task.actionPayload.laptopCondition) setLaptopCondition(task.actionPayload.laptopCondition);
-      if (task.actionPayload.laptopNotes) setLaptopNotes(task.actionPayload.laptopNotes);
-    } else {
-      setLaptopDeviceType('MacBook Pro 14" M3 Pro (18GB/512GB)');
-      setLaptopSerialNo(`C02G${Math.floor(1000 + Math.random() * 9000)}MD6T`);
-      setLaptopAssetTag(`AST-IT-2026-${Math.floor(100 + Math.random() * 900)}`);
-      setLaptopAccessories(['Charger Adapter 70W USB-C', 'USB-C Multiport Hub / Dongle', 'Laptop Sleeve NusaHR', 'Wireless Optical Mouse']);
-      setLaptopCondition('Baru 100% (Seal Box)');
-      setLaptopNotes('Diserahkan langsung pada hari pertama kerja');
-    }
+    const p = task.actionPayload || {};
+    setLaptopDeviceType(p.laptopDeviceType || 'Apple MacBook Pro 14" M3 Pro (18GB / 512GB SSD)');
+    setLaptopSerialNo(p.laptopSerialNo || `C02G${Math.floor(1000 + Math.random() * 9000)}MD6T`);
+    setLaptopAssetTag(p.laptopAssetTag || `AST-IT-2026-${Math.floor(100 + Math.random() * 900)}`);
+    const accessories = Array.isArray(p.laptopAccessories) && p.laptopAccessories.length > 0
+      ? p.laptopAccessories
+      : [
+          'Charger Adaptor USB-C 140W & Kabel Power',
+          'Mouse Wireless Ergonomic',
+          'Multiport USB-C Hub / HDMI Dongle',
+          'Tas Laptop Ransel Korporat',
+        ];
+    setLaptopAccessories(accessories);
+    setLaptopCondition(p.laptopCondition || 'Baru 100% (Seal Box)');
+    setLaptopNotes(p.laptopNotes || 'Diserahkan langsung pada hari pertama kerja');
     setIsLaptopModalOpen(true);
   };
 
@@ -1392,20 +1393,22 @@ export const RecruitmentManagement: React.FC = () => {
   const openAccountModal = (process: OnboardingProcess, task: OnboardingTask) => {
     setSelectedOnboardingProcess(process);
     setSelectedOnboardingTask(task);
-    const firstName = process.employeeName.toLowerCase().split(' ')[0].replace(/[^a-z]/g, '');
-    const lastName = process.employeeName.toLowerCase().split(' ')[1]?.replace(/[^a-z]/g, '') || 'work';
+    const firstName = (process.employeeName || 'karyawan').toLowerCase().split(' ')[0].replace(/[^a-z]/g, '') || 'staff';
+    const lastName = (process.employeeName || '').toLowerCase().split(' ')[1]?.replace(/[^a-z]/g, '') || 'work';
     const suggestedEmail = `${firstName}.${lastName}@nusantara.id`;
-    if (task.actionPayload) {
-      if (task.actionPayload.corporateEmail) setCorpEmail(task.actionPayload.corporateEmail);
-      if (task.actionPayload.temporaryPassword) setTempPassword(task.actionPayload.temporaryPassword);
-      if (task.actionPayload.accountSystems) setAccountSystems(task.actionPayload.accountSystems);
-      if (task.actionPayload.notifyPersonalEmail !== undefined) setNotifyPersonalEmail(task.actionPayload.notifyPersonalEmail);
-    } else {
-      setCorpEmail(suggestedEmail);
-      setTempPassword(`Nusa${new Date().getFullYear()}!${Math.floor(100 + Math.random() * 900)}`);
-      setAccountSystems(['NusaHR Employee Portal (Self Service)', 'Google Workspace (Gmail & Drive Korporat)', 'Slack Workplace NusaHR', 'Jira & Confluence Enterprise']);
-      setNotifyPersonalEmail(true);
-    }
+    const p = task.actionPayload || {};
+    setCorpEmail(p.corporateEmail || suggestedEmail);
+    setTempPassword(p.temporaryPassword || `Nusa${new Date().getFullYear()}!${Math.floor(100 + Math.random() * 900)}`);
+    const systems = Array.isArray(p.accountSystems) && p.accountSystems.length > 0
+      ? p.accountSystems
+      : [
+          'NusaHR Employee Portal & Absensi Mobile',
+          'Google Workspace (Gmail & Drive 2TB)',
+          'Slack & Discord Corporate Workspace',
+          'Jira & Confluence Cloud Project Access',
+        ];
+    setAccountSystems(systems);
+    setNotifyPersonalEmail(p.notifyPersonalEmail !== undefined ? p.notifyPersonalEmail : true);
     setIsAccountModalOpen(true);
   };
 
@@ -1430,7 +1433,7 @@ export const RecruitmentManagement: React.FC = () => {
   const handleSubmitDossier = submitDossierVerification;
   const handleSubmitLaptop = submitLaptopAllocation;
   const handleSubmitAccount = submitAccountSetup;
-  const idCardAccessZones = idCardAccessRooms;
+  const idCardAccessZones = Array.isArray(idCardAccessRooms) ? idCardAccessRooms : [];
   const setIdCardAccessZones = setIdCardAccessRooms;
   const idCardNotes = idCardSpecialNotes;
   const setIdCardNotes = setIdCardSpecialNotes;
@@ -1448,10 +1451,12 @@ export const RecruitmentManagement: React.FC = () => {
   const setDossierEmergencyPhone = setDossierEmergencyContactPhone;
   const dossierEmergencyRel = dossierEmergencyContactRelation;
   const setDossierEmergencyRel = setDossierEmergencyContactRelation;
-  const dossierChecklist = dossierVerifiedDocs;
+  const dossierChecklist = Array.isArray(dossierVerifiedDocs) ? dossierVerifiedDocs : [];
   const setDossierChecklist = setDossierVerifiedDocs;
   const corporateEmail = corpEmail;
   const setCorporateEmail = setCorpEmail;
+  const provisionedSystems = Array.isArray(accountSystems) ? accountSystems : [];
+  const setProvisionedSystems = setAccountSystems;
 
   // ===================== 1. FORM FPTK (PERMINTAAN KARYAWAN BARU) =====================
   const [fptkPosition, setFptkPosition] = useState('');
@@ -8258,7 +8263,8 @@ PT Nusantara Multi Talenta Tbk`);
                             }
                             const createdEmp = completeOnboardingProcess(process.id);
                             if (createdEmp) {
-                              setToastFeedback(`Selamat! NIK resmi ${createdEmp.nik} telah diterbitkan untuk ${createdEmp.name}. Data resmi masuk ke Modul Personalia.`);
+                              const empName = createdEmp.fullName || (createdEmp as any).name || process.employeeName;
+                              setToastFeedback(`Selamat! NIK resmi ${createdEmp.nik} telah diterbitkan untuk ${empName}. Data resmi masuk ke Modul Personalia.`);
                             }
                           }}
                           disabled={!isAllMandatoryDone}
@@ -18574,12 +18580,13 @@ PT Nusantara Multi Talenta Tbk`);
                     >
                       <input
                         type="checkbox"
-                        checked={idCardAccessZones.includes(perm)}
+                        checked={(idCardAccessZones || []).includes(perm)}
                         onChange={(e) => {
+                          const cur = Array.isArray(idCardAccessZones) ? idCardAccessZones : [];
                           if (e.target.checked) {
-                            setIdCardAccessZones([...idCardAccessZones, perm]);
+                            setIdCardAccessZones([...cur, perm]);
                           } else {
-                            setIdCardAccessZones(idCardAccessZones.filter((x) => x !== perm));
+                            setIdCardAccessZones(cur.filter((x: string) => x !== perm));
                           }
                         }}
                         className="rounded border-slate-300 text-amber-600 focus:ring-amber-500"
@@ -18767,12 +18774,13 @@ PT Nusantara Multi Talenta Tbk`);
                     >
                       <input
                         type="checkbox"
-                        checked={dossierChecklist.includes(docItem)}
+                        checked={(dossierChecklist || []).includes(docItem)}
                         onChange={(e) => {
+                          const cur = Array.isArray(dossierChecklist) ? dossierChecklist : [];
                           if (e.target.checked) {
-                            setDossierChecklist([...dossierChecklist, docItem]);
+                            setDossierChecklist([...cur, docItem]);
                           } else {
-                            setDossierChecklist(dossierChecklist.filter((x) => x !== docItem));
+                            setDossierChecklist(cur.filter((x: string) => x !== docItem));
                           }
                         }}
                         className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
@@ -18903,12 +18911,13 @@ PT Nusantara Multi Talenta Tbk`);
                     >
                       <input
                         type="checkbox"
-                        checked={laptopAccessories.includes(acc)}
+                        checked={(laptopAccessories || []).includes(acc)}
                         onChange={(e) => {
+                          const cur = Array.isArray(laptopAccessories) ? laptopAccessories : [];
                           if (e.target.checked) {
-                            setLaptopAccessories([...laptopAccessories, acc]);
+                            setLaptopAccessories([...cur, acc]);
                           } else {
-                            setLaptopAccessories(laptopAccessories.filter((x) => x !== acc));
+                            setLaptopAccessories(cur.filter((x: string) => x !== acc));
                           }
                         }}
                         className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
@@ -19035,12 +19044,13 @@ PT Nusantara Multi Talenta Tbk`);
                     >
                       <input
                         type="checkbox"
-                        checked={provisionedSystems.includes(sys)}
+                        checked={(provisionedSystems || []).includes(sys)}
                         onChange={(e) => {
+                          const cur = Array.isArray(provisionedSystems) ? provisionedSystems : [];
                           if (e.target.checked) {
-                            setProvisionedSystems([...provisionedSystems, sys]);
+                            setProvisionedSystems([...cur, sys]);
                           } else {
-                            setProvisionedSystems(provisionedSystems.filter((x) => x !== sys));
+                            setProvisionedSystems(cur.filter((x: string) => x !== sys));
                           }
                         }}
                         className="rounded border-slate-300 text-violet-600 focus:ring-violet-500"
