@@ -144,7 +144,74 @@ export interface DynamicOfferingInsurance {
   description?: string;
 }
 
-export 
+export function solveGrossFromTargetTHP(
+  targetTHP: number,
+  ptkp: PTKPStatus,
+  basicRatio: number = 0.75,
+  enabledBenefits: { bpjsKes: boolean; bpjsJht: boolean; bpjsJp: boolean } = {
+    bpjsKes: true,
+    bpjsJht: true,
+    bpjsJp: true,
+  }
+) {
+  let low = Math.max(targetTHP, 3000000);
+  let high = targetTHP * 1.6;
+  let bestGross = targetTHP;
+  let bestDiff = Infinity;
+
+  const maxWageKes = 12000000;
+  const maxWageJP = 10042300;
+
+  for (let i = 0; i < 45; i++) {
+    const mid = (low + high) / 2;
+    const basic = Math.round(mid * basicRatio);
+    const wageForKes = Math.min(basic, maxWageKes);
+    const wageForJP = Math.min(basic, maxWageJP);
+
+    const bpjsKesEmp = enabledBenefits.bpjsKes ? Math.round(wageForKes * 0.01) : 0;
+    const bpjsJhtEmp = enabledBenefits.bpjsJht ? Math.round(basic * 0.02) : 0;
+    const bpjsJpEmp = enabledBenefits.bpjsJp ? Math.round(wageForJP * 0.01) : 0;
+    const bpjsEmp = bpjsKesEmp + bpjsJhtEmp + bpjsJpEmp;
+
+    const tax = calculatePPh21TER(mid, ptkp).taxAmount;
+    const net = mid - bpjsEmp - tax;
+
+    if (Math.abs(net - targetTHP) < Math.abs(bestDiff)) {
+      bestDiff = net - targetTHP;
+      bestGross = mid;
+    }
+
+    if (net < targetTHP) {
+      low = mid;
+    } else {
+      high = mid;
+    }
+  }
+
+  const finalGross = Math.round(bestGross);
+  const finalBasic = Math.round(finalGross * basicRatio);
+  const wageForKes = Math.min(finalBasic, maxWageKes);
+  const wageForJP = Math.min(finalBasic, maxWageJP);
+
+  const bpjsKesEmp = enabledBenefits.bpjsKes ? Math.round(wageForKes * 0.01) : 0;
+  const bpjsJhtEmp = enabledBenefits.bpjsJht ? Math.round(finalBasic * 0.02) : 0;
+  const bpjsJpEmp = enabledBenefits.bpjsJp ? Math.round(wageForJP * 0.01) : 0;
+  const bpjsEmp = bpjsKesEmp + bpjsJhtEmp + bpjsJpEmp;
+
+  const finalTax = calculatePPh21TER(finalGross, ptkp).taxAmount;
+  const finalNet = finalGross - bpjsEmp - finalTax;
+
+  return {
+    gross: finalGross,
+    basicSalary: finalBasic,
+    totalAllowances: finalGross - finalBasic,
+    bpjsEmployee: bpjsEmp,
+    taxAmount: finalTax,
+    net: finalNet,
+    diff: finalNet - targetTHP,
+  };
+}
+
 function numberToTerbilang(nilai: number): string {
   if (isNaN(nilai) || !isFinite(nilai) || nilai <= 0) return 'Nol';
   const bilangan = ['', 'Satu', 'Dua', 'Tiga', 'Empat', 'Lima', 'Enam', 'Tujuh', 'Delapan', 'Sembilan', 'Sepuluh', 'Sebelas'];
