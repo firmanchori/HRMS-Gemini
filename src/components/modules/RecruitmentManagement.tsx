@@ -1376,6 +1376,36 @@ export const RecruitmentManagement: React.FC = () => {
     setIsAccountModalOpen(false);
   };
 
+  // Compatibility Bindings for Onboarding Action Modals (Modals 12, 13, 14, 15)
+  const activeActionProcess = selectedOnboardingProcess;
+  const activeActionTask = selectedOnboardingTask;
+  const handleSubmitIdCard = submitIdCardRequest;
+  const handleSubmitDossier = submitDossierVerification;
+  const handleSubmitLaptop = submitLaptopAllocation;
+  const handleSubmitAccount = submitAccountSetup;
+  const idCardAccessZones = idCardAccessRooms;
+  const setIdCardAccessZones = setIdCardAccessRooms;
+  const idCardNotes = idCardSpecialNotes;
+  const setIdCardNotes = setIdCardSpecialNotes;
+  const dossierKtp = dossierKtpNumber;
+  const setDossierKtp = setDossierKtpNumber;
+  const dossierNpwp = dossierNpwpNumber;
+  const setDossierNpwp = setDossierNpwpNumber;
+  const dossierBpjsTk = dossierBpjsTkNumber;
+  const setDossierBpjsTk = setDossierBpjsTkNumber;
+  const dossierBpjsKes = dossierBpjsKesNumber;
+  const setDossierBpjsKes = setDossierBpjsKesNumber;
+  const dossierEmergencyName = dossierEmergencyContactName;
+  const setDossierEmergencyName = setDossierEmergencyContactName;
+  const dossierEmergencyPhone = dossierEmergencyContactPhone;
+  const setDossierEmergencyPhone = setDossierEmergencyContactPhone;
+  const dossierEmergencyRel = dossierEmergencyContactRelation;
+  const setDossierEmergencyRel = setDossierEmergencyContactRelation;
+  const dossierChecklist = dossierVerifiedDocs;
+  const setDossierChecklist = setDossierVerifiedDocs;
+  const corporateEmail = corpEmail;
+  const setCorporateEmail = setCorpEmail;
+
   // ===================== 1. FORM FPTK (PERMINTAAN KARYAWAN BARU) =====================
   const [fptkPosition, setFptkPosition] = useState('');
   const [fptkGradeMin, setFptkGradeMin] = useState('Grade 2 - Officer / Senior Staff');
