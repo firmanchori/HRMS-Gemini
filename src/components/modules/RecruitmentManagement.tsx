@@ -1148,6 +1148,7 @@ export const RecruitmentManagement: React.FC = () => {
   const [talentStageFilter, setTalentStageFilter] = useState('all');
   const [talentMinScoreFilter, setTalentMinScoreFilter] = useState<number | 'all'>('all');
   const [selectedTalentCandidate, setSelectedTalentCandidate] = useState<Candidate | null>(null);
+  const [talentModalTab, setTalentModalTab] = useState<'overview' | 'test' | 'interview' | 'mcu'>('overview');
   const [isReengageModalOpen, setIsReengageModalOpen] = useState(false);
   const [candidateToReengage, setCandidateToReengage] = useState<Candidate | null>(null);
   const [reengageVacancyId, setReengageVacancyId] = useState<string>('');
@@ -2166,6 +2167,52 @@ export const RecruitmentManagement: React.FC = () => {
         ? cand.talentPoolTags
         : ['Komunikasi Efektif', 'Problem Solving', 'Team Collaboration'];
 
+    // Riwayat Tes & Hasil Nilai
+    const testHistory = {
+      testType: cand.testType || 'Tes Kemampuan & Asesmen Teknis',
+      testScore: cand.testScore ?? cand.overallAssessmentScore ?? (score ? Math.min(100, score + 2) : 88),
+      testPassingGrade: cand.testPassingGrade ?? 75,
+      testStatus: cand.testStatus || 'Lulus',
+      testDate: cand.testAssignedDate || cand.appliedDate || '2026-10-15',
+      testNotes: cand.testNotes || 'Kandidat menunjukkan performa logika analitis dan kompetensi fungsional yang memenuhi passing grade.',
+      competencies:
+        cand.competencyScores && cand.competencyScores.length > 0
+          ? cand.competencyScores
+          : [
+              { competencyName: 'Logika Pemecahan Masalah & Analitik', score: cand.testScore ? Math.min(100, cand.testScore + 2) : 92, passingGrade: 75, status: 'Lulus' as const },
+              { competencyName: 'Kompetensi Fungsional & Eksekusi Teknis', score: cand.testScore ?? 90, passingGrade: 75, status: 'Lulus' as const },
+              { competencyName: 'Ketelitian & Konsistensi Kerja', score: cand.testScore ? Math.max(70, cand.testScore - 3) : 86, passingGrade: 75, status: 'Lulus' as const },
+            ],
+    };
+
+    // Riwayat Wawancara & Hasil Nilai
+    const interviewHistory = {
+      interviewStep: cand.interviewStep || 2,
+      interviewDate: cand.interviewDate || dateStr,
+      interviewTime: cand.interviewStartTime || '14:00 WIB',
+      interviewFormat: cand.interviewFormat || 'Online',
+      meetingPlatform: cand.meetingPlatform || locationStr,
+      interviewer: cand.interviewer || interviewerStr,
+      interviewScore: cand.interviewScore ?? (score ?? 88),
+      scorecard: cand.interviewScorecard || {
+        technical: cand.interviewScore ? Math.min(100, cand.interviewScore + 2) : 90,
+        culturalFit: cand.interviewScore ?? 88,
+        communication: cand.interviewScore ? Math.min(100, cand.interviewScore + 1) : 89,
+        recommendation: (cand.interviewScore && cand.interviewScore >= 85 ? 'Direkomendasikan Lolos' : 'Dipertimbangkan') as 'Direkomendasikan Lolos' | 'Dipertimbangkan' | 'Tidak Direkomendasikan',
+      },
+      interviewNotes: cand.interviewNotes || notesStr,
+    };
+
+    // Riwayat Medical Check Up (MCU) & Hasil Nilai
+    const mcuHistory = {
+      mcuStatus: cand.mcuStatus || 'Fit (Lolos)',
+      mcuDate: cand.mcuDate || '2026-10-24',
+      mcuHospital: cand.mcuClinicOrHospital || 'RS Siloam Semanggi / Prodia Lab',
+      mcuPackage: cand.mcuPackage || 'Paket Pra-Kerja Standar NusaHR (Darah, Thorax, Urine, Fisik)',
+      mcuNotes: cand.mcuNotes || 'Kondisi fisik prima, pemeriksaan penunjang laboratorium dan rontgen thorax dalam rentang normal, bebas zat adiktif. Layak dan memenuhi standar kesehatan kerja.',
+      mcuDecision: cand.mcuDecision || 'Lolos ke Offering',
+    };
+
     return {
       appliedPosition,
       department,
@@ -2176,6 +2223,9 @@ export const RecruitmentManagement: React.FC = () => {
       interviewerStr,
       notesStr,
       skills,
+      testHistory,
+      interviewHistory,
+      mcuHistory,
     };
   };
 
@@ -8815,6 +8865,27 @@ PT Nusantara Multi Talenta Tbk`);
                               <strong className="font-semibold text-slate-800">Dengan Siapa:</strong> {details.interviewerStr}
                             </span>
                           </div>
+                        </div>
+                      </div>
+
+                      {/* Riwayat Hasil Nilai Ringkas: Tes, Wawancara, MCU */}
+                      <div className="grid grid-cols-3 gap-1.5 p-2 bg-slate-50 border border-slate-200/90 rounded-xl text-center">
+                        <div className="bg-white p-1.5 rounded-lg border border-slate-200/80 shadow-2xs">
+                          <span className="text-[9px] text-slate-400 font-bold block uppercase tracking-wider">Tes / Ujian</span>
+                          <span className="text-xs font-bold text-blue-700 block">{details.testHistory.testScore}/100</span>
+                          <span className="text-[9px] text-emerald-600 block font-semibold truncate">{details.testHistory.testStatus}</span>
+                        </div>
+                        <div className="bg-white p-1.5 rounded-lg border border-slate-200/80 shadow-2xs">
+                          <span className="text-[9px] text-slate-400 font-bold block uppercase tracking-wider">Wawancara</span>
+                          <span className="text-xs font-bold text-indigo-700 block">{details.interviewHistory.interviewScore}/100</span>
+                          <span className="text-[9px] text-indigo-600 block font-semibold truncate">{details.interviewHistory.scorecard.recommendation.split(' ')[0]}</span>
+                        </div>
+                        <div className="bg-white p-1.5 rounded-lg border border-slate-200/80 shadow-2xs">
+                          <span className="text-[9px] text-slate-400 font-bold block uppercase tracking-wider">MCU Kesehatan</span>
+                          <span className={`text-[10px] font-bold block truncate ${details.mcuHistory.mcuStatus.includes('Fit') ? 'text-emerald-700' : 'text-rose-700'}`}>
+                            {details.mcuHistory.mcuStatus}
+                          </span>
+                          <span className="text-[9px] text-slate-400 block truncate">{details.mcuHistory.mcuDate}</span>
                         </div>
                       </div>
 
@@ -19717,150 +19788,480 @@ PT Nusantara Multi Talenta Tbk`);
                 </button>
               </div>
 
+              {/* Tab Navigation Riwayat & Profiling */}
+              <div className="flex border-b border-slate-200 px-6 bg-slate-50 gap-2 overflow-x-auto">
+                <button
+                  type="button"
+                  onClick={() => setTalentModalTab('overview')}
+                  className={`py-3 px-3.5 text-xs font-bold border-b-2 transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+                    talentModalTab === 'overview'
+                      ? 'border-blue-600 text-blue-700 bg-white'
+                      : 'border-transparent text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                  <span>Ringkasan Profiling</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setTalentModalTab('test')}
+                  className={`py-3 px-3.5 text-xs font-bold border-b-2 transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+                    talentModalTab === 'test'
+                      ? 'border-blue-600 text-blue-700 bg-white'
+                      : 'border-transparent text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  <Award className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Riwayat Tes ({details.testHistory.testScore}/100)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setTalentModalTab('interview')}
+                  className={`py-3 px-3.5 text-xs font-bold border-b-2 transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+                    talentModalTab === 'interview'
+                      ? 'border-blue-600 text-blue-700 bg-white'
+                      : 'border-transparent text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  <Video className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>Riwayat Wawancara ({details.interviewHistory.interviewScore}/100)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setTalentModalTab('mcu')}
+                  className={`py-3 px-3.5 text-xs font-bold border-b-2 transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+                    talentModalTab === 'mcu'
+                      ? 'border-blue-600 text-blue-700 bg-white'
+                      : 'border-transparent text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  <HeartPulse className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Riwayat MCU ({details.mcuHistory.mcuStatus.split(' ')[0]})</span>
+                </button>
+              </div>
+
               {/* Body */}
               <div className="p-6 space-y-5 max-h-[75vh] overflow-y-auto text-xs">
-                {/* 1. KOTAK INFORMASI RIWAYAT SELEKSI LENGKAP (Kapan, Dimana, Dengan Siapa, Posisi) */}
-                <div className="p-4 bg-gradient-to-br from-blue-50/70 via-indigo-50/40 to-slate-50 border border-blue-200 rounded-xl space-y-3.5">
-                  <div className="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-blue-200/80">
-                    <span className="font-bold text-blue-950 text-xs flex items-center gap-1.5">
-                      <CalendarCheck className="w-4 h-4 text-blue-700" />
-                      <span>Audit Trail Riwayat Seleksi & Tahap Terakhir</span>
-                    </span>
-                    <div className={`px-2.5 py-0.5 rounded-full border text-xs font-bold ${scoreColor}`}>
-                      Skor Tahap: {details.score} / 100
-                    </div>
-                  </div>
-
-                  {/* 4 Kotak Ringkasan */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div className="p-3 bg-white rounded-lg border border-slate-200 space-y-1 shadow-2xs">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
-                        <Briefcase className="w-3 h-3 text-blue-600" />
-                        <span>Posisi yang Dilamar</span>
-                      </span>
-                      <p className="font-bold text-slate-900 text-xs">{details.appliedPosition}</p>
-                      <p className="text-[11px] text-slate-500">Departemen: {details.department}</p>
-                    </div>
-
-                    <div className="p-3 bg-white rounded-lg border border-slate-200 space-y-1 shadow-2xs">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
-                        <Clock className="w-3 h-3 text-blue-600" />
-                        <span>Kapan (Waktu Pelaksanaan)</span>
-                      </span>
-                      <p className="font-bold text-slate-900 text-xs">{details.dateStr}</p>
-                      <p className="text-[11px] text-slate-500">Tahap: {details.lastStage}</p>
-                    </div>
-
-                    <div className="p-3 bg-white rounded-lg border border-slate-200 space-y-1 shadow-2xs">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
-                        <MapPin className="w-3 h-3 text-blue-600" />
-                        <span>Dimana (Lokasi / Media)</span>
-                      </span>
-                      <p className="font-bold text-slate-900 text-xs truncate">{details.locationStr}</p>
-                      <p className="text-[11px] text-slate-500">Metode: {selectedTalentCandidate.interviewFormat || 'Online Assessment / Conference'}</p>
-                    </div>
-
-                    <div className="p-3 bg-white rounded-lg border border-slate-200 space-y-1 shadow-2xs">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
-                        <User className="w-3 h-3 text-blue-600" />
-                        <span>Dengan Siapa (Pewawancara / Penilai)</span>
-                      </span>
-                      <p className="font-bold text-slate-900 text-xs truncate">{details.interviewerStr}</p>
-                      <p className="text-[11px] text-slate-500">Tim Evaluator & HC Board</p>
-                    </div>
-                  </div>
-
-                  {/* Catatan Lengkap Evaluator */}
-                  <div className="p-3 bg-white rounded-lg border border-blue-200/90 text-xs space-y-1">
-                    <span className="font-semibold text-slate-800 text-[11px] flex items-center gap-1">
-                      <FileText className="w-3.5 h-3.5 text-blue-600" />
-                      <span>Catatan Evaluasi / Pertimbangan Masuk Talent Pool:</span>
-                    </span>
-                    <p className="text-slate-700 text-xs leading-relaxed italic bg-slate-50/80 p-2.5 rounded border border-slate-200/80">
-                      "{details.notesStr}"
-                    </p>
-                  </div>
-                </div>
-
-                {/* 2. PROFILING KANDIDAT & LATAR BELAKANG */}
-                <div className="space-y-3">
-                  <span className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
-                    <GraduationCap className="w-4 h-4 text-emerald-600" />
-                    <span>Data Profiling & Latar Belakang</span>
-                  </span>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 bg-slate-50 border border-slate-200 rounded-xl">
-                    <div>
-                      <span className="text-[10px] text-slate-400 block font-semibold">Pendidikan Terakhir</span>
-                      <p className="font-semibold text-slate-800 text-xs">
-                        {selectedTalentCandidate.parsedData?.education || 'S1 Pendidikan Terkait'}
-                      </p>
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-slate-400 block font-semibold">Total Pengalaman Kerja</span>
-                      <p className="font-semibold text-slate-800 text-xs">
-                        {selectedTalentCandidate.parsedData?.experienceYears || '3+ Tahun'}
-                      </p>
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-slate-400 block font-semibold">Ekspektasi Gaji</span>
-                      <p className="font-bold text-emerald-700 text-xs">
-                        {formatRupiah(selectedTalentCandidate.expectedSalary || 15000000)} / bln
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Executive Summary */}
-                  {selectedTalentCandidate.parsedData?.summary && (
-                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
-                      <span className="text-[10px] font-semibold text-slate-500 block mb-0.5">Ringkasan Profil (AI / Resume Parse):</span>
-                      <p className="text-slate-700 text-xs leading-relaxed">
-                        {selectedTalentCandidate.parsedData.summary}
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Top Skills Badges */}
-                  <div>
-                    <span className="font-bold text-slate-800 text-xs block mb-1.5">Keahlian & Penguasaan Kompetensi (Skills):</span>
-                    <div className="flex flex-wrap gap-1.5">
-                      {details.skills.map((skill, sIdx) => (
-                        <span
-                          key={sIdx}
-                          className="px-2.5 py-1 bg-blue-50 text-blue-800 border border-blue-200 rounded-lg text-xs font-medium"
-                        >
-                          {skill}
+                {/* ================= TAB 1: OVERVIEW & PROFILING ================= */}
+                {talentModalTab === 'overview' && (
+                  <div className="space-y-4">
+                    {/* Ringkasan Skor 3 Tahapan Utama */}
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-xl space-y-1">
+                        <span className="text-[10px] text-blue-700 font-bold uppercase tracking-wider block">1. Riwayat Tes</span>
+                        <div className="flex items-baseline gap-1">
+                          <strong className="text-base font-bold text-blue-950">{details.testHistory.testScore}</strong>
+                          <span className="text-[11px] text-slate-500">/ 100</span>
+                        </div>
+                        <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded inline-block">
+                          {details.testHistory.testStatus}
                         </span>
-                      ))}
+                      </div>
+
+                      <div className="p-3 bg-indigo-50/70 border border-indigo-200 rounded-xl space-y-1">
+                        <span className="text-[10px] text-indigo-700 font-bold uppercase tracking-wider block">2. Riwayat Wawancara</span>
+                        <div className="flex items-baseline gap-1">
+                          <strong className="text-base font-bold text-indigo-950">{details.interviewHistory.interviewScore}</strong>
+                          <span className="text-[11px] text-slate-500">/ 100</span>
+                        </div>
+                        <span className="text-[10px] font-semibold text-indigo-700 bg-indigo-100 px-1.5 py-0.5 rounded inline-block truncate">
+                          {details.interviewHistory.scorecard.recommendation}
+                        </span>
+                      </div>
+
+                      <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-xl space-y-1">
+                        <span className="text-[10px] text-emerald-700 font-bold uppercase tracking-wider block">3. Riwayat MCU</span>
+                        <div className="text-sm font-bold text-emerald-950 truncate">{details.mcuHistory.mcuStatus}</div>
+                        <span className="text-[10px] text-slate-500 block truncate">{details.mcuHistory.mcuHospital}</span>
+                      </div>
+                    </div>
+
+                    {/* Audit Trail Riwayat Terakhir */}
+                    <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+                      <div className="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-slate-200">
+                        <span className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
+                          <CalendarCheck className="w-4 h-4 text-blue-700" />
+                          <span>Tahap Terakhir yang Diikuti: {details.lastStage}</span>
+                        </span>
+                        <div className={`px-2.5 py-0.5 rounded-full border text-xs font-bold ${scoreColor}`}>
+                          Skor: {details.score} / 100
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="p-2.5 bg-white rounded-lg border border-slate-200 space-y-0.5">
+                          <span className="text-[10px] text-slate-400 font-bold uppercase block">Posisi yang Dilamar</span>
+                          <p className="font-bold text-slate-900 text-xs">{details.appliedPosition}</p>
+                          <p className="text-[11px] text-slate-500">Departemen: {details.department}</p>
+                        </div>
+
+                        <div className="p-2.5 bg-white rounded-lg border border-slate-200 space-y-0.5">
+                          <span className="text-[10px] text-slate-400 font-bold uppercase block">Kapan (Waktu Pelaksanaan)</span>
+                          <p className="font-bold text-slate-900 text-xs">{details.dateStr}</p>
+                          <p className="text-[11px] text-slate-500">Tanggal tercatat dalam sistem</p>
+                        </div>
+
+                        <div className="p-2.5 bg-white rounded-lg border border-slate-200 space-y-0.5">
+                          <span className="text-[10px] text-slate-400 font-bold uppercase block">Dimana (Lokasi / Media)</span>
+                          <p className="font-bold text-slate-900 text-xs truncate">{details.locationStr}</p>
+                          <p className="text-[11px] text-slate-500">Platform interaksi</p>
+                        </div>
+
+                        <div className="p-2.5 bg-white rounded-lg border border-slate-200 space-y-0.5">
+                          <span className="text-[10px] text-slate-400 font-bold uppercase block">Dengan Siapa (Penilai / Pewawancara)</span>
+                          <p className="font-bold text-slate-900 text-xs truncate">{details.interviewerStr}</p>
+                          <p className="text-[11px] text-slate-500">Tim Evaluator & Penguji</p>
+                        </div>
+                      </div>
+
+                      <div className="p-3 bg-white rounded-lg border border-slate-200 space-y-1">
+                        <span className="font-semibold text-slate-700 text-[11px] flex items-center gap-1">
+                          <FileText className="w-3.5 h-3.5 text-blue-600" />
+                          <span>Catatan Evaluasi / Pertimbangan Masuk Talent Pool:</span>
+                        </span>
+                        <p className="text-slate-600 text-xs leading-relaxed italic bg-slate-50 p-2.5 rounded border border-slate-200/80">
+                          "{details.notesStr}"
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Data Profiling Kandidat */}
+                    <div className="space-y-3 pt-1">
+                      <span className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
+                        <GraduationCap className="w-4 h-4 text-emerald-600" />
+                        <span>Data Profiling & Latar Belakang</span>
+                      </span>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                        <div>
+                          <span className="text-[10px] text-slate-400 block font-semibold">Pendidikan Terakhir</span>
+                          <p className="font-semibold text-slate-800 text-xs">
+                            {selectedTalentCandidate.parsedData?.education || 'S1 Pendidikan Terkait'}
+                          </p>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-400 block font-semibold">Total Pengalaman Kerja</span>
+                          <p className="font-semibold text-slate-800 text-xs">
+                            {selectedTalentCandidate.parsedData?.experienceYears || '3+ Tahun'}
+                          </p>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-400 block font-semibold">Ekspektasi Gaji</span>
+                          <p className="font-bold text-emerald-700 text-xs">
+                            {formatRupiah(selectedTalentCandidate.expectedSalary || 15000000)} / bln
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Keahlian / Skills */}
+                      <div>
+                        <span className="font-bold text-slate-800 text-xs block mb-1.5">Keahlian & Kemampuan:</span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {details.skills.map((skill, sIdx) => (
+                            <span
+                              key={sIdx}
+                              className="px-2.5 py-1 bg-blue-50 text-blue-800 border border-blue-200 rounded-lg text-xs font-medium"
+                            >
+                              {skill}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Links */}
+                      <div className="flex items-center gap-2 pt-1 flex-wrap">
+                        {selectedTalentCandidate.parsedData?.linkedinUrl && (
+                          <a
+                            href={selectedTalentCandidate.parsedData.linkedinUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5 text-blue-600" />
+                            <span>Profil LinkedIn</span>
+                          </a>
+                        )}
+                        {selectedTalentCandidate.parsedData?.portfolioUrl && (
+                          <a
+                            href={selectedTalentCandidate.parsedData.portfolioUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                          >
+                            <Globe className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>Portofolio / GitHub</span>
+                          </a>
+                        )}
+                      </div>
                     </div>
                   </div>
+                )}
 
-                  {/* External Links */}
-                  <div className="flex items-center gap-2 pt-1 flex-wrap">
-                    {selectedTalentCandidate.parsedData?.linkedinUrl && (
-                      <a
-                        href={selectedTalentCandidate.parsedData.linkedinUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 text-xs font-semibold flex items-center gap-1.5 transition-colors"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5 text-blue-600" />
-                        <span>Profil LinkedIn</span>
-                      </a>
-                    )}
-                    {selectedTalentCandidate.parsedData?.portfolioUrl && (
-                      <a
-                        href={selectedTalentCandidate.parsedData.portfolioUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 text-xs font-semibold flex items-center gap-1.5 transition-colors"
-                      >
-                        <Globe className="w-3.5 h-3.5 text-emerald-600" />
-                        <span>Portofolio / GitHub</span>
-                      </a>
-                    )}
+                {/* ================= TAB 2: RIWAYAT TES & HASIL NILAI ================= */}
+                {talentModalTab === 'test' && (
+                  <div className="space-y-4">
+                    {/* Header Nilai Tes */}
+                    <div className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl flex items-center justify-between gap-4 flex-wrap">
+                      <div className="space-y-1">
+                        <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider block">
+                          Ujian / Tes Kemampuan & Asesmen
+                        </span>
+                        <h4 className="text-sm font-bold text-blue-950">{details.testHistory.testType}</h4>
+                        <p className="text-xs text-slate-600">
+                          Tanggal Ujian: <strong>{details.testHistory.testDate}</strong> · Passing Grade Acuan: <strong>{details.testHistory.testPassingGrade}/100</strong>
+                        </p>
+                      </div>
+
+                      <div className="text-right">
+                        <span className="text-[10px] text-slate-500 block">Total Nilai Tes:</span>
+                        <div className="flex items-baseline gap-1 justify-end">
+                          <span className="text-2xl font-black text-blue-700">{details.testHistory.testScore}</span>
+                          <span className="text-xs text-slate-400 font-bold">/ 100</span>
+                        </div>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-200">
+                          Status: {details.testHistory.testStatus}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Rincian Skor Kompetensi Tes */}
+                    <div className="space-y-3">
+                      <span className="font-bold text-slate-900 text-xs block">
+                        Rincian Breakdown Hasil Nilai per Aspek Kompetensi:
+                      </span>
+
+                      <div className="space-y-2.5">
+                        {details.testHistory.competencies.map((comp, cIdx) => (
+                          <div
+                            key={cIdx}
+                            className="p-3 bg-white border border-slate-200 rounded-xl space-y-1.5 shadow-2xs"
+                          >
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="font-semibold text-slate-800">{comp.competencyName}</span>
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-blue-700">{comp.score} / 100</span>
+                                <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                  {comp.status}
+                                </span>
+                              </div>
+                            </div>
+                            {/* Visual Progress Bar */}
+                            <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                              <div
+                                className={`h-full rounded-full ${
+                                  comp.score >= 90 ? 'bg-emerald-500' : comp.score >= 80 ? 'bg-blue-600' : 'bg-amber-500'
+                                }`}
+                                style={{ width: `${Math.min(100, Math.max(0, comp.score))}%` }}
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Catatan Asesor / Psikolog */}
+                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
+                      <span className="font-semibold text-slate-800 text-[11px] flex items-center gap-1">
+                        <FileText className="w-3.5 h-3.5 text-blue-600" />
+                        <span>Catatan Hasil Evaluasi Asesor & Penguji:</span>
+                      </span>
+                      <p className="text-slate-700 text-xs leading-relaxed italic bg-white p-2.5 rounded border border-slate-200">
+                        "{details.testHistory.testNotes}"
+                      </p>
+                    </div>
                   </div>
-                </div>
+                )}
+
+                {/* ================= TAB 3: RIWAYAT WAWANCARA & HASIL NILAI ================= */}
+                {talentModalTab === 'interview' && (
+                  <div className="space-y-4">
+                    {/* Header Nilai Wawancara */}
+                    <div className="p-4 bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-200 rounded-xl flex items-center justify-between gap-4 flex-wrap">
+                      <div className="space-y-1">
+                        <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider block">
+                          Tahap Wawancara Kerja (Interview)
+                        </span>
+                        <h4 className="text-sm font-bold text-indigo-950">
+                          Wawancara Tahap {details.interviewHistory.interviewStep} ({details.interviewHistory.interviewFormat})
+                        </h4>
+                        <p className="text-xs text-slate-600 flex items-center gap-1.5 flex-wrap">
+                          <span>Waktu: <strong>{details.interviewHistory.interviewDate}, {details.interviewHistory.interviewTime}</strong></span>
+                          <span>·</span>
+                          <span>Lokasi: <strong>{details.interviewHistory.meetingPlatform}</strong></span>
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          Pewawancara: <strong>{details.interviewHistory.interviewer}</strong>
+                        </p>
+                      </div>
+
+                      <div className="text-right">
+                        <span className="text-[10px] text-slate-500 block">Total Nilai Interview:</span>
+                        <div className="flex items-baseline gap-1 justify-end">
+                          <span className="text-2xl font-black text-indigo-700">{details.interviewHistory.interviewScore}</span>
+                          <span className="text-xs text-slate-400 font-bold">/ 100</span>
+                        </div>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-indigo-100 text-indigo-800 border border-indigo-200">
+                          {details.interviewHistory.scorecard.recommendation}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Scorecard Kriteria Wawancara */}
+                    <div className="space-y-3">
+                      <span className="font-bold text-slate-900 text-xs block">
+                        Rincian Hasil Scorecard Kriteria Wawancara:
+                      </span>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div className="p-3 bg-white border border-slate-200 rounded-xl space-y-1.5 shadow-2xs">
+                          <span className="text-[10px] text-slate-400 font-bold uppercase block">1. Kompetensi Teknis</span>
+                          <div className="text-lg font-bold text-indigo-700">
+                            {details.interviewHistory.scorecard.technical} <span className="text-xs text-slate-400">/ 100</span>
+                          </div>
+                          <p className="text-[11px] text-slate-500">Pemahaman arsitektur & eksekusi fungsional</p>
+                        </div>
+
+                        <div className="p-3 bg-white border border-slate-200 rounded-xl space-y-1.5 shadow-2xs">
+                          <span className="text-[10px] text-slate-400 font-bold uppercase block">2. Cultural Fit & Nilai</span>
+                          <div className="text-lg font-bold text-indigo-700">
+                            {details.interviewHistory.scorecard.culturalFit} <span className="text-xs text-slate-400">/ 100</span>
+                          </div>
+                          <p className="text-[11px] text-slate-500">Kesesuaian budaya & integritas kerja</p>
+                        </div>
+
+                        <div className="p-3 bg-white border border-slate-200 rounded-xl space-y-1.5 shadow-2xs">
+                          <span className="text-[10px] text-slate-400 font-bold uppercase block">3. Komunikasi & Karakter</span>
+                          <div className="text-lg font-bold text-indigo-700">
+                            {details.interviewHistory.scorecard.communication} <span className="text-xs text-slate-400">/ 100</span>
+                          </div>
+                          <p className="text-[11px] text-slate-500">Kemampuan artikulasi & kolaborasi tim</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Catatan Pewawancara / User Feedback */}
+                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
+                      <span className="font-semibold text-slate-800 text-[11px] flex items-center gap-1">
+                        <MessageSquare className="w-3.5 h-3.5 text-indigo-600" />
+                        <span>Catatan Evaluasi Pewawancara (Interviewer / User):</span>
+                      </span>
+                      <p className="text-slate-700 text-xs leading-relaxed italic bg-white p-2.5 rounded border border-slate-200">
+                        "{details.interviewHistory.interviewNotes}"
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* ================= TAB 4: RIWAYAT MEDICAL CHECK UP (MCU) ================= */}
+                {talentModalTab === 'mcu' && (
+                  <div className="space-y-4">
+                    {/* Header MCU */}
+                    <div className="p-4 bg-gradient-to-r from-teal-50 to-emerald-50 border border-teal-200 rounded-xl flex items-center justify-between gap-4 flex-wrap">
+                      <div className="space-y-1">
+                        <span className="text-[10px] font-bold text-teal-700 uppercase tracking-wider block">
+                          Pemeriksaan Kesehatan Pra-Kerja (MCU)
+                        </span>
+                        <h4 className="text-sm font-bold text-teal-950">{details.mcuHistory.mcuHospital}</h4>
+                        <p className="text-xs text-slate-600 flex items-center gap-1.5 flex-wrap">
+                          <span>Tanggal Pemeriksaan: <strong>{details.mcuHistory.mcuDate}</strong></span>
+                          <span>·</span>
+                          <span>Paket: <strong>{details.mcuHistory.mcuPackage}</strong></span>
+                        </p>
+                      </div>
+
+                      <div className="text-right">
+                        <span className="text-[10px] text-slate-500 block">Status Kelayakan Kerja:</span>
+                        <span
+                          className={`text-sm font-bold px-2.5 py-1 rounded-lg border block mt-0.5 ${
+                            details.mcuHistory.mcuStatus.includes('Fit')
+                              ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                              : 'bg-rose-100 text-rose-800 border-rose-300'
+                          }`}
+                        >
+                          {details.mcuHistory.mcuStatus}
+                        </span>
+                        <span className="text-[10px] font-semibold text-slate-500 block mt-0.5">
+                          Keputusan: {details.mcuHistory.mcuDecision}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Rincian Pemeriksaan Laboratorium & Fisik Medis */}
+                    <div className="space-y-3">
+                      <span className="font-bold text-slate-900 text-xs block">
+                        Rincian Hasil Evaluasi Laboratorium & Pemeriksaan Medis:
+                      </span>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="p-3 bg-white border border-slate-200 rounded-xl space-y-1 shadow-2xs">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-bold text-slate-800 flex items-center gap-1">
+                              <HeartPulse className="w-3.5 h-3.5 text-rose-600" />
+                              <span>Fisik & Tanda Vital</span>
+                            </span>
+                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
+                              Normal
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-600">Tekanan Darah: 120/80 mmHg, denyut nadi 76 bpm, IMT Normal (Ideal).</p>
+                        </div>
+
+                        <div className="p-3 bg-white border border-slate-200 rounded-xl space-y-1 shadow-2xs">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-bold text-slate-800 flex items-center gap-1">
+                              <Activity className="w-3.5 h-3.5 text-blue-600" />
+                              <span>Rontgen Thorax (Rongga Dada)</span>
+                            </span>
+                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
+                              Normal
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-600">Jantung dan paru dalam batas normal, tidak tampak infiltrat/kelainan spesifik.</p>
+                        </div>
+
+                        <div className="p-3 bg-white border border-slate-200 rounded-xl space-y-1 shadow-2xs">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-bold text-slate-800 flex items-center gap-1">
+                              <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
+                              <span>Laboratorium Darah Rutin</span>
+                            </span>
+                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
+                              Normal
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-600">Hemoglobin 14.8 g/dL, Leukosit 6.800/uL, Gula Darah Puasa 92 mg/dL.</p>
+                        </div>
+
+                        <div className="p-3 bg-white border border-slate-200 rounded-xl space-y-1 shadow-2xs">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-bold text-slate-800 flex items-center gap-1">
+                              <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
+                              <span>Urine & Toksikologi Narkoba</span>
+                            </span>
+                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
+                              Negatif (Lolos)
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-600">Bebas dari zat narkotika, psikotropika, dan zat adiktif terlarang (5 Parameter).</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Catatan Kesimpulan Dokter Pemeriksa */}
+                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
+                      <span className="font-semibold text-slate-800 text-[11px] flex items-center gap-1">
+                        <FileText className="w-3.5 h-3.5 text-teal-600" />
+                        <span>Catatan Kesimpulan Medis & Tim Dokter Okupasi:</span>
+                      </span>
+                      <p className="text-slate-700 text-xs leading-relaxed italic bg-white p-2.5 rounded border border-slate-200">
+                        "{details.mcuHistory.mcuNotes}"
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Footer */}
