@@ -5572,12 +5572,10 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
                 </div>
               </div>
 
-              {/* Grid Pipeline: Di Tablet (md:) tampil 2 kolom per row agar lebar & luas! Di Desktop (xl:) 4 kolom atau sesuai filter */}
+              {/* Grid Pipeline: Jika 1 atau 2 filter, lebar kolom sama persis (md:grid-cols-2). Di Desktop jika 3 atau 4 tahapan menyesuaikan xl:grid-cols-3 atau xl:grid-cols-4 */}
               <div
                 className={`grid grid-cols-1 md:grid-cols-2 ${
-                  pipelineStageFilter.length === 1
-                    ? 'md:max-w-xl md:mx-auto'
-                    : pipelineStageFilter.length === 3
+                  pipelineStageFilter.length === 3
                     ? 'xl:grid-cols-3'
                     : pipelineStageFilter.length === 4
                     ? 'xl:grid-cols-4'
