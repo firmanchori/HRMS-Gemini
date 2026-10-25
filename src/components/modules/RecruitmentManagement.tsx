@@ -653,6 +653,196 @@ const OFFLINE_ASSESSMENT_ROOM_CATALOG: Record<string, {
   }
 };
 
+interface NormalizedOfferingBreakdown {
+  calculationMode: 'gross' | 'net';
+  targetThpAmount?: number;
+  basicSalary: number;
+  allowances: {
+    id: string;
+    name: string;
+    type: 'fixed' | 'percent';
+    value: number;
+    amount: number;
+    taxable: boolean;
+  }[];
+  totalAllowances: number;
+  grossSalary: number;
+  ptkpCode: string;
+  ptkpCategory: string;
+  terRatePercent: number;
+  taxAmountMonthly: number;
+  bpjsEmployee: {
+    jht: number;
+    jp: number;
+    kesehatan: number;
+    total: number;
+  };
+  bpjsCompany: {
+    jkk: number;
+    jkm: number;
+    jht: number;
+    jp: number;
+    kesehatan: number;
+    total: number;
+  };
+  insurances: {
+    id: string;
+    name: string;
+    provider: string;
+    category: string;
+    coverage: string;
+    premiumEmployee: number;
+    premiumCompany: number;
+  }[];
+  totalEmployeeInsurances: number;
+  totalCompanyInsurances: number;
+  totalDeductionsEmployee: number;
+  thp: number;
+  costToCompany: number;
+}
+
+function getSafeCandidateOfferingBreakdown(
+  candidate: Candidate | null | undefined,
+  currentCalculatedOffering?: any,
+  currentInsurances?: DynamicOfferingInsurance[]
+): NormalizedOfferingBreakdown {
+  if (!candidate) {
+    return {
+      calculationMode: 'gross',
+      basicSalary: 10000000,
+      allowances: [],
+      totalAllowances: 0,
+      grossSalary: 10000000,
+      ptkpCode: 'TK/0',
+      ptkpCategory: 'TER A',
+      terRatePercent: 1.5,
+      taxAmountMonthly: 150000,
+      bpjsEmployee: { jht: 200000, jp: 100000, kesehatan: 100000, total: 400000 },
+      bpjsCompany: { jkk: 24000, jkm: 30000, jht: 370000, jp: 200000, kesehatan: 400000, total: 1024000 },
+      insurances: [],
+      totalEmployeeInsurances: 0,
+      totalCompanyInsurances: 0,
+      totalDeductionsEmployee: 550000,
+      thp: 9450000,
+      costToCompany: 11024000
+    };
+  }
+
+  // Jika candidate sudah memiliki offeringBreakdown
+  const b: any = candidate.offeringBreakdown || {};
+
+  const grossSalary = b.grossSalary || b.grossMonthly || candidate.offeredSalary || candidate.expectedSalary || currentCalculatedOffering?.grossMonthly || 10000000;
+  const basicSalary = b.basicSalary || Math.round(grossSalary * 0.75);
+  const totalAllowances = b.totalAllowances ?? Math.max(0, grossSalary - basicSalary);
+
+  const rawAllowances: any[] = Array.isArray(b.allowances) && b.allowances.length > 0
+    ? b.allowances
+    : (currentCalculatedOffering?.allowances?.filter((a: any) => a.isEnabled) || [
+        {
+          id: 'alw-def-trans',
+          name: 'Tunjangan Transportasi & Mobilitas',
+          type: 'fixed',
+          value: Math.round(totalAllowances * 0.5),
+          amount: Math.round(totalAllowances * 0.5),
+          taxable: true
+        },
+        {
+          id: 'alw-def-meal',
+          name: 'Tunjangan Uang Makan Siang',
+          type: 'fixed',
+          value: Math.max(0, totalAllowances - Math.round(totalAllowances * 0.5)),
+          amount: Math.max(0, totalAllowances - Math.round(totalAllowances * 0.5)),
+          taxable: false
+        }
+      ]);
+
+  const allowances = rawAllowances.map((a: any) => ({
+    id: a.id || String(Math.random()),
+    name: a.name || 'Tunjangan Tambahan',
+    type: (a.type === 'percent' ? 'percent' : 'fixed') as 'fixed' | 'percent',
+    value: Number(a.value) || 0,
+    amount: Number(a.amount || a.value) || 0,
+    taxable: Boolean(a.taxable)
+  }));
+
+  // Hitung TER otomatis jika tidak ada
+  const terRatePercent = b.terRatePercent ?? currentCalculatedOffering?.terRatePercent ?? 1.5;
+  const ptkpCategory = b.ptkpCategory ?? b.terCategory ?? currentCalculatedOffering?.terCategory ?? 'TER A';
+  const ptkpCode = b.ptkpCode ?? candidate.ptkpStatus ?? 'TK/0';
+  const taxAmountMonthly = b.taxAmountMonthly ?? b.taxAmount ?? Math.round(grossSalary * (terRatePercent / 100));
+
+  // BPJS Employee
+  const bpjsEmpRaw = b.bpjsEmployee || currentCalculatedOffering?.bpjsEmployee || {};
+  const bpjsEmpJht = Number(bpjsEmpRaw.jht) || Math.round(basicSalary * 0.02);
+  const bpjsEmpJp = Number(bpjsEmpRaw.jp) || Math.round(Math.min(basicSalary, 10042300) * 0.01);
+  const bpjsEmpKes = Number(bpjsEmpRaw.kesehatan ?? bpjsEmpRaw.kes) || Math.round(Math.min(grossSalary, 12000000) * 0.01);
+  const bpjsEmpTotal = bpjsEmpRaw.total ? Number(bpjsEmpRaw.total) : (bpjsEmpJht + bpjsEmpJp + bpjsEmpKes);
+
+  // BPJS Company
+  const bpjsCompRaw = b.bpjsCompany || currentCalculatedOffering?.bpjsCompany || {};
+  const bpjsCompJkk = Number(bpjsCompRaw.jkk) || Math.round(basicSalary * 0.0024);
+  const bpjsCompJkm = Number(bpjsCompRaw.jkm) || Math.round(basicSalary * 0.0030);
+  const bpjsCompJht = Number(bpjsCompRaw.jht) || Math.round(basicSalary * 0.037);
+  const bpjsCompJp = Number(bpjsCompRaw.jp) || Math.round(Math.min(basicSalary, 10042300) * 0.02);
+  const bpjsCompKes = Number(bpjsCompRaw.kesehatan ?? bpjsCompRaw.kes) || Math.round(Math.min(grossSalary, 12000000) * 0.04);
+  const bpjsCompTotal = bpjsCompRaw.total ? Number(bpjsCompRaw.total) : (bpjsCompJkk + bpjsCompJkm + bpjsCompJht + bpjsCompJp + bpjsCompKes);
+
+  // Insurances
+  const rawInsurances: any[] = Array.isArray(b.insurances) && b.insurances.length > 0
+    ? b.insurances
+    : (currentInsurances?.filter((i: any) => i.isEnabled) || []);
+
+  const insurances = rawInsurances.map((ins: any) => ({
+    id: ins.id || String(Math.random()),
+    name: ins.name || 'Asuransi Kesehatan Karyawan',
+    provider: ins.provider || 'Mandiri Inhealth',
+    category: ins.category || 'Kesehatan Swasta',
+    coverage: ins.coverage || 'Rawat Inap & Jalan Kelas 1',
+    premiumEmployee: Number(ins.premiumEmployee) || 0,
+    premiumCompany: Number(ins.premiumCompany) || 0
+  }));
+
+  const totalEmployeeInsurances = b.totalEmployeeInsurances ?? insurances.reduce((acc: number, cur: any) => acc + cur.premiumEmployee, 0);
+  const totalCompanyInsurances = b.totalCompanyInsurances ?? insurances.reduce((acc: number, cur: any) => acc + cur.premiumCompany, 0);
+
+  const totalDeductionsEmployee = b.totalDeductionsEmployee ?? b.totalEmployeeDeductions ?? (taxAmountMonthly + bpjsEmpTotal + totalEmployeeInsurances);
+  const thp = b.thp ?? b.netTakeHomePay ?? b.takeHomePay ?? Math.max(0, grossSalary - totalDeductionsEmployee);
+  const costToCompany = b.costToCompany ?? (grossSalary + bpjsCompTotal + totalCompanyInsurances);
+
+  return {
+    calculationMode: b.calculationMode || 'gross',
+    targetThpAmount: b.targetThpAmount || thp,
+    basicSalary,
+    allowances,
+    totalAllowances,
+    grossSalary,
+    ptkpCode,
+    ptkpCategory,
+    terRatePercent,
+    taxAmountMonthly,
+    bpjsEmployee: {
+      jht: bpjsEmpJht,
+      jp: bpjsEmpJp,
+      kesehatan: bpjsEmpKes,
+      total: bpjsEmpTotal
+    },
+    bpjsCompany: {
+      jkk: bpjsCompJkk,
+      jkm: bpjsCompJkm,
+      jht: bpjsCompJht,
+      jp: bpjsCompJp,
+      kesehatan: bpjsCompKes,
+      total: bpjsCompTotal
+    },
+    insurances,
+    totalEmployeeInsurances,
+    totalCompanyInsurances,
+    totalDeductionsEmployee,
+    thp,
+    costToCompany
+  };
+}
+
 export const RecruitmentManagement: React.FC = () => {
   const {
     jobRequisitions = [],
@@ -1680,15 +1870,15 @@ export const RecruitmentManagement: React.FC = () => {
     },
   ];
 
-  // Candidates filtering
-  const filteredCandidates = candidates.filter((c) => {
+  // Candidates filtering (100% null-safe)
+  const filteredCandidates = (candidates || []).filter((c) => {
+    if (!c) return false;
     const matchesVacancy = selectedVacancyId === 'all' || c.jobVacancyId === selectedVacancyId;
-    const matchesSearch =
-      searchTerm === '' ||
-      c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.lastCompany.toLowerCase().includes(searchTerm.toLowerCase());
-    return matchesVacancy && matchesSearch;
+    const searchLower = (searchTerm || '').toLowerCase();
+    const nameMatch = (c.name || '').toLowerCase().includes(searchLower);
+    const emailMatch = (c.email || '').toLowerCase().includes(searchLower);
+    const companyMatch = (c.lastCompany || '').toLowerCase().includes(searchLower);
+    return matchesVacancy && (searchLower === '' || nameMatch || emailMatch || companyMatch);
   });
 
   // Grouped candidates for 7 tabs
@@ -4811,195 +5001,7 @@ PT Nusantara Multi Talenta Tbk`);
     (c) => c.stage === 'TalentPool' || c.stage === 'Rejected'
   ).length;
 
-interface NormalizedOfferingBreakdown {
-  calculationMode: 'gross' | 'net';
-  targetThpAmount?: number;
-  basicSalary: number;
-  allowances: {
-    id: string;
-    name: string;
-    type: 'fixed' | 'percent';
-    value: number;
-    amount: number;
-    taxable: boolean;
-  }[];
-  totalAllowances: number;
-  grossSalary: number;
-  ptkpCode: string;
-  ptkpCategory: string;
-  terRatePercent: number;
-  taxAmountMonthly: number;
-  bpjsEmployee: {
-    jht: number;
-    jp: number;
-    kesehatan: number;
-    total: number;
-  };
-  bpjsCompany: {
-    jkk: number;
-    jkm: number;
-    jht: number;
-    jp: number;
-    kesehatan: number;
-    total: number;
-  };
-  insurances: {
-    id: string;
-    name: string;
-    provider: string;
-    category: string;
-    coverage: string;
-    premiumEmployee: number;
-    premiumCompany: number;
-  }[];
-  totalEmployeeInsurances: number;
-  totalCompanyInsurances: number;
-  totalDeductionsEmployee: number;
-  thp: number;
-  costToCompany: number;
-}
 
-function getSafeCandidateOfferingBreakdown(
-  candidate: Candidate | null | undefined,
-  currentCalculatedOffering?: any,
-  currentInsurances?: DynamicOfferingInsurance[]
-): NormalizedOfferingBreakdown {
-  if (!candidate) {
-    return {
-      calculationMode: 'gross',
-      basicSalary: 10000000,
-      allowances: [],
-      totalAllowances: 0,
-      grossSalary: 10000000,
-      ptkpCode: 'TK/0',
-      ptkpCategory: 'TER A',
-      terRatePercent: 1.5,
-      taxAmountMonthly: 150000,
-      bpjsEmployee: { jht: 200000, jp: 100000, kesehatan: 100000, total: 400000 },
-      bpjsCompany: { jkk: 24000, jkm: 30000, jht: 370000, jp: 200000, kesehatan: 400000, total: 1024000 },
-      insurances: [],
-      totalEmployeeInsurances: 0,
-      totalCompanyInsurances: 0,
-      totalDeductionsEmployee: 550000,
-      thp: 9450000,
-      costToCompany: 11024000
-    };
-  }
-
-  // Jika candidate sudah memiliki offeringBreakdown
-  const b: any = candidate.offeringBreakdown || {};
-
-  const grossSalary = b.grossSalary || b.grossMonthly || candidate.offeredSalary || candidate.expectedSalary || currentCalculatedOffering?.grossMonthly || 10000000;
-  const basicSalary = b.basicSalary || Math.round(grossSalary * 0.75);
-  const totalAllowances = b.totalAllowances ?? Math.max(0, grossSalary - basicSalary);
-
-  const rawAllowances: any[] = Array.isArray(b.allowances) && b.allowances.length > 0
-    ? b.allowances
-    : (currentCalculatedOffering?.allowances?.filter((a: any) => a.isEnabled) || [
-        {
-          id: 'alw-def-trans',
-          name: 'Tunjangan Transportasi & Mobilitas',
-          type: 'fixed',
-          value: Math.round(totalAllowances * 0.5),
-          amount: Math.round(totalAllowances * 0.5),
-          taxable: true
-        },
-        {
-          id: 'alw-def-meal',
-          name: 'Tunjangan Uang Makan Siang',
-          type: 'fixed',
-          value: Math.max(0, totalAllowances - Math.round(totalAllowances * 0.5)),
-          amount: Math.max(0, totalAllowances - Math.round(totalAllowances * 0.5)),
-          taxable: false
-        }
-      ]);
-
-  const allowances = rawAllowances.map((a: any) => ({
-    id: a.id || String(Math.random()),
-    name: a.name || 'Tunjangan Tambahan',
-    type: (a.type === 'percent' ? 'percent' : 'fixed') as 'fixed' | 'percent',
-    value: Number(a.value) || 0,
-    amount: Number(a.amount || a.value) || 0,
-    taxable: Boolean(a.taxable)
-  }));
-
-  // Hitung TER otomatis jika tidak ada
-  const terRatePercent = b.terRatePercent ?? currentCalculatedOffering?.terRatePercent ?? 1.5;
-  const ptkpCategory = b.ptkpCategory ?? b.terCategory ?? currentCalculatedOffering?.terCategory ?? 'TER A';
-  const ptkpCode = b.ptkpCode ?? candidate.ptkpStatus ?? 'TK/0';
-  const taxAmountMonthly = b.taxAmountMonthly ?? b.taxAmount ?? Math.round(grossSalary * (terRatePercent / 100));
-
-  // BPJS Employee
-  const bpjsEmpRaw = b.bpjsEmployee || currentCalculatedOffering?.bpjsEmployee || {};
-  const bpjsEmpJht = Number(bpjsEmpRaw.jht) || Math.round(basicSalary * 0.02);
-  const bpjsEmpJp = Number(bpjsEmpRaw.jp) || Math.round(Math.min(basicSalary, 10042300) * 0.01);
-  const bpjsEmpKes = Number(bpjsEmpRaw.kesehatan ?? bpjsEmpRaw.kes) || Math.round(Math.min(grossSalary, 12000000) * 0.01);
-  const bpjsEmpTotal = bpjsEmpRaw.total ? Number(bpjsEmpRaw.total) : (bpjsEmpJht + bpjsEmpJp + bpjsEmpKes);
-
-  // BPJS Company
-  const bpjsCompRaw = b.bpjsCompany || currentCalculatedOffering?.bpjsCompany || {};
-  const bpjsCompJkk = Number(bpjsCompRaw.jkk) || Math.round(basicSalary * 0.0024);
-  const bpjsCompJkm = Number(bpjsCompRaw.jkm) || Math.round(basicSalary * 0.0030);
-  const bpjsCompJht = Number(bpjsCompRaw.jht) || Math.round(basicSalary * 0.037);
-  const bpjsCompJp = Number(bpjsCompRaw.jp) || Math.round(Math.min(basicSalary, 10042300) * 0.02);
-  const bpjsCompKes = Number(bpjsCompRaw.kesehatan ?? bpjsCompRaw.kes) || Math.round(Math.min(grossSalary, 12000000) * 0.04);
-  const bpjsCompTotal = bpjsCompRaw.total ? Number(bpjsCompRaw.total) : (bpjsCompJkk + bpjsCompJkm + bpjsCompJht + bpjsCompJp + bpjsCompKes);
-
-  // Insurances
-  const rawInsurances: any[] = Array.isArray(b.insurances) && b.insurances.length > 0
-    ? b.insurances
-    : (currentInsurances?.filter((i: any) => i.isEnabled) || []);
-
-  const insurances = rawInsurances.map((ins: any) => ({
-    id: ins.id || String(Math.random()),
-    name: ins.name || 'Asuransi Kesehatan Karyawan',
-    provider: ins.provider || 'Mandiri Inhealth',
-    category: ins.category || 'Kesehatan Swasta',
-    coverage: ins.coverage || 'Rawat Inap & Jalan Kelas 1',
-    premiumEmployee: Number(ins.premiumEmployee) || 0,
-    premiumCompany: Number(ins.premiumCompany) || 0
-  }));
-
-  const totalEmployeeInsurances = b.totalEmployeeInsurances ?? insurances.reduce((acc: number, cur: any) => acc + cur.premiumEmployee, 0);
-  const totalCompanyInsurances = b.totalCompanyInsurances ?? insurances.reduce((acc: number, cur: any) => acc + cur.premiumCompany, 0);
-
-  const totalDeductionsEmployee = b.totalDeductionsEmployee ?? b.totalEmployeeDeductions ?? (taxAmountMonthly + bpjsEmpTotal + totalEmployeeInsurances);
-  const thp = b.thp ?? b.netTakeHomePay ?? b.takeHomePay ?? Math.max(0, grossSalary - totalDeductionsEmployee);
-  const costToCompany = b.costToCompany ?? (grossSalary + bpjsCompTotal + totalCompanyInsurances);
-
-  return {
-    calculationMode: b.calculationMode || 'gross',
-    targetThpAmount: b.targetThpAmount || thp,
-    basicSalary,
-    allowances,
-    totalAllowances,
-    grossSalary,
-    ptkpCode,
-    ptkpCategory,
-    terRatePercent,
-    taxAmountMonthly,
-    bpjsEmployee: {
-      jht: bpjsEmpJht,
-      jp: bpjsEmpJp,
-      kesehatan: bpjsEmpKes,
-      total: bpjsEmpTotal
-    },
-    bpjsCompany: {
-      jkk: bpjsCompJkk,
-      jkm: bpjsCompJkm,
-      jht: bpjsCompJht,
-      jp: bpjsCompJp,
-      kesehatan: bpjsCompKes,
-      total: bpjsCompTotal
-    },
-    insurances,
-    totalEmployeeInsurances,
-    totalCompanyInsurances,
-    totalDeductionsEmployee,
-    thp,
-    costToCompany
-  };
-}
 
   return (
     <div className="space-y-4">
@@ -7784,7 +7786,7 @@ function getSafeCandidateOfferingBreakdown(
                 className="px-3.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-semibold border border-blue-200 flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
               >
                 <Settings className="w-3.5 h-3.5 text-blue-600" />
-                <span>Pengaturan Template Checklist ({onboardingChecklistTemplates.length})</span>
+                <span>Pengaturan Template Checklist ({onboardingChecklistTemplates?.length || 0})</span>
               </button>
               <button
                 type="button"
@@ -7809,14 +7811,17 @@ function getSafeCandidateOfferingBreakdown(
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-4">
-              {onboardingProcesses.map((process) => {
-                const totalTasks = process.tasks.length;
-                const completedTasks = process.tasks.filter((t) => t.isCompleted).length;
-                const mandatoryTasks = process.tasks.filter((t) => t.isMandatory);
+              {(onboardingProcesses || []).map((process) => {
+                const tasksList = Array.isArray(process.tasks) ? process.tasks : [];
+                const totalTasks = tasksList.length;
+                const completedTasks = tasksList.filter((t) => t.isCompleted).length;
+                const mandatoryTasks = tasksList.filter((t) => t.isMandatory);
                 const mandatoryRemaining = mandatoryTasks.filter((t) => !t.isCompleted).length;
                 const progressPct = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
                 const isAllMandatoryDone = mandatoryRemaining === 0;
                 const isFinalized = process.status === 'Completed';
+
+                const empInitial = (process.employeeName || 'K').trim().charAt(0).toUpperCase();
 
                 return (
                   <div
@@ -7827,7 +7832,7 @@ function getSafeCandidateOfferingBreakdown(
                     <div className="flex items-start justify-between gap-4 flex-wrap border-b border-slate-100 pb-4">
                       <div className="flex items-center gap-3">
                         <div className="w-11 h-11 rounded-full bg-emerald-100 text-emerald-800 font-bold flex items-center justify-center text-sm border border-emerald-200 shrink-0">
-                          {process.employeeName.charAt(0).toUpperCase()}
+                          {empInitial}
                         </div>
                         <div>
                           <div className="flex items-center gap-2 flex-wrap">
@@ -7888,7 +7893,7 @@ function getSafeCandidateOfferingBreakdown(
                         Daftar Penugasan Departemen & Checklist Aksi:
                       </span>
                       <div className="space-y-2">
-                        {process.tasks.map((task) => {
+                        {(Array.isArray(process.tasks) ? process.tasks : []).map((task) => {
                           const deptStyle =
                             task.targetDepartment === 'GA'
                               ? 'bg-amber-50 text-amber-800 border-amber-200'

@@ -979,15 +979,16 @@ export const EmployeeManagement: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {onboardingProcesses.map((proc) => {
-              const completedTasks = proc.tasks.filter((t) => t.isCompleted).length;
-              const totalTasks = proc.tasks.length;
+            {(onboardingProcesses || []).map((proc) => {
+              const taskList = Array.isArray(proc.tasks) ? proc.tasks : [];
+              const completedTasks = taskList.filter((t) => t.isCompleted).length;
+              const totalTasks = taskList.length || 1;
               const percent = Math.round((completedTasks / totalTasks) * 100);
 
               const linkedEmp = employees.find(
                 (e) =>
                   e.id === proc.createdEmployeeId ||
-                  e.fullName.toLowerCase() === proc.employeeName.toLowerCase()
+                  (e.fullName || '').toLowerCase() === (proc.employeeName || '').toLowerCase()
               );
               const linkedCand = candidates.find((c) => c.id === proc.candidateId);
 
@@ -1004,7 +1005,7 @@ export const EmployeeManagement: React.FC = () => {
                           />
                         ) : (
                           <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-700 font-bold text-sm flex items-center justify-center shrink-0">
-                            {proc.employeeName.charAt(0)}
+                            {(proc.employeeName || 'K').charAt(0)}
                           </div>
                         )}
                         <div>
@@ -1099,7 +1100,7 @@ export const EmployeeManagement: React.FC = () => {
 
                     {/* Tasks List */}
                     <div className="space-y-1.5 pt-1 border-t border-slate-100">
-                      {proc.tasks.map((task) => (
+                      {(proc.tasks || []).map((task) => (
                         <button
                           key={task.id}
                           type="button"
