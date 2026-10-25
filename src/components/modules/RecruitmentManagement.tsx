@@ -1142,6 +1142,18 @@ export const RecruitmentManagement: React.FC = () => {
   const [isRescheduleModeActive, setIsRescheduleModeActive] = useState(false);
   const [selectedInterviewerForScoringId, setSelectedInterviewerForScoringId] = useState('');
 
+  // Talent Pool Search, Filter & Profiling States
+  const [talentSearchQuery, setTalentSearchQuery] = useState('');
+  const [talentVacancyFilter, setTalentVacancyFilter] = useState('all');
+  const [talentStageFilter, setTalentStageFilter] = useState('all');
+  const [talentMinScoreFilter, setTalentMinScoreFilter] = useState<number | 'all'>('all');
+  const [selectedTalentCandidate, setSelectedTalentCandidate] = useState<Candidate | null>(null);
+  const [isReengageModalOpen, setIsReengageModalOpen] = useState(false);
+  const [candidateToReengage, setCandidateToReengage] = useState<Candidate | null>(null);
+  const [reengageVacancyId, setReengageVacancyId] = useState<string>('');
+  const [reengageStage, setReengageStage] = useState<RecruitmentStage>('Screening');
+  const [reengageNotes, setReengageNotes] = useState<string>('');
+
   // Active items for modals
   const [activeCandidate, setActiveCandidate] = useState<Candidate | null>(null);
   const [activeRequisition, setActiveRequisition] = useState<JobRequisition | null>(null);
@@ -2059,7 +2071,161 @@ export const RecruitmentManagement: React.FC = () => {
     (c) => c.stage === 'Offered' || c.stage === 'Hired' || c.stage === 'Rejected'
   );
   const hiredCandidates = filteredCandidates.filter((c) => c.stage === 'Hired');
-  const talentPoolCandidates = filteredCandidates.filter((c) => c.stage === 'TalentPool' || c.stage === 'Rejected');
+
+  // Helper for Talent Pool historical details & profiling
+  const getTalentHistoricalDetails = (cand: Candidate) => {
+    const vac = vacancies.find((v) => v.id === cand.jobVacancyId);
+    const appliedPosition = vac?.title || 'Posisi Formasi';
+    const department = vac?.department || cand.talentPoolCategory || 'Umum';
+
+    // Tahap Terakhir
+    let lastStage = cand.lastStageName;
+    if (!lastStage) {
+      if (cand.offeringStatus || cand.offeredSalary) {
+        lastStage = 'Tahap 5: Offering & Negosiasi Kompensasi';
+      } else if (cand.mcuStatus) {
+        lastStage = 'Tahap 4: Medical Check-Up (MCU)';
+      } else if (cand.interviewDate || cand.interviewScore || cand.interviewNotes) {
+        lastStage = cand.interviewStep
+          ? `Tahap 3: Wawancara / Interview Tahap ${cand.interviewStep}`
+          : 'Tahap 3: Wawancara (Interview)';
+      } else if (cand.testScore !== undefined || cand.overallAssessmentScore !== undefined) {
+        lastStage = 'Tahap 2: Technical Assessment & Psikotes';
+      } else {
+        lastStage = 'Tahap 1: Seleksi Administrasi & Screening CV';
+      }
+    }
+
+    // Score / Nilai
+    let score = cand.lastStageScore;
+    if (score === undefined) {
+      score =
+        cand.interviewScore ??
+        cand.overallAssessmentScore ??
+        cand.testScore ??
+        cand.aiMatchScore ??
+        85;
+    }
+
+    // Kapan (Tanggal & Waktu)
+    let dateStr = cand.lastStageDate;
+    if (!dateStr) {
+      if (cand.offeringResponseDate) {
+        dateStr = cand.offeringResponseDate;
+      } else if (cand.interviewDate) {
+        dateStr = `${cand.interviewDate}${cand.interviewStartTime ? ' ' + cand.interviewStartTime + ' WIB' : ''}`;
+      } else if (cand.testAssignedDate) {
+        dateStr = cand.testAssignedDate;
+      } else {
+        dateStr = cand.appliedDate || '2026-10-15';
+      }
+    }
+
+    // Dimana (Lokasi / Media)
+    let locationStr = cand.lastStageLocation;
+    if (!locationStr) {
+      if (cand.meetingPlatform) {
+        locationStr = cand.meetingLink ? `${cand.meetingPlatform} (${cand.meetingLink})` : cand.meetingPlatform;
+      } else if (cand.interviewFacilityRoom) {
+        locationStr = `Ruang Kantor: ${cand.interviewFacilityRoom}`;
+      } else if (cand.interviewFormat === 'Online') {
+        locationStr = 'Online via Google Meet';
+      } else if (cand.interviewFormat === 'Offline') {
+        locationStr = 'Kantor Pusat Menara Nusantara Kuningan, Jakarta';
+      } else {
+        locationStr = 'Online Portal NusaHR';
+      }
+    }
+
+    // Dengan Siapa (Interviewer / Assessor / Penilai)
+    let interviewerStr = cand.lastStageInterviewer;
+    if (!interviewerStr) {
+      if (cand.interviewers && cand.interviewers.length > 0) {
+        interviewerStr = cand.interviewers.map((i) => `${i.name} (${i.role})`).join(', ');
+      } else if (cand.interviewer) {
+        interviewerStr = cand.interviewer;
+      } else {
+        interviewerStr = 'Tim Rekrutmen HC & Panelis User';
+      }
+    }
+
+    // Catatan / Evaluasi
+    const notesStr =
+      cand.lastStageNotes ||
+      cand.disqualificationReason ||
+      cand.interviewNotes ||
+      cand.testNotes ||
+      cand.screeningNotes ||
+      'Kandidat memiliki kualifikasi yang sangat baik dan disimpan sebagai talent pool prioritas.';
+
+    // Keahlian / Skills
+    const skills: string[] =
+      cand.parsedData?.topSkills && cand.parsedData.topSkills.length > 0
+        ? cand.parsedData.topSkills
+        : cand.talentPoolTags && cand.talentPoolTags.length > 0
+        ? cand.talentPoolTags
+        : ['Komunikasi Efektif', 'Problem Solving', 'Team Collaboration'];
+
+    return {
+      appliedPosition,
+      department,
+      lastStage,
+      score,
+      dateStr,
+      locationStr,
+      interviewerStr,
+      notesStr,
+      skills,
+    };
+  };
+
+  const allTalentPoolCandidates = (candidates || []).filter(
+    (c) => c && (c.stage === 'TalentPool' || c.stage === 'Rejected')
+  );
+
+  const talentPoolCandidates = allTalentPoolCandidates.filter((cand) => {
+    // 1. Search Query
+    if (talentSearchQuery.trim()) {
+      const q = talentSearchQuery.toLowerCase();
+      const nameMatch = (cand.name || '').toLowerCase().includes(q);
+      const emailMatch = (cand.email || '').toLowerCase().includes(q);
+      const phoneMatch = (cand.phone || '').toLowerCase().includes(q);
+      const companyMatch = (cand.lastCompany || '').toLowerCase().includes(q);
+      const catMatch = (cand.talentPoolCategory || '').toLowerCase().includes(q);
+      const vac = vacancies.find((v) => v.id === cand.jobVacancyId);
+      const posMatch = (vac?.title || '').toLowerCase().includes(q);
+      const deptMatch = (vac?.department || '').toLowerCase().includes(q);
+      const skills = (cand.parsedData?.topSkills || cand.talentPoolTags || []).join(' ').toLowerCase();
+      const skillMatch = skills.includes(q);
+
+      if (!nameMatch && !emailMatch && !phoneMatch && !companyMatch && !catMatch && !posMatch && !deptMatch && !skillMatch) {
+        return false;
+      }
+    }
+
+    // 2. Vacancy Filter
+    if (talentVacancyFilter !== 'all' && cand.jobVacancyId !== talentVacancyFilter) {
+      return false;
+    }
+
+    // 3. Stage Filter
+    if (talentStageFilter !== 'all') {
+      const details = getTalentHistoricalDetails(cand);
+      if (!details.lastStage.toLowerCase().includes(talentStageFilter.toLowerCase())) {
+        return false;
+      }
+    }
+
+    // 4. Min Score Filter
+    if (talentMinScoreFilter !== 'all') {
+      const details = getTalentHistoricalDetails(cand);
+      if (details.score < talentMinScoreFilter) {
+        return false;
+      }
+    }
+
+    return true;
+  });
 
   // ===================== TWO-WAY SYNCHRONIZED OFFERING CALCULATOR =====================
   const calculatedOffering = React.useMemo(() => {
@@ -5130,22 +5296,50 @@ PT Nusantara Multi Talenta Tbk`);
 
   const handleConfirmDisqualified = (candidate: Candidate, reason: string) => {
     const vac = vacancies.find((v) => v.id === candidate.jobVacancyId);
+    const details = getTalentHistoricalDetails(candidate);
     updateCandidateStage(candidate.id, 'TalentPool', {
       disqualificationReason: reason || 'Kandidat belum sesuai dengan kuota formasi saat ini. Disimpan di Talent Pool untuk masa depan.',
       talentPoolCategory: vac?.department || 'General Talent',
       talentPoolTags: candidate.parsedData?.topSkills || ['Potensial', 'Disimpan'],
+      lastStageName: details.lastStage,
+      lastStageScore: details.score,
+      lastStageDate: new Date().toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' }),
+      lastStageLocation: details.locationStr,
+      lastStageInterviewer: details.interviewerStr,
+      lastStageNotes: reason || details.notesStr,
     });
     setCandidateToDisqualify(null);
     setRejectionReasonInput('');
-    alert(`Keputusan: ${candidate.name} DITOLAK pada posisi ini dan dipindahkan ke Tab Talent Pool.`);
+    setToastFeedback(`Keputusan: ${candidate.name} dipindahkan ke Tab Talent Pool.`);
+  };
+
+  const handleOpenReengageModal = (candidate: Candidate) => {
+    setCandidateToReengage(candidate);
+    setReengageVacancyId(candidate.jobVacancyId || (vacancies[0]?.id || ''));
+    setReengageStage('Screening');
+    setReengageNotes(`Kandidat dipanggil ulang dari basis data cadangan Talent Pool.`);
+    setIsReengageModalOpen(true);
+  };
+
+  const handleConfirmReengageCandidate = () => {
+    if (!candidateToReengage) return;
+    updateCandidateStage(candidateToReengage.id, reengageStage, {
+      jobVacancyId: reengageVacancyId || candidateToReengage.jobVacancyId,
+      screeningNotes: reengageNotes,
+    });
+    const targetVac = vacancies.find((v) => v.id === reengageVacancyId);
+    setToastFeedback(
+      `Sukses: ${candidateToReengage.name} berhasil diaktifkan kembali ke Pipeline (${reengageStage}) untuk posisi ${targetVac?.title || 'Formasi Terpilih'}!`
+    );
+    setIsReengageModalOpen(false);
+    setCandidateToReengage(null);
+    if (selectedTalentCandidate?.id === candidateToReengage.id) {
+      setSelectedTalentCandidate(null);
+    }
   };
 
   const handleReengageTalent = (candidate: Candidate) => {
-    updateCandidateStage(candidate.id, 'Screening', {
-      screeningNotes: 'Kandidat dipanggil ulang dari Talent Pool untuk proses seleksi aktif.',
-    });
-    alert(`${candidate.name} berhasil diaktifkan kembali ke Tab Pipeline Seleksi (Tahap Screening)!`);
-    setActiveTab('pipeline');
+    handleOpenReengageModal(candidate);
   };
 
   // ===================== SUMMARY DASHBOARD METRICS =====================
@@ -8375,73 +8569,320 @@ PT Nusantara Multi Talenta Tbk`);
       {/* ===================== TAB 7: TALENT POOL ===================== */}
       {activeTab === 'talent_pool' && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between gap-4 flex-wrap bg-white p-4 border border-slate-200 rounded-xl shadow-2xs">
-            <div>
-              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                <Archive className="w-4 h-4 text-blue-700" />
-                <span>Tab 7: Talent Pool (Basis Data Cadangan)</span>
-              </h3>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Kandidat yang belum lolos pada posisi saat ini disimpan di talent pool untuk kebutuhan rekrutmen masa depan tanpa perlu seleksi awal kembali.
-              </p>
+          {/* Header & Stats Bar */}
+          <div className="bg-white p-5 border border-slate-200 rounded-xl shadow-2xs space-y-4">
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                  <Archive className="w-4 h-4 text-blue-700" />
+                  <span>Tab 7: Talent Pool (Basis Data Cadangan & Profiling)</span>
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Basis data kandidat potensial masa depan lengkap dengan profiling, riwayat tahap terakhir, skor evaluasi, catatan penguji, dan keahlian siap panggil.
+                </p>
+              </div>
+
+              {/* Quick Metrics */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="px-3 py-1.5 rounded-lg bg-blue-50 border border-blue-200 flex items-center gap-2">
+                  <Users className="w-3.5 h-3.5 text-blue-700" />
+                  <div className="text-left">
+                    <span className="text-[10px] text-blue-600 block leading-none font-semibold">Total Pool</span>
+                    <strong className="text-xs font-bold text-blue-950">{allTalentPoolCandidates.length} Kandidat</strong>
+                  </div>
+                </div>
+
+                <div className="px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 flex items-center gap-2">
+                  <Award className="w-3.5 h-3.5 text-emerald-700" />
+                  <div className="text-left">
+                    <span className="text-[10px] text-emerald-600 block leading-none font-semibold">Top Tier (≥90)</span>
+                    <strong className="text-xs font-bold text-emerald-950">
+                      {allTalentPoolCandidates.filter((c) => getTalentHistoricalDetails(c).score >= 90).length} Kandidat
+                    </strong>
+                  </div>
+                </div>
+
+                <div className="px-3 py-1.5 rounded-lg bg-indigo-50 border border-indigo-200 flex items-center gap-2">
+                  <Star className="w-3.5 h-3.5 text-indigo-700" />
+                  <div className="text-left">
+                    <span className="text-[10px] text-indigo-600 block leading-none font-semibold">Rata-Rata Skor</span>
+                    <strong className="text-xs font-bold text-indigo-950">
+                      {allTalentPoolCandidates.length > 0
+                        ? Math.round(
+                            allTalentPoolCandidates.reduce((s, c) => s + getTalentHistoricalDetails(c).score, 0) /
+                              allTalentPoolCandidates.length
+                          )
+                        : 0}
+                      /100
+                    </strong>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Search & Filter Toolbar */}
+            <div className="pt-3 border-t border-slate-100 space-y-3">
+              {/* Row 1: Search Input */}
+              <div className="relative">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={talentSearchQuery}
+                  onChange={(e) => setTalentSearchQuery(e.target.value)}
+                  placeholder="Cari nama kandidat, email, nomor HP, keahlian/skill, posisi formasi, atau perusahaan asal..."
+                  className="w-full pl-9.5 pr-8 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 focus:bg-white outline-hidden transition-all text-slate-800 placeholder-slate-400"
+                />
+                {talentSearchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setTalentSearchQuery('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Row 2: Filter Controls */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
+                <div>
+                  <label className="text-[11px] font-semibold text-slate-600 block mb-1">Posisi Formasi Dilamar</label>
+                  <select
+                    value={talentVacancyFilter}
+                    onChange={(e) => setTalentVacancyFilter(e.target.value)}
+                    className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white text-xs focus:ring-1 focus:ring-blue-500 outline-hidden font-medium text-slate-700"
+                  >
+                    <option value="all">Semua Posisi Formasi ({vacancies.length})</option>
+                    {vacancies.map((v) => (
+                      <option key={v.id} value={v.id}>
+                        {v.title} ({v.department})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-semibold text-slate-600 block mb-1">Tahap Terakhir Diikuti</label>
+                  <select
+                    value={talentStageFilter}
+                    onChange={(e) => setTalentStageFilter(e.target.value)}
+                    className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white text-xs focus:ring-1 focus:ring-blue-500 outline-hidden font-medium text-slate-700"
+                  >
+                    <option value="all">Semua Tahap Terakhir</option>
+                    <option value="Screening">Tahap 1: Seleksi Administrasi & CV</option>
+                    <option value="Assessment">Tahap 2: Technical Assessment / Tes</option>
+                    <option value="Wawancara">Tahap 3: Wawancara (User / HR)</option>
+                    <option value="MCU">Tahap 4: Medical Check-Up (MCU)</option>
+                    <option value="Offering">Tahap 5: Offering & Negosiasi</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-semibold text-slate-600 block mb-1">Nilai / Skor Minimal</label>
+                  <select
+                    value={talentMinScoreFilter}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setTalentMinScoreFilter(v === 'all' ? 'all' : Number(v));
+                    }}
+                    className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white text-xs focus:ring-1 focus:ring-blue-500 outline-hidden font-medium text-slate-700"
+                  >
+                    <option value="all">Semua Skor Kualifikasi</option>
+                    <option value="90">Skor ≥ 90 (Top Tier / Istimewa)</option>
+                    <option value="85">Skor ≥ 85 (Sangat Direkomendasikan)</option>
+                    <option value="80">Skor ≥ 80 (Potensial Tinggi)</option>
+                    <option value="75">Skor ≥ 75 (Memenuhi Syarat)</option>
+                  </select>
+                </div>
+
+                <div className="flex items-end">
+                  {(talentSearchQuery || talentVacancyFilter !== 'all' || talentStageFilter !== 'all' || talentMinScoreFilter !== 'all') ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTalentSearchQuery('');
+                        setTalentVacancyFilter('all');
+                        setTalentStageFilter('all');
+                        setTalentMinScoreFilter('all');
+                      }}
+                      className="w-full px-3 py-1.5 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-100 font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
+                      <span>Reset Filter</span>
+                    </button>
+                  ) : (
+                    <div className="text-[11px] text-slate-400 py-1.5">
+                      Menampilkan <strong>{talentPoolCandidates.length}</strong> dari <strong>{allTalentPoolCandidates.length}</strong> kandidat
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+          {/* Cards Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {talentPoolCandidates.length === 0 ? (
-              <div className="col-span-full py-12 text-center text-slate-400 bg-white rounded-xl border border-slate-200">
-                Belum ada kandidat di dalam basis data cadangan (Talent Pool).
+              <div className="col-span-full py-16 text-center text-slate-400 bg-white rounded-xl border border-slate-200 space-y-2">
+                <Archive className="w-8 h-8 text-slate-300 mx-auto" />
+                <p className="font-semibold text-slate-600 text-sm">Tidak ada kandidat di Talent Pool yang cocok.</p>
+                <p className="text-xs text-slate-400">Coba ubah kata kunci pencarian atau reset filter di atas.</p>
               </div>
             ) : (
-              talentPoolCandidates.map((cand) => (
-                <div
-                  key={cand.id}
-                  className="p-4 bg-white border border-slate-200 rounded-xl shadow-2xs space-y-3 flex flex-col justify-between"
-                >
-                  <div className="space-y-2">
-                    <div className="flex items-start justify-between gap-1">
-                      <div>
-                        <span className="font-bold text-slate-900 text-sm block">{cand.name}</span>
-                        <span className="text-xs text-slate-500">{cand.lastCompany}</span>
+              talentPoolCandidates.map((cand) => {
+                const details = getTalentHistoricalDetails(cand);
+                const scoreColor =
+                  details.score >= 90
+                    ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                    : details.score >= 80
+                    ? 'bg-blue-50 text-blue-800 border-blue-300'
+                    : 'bg-amber-50 text-amber-800 border-amber-300';
+
+                return (
+                  <div
+                    key={cand.id}
+                    className="p-4 bg-white border border-slate-200 rounded-xl shadow-2xs hover:shadow-md hover:border-slate-300 transition-all flex flex-col justify-between space-y-3.5 group"
+                  >
+                    {/* Top Section */}
+                    <div className="space-y-3">
+                      {/* Candidate Avatar, Name, Category & Score */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-700 to-indigo-800 text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-2xs">
+                            {cand.name
+                              .split(' ')
+                              .map((n) => n[0])
+                              .slice(0, 2)
+                              .join('')}
+                          </div>
+                          <div className="min-w-0">
+                            <span className="font-bold text-slate-900 text-xs sm:text-sm block truncate group-hover:text-blue-700 transition-colors">
+                              {cand.name}
+                            </span>
+                            <span className="text-[11px] text-slate-500 truncate block">
+                              {cand.lastCompany || 'Kandidat Profesional'}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Skor Badge */}
+                        <div className={`px-2 py-0.5 rounded-md border text-[11px] font-bold shrink-0 ${scoreColor}`}>
+                          ★ {details.score}/100
+                        </div>
                       </div>
-                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-700">
-                        {cand.talentPoolCategory || 'Engineering'}
-                      </span>
-                    </div>
 
-                    <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-100 text-xs space-y-1">
-                      <span className="font-semibold text-slate-700 block text-[11px]">Catatan Disqualified / Alasan:</span>
-                      <p className="text-slate-600 text-[11px] leading-relaxed">
-                        {cand.disqualificationReason || 'Kandidat sangat kompeten, disimpan untuk proyek atau posisi berikutnya.'}
-                      </p>
-                    </div>
-
-                    <div className="space-y-1">
-                      <span className="text-[10px] text-slate-400 font-semibold block">Tags Keahlian:</span>
-                      <div className="flex flex-wrap gap-1">
-                        {(cand.talentPoolTags || ['Cloud', 'Kubernetes', 'High Potential']).map((tag, idx) => (
-                          <span key={idx} className="text-[10px] bg-blue-50 text-blue-800 px-2 py-0.5 rounded font-medium border border-blue-100">
-                            {tag}
+                      {/* Posisi Apa yang Dilamar */}
+                      <div className="flex items-center gap-1.5 text-xs text-slate-700 bg-slate-50 p-2 rounded-lg border border-slate-200/80">
+                        <Briefcase className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                        <div className="min-w-0 truncate">
+                          <span className="text-[10px] text-slate-400 block leading-tight">Posisi yang Dilamar:</span>
+                          <span className="font-semibold text-slate-900 truncate block text-[11px]">
+                            {details.appliedPosition} · <span className="text-slate-500 font-normal">{details.department}</span>
                           </span>
-                        ))}
+                        </div>
+                      </div>
+
+                      {/* KOTAK INFORMASI RIWAYAT TAHAP TERAKHIR (Kapan, Dimana, Dengan Siapa) */}
+                      <div className="p-3 bg-blue-50/50 border border-blue-200/90 rounded-xl space-y-2 text-xs">
+                        <div className="flex items-center justify-between gap-1 flex-wrap pb-1.5 border-b border-blue-200/70">
+                          <span className="font-bold text-blue-950 text-[11px] flex items-center gap-1">
+                            <CalendarCheck className="w-3.5 h-3.5 text-blue-700" />
+                            <span>Tahap Terakhir:</span>
+                          </span>
+                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-blue-100 text-blue-800">
+                            {details.lastStage}
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-1.5 text-[11px] text-slate-700">
+                          <div className="flex items-start gap-1.5">
+                            <Clock className="w-3 h-3 text-slate-400 shrink-0 mt-0.5" />
+                            <span>
+                              <strong className="font-semibold text-slate-800">Kapan:</strong> {details.dateStr}
+                            </span>
+                          </div>
+
+                          <div className="flex items-start gap-1.5">
+                            <MapPin className="w-3 h-3 text-slate-400 shrink-0 mt-0.5" />
+                            <span className="truncate">
+                              <strong className="font-semibold text-slate-800">Dimana:</strong> {details.locationStr}
+                            </span>
+                          </div>
+
+                          <div className="flex items-start gap-1.5">
+                            <User className="w-3 h-3 text-slate-400 shrink-0 mt-0.5" />
+                            <span className="truncate">
+                              <strong className="font-semibold text-slate-800">Dengan Siapa:</strong> {details.interviewerStr}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Catatan / Evaluasi Alasan Disimpan */}
+                      <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200 text-xs space-y-1">
+                        <span className="font-semibold text-slate-700 block text-[11px] flex items-center gap-1">
+                          <FileText className="w-3 h-3 text-slate-500" />
+                          <span>Catatan Evaluasi / Alasan Masuk Pool:</span>
+                        </span>
+                        <p className="text-slate-600 text-[11px] leading-relaxed line-clamp-2">
+                          {details.notesStr}
+                        </p>
+                      </div>
+
+                      {/* Keahlian / Skills */}
+                      <div className="space-y-1">
+                        <span className="text-[10px] text-slate-400 font-semibold block">Keahlian & Kemampuan:</span>
+                        <div className="flex flex-wrap gap-1">
+                          {details.skills.slice(0, 4).map((skill, sIdx) => (
+                            <span
+                              key={sIdx}
+                              className="text-[10px] bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-medium border border-slate-200"
+                            >
+                              {skill}
+                            </span>
+                          ))}
+                          {details.skills.length > 4 && (
+                            <span className="text-[10px] text-slate-500 px-1.5 py-0.5 font-semibold">
+                              +{details.skills.length - 4} lainnya
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Bottom Actions */}
+                    <div className="pt-3 border-t border-slate-100 space-y-2">
+                      <div className="flex items-center justify-between text-[11px] text-slate-500">
+                        <span className="truncate flex items-center gap-1">
+                          <Mail className="w-3 h-3 text-slate-400" />
+                          {cand.email}
+                        </span>
+                        <span className="font-mono text-slate-400">{cand.phone}</span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedTalentCandidate(cand)}
+                          className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg font-bold text-xs flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                        >
+                          <Eye className="w-3 h-3 text-slate-600" />
+                          <span>Profiling & Riwayat</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleOpenReengageModal(cand)}
+                          className="px-2.5 py-1.5 bg-blue-700 hover:bg-blue-800 text-white rounded-lg font-bold text-xs flex items-center justify-center gap-1 shadow-2xs transition-colors cursor-pointer"
+                        >
+                          <RefreshCw className="w-3 h-3" />
+                          <span>Hubungi Kembali</span>
+                        </button>
                       </div>
                     </div>
                   </div>
-
-                  <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
-                    <span className="font-mono text-slate-500 text-[11px]">
-                      {cand.email}
-                    </span>
-                    <button
-                      onClick={() => handleReengageTalent(cand)}
-                      className="px-3 py-1 bg-blue-700 hover:bg-blue-800 text-white rounded font-semibold text-xs flex items-center gap-1 shadow-2xs"
-                    >
-                      <RefreshCw className="w-3 h-3" />
-                      <span>Hubungi Kembali</span>
-                    </button>
-                  </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>
@@ -19213,6 +19654,346 @@ PT Nusantara Multi Talenta Tbk`);
               >
                 <Check className="w-3.5 h-3.5" />
                 <span>Aktifkan Akun & Selesaikan Provisioning</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===================== MODAL 16: TALENT PROFILING & HISTORICAL DOSSIER ===================== */}
+      {selectedTalentCandidate && (() => {
+        const details = getTalentHistoricalDetails(selectedTalentCandidate);
+        const scoreColor =
+          details.score >= 90
+            ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+            : details.score >= 80
+            ? 'bg-blue-50 text-blue-800 border-blue-300'
+            : 'bg-amber-50 text-amber-800 border-amber-300';
+
+        return (
+          <div
+            className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto"
+            onClick={() => setSelectedTalentCandidate(null)}
+          >
+            <div
+              className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full border border-slate-200 overflow-hidden my-6 animate-in fade-in zoom-in-95 duration-200"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="px-6 py-5 bg-gradient-to-r from-slate-950 via-slate-900 to-blue-950 text-white flex items-start justify-between">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-12 h-12 rounded-full bg-blue-600 text-white font-bold text-base flex items-center justify-center shrink-0 shadow-md border-2 border-white/20">
+                    {selectedTalentCandidate.name
+                      .split(' ')
+                      .map((n) => n[0])
+                      .slice(0, 2)
+                      .join('')}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="text-base font-bold text-white tracking-wide">
+                        {selectedTalentCandidate.name}
+                      </h3>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-500/20 text-blue-200 border border-blue-400/30">
+                        Talent Pool Cadangan
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-300 mt-0.5 flex items-center gap-2 flex-wrap">
+                      <span>{selectedTalentCandidate.lastCompany || 'Kandidat Profesional'}</span>
+                      <span>·</span>
+                      <span className="text-blue-300">{details.appliedPosition}</span>
+                      <span>·</span>
+                      <span className="text-slate-400 font-mono text-[11px]">{selectedTalentCandidate.email}</span>
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setSelectedTalentCandidate(null)}
+                  className="w-8 h-8 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 flex items-center justify-center transition-colors cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="p-6 space-y-5 max-h-[75vh] overflow-y-auto text-xs">
+                {/* 1. KOTAK INFORMASI RIWAYAT SELEKSI LENGKAP (Kapan, Dimana, Dengan Siapa, Posisi) */}
+                <div className="p-4 bg-gradient-to-br from-blue-50/70 via-indigo-50/40 to-slate-50 border border-blue-200 rounded-xl space-y-3.5">
+                  <div className="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-blue-200/80">
+                    <span className="font-bold text-blue-950 text-xs flex items-center gap-1.5">
+                      <CalendarCheck className="w-4 h-4 text-blue-700" />
+                      <span>Audit Trail Riwayat Seleksi & Tahap Terakhir</span>
+                    </span>
+                    <div className={`px-2.5 py-0.5 rounded-full border text-xs font-bold ${scoreColor}`}>
+                      Skor Tahap: {details.score} / 100
+                    </div>
+                  </div>
+
+                  {/* 4 Kotak Ringkasan */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="p-3 bg-white rounded-lg border border-slate-200 space-y-1 shadow-2xs">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                        <Briefcase className="w-3 h-3 text-blue-600" />
+                        <span>Posisi yang Dilamar</span>
+                      </span>
+                      <p className="font-bold text-slate-900 text-xs">{details.appliedPosition}</p>
+                      <p className="text-[11px] text-slate-500">Departemen: {details.department}</p>
+                    </div>
+
+                    <div className="p-3 bg-white rounded-lg border border-slate-200 space-y-1 shadow-2xs">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                        <Clock className="w-3 h-3 text-blue-600" />
+                        <span>Kapan (Waktu Pelaksanaan)</span>
+                      </span>
+                      <p className="font-bold text-slate-900 text-xs">{details.dateStr}</p>
+                      <p className="text-[11px] text-slate-500">Tahap: {details.lastStage}</p>
+                    </div>
+
+                    <div className="p-3 bg-white rounded-lg border border-slate-200 space-y-1 shadow-2xs">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                        <MapPin className="w-3 h-3 text-blue-600" />
+                        <span>Dimana (Lokasi / Media)</span>
+                      </span>
+                      <p className="font-bold text-slate-900 text-xs truncate">{details.locationStr}</p>
+                      <p className="text-[11px] text-slate-500">Metode: {selectedTalentCandidate.interviewFormat || 'Online Assessment / Conference'}</p>
+                    </div>
+
+                    <div className="p-3 bg-white rounded-lg border border-slate-200 space-y-1 shadow-2xs">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                        <User className="w-3 h-3 text-blue-600" />
+                        <span>Dengan Siapa (Pewawancara / Penilai)</span>
+                      </span>
+                      <p className="font-bold text-slate-900 text-xs truncate">{details.interviewerStr}</p>
+                      <p className="text-[11px] text-slate-500">Tim Evaluator & HC Board</p>
+                    </div>
+                  </div>
+
+                  {/* Catatan Lengkap Evaluator */}
+                  <div className="p-3 bg-white rounded-lg border border-blue-200/90 text-xs space-y-1">
+                    <span className="font-semibold text-slate-800 text-[11px] flex items-center gap-1">
+                      <FileText className="w-3.5 h-3.5 text-blue-600" />
+                      <span>Catatan Evaluasi / Pertimbangan Masuk Talent Pool:</span>
+                    </span>
+                    <p className="text-slate-700 text-xs leading-relaxed italic bg-slate-50/80 p-2.5 rounded border border-slate-200/80">
+                      "{details.notesStr}"
+                    </p>
+                  </div>
+                </div>
+
+                {/* 2. PROFILING KANDIDAT & LATAR BELAKANG */}
+                <div className="space-y-3">
+                  <span className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
+                    <GraduationCap className="w-4 h-4 text-emerald-600" />
+                    <span>Data Profiling & Latar Belakang</span>
+                  </span>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                    <div>
+                      <span className="text-[10px] text-slate-400 block font-semibold">Pendidikan Terakhir</span>
+                      <p className="font-semibold text-slate-800 text-xs">
+                        {selectedTalentCandidate.parsedData?.education || 'S1 Pendidikan Terkait'}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-400 block font-semibold">Total Pengalaman Kerja</span>
+                      <p className="font-semibold text-slate-800 text-xs">
+                        {selectedTalentCandidate.parsedData?.experienceYears || '3+ Tahun'}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-400 block font-semibold">Ekspektasi Gaji</span>
+                      <p className="font-bold text-emerald-700 text-xs">
+                        {formatRupiah(selectedTalentCandidate.expectedSalary || 15000000)} / bln
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Executive Summary */}
+                  {selectedTalentCandidate.parsedData?.summary && (
+                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                      <span className="text-[10px] font-semibold text-slate-500 block mb-0.5">Ringkasan Profil (AI / Resume Parse):</span>
+                      <p className="text-slate-700 text-xs leading-relaxed">
+                        {selectedTalentCandidate.parsedData.summary}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Top Skills Badges */}
+                  <div>
+                    <span className="font-bold text-slate-800 text-xs block mb-1.5">Keahlian & Penguasaan Kompetensi (Skills):</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {details.skills.map((skill, sIdx) => (
+                        <span
+                          key={sIdx}
+                          className="px-2.5 py-1 bg-blue-50 text-blue-800 border border-blue-200 rounded-lg text-xs font-medium"
+                        >
+                          {skill}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* External Links */}
+                  <div className="flex items-center gap-2 pt-1 flex-wrap">
+                    {selectedTalentCandidate.parsedData?.linkedinUrl && (
+                      <a
+                        href={selectedTalentCandidate.parsedData.linkedinUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5 text-blue-600" />
+                        <span>Profil LinkedIn</span>
+                      </a>
+                    )}
+                    {selectedTalentCandidate.parsedData?.portfolioUrl && (
+                      <a
+                        href={selectedTalentCandidate.parsedData.portfolioUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                      >
+                        <Globe className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Portofolio / GitHub</span>
+                      </a>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-3 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <a
+                    href={`https://wa.me/${(selectedTalentCandidate.phone || '').replace(/[^0-9]/g, '')}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                  >
+                    <MessageSquare className="w-3.5 h-3.5" />
+                    <span>WhatsApp</span>
+                  </a>
+                  <a
+                    href={`mailto:${selectedTalentCandidate.email}`}
+                    className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                  >
+                    <Mail className="w-3.5 h-3.5" />
+                    <span>Kirim Email</span>
+                  </a>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedTalentCandidate(null)}
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold cursor-pointer"
+                  >
+                    Tutup
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenReengageModal(selectedTalentCandidate)}
+                    className="px-4 py-2 bg-blue-700 hover:bg-blue-800 text-white rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    <span>Hubungi & Aktifkan Kembali ke Pipeline →</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ===================== MODAL 17: DIALOG HUBUNGI KEMBALI (RE-ENGAGE) ===================== */}
+      {isReengageModalOpen && candidateToReengage && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
+          onClick={() => setIsReengageModalOpen(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl max-w-md w-full border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-5 py-4 bg-slate-950 text-white flex items-center justify-between">
+              <h3 className="text-sm font-bold flex items-center gap-2">
+                <RefreshCw className="w-4 h-4 text-blue-400" />
+                <span>Hubungi Kembali (Re-Engage Talent)</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsReengageModalOpen(false)}
+                className="text-slate-400 hover:text-white cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-3.5 text-xs">
+              <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-xl space-y-1">
+                <span className="text-[10px] text-blue-600 font-bold uppercase tracking-wider block">Kandidat Terpilih:</span>
+                <p className="font-bold text-slate-900 text-sm">{candidateToReengage.name}</p>
+                <p className="text-slate-500 text-[11px]">{candidateToReengage.email} · {candidateToReengage.phone}</p>
+              </div>
+
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">Target Lowongan Formasi *</label>
+                <select
+                  value={reengageVacancyId}
+                  onChange={(e) => setReengageVacancyId(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white text-xs focus:ring-1 focus:ring-blue-500 outline-hidden font-medium"
+                >
+                  {vacancies.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.title} ({v.department})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">Tahap Awal Pengaktifan Kembali *</label>
+                <select
+                  value={reengageStage}
+                  onChange={(e) => setReengageStage(e.target.value as RecruitmentStage)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white text-xs focus:ring-1 focus:ring-blue-500 outline-hidden font-medium"
+                >
+                  <option value="Screening">Tahap 1: Screening & Review Profil</option>
+                  <option value="Assessment">Tahap 2: Technical Assessment / Tes</option>
+                  <option value="Interview">Tahap 3: Wawancara (Interview User/HR)</option>
+                  <option value="Offered">Tahap 5: Offering Negotiation (Fast-Track)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">Catatan Pemanggilan / Alasan Re-Engage</label>
+                <textarea
+                  value={reengageNotes}
+                  onChange={(e) => setReengageNotes(e.target.value)}
+                  rows={2}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white text-xs focus:ring-1 focus:ring-blue-500 outline-hidden resize-none"
+                  placeholder="Kandidat dipanggil ulang dari basis data cadangan Talent Pool..."
+                />
+              </div>
+            </div>
+
+            <div className="px-5 py-3.5 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setIsReengageModalOpen(false)}
+                className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmReengageCandidate}
+                className="px-4 py-1.5 bg-blue-700 hover:bg-blue-800 text-white rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1.5 cursor-pointer"
+              >
+                <Check className="w-3.5 h-3.5" />
+                <span>Aktifkan ke Pipeline</span>
               </button>
             </div>
           </div>

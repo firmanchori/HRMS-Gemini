@@ -845,6 +845,12 @@ export interface Candidate {
   disqualificationReason?: string;
   talentPoolCategory?: string;
   talentPoolTags?: string[];
+  lastStageName?: string;
+  lastStageScore?: number;
+  lastStageDate?: string;
+  lastStageLocation?: string;
+  lastStageInterviewer?: string;
+  lastStageNotes?: string;
 }
 
 export interface OfferingCalculationState {
