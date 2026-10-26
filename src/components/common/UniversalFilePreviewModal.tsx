@@ -178,53 +178,56 @@ _Dokumen ini diverifikasi secara sah melalui sistem NusaHR Enterprise v2026._`;
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 sm:gap-2">
-            {/* WhatsApp Share Button */}
+          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+            {/* WhatsApp Icon Button */}
             <button
+              type="button"
               onClick={handleShareWhatsApp}
-              title="Kirim Ringkasan Dokumen ke WhatsApp"
-              className="flex items-center gap-1 sm:gap-1.5 px-2.5 py-1.5 rounded text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition-colors shadow-2xs"
+              title="Kirim Dokumen ke WhatsApp"
+              aria-label="Kirim Dokumen ke WhatsApp"
+              className="p-2 sm:p-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition-all shadow-2xs hover:shadow-xs cursor-pointer flex items-center justify-center shrink-0"
             >
-              <Share2 className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Kirim ke WA</span>
+              <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.978.58 1.911.928 3.145.929 3.178 0 5.767-2.587 5.768-5.766.001-3.187-2.575-5.77-5.764-5.771zm3.392 8.244c-.144.405-.837.774-1.17.824-.299.045-.677.063-1.092-.069-.252-.08-.575-.187-.988-.365-1.739-.751-2.874-2.502-2.961-2.617-.087-.116-.708-.94-.708-1.793s.448-1.273.607-1.446c.159-.173.346-.217.462-.217l.332.006c.106.005.249-.04.39.298.144.347.491 1.2.534 1.287.043.087.072.188.014.304-.058.116-.087.188-.173.289l-.26.304c-.087.086-.177.18-.076.354.101.174.449.741.964 1.201.662.591 1.221.774 1.394.86.174.086.275.072.376-.043.101-.116.433-.506.549-.68.116-.173.231-.145.39-.086s1.011.477 1.184.564.289.13.332.202c.045.072.045.419-.099.824zm-3.392-12.416c-5.518 0-9.995 4.477-9.995 9.995 0 1.763.459 3.486 1.332 5.006l-1.417 5.176 5.309-1.392c1.458.796 3.107 1.215 4.772 1.216 5.52 0 9.998-4.477 9.998-9.996 0-5.518-4.478-9.995-9.998-9.995z"/>
+              </svg>
             </button>
 
-            {/* Print Button - Direct window.print */}
+            {/* Print Icon Button */}
             <button
+              type="button"
               onClick={handlePrint}
-              title="Cetak Dokumen Fisik / Printer (Ctrl+P)"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-white transition-colors shadow-2xs"
+              title="Cetak Dokumen Fisik (Ctrl+P)"
+              aria-label="Cetak Dokumen Fisik"
+              className="p-2 sm:p-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white transition-all shadow-2xs hover:shadow-xs cursor-pointer flex items-center justify-center shrink-0 border border-slate-700"
             >
-              <Printer className="w-3.5 h-3.5" />
-              <span>Cetak</span>
+              <Printer className="w-4 h-4" />
             </button>
 
-            {/* Direct PDF Download Button (jsPDF Binary) */}
+            {/* Direct PDF Download Icon Button */}
             <button
+              type="button"
               onClick={handleExportPdf}
               disabled={isExporting}
               title="Unduh Berkas Binary PDF Resmi"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white hover:bg-slate-100 text-slate-900 transition-colors shadow-2xs disabled:opacity-60"
+              aria-label="Unduh Berkas Binary PDF Resmi"
+              className="p-2 sm:p-2.5 rounded-lg bg-white hover:bg-slate-100 text-slate-900 transition-all shadow-2xs hover:shadow-xs cursor-pointer flex items-center justify-center shrink-0 disabled:opacity-60"
             >
               {isExporting ? (
-                <>
-                  <div className="w-3.5 h-3.5 border-2 border-slate-900 border-t-transparent rounded-full animate-spin" />
-                  <span>Membuat PDF...</span>
-                </>
+                <div className="w-4 h-4 border-2 border-slate-900 border-t-transparent rounded-full animate-spin" />
               ) : (
-                <>
-                  <FileDown className="w-3.5 h-3.5 text-slate-900" />
-                  <span>Unduh PDF</span>
-                </>
+                <FileDown className="w-4 h-4 text-slate-900" />
               )}
             </button>
 
             {/* Close Button */}
             <button
+              type="button"
               onClick={closeFilePreview}
-              className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-md transition-colors"
+              title="Tutup Preview (Esc)"
+              aria-label="Tutup Preview"
+              className="p-2 sm:p-2.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors cursor-pointer flex items-center justify-center shrink-0"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4" />
             </button>
           </div>
         </div>

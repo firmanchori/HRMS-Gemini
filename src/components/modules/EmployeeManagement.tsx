@@ -39,6 +39,7 @@ import {
   RotateCcw,
   Trash2,
   Info,
+  Lock,
 } from 'lucide-react';
 import {
   EmploymentType,
@@ -569,6 +570,7 @@ export const EmployeeManagement: React.FC = () => {
     setNewBasicSalary(salary);
     setNewContractDoc(docNo);
     setNewContractStartDate(joinDt);
+    setNewSkEffectiveDate(joinDt);
     setNewContractEndDate(empType === 'Kontrak' ? '2027-10-31' : '');
     setNewPermanentDate(empType === 'Tetap' ? joinDt : '');
     setNewProbationStatus(empType === 'Tetap' ? 'Sedang Berjalan' : 'Tanpa Percobaan');
@@ -3243,65 +3245,123 @@ export const EmployeeManagement: React.FC = () => {
 
                 {/* TAB 7: RIWAYAT SK KARIER & LEGALITAS */}
                 {dossierFormTab === 'riwayat' && (
-                  <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-4">
-                    <h4 className="font-bold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-2">
-                      <FileClock className="w-4 h-4 text-indigo-600" />
-                      <span>Surat Keputusan (SK) Pengangkatan / Hubungan Kerja Awal</span>
-                    </h4>
+                  <div className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-2xs space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                      <h4 className="font-bold text-slate-900 flex items-center gap-2">
+                        <FileClock className="w-4 h-4 text-indigo-600" />
+                        <span>Surat Keputusan (SK) Pengangkatan / Hubungan Kerja Awal</span>
+                      </h4>
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-800 border border-amber-200 w-fit">
+                        <Lock className="w-3 h-3 text-amber-600" /> Data SK Terbawa Otomatis (Read-Only)
+                      </span>
+                    </div>
+
+                    {/* Banner Info Integritas Legalitas */}
+                    <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-lg text-xs text-amber-900 flex items-start gap-2.5">
+                      <ShieldCheck className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                      <div className="leading-relaxed">
+                        <span className="font-bold">Integritas Dokumen Kontrak & SK:</span> Nomor Dokumen SK, Tanggal Berlaku Efektif, serta Pejabat Penandatangan SK secara otomatis terbawa dari hasil persetujuan kontrak resmi karyawan. Hanya kolom <strong>Catatan Legalitas / Ringkasan Keputusan Direksi</strong> di bawah yang terbuka untuk disunting.
+                      </div>
+                    </div>
+
+                    {/* Data SK & Kontrak: READONLY */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="font-semibold text-slate-700 text-xs">
+                            Nomor Dokumen SK / Kontrak Resmi
+                          </label>
+                          <span className="text-[10px] text-slate-400 font-mono flex items-center gap-1">
+                            <Lock className="w-2.5 h-2.5 text-slate-400" /> Read-Only
+                          </span>
+                        </div>
+                        <input
+                          type="text"
+                          value={newContractDoc || '-'}
+                          readOnly
+                          title="Nomor dokumen dibawa otomatis dari persetujuan kontrak (Read-Only)"
+                          className="w-full px-3 py-2 border border-slate-200 bg-slate-100/90 rounded-md font-mono font-bold text-slate-700 cursor-not-allowed select-all focus:outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="font-semibold text-slate-700 text-xs">
+                            Tanggal Efektif SK Berlaku
+                          </label>
+                          <span className="text-[10px] text-slate-400 font-mono flex items-center gap-1">
+                            <Lock className="w-2.5 h-2.5 text-slate-400" /> Read-Only
+                          </span>
+                        </div>
+                        <input
+                          type="date"
+                          value={newSkEffectiveDate || ''}
+                          readOnly
+                          title="Tanggal efektif dibawa otomatis dari tanggal mulai kontrak (Read-Only)"
+                          className="w-full px-3 py-2 border border-slate-200 bg-slate-100/90 rounded-md font-medium text-slate-700 cursor-not-allowed focus:outline-none"
+                        />
+                      </div>
+                    </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                       <div>
-                        <label className="font-medium text-slate-700 block mb-1">
-                          Nomor Dokumen SK / Kontrak Resmi *
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="font-semibold text-slate-700 text-xs">
+                            Pejabat Penandatangan SK
+                          </label>
+                          <span className="text-[10px] text-slate-400 font-mono flex items-center gap-1">
+                            <Lock className="w-2.5 h-2.5 text-slate-400" /> Read-Only
+                          </span>
+                        </div>
+                        <input
+                          type="text"
+                          value={newSkSignee || '-'}
+                          readOnly
+                          title="Pejabat penandatangan SK resmi dibawa dari persetujuan kontrak (Read-Only)"
+                          className="w-full px-3 py-2 border border-slate-200 bg-slate-100/90 rounded-md font-medium text-slate-700 cursor-not-allowed focus:outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="font-semibold text-slate-700 text-xs">
+                            Jabatan Pejabat Penandatangan
+                          </label>
+                          <span className="text-[10px] text-slate-400 font-mono flex items-center gap-1">
+                            <Lock className="w-2.5 h-2.5 text-slate-400" /> Read-Only
+                          </span>
+                        </div>
+                        <input
+                          type="text"
+                          value={newSkRole || '-'}
+                          readOnly
+                          title="Jabatan pejabat penandatangan resmi (Read-Only)"
+                          className="w-full px-3 py-2 border border-slate-200 bg-slate-100/90 rounded-md font-medium text-slate-700 cursor-not-allowed focus:outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    {/* OPEN FORM: CATATAN LEGALITAS / RINGKASAN KEPUTUSAN DIREKSI */}
+                    <div className="pt-2 border-t border-slate-100">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
+                          <span>Catatan Legalitas / Ringkasan Keputusan Direksi</span>
+                          <span className="text-rose-500">*</span>
                         </label>
-                        <input
-                          type="text"
-                          value={newContractDoc}
-                          onChange={(e) => setNewContractDoc(e.target.value)}
-                          className="w-full px-3 py-2 border border-slate-300 rounded font-mono font-bold text-slate-900"
-                        />
+                        <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          <Edit3 className="w-3 h-3 text-emerald-600" /> Form Terbuka (Dapat Diedit)
+                        </span>
                       </div>
-
-                      <ValidatedDateInput
-                        id="formSkEffective"
-                        label="Tanggal Efektif SK Berlaku *"
-                        value={newSkEffectiveDate}
-                        onChange={(val) => setNewSkEffectiveDate(val)}
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                      <div>
-                        <label className="font-medium text-slate-700 block mb-1">Pejabat Penandatangan SK</label>
-                        <input
-                          type="text"
-                          value={newSkSignee}
-                          onChange={(e) => setNewSkSignee(e.target.value)}
-                          className="w-full px-3 py-2 border border-slate-300 rounded"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="font-medium text-slate-700 block mb-1">Jabatan Pejabat Penandatangan</label>
-                        <input
-                          type="text"
-                          value={newSkRole}
-                          onChange={(e) => setNewSkRole(e.target.value)}
-                          className="w-full px-3 py-2 border border-slate-300 rounded"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="font-medium text-slate-700 block mb-1">
-                        Catatan Legalitas / Ringkasan Keputusan Direksi
-                      </label>
                       <textarea
-                        rows={3}
+                        rows={4}
                         value={newSkNotes}
                         onChange={(e) => setNewSkNotes(e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-300 rounded text-xs"
+                        placeholder="Contoh: Berdasarkan persetujuan Direksi pada Rapat Manajemen No. 12/BOD/X/2026 tanggal 15 Oktober 2026 tentang pengangkatan dan penempatan pegawai..."
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs text-slate-800 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all shadow-2xs"
                       />
+                      <p className="text-[11px] text-slate-500 mt-1">
+                        Satu-satunya kolom yang dapat disunting pada tab ini untuk mencatat nomor risalah direksi, memo internal, atau klausul hukum tambahan.
+                      </p>
                     </div>
                   </div>
                 )}
