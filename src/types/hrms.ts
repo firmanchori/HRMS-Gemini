@@ -103,6 +103,27 @@ export interface EmergencyContact {
   address: string;
 }
 
+export interface EmployeeEducationItem {
+  id: string;
+  degree: 'SMA/SMK' | 'D1/D2' | 'D3' | 'D4/S1' | 'S1' | 'S2' | 'S3';
+  institution: string;
+  major: string;
+  graduationYear: number;
+  gpa?: string;
+  frontTitle?: string; // Gelar Depan (misal: "Dr.", "Ir.") - berlaku untuk S1/D4 sampai S3
+  backTitle?: string;  // Gelar Belakang (misal: "S.Kom.", "M.M.", "Ph.D.") - berlaku untuk S1/D4 sampai S3
+}
+
+export interface EmployeeNonFormalEducationItem {
+  id: string;
+  trainingName: string; // Nama Pelatihan / Kursus / Sertifikasi Profesional
+  organizer: string;    // Lembaga Penyelenggara / Penerbit
+  year: number | string;// Tahun / Tanggal Perolehan
+  validityType: 'Permanen' | 'Memiliki Masa Berlaku';
+  expiredDate?: string; // Tanggal Kadaluarsa jika memiliki masa berlaku
+  certificateNumber?: string; // Nomor Sertifikat / Lisensi
+}
+
 export interface Employee {
   id: string;
   tenantId: string;
@@ -160,6 +181,10 @@ export interface Employee {
   bpjsTkNo: string;
   bpjsKesNo: string;
   faskes1Bpjs: string;
+  hasBpjsTk?: boolean;
+  hasBpjsKes?: boolean;
+  bpjsTkActionNeeded?: 'Pengalihan' | 'Pembuatan Baru';
+  bpjsKesActionNeeded?: 'Pengalihan' | 'Pembuatan Baru';
 
   // 5. Finansial & Payroll
   bankName: string;
@@ -178,6 +203,10 @@ export interface Employee {
   major: string;
   graduationYear: number;
   educationGpa?: number | string;
+  formalEducations?: EmployeeEducationItem[];
+  nonFormalEducations?: EmployeeNonFormalEducationItem[];
+  titlePrefix?: string; // Gelar di depan nama (misal: "Dr.", "Ir.")
+  titleSuffix?: string; // Gelar di belakang nama (misal: "S.Kom.", "M.M.")
 
   // 7. Keluarga & Kontak Darurat
   familyMembers: FamilyMember[];

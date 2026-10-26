@@ -40,7 +40,17 @@ import {
   Trash2,
   Info,
 } from 'lucide-react';
-import { EmploymentType, PTKPStatus, Employee, Candidate, FamilyMember, EmergencyContact, OnboardingProcess } from '../../types/hrms';
+import {
+  EmploymentType,
+  PTKPStatus,
+  Employee,
+  Candidate,
+  FamilyMember,
+  EmergencyContact,
+  OnboardingProcess,
+  EmployeeEducationItem,
+  EmployeeNonFormalEducationItem,
+} from '../../types/hrms';
 import { formatRupiah, getTERCategory } from '../../utils/taxCalculator';
 import { EmployeeSelect } from '../common/EmployeeSelect';
 import { CurrencyInput } from '../common/CurrencyInput';
@@ -242,6 +252,8 @@ export const EmployeeManagement: React.FC = () => {
   const [newNpwp16, setNewNpwp16] = useState('1234567890120000');
   const [newPtkp, setNewPtkp] = useState<PTKPStatus>('TK/0');
   const [newKpp, setNewKpp] = useState('KPP Pratama Jakarta Selatan');
+  const [hasBpjsTk, setHasBpjsTk] = useState<boolean>(true);
+  const [hasBpjsKes, setHasBpjsKes] = useState<boolean>(true);
   const [newBpjsTk, setNewBpjsTk] = useState('24' + Math.floor(1000000000 + Math.random() * 9000000000));
   const [newBpjsKes, setNewBpjsKes] = useState('0001' + Math.floor(10000000 + Math.random() * 90000000));
   const [newFaskes, setNewFaskes] = useState('Puskesmas Kecamatan Setiabudi');
@@ -256,12 +268,37 @@ export const EmployeeManagement: React.FC = () => {
   const [newBankAccount, setNewBankAccount] = useState('');
   const [newBankAccountHolder, setNewBankAccountHolder] = useState('');
 
-  // Pendidikan
+  // Pendidikan Formal & Kualifikasi Akademik
   const [newDegree, setNewDegree] = useState<'SMA/SMK' | 'D3' | 'S1' | 'S2' | 'S3'>('S1');
   const [newInstitution, setNewInstitution] = useState('Universitas Indonesia');
   const [newMajor, setNewMajor] = useState('Teknik Informatika');
   const [newGradYear, setNewGradYear] = useState(2018);
   const [newGpa, setNewGpa] = useState('3.75');
+  const [formalEducations, setFormalEducations] = useState<EmployeeEducationItem[]>([
+    {
+      id: 'edu-1',
+      degree: 'S1',
+      institution: 'Universitas Indonesia',
+      major: 'Teknik Informatika',
+      graduationYear: 2020,
+      gpa: '3.75',
+      frontTitle: '',
+      backTitle: 'S.Kom.',
+    },
+  ]);
+
+  // Pendidikan Non Formal & Pelatihan Profesional
+  const [nonFormalEducations, setNonFormalEducations] = useState<EmployeeNonFormalEducationItem[]>([
+    {
+      id: 'tr-1',
+      trainingName: 'Scrum Master Certified & Agile Leadership',
+      organizer: 'Scrum Alliance & BNSP',
+      year: '2023',
+      certificateNumber: 'SMC-2023-8891',
+      validityType: 'Permanen',
+      expiredDate: '',
+    },
+  ]);
 
   // Keluarga & Kontak Darurat
   const [newFamilyMembers, setNewFamilyMembers] = useState<FamilyMember[]>([]);
@@ -425,6 +462,8 @@ export const EmployeeManagement: React.FC = () => {
     setNewNpwp16('1234567890120000');
     setNewPtkp('TK/0');
     setNewKpp(`KPP Pratama ${currentTenant.city || 'Jakarta Selatan'}`);
+    setHasBpjsTk(true);
+    setHasBpjsKes(true);
     setNewBpjsTk('24' + Math.floor(1000000000 + Math.random() * 9000000000));
     setNewBpjsKes('0001' + Math.floor(10000000 + Math.random() * 90000000));
     setNewFaskes('Puskesmas Kecamatan Setiabudi');
@@ -439,12 +478,35 @@ export const EmployeeManagement: React.FC = () => {
     setNewBankAccount('');
     setNewBankAccountHolder('');
 
-    // Pendidikan
+    // Pendidikan Formal & Non Formal
     setNewDegree('S1');
     setNewInstitution('Universitas Indonesia');
     setNewMajor('Teknik Informatika');
     setNewGradYear(2020);
     setNewGpa('3.75');
+    setFormalEducations([
+      {
+        id: `edu-${Date.now()}`,
+        degree: 'S1',
+        institution: 'Universitas Indonesia',
+        major: 'Teknik Informatika',
+        graduationYear: 2020,
+        gpa: '3.75',
+        frontTitle: '',
+        backTitle: 'S.Kom.',
+      },
+    ]);
+    setNonFormalEducations([
+      {
+        id: `tr-${Date.now()}`,
+        trainingName: 'Scrum Master Certified & Agile Leadership',
+        organizer: 'Scrum Alliance & BNSP',
+        year: '2023',
+        certificateNumber: 'SMC-2023-8891',
+        validityType: 'Permanen',
+        expiredDate: '',
+      },
+    ]);
 
     // Keluarga & Darurat
     setNewFamilyMembers([]);
@@ -466,6 +528,13 @@ export const EmployeeManagement: React.FC = () => {
       'Pengangkatan resmi karyawan baru setelah memenuhi kualifikasi dan verifikasi administrasi kepegawaian standar perusahaan.'
     );
   };
+
+  // Probation hanya berlaku untuk PKWTT (Tetap). Non-PKWTT selalu Tanpa Percobaan (PP 35/2021).
+  useEffect(() => {
+    if (newType !== 'Tetap') {
+      setNewProbationStatus('Tanpa Percobaan');
+    }
+  }, [newType]);
 
   // Helper: Memuat data kandidat berstatus Hired langsung ke form dosir lengkap
   const loadCandidateIntoDossierForm = (cand: Candidate) => {
@@ -502,6 +571,7 @@ export const EmployeeManagement: React.FC = () => {
     setNewContractStartDate(joinDt);
     setNewContractEndDate(empType === 'Kontrak' ? '2027-10-31' : '');
     setNewPermanentDate(empType === 'Tetap' ? joinDt : '');
+    setNewProbationStatus(empType === 'Tetap' ? 'Sedang Berjalan' : 'Tanpa Percobaan');
     setNewBankAccountHolder(cand.name);
 
     if (cand.offeringBreakdown) {
@@ -522,17 +592,31 @@ export const EmployeeManagement: React.FC = () => {
     }
 
     if (cand.parsedData) {
-      if (cand.parsedData.university) {
-        setNewInstitution(cand.parsedData.university);
-      }
+      const inst = cand.parsedData.university || 'Universitas Indonesia';
+      let deg: any = 'S1';
+      let bTitle = 'S.Kom.';
       if (typeof cand.parsedData.education === 'string') {
         const eduStr = cand.parsedData.education.toUpperCase();
-        if (eduStr.includes('S2')) setNewDegree('S2');
-        else if (eduStr.includes('S3')) setNewDegree('S3');
-        else if (eduStr.includes('D3')) setNewDegree('D3');
-        else if (eduStr.includes('SMA') || eduStr.includes('SMK')) setNewDegree('SMA/SMK');
-        else setNewDegree('S1');
+        if (eduStr.includes('S2')) { deg = 'S2'; bTitle = 'M.M.'; }
+        else if (eduStr.includes('S3')) { deg = 'S3'; bTitle = 'Dr.'; }
+        else if (eduStr.includes('D3')) { deg = 'D3'; bTitle = ''; }
+        else if (eduStr.includes('SMA') || eduStr.includes('SMK')) { deg = 'SMA/SMK'; bTitle = ''; }
+        else { deg = 'S1'; bTitle = 'S.Kom.'; }
       }
+      setNewDegree(deg);
+      setNewInstitution(inst);
+      setFormalEducations([
+        {
+          id: `edu-${Date.now()}`,
+          degree: deg,
+          institution: inst,
+          major: cand.parsedData.currentTitle || 'Teknik Informatika',
+          graduationYear: 2020,
+          gpa: '3.75',
+          frontTitle: '',
+          backTitle: bTitle,
+        },
+      ]);
     }
   };
 
@@ -547,6 +631,104 @@ export const EmployeeManagement: React.FC = () => {
     setSelectedCandidateId('');
     setIsOnboardingChoiceOpen(false);
     setIsDossierFormOpen(true);
+  };
+
+  // Pendidikan Formal list handlers (bisa ditambah terus, gelar hanya untuk S1/D4 sampai S3)
+  const handleAddFormalEducation = () => {
+    setFormalEducations([
+      ...formalEducations,
+      {
+        id: `edu-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        degree: 'S1',
+        institution: '',
+        major: '',
+        graduationYear: new Date().getFullYear(),
+        gpa: '',
+        frontTitle: '',
+        backTitle: '',
+      },
+    ]);
+  };
+
+  const handleRemoveFormalEducation = (id: string) => {
+    if (formalEducations.length <= 1) {
+      setFormError('Minimal harus ada 1 riwayat pendidikan formal!');
+      return;
+    }
+    setFormalEducations(formalEducations.filter((item) => item.id !== id));
+  };
+
+  const handleUpdateFormalEducation = (id: string, field: keyof EmployeeEducationItem, val: any) => {
+    setFormalEducations(
+      formalEducations.map((item) => {
+        if (item.id === id) {
+          const updated = { ...item, [field]: val };
+          if (field === 'degree' && ['SMA/SMK', 'D1/D2', 'D3'].includes(val)) {
+            updated.frontTitle = '';
+            updated.backTitle = '';
+          }
+          return updated;
+        }
+        return item;
+      })
+    );
+  };
+
+  // Pendidikan Non Formal / Pelatihan Profesional list handlers
+  const handleAddNonFormalEducation = () => {
+    setNonFormalEducations([
+      ...nonFormalEducations,
+      {
+        id: `tr-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        trainingName: '',
+        organizer: '',
+        year: new Date().getFullYear(),
+        validityType: 'Permanen',
+        expiredDate: '',
+        certificateNumber: '',
+      },
+    ]);
+  };
+
+  const handleRemoveNonFormalEducation = (id: string) => {
+    setNonFormalEducations(nonFormalEducations.filter((item) => item.id !== id));
+  };
+
+  const handleUpdateNonFormalEducation = (id: string, field: keyof EmployeeNonFormalEducationItem, val: any) => {
+    setNonFormalEducations(
+      nonFormalEducations.map((item) => (item.id === id ? { ...item, [field]: val } : item))
+    );
+  };
+
+  // Gelar akademik kompilasi (Hanya dari S1 atau setara sampai S3)
+  const eligibleEducationsForTitle = formalEducations.filter((e) =>
+    ['S1', 'D4/S1', 'S2', 'S3'].includes(e.degree)
+  );
+  const compiledFrontTitles = Array.from(
+    new Set(
+      eligibleEducationsForTitle
+        .map((e) => e.frontTitle?.trim())
+        .filter((t): t is string => Boolean(t))
+    )
+  ).join(' ');
+  const compiledBackTitles = Array.from(
+    new Set(
+      eligibleEducationsForTitle
+        .map((e) => e.backTitle?.trim())
+        .filter((t): t is string => Boolean(t))
+    )
+  ).join(', ');
+
+  const handleApplyTitlesToName = () => {
+    if (!newName.trim()) return;
+    let cleanName = newName.trim();
+    if (compiledFrontTitles && !cleanName.startsWith(compiledFrontTitles)) {
+      cleanName = `${compiledFrontTitles} ${cleanName}`;
+    }
+    if (compiledBackTitles && !cleanName.includes(compiledBackTitles)) {
+      cleanName = `${cleanName}, ${compiledBackTitles}`;
+    }
+    setNewName(cleanName);
   };
 
   // Family & Emergency Contact list handlers
@@ -670,7 +852,7 @@ export const EmployeeManagement: React.FC = () => {
       contractStartDate: newContractStartDate || newJoinDate,
       contractEndDate: newType === 'Kontrak' ? newContractEndDate || '2027-10-31' : undefined,
       permanentAppointmentDate: newType === 'Tetap' ? newPermanentDate || newJoinDate : undefined,
-      probationStatus: newProbationStatus,
+      probationStatus: newType === 'Tetap' ? newProbationStatus : 'Tanpa Percobaan',
       department: newDept,
       position: newPosition,
       grade: newGrade || 'L3',
@@ -696,8 +878,12 @@ export const EmployeeManagement: React.FC = () => {
       npwp16: newNpwp16 || newNpwp,
       ptkp: newPtkp,
       kppPratama: newKpp,
-      bpjsTkNo: newBpjsTk,
-      bpjsKesNo: newBpjsKes,
+      hasBpjsTk: hasBpjsTk,
+      hasBpjsKes: hasBpjsKes,
+      bpjsTkActionNeeded: hasBpjsTk ? 'Pengalihan' : 'Pembuatan Baru',
+      bpjsKesActionNeeded: hasBpjsKes ? 'Pengalihan' : 'Pembuatan Baru',
+      bpjsTkNo: hasBpjsTk ? newBpjsTk : 'BELUM_ADA',
+      bpjsKesNo: hasBpjsKes ? newBpjsKes : 'BELUM_ADA',
       faskes1Bpjs: newFaskes,
       bankName: newBankName,
       bankAccount: newBankAccount,
@@ -707,11 +893,15 @@ export const EmployeeManagement: React.FC = () => {
       transportAllowance: Number(newTransportAllow || 0),
       mealAllowance: Number(newMealAllow || 0),
       positionAllowance: Number(newPositionAllow || 0),
-      lastEducationDegree: newDegree,
-      institution: newInstitution,
-      major: newMajor,
-      graduationYear: Number(newGradYear || 2020),
-      educationGpa: newGpa || '3.75',
+      lastEducationDegree: (formalEducations[0]?.degree as any) || newDegree,
+      institution: formalEducations[0]?.institution || newInstitution,
+      major: formalEducations[0]?.major || newMajor,
+      graduationYear: Number(formalEducations[0]?.graduationYear || newGradYear || 2020),
+      educationGpa: formalEducations[0]?.gpa || newGpa || '3.75',
+      formalEducations: formalEducations,
+      nonFormalEducations: nonFormalEducations,
+      titlePrefix: compiledFrontTitles || undefined,
+      titleSuffix: compiledBackTitles || undefined,
       familyMembers: newFamilyMembers,
       emergencyContacts: newEmergencyContacts,
     });
@@ -1324,12 +1514,12 @@ export const EmployeeManagement: React.FC = () => {
                 <div className="w-10 h-10 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
                   <Sparkles className="w-5 h-5" />
                 </div>
-                <div>
-                  <div className="flex items-center gap-2">
+                <div className="flex-1 min-w-0">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 mb-1">
                     <h4 className="font-bold text-slate-900 text-sm">
                       1. Onboarding Melalui Rekrutmen Lengkap
                     </h4>
-                    <span className="text-[10px] bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-full font-bold">
+                    <span className="self-start sm:self-auto text-[10px] bg-indigo-100 text-indigo-800 px-2.5 py-0.5 rounded-full font-bold whitespace-nowrap border border-indigo-200 shrink-0">
                       Status Hired
                     </span>
                   </div>
@@ -1457,20 +1647,20 @@ export const EmployeeManagement: React.FC = () => {
                 {/* Candidate Detail Card Preview */}
                 {selectedCandidate && (
                   <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-center gap-3">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5">
+                      <div className="flex items-center gap-3 min-w-0">
                         <div className="w-10 h-10 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center text-sm shadow-2xs shrink-0">
                           {selectedCandidate.name[0]}
                         </div>
-                        <div>
-                          <h4 className="font-bold text-slate-900 text-sm">{selectedCandidate.name}</h4>
-                          <div className="text-xs text-indigo-700 font-medium">
+                        <div className="min-w-0">
+                          <h4 className="font-bold text-slate-900 text-sm truncate">{selectedCandidate.name}</h4>
+                          <div className="text-xs text-indigo-700 font-medium truncate">
                             {selectedCandidateVacancy?.title || 'Posisi Rekrutmen'} ·{' '}
                             {selectedCandidateVacancy?.department || 'Engineering'}
                           </div>
                         </div>
                       </div>
-                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 shrink-0">
+                      <span className="self-start sm:self-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 whitespace-nowrap shrink-0">
                         Status: Hired
                       </span>
                     </div>
@@ -1921,16 +2111,35 @@ export const EmployeeManagement: React.FC = () => {
                         />
 
                         <div>
-                          <label className="font-medium text-slate-700 block mb-1">Status Evaluasi Percobaan (Probation)</label>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="font-medium text-slate-700 block text-xs">
+                              Status Evaluasi Percobaan (Probation)
+                            </label>
+                            {newType !== 'Tetap' && (
+                              <span className="text-[10px] bg-amber-50 text-amber-700 px-2 py-0.5 rounded font-semibold border border-amber-200">
+                                Hanya Berlaku PKWTT
+                              </span>
+                            )}
+                          </div>
                           <select
-                            value={newProbationStatus}
+                            disabled={newType !== 'Tetap'}
+                            value={newType === 'Tetap' ? newProbationStatus : 'Tanpa Percobaan'}
                             onChange={(e) => setNewProbationStatus(e.target.value as any)}
-                            className="w-full px-3 py-2 border border-slate-300 rounded bg-white font-medium cursor-pointer"
+                            className={`w-full px-3 py-2 border rounded font-medium text-xs ${
+                              newType === 'Tetap'
+                                ? 'border-slate-300 bg-white cursor-pointer text-slate-900'
+                                : 'border-slate-200 bg-slate-100 text-slate-500 cursor-not-allowed'
+                            }`}
                           >
                             <option value="Sedang Berjalan">Sedang Berjalan (Probation 3 Bulan)</option>
                             <option value="Lolos">Lolos Evaluasi (Langsung Lolos)</option>
                             <option value="Tanpa Percobaan">Tanpa Percobaan</option>
                           </select>
+                          <p className="text-[10px] text-slate-500 mt-1">
+                            {newType === 'Tetap'
+                              ? 'Maksimal 3 bulan masa percobaan sesuai regulasi ketenagakerjaan (PKWTT).'
+                              : 'Sesuai PP 35/2021 & UU Ketenagakerjaan, masa percobaan hanya berlaku untuk PKWTT (Tetap). Non-PKWTT tidak diperkenankan ada masa percobaan.'}
+                          </p>
                         </div>
                       </div>
 
@@ -2174,33 +2383,110 @@ export const EmployeeManagement: React.FC = () => {
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-2 border-t border-slate-100">
-                      <div>
-                        <label className="font-medium text-slate-700 block mb-1">
-                          No. BPJS Ketenagakerjaan (KPJ)
-                        </label>
-                        <input
-                          type="text"
-                          value={newBpjsTk}
-                          onChange={(e) => setNewBpjsTk(e.target.value)}
-                          className="w-full px-3 py-2 border border-slate-300 rounded font-mono"
-                        />
-                        <span className="text-[10px] text-emerald-600 block mt-0.5">
-                          ✓ JKK, JKM, JHT, JP didaftarkan
-                        </span>
+                      {/* BPJS Ketenagakerjaan */}
+                      <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <label className="font-semibold text-slate-800 text-xs">
+                            BPJS Ketenagakerjaan (KPJ)
+                          </label>
+                          <label className="flex items-center gap-1.5 text-xs font-medium cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={!hasBpjsTk}
+                              onChange={(e) => {
+                                const belumAda = e.target.checked;
+                                setHasBpjsTk(!belumAda);
+                                if (belumAda) setNewBpjsTk('');
+                                else if (!newBpjsTk) setNewBpjsTk('24' + Math.floor(1000000000 + Math.random() * 9000000000));
+                              }}
+                              className="w-3.5 h-3.5 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                            />
+                            <span className="text-[11px] text-amber-700 font-bold">Belum / Tidak Ada</span>
+                          </label>
+                        </div>
+
+                        {hasBpjsTk ? (
+                          <div className="space-y-1.5">
+                            <input
+                              type="text"
+                              placeholder="Nomor KPJ (11 digit)"
+                              value={newBpjsTk}
+                              onChange={(e) => setNewBpjsTk(e.target.value)}
+                              className="w-full px-3 py-1.5 border border-slate-300 rounded font-mono text-xs bg-white"
+                            />
+                            <div className="flex items-center justify-between text-[10px]">
+                              <span className="text-emerald-700 font-semibold">✓ Kartu KPJ Ada</span>
+                              <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 font-bold">
+                                Status: Perlu Pengalihan / Update Perusahaan
+                              </span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="p-2 bg-amber-50 rounded-lg border border-amber-200 text-xs space-y-1">
+                            <div className="flex items-center justify-between">
+                              <span className="font-bold text-amber-900 text-[11px]">Belum Ada Kartu KPJ</span>
+                              <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-300 font-bold text-[10px]">
+                                Perlu Pembuatan Baru
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-amber-700 leading-normal">
+                              Karyawan ditandai belum memiliki KPJ. HRD akan memproses <strong>pendaftaran pembuatan baru</strong> ke BPJS Ketenagakerjaan.
+                            </p>
+                          </div>
+                        )}
                       </div>
-                      <div>
-                        <label className="font-medium text-slate-700 block mb-1">
-                          No. Kartu BPJS Kesehatan
-                        </label>
-                        <input
-                          type="text"
-                          value={newBpjsKes}
-                          onChange={(e) => setNewBpjsKes(e.target.value)}
-                          className="w-full px-3 py-2 border border-slate-300 rounded font-mono"
-                        />
-                        <span className="text-[10px] text-emerald-600 block mt-0.5">
-                          ✓ Ditanggung 4% Perusahaan & 1% Karyawan
-                        </span>
+
+                      {/* BPJS Kesehatan */}
+                      <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <label className="font-semibold text-slate-800 text-xs">
+                            No. Kartu BPJS Kesehatan
+                          </label>
+                          <label className="flex items-center gap-1.5 text-xs font-medium cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={!hasBpjsKes}
+                              onChange={(e) => {
+                                const belumAda = e.target.checked;
+                                setHasBpjsKes(!belumAda);
+                                if (belumAda) setNewBpjsKes('');
+                                else if (!newBpjsKes) setNewBpjsKes('0001' + Math.floor(10000000 + Math.random() * 90000000));
+                              }}
+                              className="w-3.5 h-3.5 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                            />
+                            <span className="text-[11px] text-amber-700 font-bold">Belum / Tidak Ada</span>
+                          </label>
+                        </div>
+
+                        {hasBpjsKes ? (
+                          <div className="space-y-1.5">
+                            <input
+                              type="text"
+                              placeholder="Nomor Kartu BPJS Kesehatan (13 digit)"
+                              value={newBpjsKes}
+                              onChange={(e) => setNewBpjsKes(e.target.value)}
+                              className="w-full px-3 py-1.5 border border-slate-300 rounded font-mono text-xs bg-white"
+                            />
+                            <div className="flex items-center justify-between text-[10px]">
+                              <span className="text-emerald-700 font-semibold">✓ Kartu BPJS Ada</span>
+                              <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 font-bold">
+                                Status: Perlu Pengalihan / Update Perusahaan
+                              </span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="p-2 bg-amber-50 rounded-lg border border-amber-200 text-xs space-y-1">
+                            <div className="flex items-center justify-between">
+                              <span className="font-bold text-amber-900 text-[11px]">Belum Ada Kartu BPJS Kes</span>
+                              <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-300 font-bold text-[10px]">
+                                Perlu Pembuatan Baru
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-amber-700 leading-normal">
+                              Karyawan ditandai belum memiliki kartu BPJS Kesehatan. HRD akan memproses <strong>pendaftaran pembuatan baru</strong> ke BPJS Kesehatan.
+                            </p>
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -2390,70 +2676,399 @@ export const EmployeeManagement: React.FC = () => {
 
                 {/* TAB 5: PENDIDIKAN & KUALIFIKASI */}
                 {dossierFormTab === 'pendidikan' && (
-                  <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-4">
-                    <h4 className="font-bold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-2">
-                      <GraduationCap className="w-4 h-4 text-indigo-600" />
-                      <span>Riwayat Pendidikan Formal & Kualifikasi Akademik</span>
-                    </h4>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                      <div>
-                        <label className="font-medium text-slate-700 block mb-1">Jenjang Pendidikan Terakhir</label>
-                        <select
-                          value={newDegree}
-                          onChange={(e) => setNewDegree(e.target.value as any)}
-                          className="w-full px-3 py-2 border border-slate-300 rounded bg-white font-semibold cursor-pointer"
+                  <div className="space-y-4">
+                    {/* 1. Riwayat Pendidikan Formal & Kualifikasi Akademik */}
+                    <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
+                        <div>
+                          <h4 className="font-bold text-slate-900 flex items-center gap-2 text-sm">
+                            <GraduationCap className="w-4 h-4 text-indigo-600" />
+                            <span>Riwayat Pendidikan Formal & Kualifikasi Akademik</span>
+                          </h4>
+                          <span className="text-[11px] text-slate-500">
+                            Dapat menambahkan lebih dari 1 riwayat pendidikan formal (D3, S1, S2, S3, dsb.)
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleAddFormalEducation}
+                          className="self-start sm:self-auto px-3 py-1.5 text-xs font-semibold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-lg border border-indigo-200 flex items-center gap-1.5 cursor-pointer transition-colors shadow-2xs"
                         >
-                          <option value="SMA/SMK">SMA / SMK / Sederajat</option>
-                          <option value="D3">Diploma 3 (D3)</option>
-                          <option value="S1">Strata 1 (S1) / Sarjana</option>
-                          <option value="S2">Strata 2 (S2) / Magister</option>
-                          <option value="S3">Strata 3 (S3) / Doktor</option>
-                        </select>
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Tambah Pendidikan Formal</span>
+                        </button>
                       </div>
 
-                      <div>
-                        <label className="font-medium text-slate-700 block mb-1">Perguruan Tinggi / Universitas</label>
-                        <input
-                          type="text"
-                          value={newInstitution}
-                          onChange={(e) => setNewInstitution(e.target.value)}
-                          className="w-full px-3 py-2 border border-slate-300 rounded"
-                        />
+                      {/* Preview Gelar Akademik jika ada S1-S3 */}
+                      {(compiledFrontTitles || compiledBackTitles) && (
+                        <div className="p-3 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl border border-indigo-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                          <div>
+                            <span className="text-[10px] font-bold text-indigo-900 uppercase tracking-wider block">
+                              Preview Nama dengan Gelar Akademik (S1 - S3)
+                            </span>
+                            <strong className="text-sm text-indigo-950 font-bold">
+                              {compiledFrontTitles ? `${compiledFrontTitles} ` : ''}
+                              {newName || 'Nama Karyawan'}
+                              {compiledBackTitles ? `, ${compiledBackTitles}` : ''}
+                            </strong>
+                            <p className="text-[10px] text-indigo-700 mt-0.5">
+                              Sesuai ketentuan, penulisan gelar pada nama hanya berlaku dari jenjang Strata 1 (S1) atau setara sampai S3.
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={handleApplyTitlesToName}
+                            className="self-start sm:self-center px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold shrink-0 shadow-2xs transition-colors cursor-pointer"
+                          >
+                            Terapkan ke Nama Karyawan
+                          </button>
+                        </div>
+                      )}
+
+                      {/* List Formulir Pendidikan Formal */}
+                      <div className="space-y-3.5">
+                        {formalEducations.map((item, idx) => {
+                          const isEligibleForTitle = ['S1', 'D4/S1', 'S2', 'S3'].includes(item.degree);
+                          return (
+                            <div
+                              key={item.id}
+                              className="p-3.5 bg-slate-50/70 rounded-xl border border-slate-200 space-y-3 relative group"
+                            >
+                              <div className="flex items-center justify-between border-b border-slate-200/80 pb-2">
+                                <div className="flex items-center gap-2">
+                                  <span className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 font-bold text-xs flex items-center justify-center">
+                                    {idx + 1}
+                                  </span>
+                                  <span className="font-bold text-xs text-slate-800">
+                                    Pendidikan #{idx + 1}: {item.degree} — {item.institution || 'Belum diisi'}
+                                  </span>
+                                </div>
+                                {formalEducations.length > 1 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveFormalEducation(item.id)}
+                                    className="text-slate-400 hover:text-rose-600 p-1 rounded hover:bg-rose-50 transition-colors"
+                                    title="Hapus riwayat pendidikan ini"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                )}
+                              </div>
+
+                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                <div>
+                                  <label className="font-medium text-slate-700 block mb-1 text-xs">
+                                    Jenjang Pendidikan *
+                                  </label>
+                                  <select
+                                    value={item.degree}
+                                    onChange={(e) =>
+                                      handleUpdateFormalEducation(item.id, 'degree', e.target.value as any)
+                                    }
+                                    className="w-full px-3 py-1.5 border border-slate-300 rounded bg-white font-semibold text-xs cursor-pointer"
+                                  >
+                                    <option value="SMA/SMK">SMA / SMK / Sederajat</option>
+                                    <option value="D1/D2">Diploma 1 / Diploma 2 (D1/D2)</option>
+                                    <option value="D3">Diploma 3 (D3)</option>
+                                    <option value="D4/S1">Diploma 4 / Sarjana Terapan (D4/S1)</option>
+                                    <option value="S1">Strata 1 (S1) / Sarjana</option>
+                                    <option value="S2">Strata 2 (S2) / Magister</option>
+                                    <option value="S3">Strata 3 (S3) / Doktor</option>
+                                  </select>
+                                </div>
+
+                                <div>
+                                  <label className="font-medium text-slate-700 block mb-1 text-xs">
+                                    Institusi / Universitas / Sekolah *
+                                  </label>
+                                  <input
+                                    type="text"
+                                    placeholder="Contoh: Universitas Indonesia"
+                                    value={item.institution}
+                                    onChange={(e) => handleUpdateFormalEducation(item.id, 'institution', e.target.value)}
+                                    className="w-full px-3 py-1.5 border border-slate-300 rounded text-xs bg-white"
+                                  />
+                                </div>
+
+                                <div>
+                                  <label className="font-medium text-slate-700 block mb-1 text-xs">
+                                    Program Studi / Jurusan *
+                                  </label>
+                                  <input
+                                    type="text"
+                                    placeholder="Contoh: Teknik Informatika"
+                                    value={item.major}
+                                    onChange={(e) => handleUpdateFormalEducation(item.id, 'major', e.target.value)}
+                                    className="w-full px-3 py-1.5 border border-slate-300 rounded text-xs bg-white"
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div>
+                                  <label className="font-medium text-slate-700 block mb-1 text-xs">Tahun Kelulusan</label>
+                                  <input
+                                    type="number"
+                                    value={item.graduationYear}
+                                    onChange={(e) =>
+                                      handleUpdateFormalEducation(item.id, 'graduationYear', Number(e.target.value))
+                                    }
+                                    className="w-full px-3 py-1.5 border border-slate-300 rounded font-mono text-xs bg-white"
+                                  />
+                                </div>
+
+                                <div>
+                                  <label className="font-medium text-slate-700 block mb-1 text-xs">IPK / Nilai Akhir</label>
+                                  <input
+                                    type="text"
+                                    placeholder="Contoh: 3.75"
+                                    value={item.gpa || ''}
+                                    onChange={(e) => handleUpdateFormalEducation(item.id, 'gpa', e.target.value)}
+                                    className="w-full px-3 py-1.5 border border-slate-300 rounded font-mono font-bold text-emerald-700 text-xs bg-white"
+                                  />
+                                </div>
+                              </div>
+
+                              {/* Bagian Form Gelar Depan & Gelar Belakang (Khusus S1 atau setara sampai S3) */}
+                              <div className="pt-2 border-t border-slate-200">
+                                {isEligibleForTitle ? (
+                                  <div className="p-2.5 bg-indigo-50/60 rounded-lg border border-indigo-100 space-y-2">
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-[11px] font-bold text-indigo-900 flex items-center gap-1.5">
+                                        <Award className="w-3.5 h-3.5 text-indigo-600" />
+                                        Gelar Akademik Karyawan (Khusus S1 s/d S3)
+                                      </span>
+                                      <span className="text-[10px] text-indigo-600 font-semibold bg-white px-2 py-0.5 rounded border border-indigo-200">
+                                        Jenjang {item.degree} Memenuhi Syarat Gelar
+                                      </span>
+                                    </div>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                      <div>
+                                        <label className="font-medium text-slate-700 block mb-1 text-[11px]">
+                                          Gelar Depan Nama
+                                        </label>
+                                        <input
+                                          type="text"
+                                          placeholder="Contoh: Dr. / Ir. / Drs."
+                                          value={item.frontTitle || ''}
+                                          onChange={(e) =>
+                                            handleUpdateFormalEducation(item.id, 'frontTitle', e.target.value)
+                                          }
+                                          className="w-full px-2.5 py-1.5 border border-indigo-200 rounded text-xs bg-white font-medium"
+                                        />
+                                        <span className="text-[10px] text-slate-500 mt-0.5 block">
+                                          Ditulis di depan nama (misal: Dr. atau Ir.)
+                                        </span>
+                                      </div>
+                                      <div>
+                                        <label className="font-medium text-slate-700 block mb-1 text-[11px]">
+                                          Gelar Belakang Nama
+                                        </label>
+                                        <input
+                                          type="text"
+                                          placeholder="Contoh: S.Kom. / S.T. / M.M. / Ph.D."
+                                          value={item.backTitle || ''}
+                                          onChange={(e) =>
+                                            handleUpdateFormalEducation(item.id, 'backTitle', e.target.value)
+                                          }
+                                          className="w-full px-2.5 py-1.5 border border-indigo-200 rounded text-xs bg-white font-medium"
+                                        />
+                                        <span className="text-[10px] text-slate-500 mt-0.5 block">
+                                          Ditulis di belakang nama (misal: S.Kom., M.M.)
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="p-2 bg-slate-100 rounded-lg text-slate-500 text-[11px] flex items-center justify-between">
+                                    <span>Gelar akademik tidak berlaku untuk jenjang {item.degree}.</span>
+                                    <span className="text-[10px] bg-slate-200/80 px-2 py-0.5 rounded text-slate-600 font-medium">
+                                      Gelar hanya ditulis dari jenjang S1/D4 sampai S3
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
-                      <div>
-                        <label className="font-medium text-slate-700 block mb-1">Program Studi / Jurusan</label>
-                        <input
-                          type="text"
-                          value={newMajor}
-                          onChange={(e) => setNewMajor(e.target.value)}
-                          className="w-full px-3 py-2 border border-slate-300 rounded"
-                        />
+                    {/* 2. Riwayat Pendidikan Non Formal (Pelatihan Profesional / Sertifikasi) */}
+                    <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
+                        <div>
+                          <h4 className="font-bold text-slate-900 flex items-center gap-2 text-sm">
+                            <Award className="w-4 h-4 text-emerald-600" />
+                            <span>Riwayat Pendidikan Non Formal & Pelatihan Profesional</span>
+                          </h4>
+                          <span className="text-[11px] text-slate-500">
+                            Pelatihan profesional, sertifikasi keahlian teknis/manajemen, dengan masa berlaku permanen atau expired
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleAddNonFormalEducation}
+                          className="self-start sm:self-auto px-3 py-1.5 text-xs font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg border border-emerald-200 flex items-center gap-1.5 cursor-pointer transition-colors shadow-2xs"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Tambah Pelatihan / Sertifikasi</span>
+                        </button>
                       </div>
 
-                      <div>
-                        <label className="font-medium text-slate-700 block mb-1">Tahun Kelulusan</label>
-                        <input
-                          type="number"
-                          value={newGradYear}
-                          onChange={(e) => setNewGradYear(Number(e.target.value))}
-                          className="w-full px-3 py-2 border border-slate-300 rounded font-mono"
-                        />
-                      </div>
+                      {nonFormalEducations.length === 0 ? (
+                        <div className="p-4 text-center bg-slate-50 rounded-xl border border-dashed border-slate-300">
+                          <p className="text-xs text-slate-500">Belum ada data pelatihan non-formal atau sertifikasi profesional.</p>
+                          <button
+                            type="button"
+                            onClick={handleAddNonFormalEducation}
+                            className="mt-2 text-xs font-semibold text-emerald-700 hover:underline"
+                          >
+                            + Tambah Pelatihan Profesional Sekarang
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="space-y-3.5">
+                          {nonFormalEducations.map((item, idx) => (
+                            <div
+                              key={item.id}
+                              className="p-3.5 bg-slate-50/70 rounded-xl border border-slate-200 space-y-3 relative group"
+                            >
+                              <div className="flex items-center justify-between border-b border-slate-200/80 pb-2">
+                                <div className="flex items-center gap-2">
+                                  <span className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 font-bold text-xs flex items-center justify-center">
+                                    {idx + 1}
+                                  </span>
+                                  <span className="font-bold text-xs text-slate-800">
+                                    Pelatihan #{idx + 1}: {item.trainingName || 'Belum diisi'}
+                                  </span>
+                                  <span
+                                    className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${
+                                      item.validityType === 'Permanen'
+                                        ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                                        : 'bg-amber-100 text-amber-800 border-amber-300'
+                                    }`}
+                                  >
+                                    {item.validityType === 'Permanen' ? 'Masa Berlaku Permanen' : 'Ada Masa Berlaku'}
+                                  </span>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveNonFormalEducation(item.id)}
+                                  className="text-slate-400 hover:text-rose-600 p-1 rounded hover:bg-rose-50 transition-colors"
+                                  title="Hapus pelatihan ini"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
 
-                      <div>
-                        <label className="font-medium text-slate-700 block mb-1">Indeks Prestasi Kumulatif (IPK)</label>
-                        <input
-                          type="text"
-                          value={newGpa}
-                          onChange={(e) => setNewGpa(e.target.value)}
-                          className="w-full px-3 py-2 border border-slate-300 rounded font-mono font-bold text-emerald-700"
-                          placeholder="3.75"
-                        />
-                      </div>
+                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                <div>
+                                  <label className="font-medium text-slate-700 block mb-1 text-xs">
+                                    Nama Pelatihan / Sertifikasi *
+                                  </label>
+                                  <input
+                                    type="text"
+                                    placeholder="Contoh: Certified Scrum Master (CSM)"
+                                    value={item.trainingName}
+                                    onChange={(e) =>
+                                      handleUpdateNonFormalEducation(item.id, 'trainingName', e.target.value)
+                                    }
+                                    className="w-full px-3 py-1.5 border border-slate-300 rounded text-xs bg-white font-medium"
+                                  />
+                                </div>
+
+                                <div>
+                                  <label className="font-medium text-slate-700 block mb-1 text-xs">
+                                    Lembaga Penyelenggara / Penerbit *
+                                  </label>
+                                  <input
+                                    type="text"
+                                    placeholder="Contoh: BNSP / Scrum Alliance / Google"
+                                    value={item.organizer}
+                                    onChange={(e) =>
+                                      handleUpdateNonFormalEducation(item.id, 'organizer', e.target.value)
+                                    }
+                                    className="w-full px-3 py-1.5 border border-slate-300 rounded text-xs bg-white"
+                                  />
+                                </div>
+
+                                <div>
+                                  <label className="font-medium text-slate-700 block mb-1 text-xs">
+                                    Tahun / Tanggal Perolehan
+                                  </label>
+                                  <input
+                                    type="text"
+                                    placeholder="Contoh: 2023 atau 2023-08-15"
+                                    value={item.year}
+                                    onChange={(e) =>
+                                      handleUpdateNonFormalEducation(item.id, 'year', e.target.value)
+                                    }
+                                    className="w-full px-3 py-1.5 border border-slate-300 rounded text-xs bg-white font-mono"
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-slate-200/80">
+                                <div>
+                                  <label className="font-medium text-slate-700 block mb-1 text-xs">
+                                    Nomor Sertifikat / Lisensi
+                                  </label>
+                                  <input
+                                    type="text"
+                                    placeholder="Contoh: CSM-2023-88912"
+                                    value={item.certificateNumber || ''}
+                                    onChange={(e) =>
+                                      handleUpdateNonFormalEducation(item.id, 'certificateNumber', e.target.value)
+                                    }
+                                    className="w-full px-3 py-1.5 border border-slate-300 rounded text-xs bg-white font-mono"
+                                  />
+                                </div>
+
+                                <div>
+                                  <label className="font-medium text-slate-700 block mb-1 text-xs">
+                                    Sifat Masa Berlaku
+                                  </label>
+                                  <select
+                                    value={item.validityType}
+                                    onChange={(e) =>
+                                      handleUpdateNonFormalEducation(item.id, 'validityType', e.target.value as any)
+                                    }
+                                    className="w-full px-3 py-1.5 border border-slate-300 rounded bg-white text-xs font-semibold cursor-pointer"
+                                  >
+                                    <option value="Permanen">Permanen (Seumur Hidup / Tidak Ada Expired)</option>
+                                    <option value="Memiliki Masa Berlaku">Memiliki Masa Berlaku (Ada Tanggal Expired)</option>
+                                  </select>
+                                </div>
+
+                                <div>
+                                  <label className="font-medium text-slate-700 block mb-1 text-xs">
+                                    Tanggal Kadaluarsa (Expired Date)
+                                  </label>
+                                  <input
+                                    type="date"
+                                    disabled={item.validityType === 'Permanen'}
+                                    value={item.expiredDate || ''}
+                                    onChange={(e) =>
+                                      handleUpdateNonFormalEducation(item.id, 'expiredDate', e.target.value)
+                                    }
+                                    className={`w-full px-3 py-1.5 border rounded text-xs font-mono ${
+                                      item.validityType === 'Permanen'
+                                        ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
+                                        : 'bg-white border-slate-300 text-slate-900'
+                                    }`}
+                                  />
+                                  <span className="text-[10px] text-slate-500 mt-0.5 block">
+                                    {item.validityType === 'Permanen'
+                                      ? 'Tidak diperlukan tanggal expired'
+                                      : 'Peringatan kadaluarsa akan muncul otomatis'}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -3077,16 +3692,36 @@ export const EmployeeManagement: React.FC = () => {
                     <div>
                       <span className="text-slate-500 block text-[11px]">No. BPJS Ketenagakerjaan (KPJ)</span>
                       <strong className="font-mono text-slate-900 text-xs">
-                        {selectedEmployee.bpjsTkNo}
+                        {selectedEmployee.bpjsTkNo === 'BELUM_ADA' || selectedEmployee.hasBpjsTk === false
+                          ? 'Belum Memiliki Kartu'
+                          : selectedEmployee.bpjsTkNo}
                       </strong>
-                      <span className="text-[10px] text-emerald-600 block">✓ JKK, JKM, JHT, JP Aktif</span>
+                      {selectedEmployee.bpjsTkNo === 'BELUM_ADA' || selectedEmployee.hasBpjsTk === false ? (
+                        <span className="text-[10px] text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 font-semibold block mt-0.5">
+                          Status: Perlu Pembuatan Baru
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200 font-semibold block mt-0.5">
+                          Status: Perlu Pengalihan Perusahaan
+                        </span>
+                      )}
                     </div>
                     <div>
                       <span className="text-slate-500 block text-[11px]">No. Kartu BPJS Kesehatan</span>
                       <strong className="font-mono text-slate-900 text-xs">
-                        {selectedEmployee.bpjsKesNo}
+                        {selectedEmployee.bpjsKesNo === 'BELUM_ADA' || selectedEmployee.hasBpjsKes === false
+                          ? 'Belum Memiliki Kartu'
+                          : selectedEmployee.bpjsKesNo}
                       </strong>
-                      <span className="text-[10px] text-emerald-600 block">✓ Ditanggung 4% Pemberi Kerja</span>
+                      {selectedEmployee.bpjsKesNo === 'BELUM_ADA' || selectedEmployee.hasBpjsKes === false ? (
+                        <span className="text-[10px] text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 font-semibold block mt-0.5">
+                          Status: Perlu Pembuatan Baru
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200 font-semibold block mt-0.5">
+                          Status: Perlu Pengalihan Perusahaan
+                        </span>
+                      )}
                     </div>
                   </div>
 
@@ -3180,42 +3815,132 @@ export const EmployeeManagement: React.FC = () => {
 
               {/* TAB 5: PENDIDIKAN & KUALIFIKASI */}
               {detailModalTab === 'pendidikan' && (
-                <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-4">
-                  <h4 className="font-bold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-2">
-                    <GraduationCap className="w-4 h-4 text-indigo-600" />
-                    <span>Riwayat Pendidikan Formal & Kualifikasi Akademik</span>
-                  </h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5">
-                    <div>
-                      <span className="text-slate-500 block text-[11px]">Jenjang Terakhir</span>
-                      <strong className="text-indigo-700 text-xs font-bold">
-                        {selectedEmployee.lastEducationDegree || 'Strata 1 (S1)'}
-                      </strong>
-                    </div>
-                    <div>
-                      <span className="text-slate-500 block text-[11px]">Perguruan Tinggi / Universitas</span>
-                      <strong className="text-slate-900 text-xs">
-                        {selectedEmployee.institution || 'Universitas Indonesia'}
-                      </strong>
-                    </div>
-                    <div>
-                      <span className="text-slate-500 block text-[11px]">Program Studi / Jurusan</span>
-                      <strong className="text-slate-800 text-xs">
-                        {selectedEmployee.major || 'Teknik Informatika / Manajemen'}
-                      </strong>
-                    </div>
-                    <div>
-                      <span className="text-slate-500 block text-[11px]">Tahun Kelulusan</span>
-                      <strong className="font-mono text-slate-800 text-xs">
-                        {selectedEmployee.graduationYear || 2018}
-                      </strong>
-                    </div>
-                    <div>
-                      <span className="text-slate-500 block text-[11px]">Indeks Prestasi Kumulatif (IPK)</span>
-                      <strong className="font-mono text-emerald-700 font-bold text-xs">
-                        {selectedEmployee.educationGpa || '3.75'} / 4.00
-                      </strong>
-                    </div>
+                <div className="space-y-4">
+                  <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-3">
+                    <h4 className="font-bold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-2">
+                      <GraduationCap className="w-4 h-4 text-indigo-600" />
+                      <span>Riwayat Pendidikan Formal & Kualifikasi Akademik</span>
+                    </h4>
+
+                    {selectedEmployee.formalEducations && selectedEmployee.formalEducations.length > 0 ? (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs">
+                          <thead className="bg-slate-50 border-b border-slate-200 text-slate-600">
+                            <tr>
+                              <th className="py-2 px-3">Jenjang</th>
+                              <th className="py-2 px-3">Institusi / Universitas</th>
+                              <th className="py-2 px-3">Program Studi</th>
+                              <th className="py-2 px-3">Tahun Lulus</th>
+                              <th className="py-2 px-3">IPK / Nilai</th>
+                              <th className="py-2 px-3">Gelar (Depan / Belakang)</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {selectedEmployee.formalEducations.map((edu, idx) => (
+                              <tr key={idx}>
+                                <td className="py-2 px-3 font-semibold text-indigo-700">{edu.degree}</td>
+                                <td className="py-2 px-3 font-medium text-slate-900">{edu.institution}</td>
+                                <td className="py-2 px-3 text-slate-700">{edu.major}</td>
+                                <td className="py-2 px-3 font-mono text-slate-600">{edu.graduationYear}</td>
+                                <td className="py-2 px-3 font-mono font-bold text-emerald-700">{edu.gpa || '-'}</td>
+                                <td className="py-2 px-3">
+                                  {edu.frontTitle || edu.backTitle ? (
+                                    <span className="font-semibold text-slate-800 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200 text-[11px]">
+                                      {edu.frontTitle ? `${edu.frontTitle} ` : ''}
+                                      {edu.backTitle || ''}
+                                    </span>
+                                  ) : (
+                                    <span className="text-slate-400 text-[11px]">-</span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5">
+                        <div>
+                          <span className="text-slate-500 block text-[11px]">Jenjang Terakhir</span>
+                          <strong className="text-indigo-700 text-xs font-bold">
+                            {selectedEmployee.lastEducationDegree || 'Strata 1 (S1)'}
+                          </strong>
+                        </div>
+                        <div>
+                          <span className="text-slate-500 block text-[11px]">Perguruan Tinggi / Universitas</span>
+                          <strong className="text-slate-900 text-xs">
+                            {selectedEmployee.institution || 'Universitas Indonesia'}
+                          </strong>
+                        </div>
+                        <div>
+                          <span className="text-slate-500 block text-[11px]">Program Studi / Jurusan</span>
+                          <strong className="text-slate-800 text-xs">
+                            {selectedEmployee.major || 'Teknik Informatika / Manajemen'}
+                          </strong>
+                        </div>
+                        <div>
+                          <span className="text-slate-500 block text-[11px]">Tahun Kelulusan</span>
+                          <strong className="font-mono text-slate-800 text-xs">
+                            {selectedEmployee.graduationYear || 2018}
+                          </strong>
+                        </div>
+                        <div>
+                          <span className="text-slate-500 block text-[11px]">Indeks Prestasi Kumulatif (IPK)</span>
+                          <strong className="font-mono text-emerald-700 font-bold text-xs">
+                            {selectedEmployee.educationGpa || '3.75'} / 4.00
+                          </strong>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Riwayat Pendidikan Non Formal di Detail Modal */}
+                  <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-3">
+                    <h4 className="font-bold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-2">
+                      <Award className="w-4 h-4 text-emerald-600" />
+                      <span>Riwayat Pendidikan Non Formal & Pelatihan Profesional</span>
+                    </h4>
+
+                    {selectedEmployee.nonFormalEducations && selectedEmployee.nonFormalEducations.length > 0 ? (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs">
+                          <thead className="bg-slate-50 border-b border-slate-200 text-slate-600">
+                            <tr>
+                              <th className="py-2 px-3">Nama Pelatihan / Sertifikasi</th>
+                              <th className="py-2 px-3">Lembaga Penyelenggara</th>
+                              <th className="py-2 px-3">Tahun Perolehan</th>
+                              <th className="py-2 px-3">No. Sertifikat</th>
+                              <th className="py-2 px-3">Masa Berlaku</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {selectedEmployee.nonFormalEducations.map((nf, idx) => (
+                              <tr key={idx}>
+                                <td className="py-2 px-3 font-semibold text-slate-900">{nf.trainingName}</td>
+                                <td className="py-2 px-3 text-slate-700">{nf.organizer}</td>
+                                <td className="py-2 px-3 font-mono text-slate-600">{nf.year}</td>
+                                <td className="py-2 px-3 font-mono text-slate-600">{nf.certificateNumber || '-'}</td>
+                                <td className="py-2 px-3">
+                                  {nf.validityType === 'Permanen' ? (
+                                    <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-bold">
+                                      Permanen (Seumur Hidup)
+                                    </span>
+                                  ) : (
+                                    <span className="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-bold">
+                                      Exp: {nf.expiredDate || 'Ada Masa Berlaku'}
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-slate-500 py-1">
+                        Belum ada riwayat pendidikan non-formal atau pelatihan profesional yang tercatat.
+                      </p>
+                    )}
                   </div>
                 </div>
               )}
