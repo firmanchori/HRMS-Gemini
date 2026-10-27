@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useHrms } from '../../context/HrmsContext';
 import {
   QrCode,
   Building,
   Plus,
   Printer,
+  Download,
   CheckCircle2,
   AlertTriangle,
   Search,
@@ -30,6 +31,8 @@ import {
   Check,
   Clock,
   Send,
+  Loader2,
+  FileDown,
 } from 'lucide-react';
 import {
   GAAsset,
@@ -43,6 +46,7 @@ import {
 } from '../../types/hrms';
 import { formatRupiah } from '../../utils/taxCalculator';
 import { QRCodeView } from '../common/QRCodeView';
+import { printPagesDirectly, exportPagesToPdf } from '../../utils/documentPdfExporter';
 import { EmployeeSelect } from '../common/EmployeeSelect';
 import { ValidatedDateInput } from '../common/ValidatedDateInput';
 import { ScrollableTabNav } from '../common/ScrollableTabNav';
@@ -80,6 +84,36 @@ export const GaAssetManagement: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [selectedAssetForQR, setSelectedAssetForQR] = useState<GAAsset | null>(null);
+  const qrLabelRef = useRef<HTMLDivElement>(null);
+  const [isPrintingQR, setIsPrintingQR] = useState(false);
+  const [isExportingQR, setIsExportingQR] = useState(false);
+
+  const handlePrintQR = async () => {
+    if (!qrLabelRef.current) return;
+    try {
+      setIsPrintingQR(true);
+      await printPagesDirectly([qrLabelRef.current]);
+    } catch (err) {
+      console.error('Print QR failed:', err);
+      alert('Gagal memproses cetak label barcode aset.');
+    } finally {
+      setIsPrintingQR(false);
+    }
+  };
+
+  const handleDownloadQRPdf = async () => {
+    if (!qrLabelRef.current || !selectedAssetForQR) return;
+    try {
+      setIsExportingQR(true);
+      const filename = `Label_Aset_${selectedAssetForQR.assetCode}.pdf`;
+      await exportPagesToPdf([qrLabelRef.current], filename);
+    } catch (err) {
+      console.error('Download QR PDF failed:', err);
+      alert('Gagal mengunduh PDF label aset.');
+    } finally {
+      setIsExportingQR(false);
+    }
+  };
 
   // Modals
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
@@ -2316,19 +2350,46 @@ export const GaAssetManagement: React.FC = () => {
               <h3 className="text-xs font-semibold">Label Barcode / QR Aset</h3>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => window.print()}
-                  className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-white rounded text-xs inline-flex items-center gap-1"
+                  type="button"
+                  onClick={handleDownloadQRPdf}
+                  disabled={isExportingQR}
+                  className="p-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg shadow-2xs transition-colors cursor-pointer disabled:opacity-60 flex items-center justify-center shrink-0"
+                  title="Unduh Label Format PDF"
+                  aria-label="Unduh PDF"
                 >
-                  <Printer className="w-3.5 h-3.5" />
-                  <span>Cetak</span>
+                  {isExportingQR ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <FileDown className="w-4 h-4" />
+                  )}
                 </button>
-                <button onClick={() => setSelectedAssetForQR(null)}>
-                  <X className="w-4 h-4 text-slate-400 hover:text-white" />
+                <button
+                  type="button"
+                  onClick={handlePrintQR}
+                  disabled={isPrintingQR}
+                  className="p-1.5 bg-slate-800 hover:bg-slate-700 text-white border border-slate-700 rounded-lg shadow-2xs transition-colors cursor-pointer disabled:opacity-60 flex items-center justify-center shrink-0"
+                  title="Cetak Label Fisik"
+                  aria-label="Cetak Label"
+                >
+                  {isPrintingQR ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Printer className="w-4 h-4" />
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedAssetForQR(null)}
+                  className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors ml-1 flex items-center justify-center shrink-0"
+                  title="Tutup"
+                  aria-label="Tutup"
+                >
+                  <X className="w-4 h-4" />
                 </button>
               </div>
             </div>
 
-            <div className="p-6 text-center space-y-4">
+            <div ref={qrLabelRef} className="p-6 text-center space-y-4 bg-white">
               <div className="border-2 border-slate-900 p-4 rounded-lg inline-block bg-white shadow-sm">
                 <div className="text-[10px] font-bold text-slate-700 uppercase tracking-widest border-b border-slate-300 pb-1 mb-2">
                   {currentTenant.name} · ASSET TAG

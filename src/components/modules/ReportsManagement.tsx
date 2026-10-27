@@ -1,5 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { useHrms } from '../../context/HrmsContext';
+import { printPagesDirectly } from '../../utils/documentPdfExporter';
 import {
   BarChart3,
   Users,
@@ -444,12 +445,19 @@ export const ReportsManagement: React.FC = () => {
     document.body.removeChild(link);
   };
 
-  const handlePrint = () => {
-    window.print();
+  const reportsContainerRef = useRef<HTMLDivElement>(null);
+
+  const handlePrint = async () => {
+    if (!reportsContainerRef.current) return;
+    try {
+      await printPagesDirectly([reportsContainerRef.current]);
+    } catch (err) {
+      console.error('Print report failed:', err);
+    }
   };
 
   return (
-    <div className="p-4 sm:p-6 space-y-6 max-w-7xl mx-auto w-full print:p-0">
+    <div ref={reportsContainerRef} className="p-4 sm:p-6 space-y-6 max-w-7xl mx-auto w-full print:p-0">
       {/* ===================== HEADER UTAMA ===================== */}
       <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>

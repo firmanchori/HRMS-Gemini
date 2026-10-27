@@ -296,15 +296,19 @@ export const evaluateNumberingFormula = (
 export const interpolateDocxTemplate = (
   content: string,
   context: {
-    employee: Employee;
-    tenant: Tenant;
-    documentNumber: string;
-    signeeName: string;
-    signeeRole: string;
+    employee?: Employee | null;
+    tenant?: Tenant | null;
+    documentNumber?: string;
+    signeeName?: string;
+    signeeRole?: string;
     issueDate?: string;
   }
 ): string => {
-  const { employee, tenant, documentNumber, signeeName, signeeRole } = context;
+  const emp = context.employee || ({} as Partial<Employee>);
+  const ten = context.tenant || ({} as Partial<Tenant>);
+  const documentNumber = context.documentNumber || '';
+  const signeeName = context.signeeName || 'Pejabat Berwenang';
+  const signeeRole = context.signeeRole || 'Direksi / Manajemen';
 
   const dateObj = context.issueDate ? new Date(context.issueDate) : new Date();
   const dateFormatted = dateObj.toLocaleDateString('id-ID', {
@@ -313,48 +317,48 @@ export const interpolateDocxTemplate = (
     year: 'numeric',
   });
 
-  const salaryNum = employee.basicSalary || 0;
+  const salaryNum = emp.basicSalary || 0;
   const salaryRupiah = formatRupiah(salaryNum);
   const salaryWords = `${angkaKeTerbilang(salaryNum)} Rupiah`;
 
   const map: Record<string, string> = {
     // Employee
-    nama: employee.fullName,
-    nama_karyawan: employee.fullName,
-    karyawan: employee.fullName,
-    nik: employee.nik,
-    nik_karyawan: employee.nik,
-    nik_ktp: employee.nikKtp,
-    ktp: employee.nikKtp,
-    no_kk: employee.noKk || '-',
-    jabatan: employee.position,
-    posisi: employee.position,
-    departemen: employee.department,
-    divisi: employee.department,
-    grade: employee.grade || 'L3',
+    nama: emp.fullName || '-',
+    nama_karyawan: emp.fullName || '-',
+    karyawan: emp.fullName || '-',
+    nik: emp.nik || '-',
+    nik_karyawan: emp.nik || '-',
+    nik_ktp: emp.nikKtp || '-',
+    ktp: emp.nikKtp || '-',
+    no_kk: emp.noKk || '-',
+    jabatan: emp.position || '-',
+    posisi: emp.position || '-',
+    departemen: emp.department || '-',
+    divisi: emp.department || '-',
+    grade: emp.grade || 'L3',
     gaji_pokok: salaryRupiah,
     gaji: salaryRupiah,
     gaji_terbilang: salaryWords,
-    status_kerja: employee.employmentType,
-    tipe_kontrak: employee.employmentType,
-    tanggal_mulai: employee.contractStartDate || employee.joinDate,
-    tgl_mulai: employee.contractStartDate || employee.joinDate,
-    tanggal_berakhir: employee.contractEndDate || 'Sampai Penetapan Selanjutnya',
-    tgl_berakhir: employee.contractEndDate || 'Sampai Penetapan Selanjutnya',
-    alamat_karyawan: employee.ktpAddress || employee.currentAddress || 'DKI Jakarta',
-    ptkp: `${employee.ptkp} (${getTERCategory(employee.ptkp)})`,
-    npwp: employee.npwp || '00.000.000.0-000.000',
-    rekening: `${employee.bankName} - ${employee.bankAccount}`,
+    status_kerja: emp.employmentType || 'PKWT',
+    tipe_kontrak: emp.employmentType || 'PKWT',
+    tanggal_mulai: emp.contractStartDate || emp.joinDate || dateFormatted,
+    tgl_mulai: emp.contractStartDate || emp.joinDate || dateFormatted,
+    tanggal_berakhir: emp.contractEndDate || 'Sampai Penetapan Selanjutnya',
+    tgl_berakhir: emp.contractEndDate || 'Sampai Penetapan Selanjutnya',
+    alamat_karyawan: emp.ktpAddress || emp.currentAddress || 'DKI Jakarta',
+    ptkp: emp.ptkp ? `${emp.ptkp} (${getTERCategory(emp.ptkp)})` : 'TK/0',
+    npwp: emp.npwp || '00.000.000.0-000.000',
+    rekening: emp.bankName ? `${emp.bankName} - ${emp.bankAccount}` : '-',
 
     // Company & Document
     nomor_surat: documentNumber,
     nomor_dokumen: documentNumber,
-    nama_perusahaan: tenant.name,
-    perusahaan: tenant.name,
-    alamat_perusahaan: tenant.address || 'Gedung Menara Palma Lantai 18, Jl. HR Rasuna Said, Jakarta Selatan',
+    nama_perusahaan: ten.name || 'PT Nusantara Teknologi Mandiri',
+    perusahaan: ten.name || 'PT Nusantara Teknologi Mandiri',
+    alamat_perusahaan: ten.address || 'Gedung Menara Palma Lantai 18, Jl. HR Rasuna Said, Jakarta Selatan',
     telepon_perusahaan: '+62 21 5566 7788',
     email_perusahaan: 'legal.hr@nusantara.id',
-    npwp_perusahaan: tenant.npwp || '01.999.888.7-011.000',
+    npwp_perusahaan: ten.npwp || '01.999.888.7-011.000',
 
     // Signee
     penandatangan: signeeName,
@@ -380,6 +384,171 @@ export const interpolateDocxTemplate = (
   }
 
   return interpolated;
+};
+
+export interface DocumentSignatoryPreset {
+  preferredName: string;
+  preferredRole: string;
+  matchedEmployeeId?: string;
+  documentRoleLabel: string;
+  description: string;
+}
+
+/**
+ * Returns the recommended legal signatory for a specific document type
+ */
+export const getPresetSignatoryForDocType = (docType: string, employees: Employee[]): DocumentSignatoryPreset => {
+  const norm = (docType || '').toLowerCase();
+
+  // 1. SK Promosi Jabatan & Kenaikan Grade / PHK / Pemberhentian
+  if (norm.includes('promosi') || norm.includes('phk') || norm.includes('pemberhentian')) {
+    const ceo = employees.find(
+      (e) =>
+        e.position.toLowerCase().includes('director') ||
+        e.position.toLowerCase().includes('ceo') ||
+        e.fullName.includes('Budi Santoso')
+    ) || employees[0];
+    return {
+      preferredName: ceo ? ceo.fullName : 'Ir. Budi Santoso, MBA',
+      preferredRole: 'President Director & CEO',
+      matchedEmployeeId: ceo?.id,
+      documentRoleLabel: 'Direksi Perusahaan',
+      description: 'SK Promosi Jabatan & PHK berkonsekuensi hukum perdata/korporasi wajib disahkan oleh Direktur Utama (CEO).',
+    };
+  }
+
+  // 2. Surat Penugasan Sementara (Plt) / Pelaksana Tugas / Acting Role
+  if (norm.includes('penugasan') || norm.includes('plt') || norm.includes('acting')) {
+    const dir = employees.find(
+      (e) =>
+        e.position.toLowerCase().includes('direktur') ||
+        e.fullName.includes('Hendra') ||
+        e.department.toLowerCase().includes('human')
+    ) || employees[0];
+    return {
+      preferredName: dir ? dir.fullName : 'Dr. Hendra Wijaya',
+      preferredRole: 'Direktur Sumber Daya Manusia',
+      matchedEmployeeId: dir?.id,
+      documentRoleLabel: 'Pemberi Mandat & Kuasa Tugas',
+      description: 'Penugasan Sementara (Plt) membutuhkan mandat resmi dari Direktur Terkait.',
+    };
+  }
+
+  // 3. Surat Mutasi / Rotasi Kerja Antar Unit
+  if (norm.includes('mutasi') || norm.includes('transfer') || norm.includes('rotasi')) {
+    const vp = employees.find(
+      (e) =>
+        e.position.toLowerCase().includes('vp') ||
+        e.fullName.includes('Aditya Pratama')
+    ) || employees[0];
+    return {
+      preferredName: vp ? vp.fullName : 'Aditya Pratama, S.Psi',
+      preferredRole: 'VP of Human Capital',
+      matchedEmployeeId: vp?.id,
+      documentRoleLabel: 'Pejabat Penetap Mutasi',
+      description: 'Mutasi antar cabang/divisi disahkan oleh Kepala Divisi / VP Human Capital.',
+    };
+  }
+
+  // 4. Surat Demosi & Sanksi Disiplin / Surat Peringatan (SP I, II, III)
+  if (norm.includes('demosi') || norm.includes('peringatan') || norm.includes('sp ') || norm === 'sp' || norm.includes('sanksi')) {
+    const ir = employees.find(
+      (e) =>
+        e.position.toLowerCase().includes('compliance') ||
+        e.position.toLowerCase().includes('industrial') ||
+        e.fullName.includes('Aditya')
+    ) || employees[0];
+    return {
+      preferredName: ir ? ir.fullName : 'Aditya Pratama, S.Psi',
+      preferredRole: 'VP of Human Capital & Compliance',
+      matchedEmployeeId: ir?.id,
+      documentRoleLabel: 'Pejabat Penegak Disiplin & Hubungan Industrial',
+      description: 'Surat Peringatan & Demosi ditandatangani oleh pejabat penegak disiplin & hubungan industrial.',
+    };
+  }
+
+  // 5. Surat Perjalanan Dinas / Surat Tugas (SPPD)
+  if (norm.includes('tugas') || norm.includes('perjalanan') || norm.includes('sppd')) {
+    const head = employees.find(
+      (e) =>
+        e.position.toLowerCase().includes('lead') ||
+        e.position.toLowerCase().includes('head') ||
+        e.fullName.includes('Siti Aminah')
+    ) || employees[0];
+    return {
+      preferredName: head ? head.fullName : 'Siti Aminah, S.E.',
+      preferredRole: 'Head of Division / Finance Director',
+      matchedEmployeeId: head?.id,
+      documentRoleLabel: 'Pejabat Pemberi Mandat Perjalanan Dinas',
+      description: 'Surat Tugas dinas disahkan oleh Kepala Divisi / Finance Director.',
+    };
+  }
+
+  // 6. Slip Gaji & Remunerasi
+  if (norm.includes('gaji') || norm.includes('slip') || norm.includes('payroll')) {
+    const payroll = employees.find(
+      (e) =>
+        e.position.toLowerCase().includes('payroll') ||
+        e.position.toLowerCase().includes('finance') ||
+        e.department.toLowerCase().includes('finance')
+    ) || employees[0];
+    return {
+      preferredName: payroll ? payroll.fullName : 'Dewi Lestari, S.E.',
+      preferredRole: 'Payroll & Remuneration Manager',
+      matchedEmployeeId: payroll?.id,
+      documentRoleLabel: 'Finance & Remuneration Department',
+      description: 'Slip Gaji disahkan oleh Bagian Kompensasi & Payroll.',
+    };
+  }
+
+  // 7. Surat Keterangan Kerja (Paklaring) / Pengalaman Kerja
+  if (norm.includes('keterangan') || norm.includes('paklaring') || norm.includes('skk')) {
+    const hr = employees.find(
+      (e) =>
+        e.position.toLowerCase().includes('people') ||
+        e.fullName.includes('Siti Aminah') ||
+        e.department.toLowerCase().includes('human')
+    ) || employees[0];
+    return {
+      preferredName: hr ? hr.fullName : 'Siti Aminah, S.E.',
+      preferredRole: 'Head of People Operations',
+      matchedEmployeeId: hr?.id,
+      documentRoleLabel: 'Human Capital Department',
+      description: 'Surat Keterangan Kerja diterbitkan oleh People Operations.',
+    };
+  }
+
+  // 8. BAST Aset & Fasilitas
+  if (norm.includes('bast') || norm.includes('aset') || norm.includes('inventaris') || norm.includes('fasilitas')) {
+    const ga = employees.find(
+      (e) =>
+        e.position.toLowerCase().includes('facility') ||
+        e.position.toLowerCase().includes('ga') ||
+        e.fullName.includes('Bambang Sudiro')
+    ) || employees[0];
+    return {
+      preferredName: ga ? ga.fullName : 'Bambang Sudiro',
+      preferredRole: 'General Affairs & Asset Lead',
+      matchedEmployeeId: ga?.id,
+      documentRoleLabel: 'Bagian Logistik & Sarana',
+      description: 'BAST serah terima aset disahkan oleh GA & Asset Lead.',
+    };
+  }
+
+  // 9. Default: Kontrak Kerja PKWT / PKWTT / Dokumen Personalia Umum
+  const defaultHc = employees.find(
+    (e) =>
+      e.fullName.includes('Aditya Pratama') ||
+      e.position.toLowerCase().includes('human capital')
+  ) || employees[0];
+
+  return {
+    preferredName: defaultHc ? defaultHc.fullName : 'Aditya Pratama, S.Psi',
+    preferredRole: 'VP of Human Capital',
+    matchedEmployeeId: defaultHc?.id,
+    documentRoleLabel: 'Pihak Pertama (Manajemen)',
+    description: 'Perjanjian kerja ditandatangani oleh VP of Human Capital atas nama manajemen perusahaan.',
+  };
 };
 
 /**

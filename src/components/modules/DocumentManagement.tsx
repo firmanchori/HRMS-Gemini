@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useHrms } from '../../context/HrmsContext';
 import {
@@ -15,6 +15,7 @@ import {
   Settings,
   Edit3,
   Building,
+  Building2,
   Save,
   RotateCcw,
   Sparkles,
@@ -34,9 +35,25 @@ import {
   Layers,
   FileSpreadsheet,
   User,
+  Layout,
+  Bold,
+  Italic,
+  Underline,
+  Strikethrough,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+  AlignJustify,
+  List,
+  ListOrdered,
+  Minus,
+  ChevronDown,
+  Scissors,
+  Users,
 } from 'lucide-react';
 import { OfficialDocument, DocumentType, DocumentTemplateConfig, Employee } from '../../types/hrms';
 import { QRCodeView } from '../common/QRCodeView';
+import { OfficialMultiPageDocumentSheet, DocumentSignatory } from '../common/OfficialMultiPageDocumentSheet';
 import { EmployeeSelect } from '../common/EmployeeSelect';
 import {
   parseDocxFile,
@@ -46,10 +63,43 @@ import {
   SAMPLE_DOCX_PRESETS,
   ParsedDocxResult,
   NUMBERING_TOKEN_REGISTRY,
+  NUMBERING_TOKEN_REGISTRY as NUMBERING_TOKENS,
   NumberingTokenInfo,
+  getPresetSignatoryForDocType,
+  DocumentSignatoryPreset,
 } from '../../utils/docxTemplateHelper';
 import { formatRupiah, getTERCategory } from '../../utils/taxCalculator';
 import { ScrollableTabNav } from '../common/ScrollableTabNav';
+
+export const ALL_DOCUMENT_TYPES: { type: DocumentType | string; label: string; category: string }[] = [
+  { type: 'PKWT', label: 'PKWT (Perjanjian Kerja Waktu Tertentu)', category: 'Kontrak Kerja' },
+  { type: 'PKWTT', label: 'PKWTT (Karyawan Tetap)', category: 'Kontrak Kerja' },
+  { type: 'Surat Promosi', label: 'Surat Promosi Jabatan & Kenaikan Grade', category: 'Karier & Personalia' },
+  { type: 'Surat Mutasi', label: 'Surat Mutasi / Rotasi Kerja Antar Unit', category: 'Karier & Personalia' },
+  { type: 'Surat Demosi', label: 'Surat Demosi Jabatan & Penyesuaian', category: 'Karier & Personalia' },
+  { type: 'Surat Penugasan Sementara (Plt)', label: 'Penugasan Sementara (Plt / Acting Role)', category: 'Karier & Personalia' },
+  { type: 'Addendum PKWT', label: 'Addendum Perpanjangan / Perubahan PKWT', category: 'Kontrak Kerja' },
+  { type: 'Surat Peringatan Pertama (SP1)', label: 'Surat Peringatan Pertama (SP1)', category: 'Disipliner' },
+  { type: 'Surat Peringatan Kedua (SP2)', label: 'Surat Peringatan Kedua (SP2)', category: 'Disipliner' },
+  { type: 'Surat Peringatan Ketiga (SP3)', label: 'Surat Peringatan Ketiga (SP3 / Terakhir)', category: 'Disipliner' },
+  { type: 'Parklaring', label: 'Parklaring (Surat Pengalaman Kerja)', category: 'Arsip & Keterangan' },
+  { type: 'Surat Pemutusan Hubungan Kerja (PHK)', label: 'Pemutusan Hubungan Kerja (PHK Resmi)', category: 'Disipliner' },
+  { type: 'BAST Aset', label: 'BAST (Serah Terima Fasilitas & Aset)', category: 'Operasional & GA' },
+  { type: 'Offering Letter', label: 'Offering Letter Rekrutmen', category: 'Rekrutmen' },
+  { type: 'Surat Tugas Dinas', label: 'Surat Perintah Perjalanan Dinas (SPPD)', category: 'Operasional & GA' },
+  { type: 'Surat Izin Cuti', label: 'Surat Izin Cuti & Istirahat Resmi', category: 'Operasional & GA' },
+  { type: 'Surat Perintah Lembur (SPL)', label: 'Surat Perintah Lembur (SPL)', category: 'Operasional & GA' },
+  { type: 'Slip Gaji Resmi', label: 'Slip Gaji & Bukti Penghasilan Resmi', category: 'Payroll & Remunerasi' },
+  { type: 'Surat Pinjaman Karyawan', label: 'Surat Pinjaman / Kasbon Karyawan', category: 'Payroll & Remunerasi' },
+  { type: 'Non-Disclosure Agreement (NDA)', label: 'Non-Disclosure Agreement (NDA Kerahasiaan)', category: 'Legal & Kepatuhan' },
+];
+
+export const extractPlaceholdersFromText = (text: string): string[] => {
+  const matches = text.match(/\{\{([a-zA-Z0-9_-]+)\}\}/g);
+  if (!matches) return ['nama', 'nik', 'jabatan', 'departemen', 'gaji_pokok', 'nomor_surat', 'tanggal_terbit'];
+  const unique = Array.from(new Set(matches.map((m) => m.replace(/[\{\}]/g, '').trim())));
+  return unique.length > 0 ? unique : ['nama', 'nik', 'jabatan', 'departemen', 'gaji_pokok', 'nomor_surat', 'tanggal_terbit'];
+};
 
 export const DocumentManagement: React.FC = () => {
   const {
@@ -68,10 +118,246 @@ export const DocumentManagement: React.FC = () => {
     updateTenantBranding,
   } = useHrms();
 
-  const [activeTab, setActiveTab] = useState<'arsip' | 'upload_docx' | 'templates' | 'daftar_tag' | 'pengaturan'>('arsip');
+  const [activeTab, setActiveTab] = useState<'arsip' | 'studio' | 'templates' | 'daftar_tag' | 'pengaturan'>('arsip');
   const [selectedDoc, setSelectedDoc] = useState<OfficialDocument | null>(null);
-  const [isGenerateModalOpen, setIsGenerateModalOpen] = useState(false);
   const [searchDocQuery, setSearchDocQuery] = useState('');
+  const [docTypeFilter, setDocTypeFilter] = useState<string>('all');
+
+  // Studio Side-by-Side State
+  const [studioSelectedTemplateId, setStudioSelectedTemplateId] = useState<string>(documentTemplates[0]?.id || '');
+  const [studioTemplateName, setStudioTemplateName] = useState(documentTemplates[0]?.name || '');
+  const [studioTemplateType, setStudioTemplateType] = useState<DocumentType>((documentTemplates[0]?.type as DocumentType) || 'PKWT');
+  const [studioNumberingPattern, setStudioNumberingPattern] = useState(documentTemplates[0]?.numberingPattern || '{SEQ}/HRD-PKWT/{TENANT_CODE}/{ROMAN_MONTH}/{YEAR}');
+  const [studioCompanyName, setStudioCompanyName] = useState(documentTemplates[0]?.letterHeadTitle || currentTenant.name);
+  const [studioCompanyAddress, setStudioCompanyAddress] = useState(documentTemplates[0]?.letterHeadAddress || currentTenant.address || 'Gedung Menara Palma Lantai 18, Jl. HR Rasuna Said, Jakarta Selatan');
+  const [studioCompanyPhone, setStudioCompanyPhone] = useState(documentTemplates[0]?.letterHeadPhone || '+62 21 5566 7788');
+  const [studioCompanyEmail, setStudioCompanyEmail] = useState(documentTemplates[0]?.letterHeadEmail || 'legal.hr@nusantara.id');
+  const [studioCompanyNpwp, setStudioCompanyNpwp] = useState(documentTemplates[0]?.letterHeadNpwp || currentTenant.npwp || '01.999.888.7-011.000');
+  const [isGenerateModalOpen, setIsGenerateModalOpen] = useState(false);
+  // Studio Signee State Sesuai Jenis Dokumen (Seperti di Personalia)
+  const initialPreset = getPresetSignatoryForDocType(documentTemplates[0]?.type || 'PKWT', employees);
+  const [studioSigneeEmployeeId, setStudioSigneeEmployeeId] = useState<string>(initialPreset.matchedEmployeeId || '');
+  const [studioSigneeName, setStudioSigneeName] = useState(
+    documentTemplates[0]?.signeeTitle && !documentTemplates[0]?.signeeTitle.toLowerCase().includes('director') && !documentTemplates[0]?.signeeTitle.toLowerCase().includes('vp') && !documentTemplates[0]?.signeeTitle.toLowerCase().includes('head')
+      ? documentTemplates[0]?.signeeTitle
+      : initialPreset.preferredName
+  );
+  const [studioSigneeRole, setStudioSigneeRole] = useState(documentTemplates[0]?.signeeRole || initialPreset.preferredRole);
+  const [studioSigneeDocRole, setStudioSigneeDocRole] = useState(initialPreset.documentRoleLabel);
+  const [studioBodyText, setStudioBodyText] = useState(documentTemplates[0]?.defaultBody || '');
+  const [studioFooterText, setStudioFooterText] = useState(documentTemplates[0]?.footerText || 'Dokumen ini sah dan berkekuatan hukum tetap menurut UU ITE No. 11/2008.');
+  const [studioShowLetterhead, setStudioShowLetterhead] = useState(true);
+  const [studioShowQrSignature, setStudioShowQrSignature] = useState(true);
+  const [studioShowQrValidation, setStudioShowQrValidation] = useState(true);
+  // Pengaturan Ukuran Kertas Studio (A4, F4, atau A5)
+  const [studioPaperSize, setStudioPaperSize] = useState<'A4' | 'F4' | 'A5'>('A4');
+  // Pengaturan Kop Surat (Header) & Footer Studio Side-by-Side
+  const [studioLetterheadStyle, setStudioLetterheadStyle] = useState<'double' | 'bold' | 'single' | 'none'>('double');
+  const [studioLetterheadAlign, setStudioLetterheadAlign] = useState<'left' | 'center' | 'right'>('left');
+  const [studioLetterheadMode, setStudioLetterheadMode] = useState<'structured' | 'freetext'>('structured');
+  const [studioLetterheadFreeText, setStudioLetterheadFreeText] = useState<string>('');
+  const [studioCustomLogoUrl, setStudioCustomLogoUrl] = useState<string>('');
+  const [studioRunningHeaderText, setStudioRunningHeaderText] = useState<string>('');
+  const [studioPageNumFormat, setStudioPageNumFormat] = useState<'standard' | 'simple' | 'slash' | 'none'>('standard');
+  const [studioFooterAlign, setStudioFooterAlign] = useState<'split' | 'center' | 'right'>('split');
+  const [studioShowFooterBorder, setStudioShowFooterBorder] = useState<boolean>(true);
+  const [studioQrValidationPlacement, setStudioQrValidationPlacement] = useState<'all_pages' | 'last_page'>('all_pages');
+  const [studioConfigSection, setStudioConfigSection] = useState<'naskah' | 'kop' | 'footer'>('naskah');
+
+  // Pejabat Penandatangan Dokumen / Simulasi TTD (Fleksibel & Eksternal seperti di Personalia)
+  const [studioSignatories, setStudioSignatories] = useState<DocumentSignatory[]>([
+    {
+      id: 'sig-1',
+      label: 'Pihak Pertama (Perusahaan)',
+      employeeId: initialPreset.matchedEmployeeId || (employees[0]?.id || ''),
+      name: initialPreset.preferredName || currentUser.name,
+      role: initialPreset.preferredRole || 'VP of Human Capital',
+      isExternal: false,
+    },
+    {
+      id: 'sig-2',
+      label: 'Pihak Kedua (Karyawan / Pihak Terkait)',
+      employeeId: employees[1]?.id || '',
+      name: employees[1]?.fullName || 'Karyawan yang Bersangkutan',
+      role: employees[1]?.position || 'Karyawan',
+      isExternal: false,
+    },
+  ]);
+
+  const applyStudioSignatoryPreset = (type: '1-tier' | '2-tier' | '3-tier') => {
+    if (type === '1-tier') {
+      setStudioSignatories([
+        {
+          id: `sig-${Date.now()}-1`,
+          label: 'Ditetapkan Oleh',
+          employeeId: studioSignatories[0]?.employeeId || employees[0]?.id || '',
+          name: studioSignatories[0]?.name || currentUser.name,
+          role: studioSignatories[0]?.role || 'VP of Human Capital',
+          isExternal: false,
+        },
+      ]);
+    } else if (type === '2-tier') {
+      setStudioSignatories([
+        {
+          id: `sig-${Date.now()}-1`,
+          label: 'Pihak Pertama (Perusahaan)',
+          employeeId: studioSignatories[0]?.employeeId || employees[0]?.id || '',
+          name: studioSignatories[0]?.name || currentUser.name,
+          role: studioSignatories[0]?.role || 'VP of Human Capital',
+          isExternal: false,
+        },
+        {
+          id: `sig-${Date.now()}-2`,
+          label: 'Pihak Kedua (Karyawan / Mitra)',
+          employeeId: employees[1]?.id || '',
+          name: employees[1]?.fullName || 'Pihak Kedua / Rekanan',
+          role: employees[1]?.position || 'Karyawan',
+          isExternal: false,
+        },
+      ]);
+    } else if (type === '3-tier') {
+      setStudioSignatories([
+        {
+          id: `sig-${Date.now()}-1`,
+          label: 'Dibuat Oleh',
+          employeeId: currentUser?.id || employees[0]?.id || '',
+          name: currentUser.name || 'HR Specialist',
+          role: 'Human Capital Operations',
+          isExternal: false,
+        },
+        {
+          id: `sig-${Date.now()}-2`,
+          label: 'Mengetahui',
+          employeeId: '',
+          name: 'Head of Legal & Compliance',
+          role: 'Vice President of Legal',
+          isExternal: false,
+        },
+        {
+          id: `sig-${Date.now()}-3`,
+          label: 'Menyetujui',
+          employeeId: '',
+          name: 'President Director & CEO',
+          role: 'Direktur Utama',
+          isExternal: false,
+        },
+      ]);
+    }
+  };
+
+  const handleAddStudioSignatory = () => {
+    setStudioSignatories((prev) => [
+      ...prev,
+      {
+        id: `sig-${Date.now()}-${prev.length + 1}`,
+        label: `Pihak ${prev.length + 1}`,
+        employeeId: '',
+        name: '',
+        role: '',
+        isExternal: false,
+      },
+    ]);
+  };
+
+  const handleRemoveStudioSignatory = (index: number) => {
+    if (studioSignatories.length <= 1) return;
+    setStudioSignatories((prev) => prev.filter((_, idx) => idx !== index));
+  };
+
+  const handleUpdateStudioSignatory = (index: number, field: keyof DocumentSignatory, val: any) => {
+    setStudioSignatories((prev) => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], [field]: val };
+      return updated;
+    });
+  };
+
+  const handleStudioSignatoryEmployeeSelect = (index: number, empId: string) => {
+    if (empId === '__manual__') {
+      setStudioSignatories((prev) => {
+        const updated = [...prev];
+        updated[index] = {
+          ...updated[index],
+          employeeId: '__manual__',
+          isExternal: true,
+        };
+        return updated;
+      });
+      return;
+    }
+
+    const selectedEmp = employees.find((e) => e.id === empId);
+    if (selectedEmp) {
+      setStudioSignatories((prev) => {
+        const updated = [...prev];
+        updated[index] = {
+          ...updated[index],
+          employeeId: selectedEmp.id,
+          name: selectedEmp.fullName,
+          role: selectedEmp.position,
+          nik: selectedEmp.nik,
+          isExternal: false,
+        };
+        return updated;
+      });
+    }
+  };
+
+  const [studioPlaceholders, setStudioPlaceholders] = useState<string[]>(() => {
+    return documentTemplates[0]?.extractedPlaceholders || extractPlaceholdersFromText(documentTemplates[0]?.defaultBody || '');
+  });
+  const [studioNewTagInput, setStudioNewTagInput] = useState('');
+  const [studioSimulatedEmpId, setStudioSimulatedEmpId] = useState(employees[0]?.id || '');
+  const [studioHighlightTags, setStudioHighlightTags] = useState(false);
+  const [isUnderlineMenuOpen, setIsUnderlineMenuOpen] = useState(false);
+
+  const studioTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const underlineDropdownRef = useRef<HTMLDivElement>(null);
+  const studioReplaceInputRef = useRef<HTMLInputElement>(null);
+  const templateReplaceInputRef = useRef<HTMLInputElement>(null);
+  const templateToReplaceIdRef = useRef<string>('');
+
+  // Close Underline Menu on Click Outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (underlineDropdownRef.current && !underlineDropdownRef.current.contains(event.target as Node)) {
+        setIsUnderlineMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Studio Basic Document Formatting Handler (Bold, Italic, Underlines, Alignment, dll)
+  const handleStudioApplyFormat = (
+    openTag: string,
+    closeTag: string,
+    defaultPlaceholder: string = 'teks'
+  ) => {
+    const textarea = studioTextareaRef.current;
+    if (!textarea) return;
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const currentText = studioBodyText;
+
+    const selectedText = currentText.substring(start, end);
+    const textToWrap = selectedText || defaultPlaceholder;
+
+    const replacement = `${openTag}${textToWrap}${closeTag}`;
+    const newText = currentText.substring(0, start) + replacement + currentText.substring(end);
+
+    setStudioBodyText(newText);
+
+    setTimeout(() => {
+      textarea.focus();
+      if (selectedText) {
+        textarea.setSelectionRange(start, start + replacement.length);
+      } else {
+        textarea.setSelectionRange(start + openTag.length, start + openTag.length + textToWrap.length);
+      }
+    }, 10);
+  };
 
   // Branding states for Kop Surat Logo & App Favicon
   const [docLogoInput, setDocLogoInput] = useState(currentTenant.documentLogoUrl || '');
@@ -96,11 +382,18 @@ export const DocumentManagement: React.FC = () => {
     return () => clearTimeout(timer);
   }, [feedbackMessage]);
 
-  // Generate Document State
+  // Generate Document State (Dengan Pejabat Penandatangan Spesifik Sesuai Template)
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>(documentTemplates[0]?.id || '');
   const [targetEmployeeId, setTargetEmployeeId] = useState(employees[0]?.id || '');
   const [customDocTitle, setCustomDocTitle] = useState('');
   const [customAdditionalNotes, setCustomAdditionalNotes] = useState('');
+  const [generateSigneeEmployeeId, setGenerateSigneeEmployeeId] = useState<string>(initialPreset.matchedEmployeeId || '');
+  const [generateSigneeName, setGenerateSigneeName] = useState(
+    documentTemplates[0]?.signeeTitle && !documentTemplates[0]?.signeeTitle.toLowerCase().includes('director') && !documentTemplates[0]?.signeeTitle.toLowerCase().includes('vp') && !documentTemplates[0]?.signeeTitle.toLowerCase().includes('head')
+      ? documentTemplates[0]?.signeeTitle
+      : initialPreset.preferredName
+  );
+  const [generateSigneeRole, setGenerateSigneeRole] = useState(documentTemplates[0]?.signeeRole || initialPreset.preferredRole);
 
   // DOCX Upload State
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -167,6 +460,9 @@ export const DocumentManagement: React.FC = () => {
   const [editTitleFormat, setEditTitleFormat] = useState(activeTemplate?.name || 'SURAT PERJANJIAN KERJA WAKTU TERTENTU (PKWT)');
   const [editBodyTemplate, setEditBodyTemplate] = useState(activeTemplate?.defaultBody || '');
   const [editFooterText, setEditFooterText] = useState(activeTemplate?.footerText || 'Dokumen ini sah dan berkekuatan hukum tetap menurut UU ITE No. 11/2008.');
+  const [isEditTemplateModalOpen, setIsEditTemplateModalOpen] = useState(false);
+  const [editSigneeTitle, setEditSigneeTitle] = useState(activeTemplate?.signeeTitle || currentUser.name);
+  const [editSigneeRole, setEditSigneeRole] = useState(activeTemplate?.signeeRole || 'VP of Human Capital');
 
   // Settings State
   const [defaultSigneeRole, setDefaultSigneeRole] = useState(moduleSettings.documents?.defaultSigneeRole || 'VP of Human Capital');
@@ -298,24 +594,31 @@ export const DocumentManagement: React.FC = () => {
     setTimeout(() => setCopiedVariable(null), 2000);
   };
 
-  // Sync template fields when changing template in editor tab
-  const handleSelectTemplateForEdit = (tmpl: DocumentTemplateConfig) => {
+  // Open Edit Template Modal
+  const handleOpenEditTemplate = (tmpl: DocumentTemplateConfig) => {
     setEditingTemplateId(tmpl.id);
     setEditNumberingFormat(tmpl.numberingPattern);
-    setEditCompanyName(tmpl.letterHeadTitle);
-    setEditCompanyAddress(tmpl.letterHeadAddress);
+    setEditCompanyName(tmpl.letterHeadTitle || currentTenant.name);
+    setEditCompanyAddress(tmpl.letterHeadAddress || currentTenant.address || 'Gedung Menara Palma Lantai 18, Jl. HR Rasuna Said, Jakarta Selatan');
     setEditTitleFormat(tmpl.name);
-    setEditBodyTemplate(tmpl.defaultBody);
+    setEditBodyTemplate(tmpl.defaultBody || '');
     setEditCompanyPhone(tmpl.letterHeadPhone || '+62 21 5566 7788');
     setEditCompanyEmail(tmpl.letterHeadEmail || 'legal.hr@nusantara.id');
     setEditCompanyNpwp(tmpl.letterHeadNpwp || currentTenant.npwp);
     setEditFooterText(tmpl.footerText || 'Dokumen ini sah dan berkekuatan hukum tetap menurut UU ITE No. 11/2008.');
+    setEditSigneeTitle(tmpl.signeeTitle || currentUser.name);
+    setEditSigneeRole(tmpl.signeeRole || defaultSigneeRole);
+    setIsEditTemplateModalOpen(true);
+  };
+
+  const handleSelectTemplateForEdit = (tmpl: DocumentTemplateConfig) => {
+    handleOpenEditTemplate(tmpl);
   };
 
   const handleSaveStandardTemplate = () => {
-    if (!activeTemplate) return;
+    if (!editingTemplateId) return;
 
-    updateDocumentTemplate(activeTemplate.id, {
+    updateDocumentTemplate(editingTemplateId, {
       numberingPattern: editNumberingFormat,
       name: editTitleFormat,
       letterHeadTitle: editCompanyName,
@@ -325,12 +628,16 @@ export const DocumentManagement: React.FC = () => {
       letterHeadNpwp: editCompanyNpwp,
       defaultBody: editBodyTemplate,
       footerText: editFooterText,
+      signeeTitle: editSigneeTitle,
+      signeeRole: editSigneeRole,
     });
+
+    setIsEditTemplateModalOpen(false);
 
     setFeedbackMessage({
       type: 'success',
       title: 'Template Berhasil Diperbarui',
-      description: `Perubahan kop surat dan klausul template "${editTitleFormat}" telah tersimpan.`,
+      description: `Perubahan klausul, pejabat, dan formula template "${editTitleFormat}" telah tersimpan.`,
     });
   };
 
@@ -360,8 +667,8 @@ export const DocumentManagement: React.FC = () => {
       employee: targetEmp,
       tenant: currentTenant,
       documentNumber,
-      signeeName: currentUser.name,
-      signeeRole: defaultSigneeRole,
+      signeeName: generateSigneeName || currentUser.name,
+      signeeRole: generateSigneeRole || defaultSigneeRole,
     });
 
     const isFromDocx = tmpl?.sourceType === 'uploaded_docx';
@@ -371,8 +678,8 @@ export const DocumentManagement: React.FC = () => {
       templateId: tmpl?.id,
       title,
       targetEmployeeId: targetEmp.id,
-      signeeName: currentUser.name,
-      signeeRole: defaultSigneeRole,
+      signeeName: generateSigneeName || currentUser.name,
+      signeeRole: generateSigneeRole || defaultSigneeRole,
       contentPreview: resolvedContent,
       isFromDocxTemplate: isFromDocx,
       customDocumentNumber: documentNumber,
@@ -386,7 +693,7 @@ export const DocumentManagement: React.FC = () => {
     setFeedbackMessage({
       type: 'success',
       title: 'Surat Keputusan Resmi Berhasil Diterbitkan',
-      description: `Dokumen "${title}" (${documentNumber}) berhasil di-generate dengan Tanda Tangan QR terenkripsi.`,
+      description: `Dokumen "${title}" (${documentNumber}) ditandatangani oleh ${generateSigneeName} (${generateSigneeRole}).`,
     });
   };
 
@@ -402,12 +709,343 @@ export const DocumentManagement: React.FC = () => {
     });
   };
 
-  const filteredDocs = documents.filter(
-    (d) =>
+  // Handler Memuat Template ke Studio Side-by-Side
+  const handleLoadTemplateIntoStudio = (tmpl: DocumentTemplateConfig) => {
+    setStudioSelectedTemplateId(tmpl.id);
+    setStudioTemplateName(tmpl.name);
+    setStudioTemplateType(tmpl.type as DocumentType);
+    setStudioNumberingPattern(tmpl.numberingPattern);
+    setStudioCompanyName(tmpl.letterHeadTitle || currentTenant.name);
+    setStudioCompanyAddress(tmpl.letterHeadAddress || currentTenant.address || 'Gedung Menara Palma Lantai 18, Jl. HR Rasuna Said, Jakarta Selatan');
+    setStudioCompanyPhone(tmpl.letterHeadPhone || '+62 21 5566 7788');
+    setStudioCompanyEmail(tmpl.letterHeadEmail || 'legal.hr@nusantara.id');
+    setStudioCompanyNpwp(tmpl.letterHeadNpwp || currentTenant.npwp || '01.999.888.7-011.000');
+
+    // Cek preset rekomendasi penandatangan sesuai jenis dokumen ini (Seperti di Personalia)
+    const preset = getPresetSignatoryForDocType(tmpl.type || tmpl.name, employees);
+    const signeeNameToUse = tmpl.signeeTitle && !tmpl.signeeTitle.toLowerCase().includes('director') && !tmpl.signeeTitle.toLowerCase().includes('vp') && !tmpl.signeeTitle.toLowerCase().includes('head')
+      ? tmpl.signeeTitle
+      : preset.preferredName;
+    const signeeRoleToUse = tmpl.signeeRole || preset.preferredRole;
+
+    setStudioSigneeName(signeeNameToUse);
+    setStudioSigneeRole(signeeRoleToUse);
+    setStudioSigneeDocRole(preset.documentRoleLabel);
+    setStudioSigneeEmployeeId(preset.matchedEmployeeId || '__manual__');
+
+    // Inisialisasi simulasi penandatangan sesuai template
+    setStudioSignatories([
+      {
+        id: `sig-1`,
+        label: 'Pihak Pertama (Perusahaan)',
+        employeeId: preset.matchedEmployeeId || (employees[0]?.id || ''),
+        name: signeeNameToUse,
+        role: signeeRoleToUse,
+        isExternal: false,
+      },
+      {
+        id: `sig-2`,
+        label: 'Pihak Kedua (Karyawan / Mitra)',
+        employeeId: employees[1]?.id || '',
+        name: employees[1]?.fullName || 'Pihak Kedua / Rekanan Terkait',
+        role: employees[1]?.position || 'Karyawan',
+        isExternal: false,
+      },
+    ]);
+
+    setStudioBodyText(tmpl.defaultBody || '');
+    setStudioFooterText(tmpl.footerText || 'Dokumen ini sah dan berkekuatan hukum tetap menurut UU ITE No. 11/2008.');
+    setStudioPaperSize((tmpl.paperSize as any) || 'A4');
+    setStudioShowLetterhead(tmpl.kopPosition !== 'none');
+    setStudioShowQrSignature(tmpl.showQrSignature ?? true);
+    setStudioShowQrValidation(tmpl.qrPosition !== 'none');
+
+    const foundPlaceholders = tmpl.extractedPlaceholders && tmpl.extractedPlaceholders.length > 0
+      ? tmpl.extractedPlaceholders
+      : extractPlaceholdersFromText(tmpl.defaultBody || '');
+    setStudioPlaceholders(foundPlaceholders);
+
+    setActiveTab('studio');
+    setFeedbackMessage({
+      type: 'info',
+      title: `Studio Dibuka: ${tmpl.name}`,
+      description: 'Editor teks & live preview lembar resmi kini berdampingan.',
+    });
+  };
+
+  // Handler Ganti Template di Studio Dropdown
+  const handleStudioChangeTemplate = (tmplId: string) => {
+    const tmpl = documentTemplates.find((t) => t.id === tmplId);
+    if (tmpl) {
+      handleLoadTemplateIntoStudio(tmpl);
+    }
+  };
+
+  // Handler Pilih Pejabat Penandatangan di Studio (via EmployeeSelect)
+  const handleStudioSigneeEmployeeSelect = (empId: string) => {
+    setStudioSigneeEmployeeId(empId);
+    if (empId === '__manual__') return;
+    const emp = employees.find((e) => e.id === empId);
+    if (emp) {
+      setStudioSigneeName(emp.fullName);
+      setStudioSigneeRole(emp.position);
+      setFeedbackMessage({
+        type: 'info',
+        title: 'Pejabat Penandatangan Terpilih',
+        description: `${emp.fullName} (${emp.position}) ditetapkan sebagai penandatangan dokumen.`,
+      });
+    }
+  };
+
+  // Handler Terapkan Rekomendasi Pejabat Sesuai Dokumen di Studio
+  const handleApplyRecommendedSignatory = () => {
+    const preset = getPresetSignatoryForDocType(studioTemplateType || studioTemplateName, employees);
+    setStudioSigneeName(preset.preferredName);
+    setStudioSigneeRole(preset.preferredRole);
+    setStudioSigneeDocRole(preset.documentRoleLabel);
+    setStudioSigneeEmployeeId(preset.matchedEmployeeId || '__manual__');
+    setFeedbackMessage({
+      type: 'success',
+      title: 'Rekomendasi Pejabat Diterapkan',
+      description: `${preset.preferredName} (${preset.preferredRole}) telah diterapkan untuk jenis dokumen ${studioTemplateType}.`,
+    });
+  };
+
+  // Handler Ganti Template di Modal Terbitkan Dokumen Baru
+  const handleSelectTemplateForGenerate = (tmplId: string) => {
+    setSelectedTemplateId(tmplId);
+    const tmpl = documentTemplates.find((t) => t.id === tmplId);
+    if (tmpl) {
+      const preset = getPresetSignatoryForDocType(tmpl.type || tmpl.name, employees);
+      const signeeNameToUse = tmpl.signeeTitle && !tmpl.signeeTitle.toLowerCase().includes('director') && !tmpl.signeeTitle.toLowerCase().includes('vp') && !tmpl.signeeTitle.toLowerCase().includes('head')
+        ? tmpl.signeeTitle
+        : preset.preferredName;
+      setGenerateSigneeName(signeeNameToUse);
+      setGenerateSigneeRole(tmpl.signeeRole || preset.preferredRole);
+      setGenerateSigneeEmployeeId(preset.matchedEmployeeId || '__manual__');
+    }
+  };
+
+  // Handler Pilih Pejabat di Modal Terbitkan Dokumen Baru
+  const handleGenerateSigneeSelect = (empId: string) => {
+    setGenerateSigneeEmployeeId(empId);
+    if (empId === '__manual__') return;
+    const emp = employees.find((e) => e.id === empId);
+    if (emp) {
+      setGenerateSigneeName(emp.fullName);
+      setGenerateSigneeRole(emp.position);
+    }
+  };
+
+  // Handler Simpan Perubahan Template dari Studio
+  const handleSaveStudioTemplate = () => {
+    if (!studioSelectedTemplateId) return;
+
+    updateDocumentTemplate(studioSelectedTemplateId, {
+      name: studioTemplateName,
+      type: studioTemplateType,
+      paperSize: studioPaperSize,
+      numberingPattern: studioNumberingPattern,
+      letterHeadTitle: studioCompanyName,
+      letterHeadAddress: studioCompanyAddress,
+      letterHeadPhone: studioCompanyPhone,
+      letterHeadEmail: studioCompanyEmail,
+      letterHeadNpwp: studioCompanyNpwp,
+      signeeTitle: studioSigneeName,
+      signeeRole: studioSigneeRole,
+      defaultBody: studioBodyText,
+      footerText: studioFooterText,
+      kopPosition: studioShowLetterhead ? 'top' : 'none',
+      showQrSignature: studioShowQrSignature,
+      qrPosition: studioShowQrValidation ? 'bottom-right' : 'none',
+      extractedPlaceholders: studioPlaceholders,
+    });
+
+    setFeedbackMessage({
+      type: 'success',
+      title: 'Perubahan Template Disimpan',
+      description: `Konfigurasi template "${studioTemplateName}" telah diperbarui dan aktif di seluruh sistem.`,
+    });
+  };
+
+  // Handler Tambah Tag Baru ke Studio
+  const handleAddTagToStudio = () => {
+    const cleanTag = studioNewTagInput.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_');
+    if (!cleanTag) return;
+    if (!studioPlaceholders.includes(cleanTag)) {
+      setStudioPlaceholders((prev) => [...prev, cleanTag]);
+    }
+    setStudioNewTagInput('');
+    setFeedbackMessage({
+      type: 'success',
+      title: `Tag {{${cleanTag}}} Ditambahkan`,
+      description: 'Tag baru telah dimasukkan ke daftar tag aktif template ini.',
+    });
+  };
+
+  // Handler Hapus Tag dari Studio
+  const handleRemoveTagFromStudio = (tagToRemove: string) => {
+    setStudioPlaceholders((prev) => prev.filter((t) => t !== tagToRemove));
+    setFeedbackMessage({
+      type: 'info',
+      title: `Tag {{${tagToRemove}}} Dihapus`,
+      description: 'Tag telah dikeluarkan dari daftar tag aktif.',
+    });
+  };
+
+  // Handler Sisipkan Tag ke Cursor Textarea Studio
+  const handleInsertTagToStudioTextarea = (tag: string) => {
+    const tagToInsert = `{{${tag}}}`;
+    const textarea = studioTextareaRef.current;
+    if (!textarea) {
+      setStudioBodyText((prev) => `${prev} ${tagToInsert}`);
+    } else {
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const text = studioBodyText;
+      const before = text.substring(0, start);
+      const after = text.substring(end, text.length);
+      setStudioBodyText(`${before}${tagToInsert}${after}`);
+      setTimeout(() => {
+        textarea.focus();
+        textarea.setSelectionRange(start + tagToInsert.length, start + tagToInsert.length);
+      }, 50);
+    }
+    setFeedbackMessage({
+      type: 'info',
+      title: `Tag ${tagToInsert} Disisipkan`,
+      description: 'Tag telah disisipkan ke posisi kursor teks dokumen.',
+    });
+  };
+
+  // Handler Sisipkan Pemisah Halaman Fisik (Page Break)
+  const handleInsertPageBreak = () => {
+    const pageBreakTag = '\n\n<!-- PAGE_BREAK -->\n\n';
+    const textarea = studioTextareaRef.current;
+    if (!textarea) {
+      setStudioBodyText((prev) => `${prev}${pageBreakTag}`);
+    } else {
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const text = studioBodyText;
+      const before = text.substring(0, start);
+      const after = text.substring(end, text.length);
+      setStudioBodyText(`${before}${pageBreakTag}${after}`);
+      setTimeout(() => {
+        textarea.focus();
+        textarea.setSelectionRange(start + pageBreakTag.length, start + pageBreakTag.length);
+      }, 50);
+    }
+    setFeedbackMessage({
+      type: 'info',
+      title: 'Pemisah Halaman Disisipkan',
+      description: 'Penanda lembar baru <!-- PAGE_BREAK --> berhasil ditambahkan.',
+    });
+  };
+
+  // Handler Replace File DOCX di Studio
+  const handleStudioReplaceDocx = async (file: File) => {
+    if (!file.name.endsWith('.docx') && !file.name.endsWith('.doc')) {
+      setFeedbackMessage({
+        type: 'error',
+        title: 'Format File Tidak Didukung',
+        description: 'Mohon unggah berkas berekstensi Microsoft Word (.docx).',
+      });
+      return;
+    }
+
+    try {
+      setIsParsingDocx(true);
+      const result = await parseDocxFile(file);
+      setStudioBodyText(result.rawText);
+      if (result.placeholders && result.placeholders.length > 0) {
+        setStudioPlaceholders(Array.from(new Set([...studioPlaceholders, ...result.placeholders])));
+      }
+      setFeedbackMessage({
+        type: 'success',
+        title: 'Isi Template Berhasil Direplace (.docx)',
+        description: `Teks dan ${result.placeholders.length} variabel dari "${file.name}" telah diekstrak ke Studio.`,
+      });
+    } catch (err: any) {
+      setFeedbackMessage({
+        type: 'error',
+        title: 'Gagal Membaca File DOCX',
+        description: err.message || 'Pastikan berkas DOCX valid dan tidak terenkripsi.',
+      });
+    } finally {
+      setIsParsingDocx(false);
+    }
+  };
+
+  const handleStudioReplaceWithDocx = handleStudioReplaceDocx;
+  const handleSaveStudioChanges = handleSaveStudioTemplate;
+  const handleStudioApplyPresetSignee = handleApplyRecommendedSignatory;
+  const handleStudioSigneeSelect = handleStudioSigneeEmployeeSelect;
+  const handleStudioInsertTag = handleInsertTagToStudioTextarea;
+  const handleStudioAddNewTag = handleAddTagToStudio;
+
+  // Handler Replace Existing Template dari Tab Templates
+  const handleTriggerReplaceExistingTemplate = (tmplId: string) => {
+    templateToReplaceIdRef.current = tmplId;
+    templateReplaceInputRef.current?.click();
+  };
+
+  const handleExecuteReplaceExistingTemplate = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const targetId = templateToReplaceIdRef.current;
+    if (!targetId) return;
+
+    try {
+      setIsParsingDocx(true);
+      const result = await parseDocxFile(file);
+      updateDocumentTemplate(targetId, {
+        defaultBody: result.rawText,
+        extractedPlaceholders: result.placeholders,
+        fileName: file.name,
+        fileSize: result.fileSize,
+        sourceType: 'uploaded_docx',
+      });
+
+      const updated = documentTemplates.find((t) => t.id === targetId);
+      if (updated) {
+        handleLoadTemplateIntoStudio({
+          ...updated,
+          defaultBody: result.rawText,
+          extractedPlaceholders: result.placeholders,
+        });
+      }
+
+      setFeedbackMessage({
+        type: 'success',
+        title: 'Template Berhasil Direplace (.docx)',
+        description: `Template telah diperbarui dengan file "${file.name}" dan dibuka di Studio Side-by-Side.`,
+      });
+    } catch (err: any) {
+      setFeedbackMessage({
+        type: 'error',
+        title: 'Gagal Memproses File DOCX',
+        description: err.message || 'File tidak dapat diproses.',
+      });
+    } finally {
+      setIsParsingDocx(false);
+      if (templateReplaceInputRef.current) templateReplaceInputRef.current.value = '';
+    }
+  };
+
+  // Enhanced Filter Dokumen
+  const filteredDocs = documents.filter((d) => {
+    const emp = employees.find((e) => e.id === d.targetEmployeeId);
+    const matchesSearch =
       d.documentNumber.toLowerCase().includes(searchDocQuery.toLowerCase()) ||
       d.title.toLowerCase().includes(searchDocQuery.toLowerCase()) ||
-      d.type.toLowerCase().includes(searchDocQuery.toLowerCase())
-  );
+      d.type.toLowerCase().includes(searchDocQuery.toLowerCase()) ||
+      (emp && emp.fullName.toLowerCase().includes(searchDocQuery.toLowerCase())) ||
+      (emp && emp.nik.toLowerCase().includes(searchDocQuery.toLowerCase()));
+
+    const matchesType = docTypeFilter === 'all' || d.type === docTypeFilter;
+    return matchesSearch && matchesType;
+  });
 
   return (
     <div className="space-y-5">
@@ -473,14 +1111,6 @@ export const DocumentManagement: React.FC = () => {
             <HelpCircle className="w-3.5 h-3.5 text-indigo-600" />
             <span>Kamus Tag & Token</span>
           </button>
-          <button
-            type="button"
-            onClick={() => setIsGenerateModalOpen(true)}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md text-xs font-semibold shadow-xs transition-colors"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>+ Terbitkan Dokumen Baru</span>
-          </button>
         </div>
       </div>
 
@@ -508,15 +1138,18 @@ export const DocumentManagement: React.FC = () => {
         </button>
 
         <button
-          onClick={() => setActiveTab('upload_docx')}
+          onClick={() => setActiveTab('studio')}
           className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
-            activeTab === 'upload_docx'
+            activeTab === 'studio'
               ? 'border-slate-900 text-slate-950 font-bold'
               : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
           }`}
         >
-          <FileUp className="w-3.5 h-3.5" />
-          <span>Upload Template DOCX</span>
+          <Layout className="w-3.5 h-3.5" />
+          <span>Studio Side-by-Side</span>
+          <span className="text-[10px] font-mono px-1.5 py-0.5 bg-emerald-100 text-emerald-800 font-bold rounded">
+            Live
+          </span>
         </button>
 
         <button
@@ -527,8 +1160,17 @@ export const DocumentManagement: React.FC = () => {
               : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
           }`}
         >
-          <Edit3 className="w-3.5 h-3.5" />
-          <span>Kop & Pola Penomoran</span>
+          <FileCheck2 className="w-3.5 h-3.5" />
+          <span>Template Dokumen</span>
+          <span
+            className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full transition-colors ${
+              activeTab === 'templates'
+                ? 'bg-slate-900 text-white'
+                : 'bg-slate-100 text-slate-600'
+            }`}
+          >
+            {documentTemplates.length}
+          </span>
         </button>
 
         <button
@@ -559,193 +1201,249 @@ export const DocumentManagement: React.FC = () => {
       {/* TAB 1: ARSIP DOKUMEN TERBIT */}
       {activeTab === 'arsip' && (
         <div className="space-y-4">
-          <div className="bg-white p-3 sm:p-3.5 border border-slate-200 rounded-xl shadow-xs space-y-2.5 sm:space-y-0 sm:flex sm:items-center sm:justify-between sm:gap-3">
-            <div className="relative w-full sm:max-w-md">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
-              <input
-                type="text"
-                placeholder="Cari nomor dokumen, judul surat, nama..."
-                value={searchDocQuery}
-                onChange={(e) => setSearchDocQuery(e.target.value)}
-                className="w-full pl-9 pr-8 py-2 text-xs bg-slate-50/70 focus:bg-white border border-slate-300 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-indigo-500 transition-all font-medium text-slate-800 placeholder-slate-400"
-              />
-              {searchDocQuery && (
-                <button
-                  type="button"
-                  onClick={() => setSearchDocQuery('')}
-                  className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600"
-                  title="Hapus pencarian"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </div>
+          {/* Filter Bar & Quick Actions */}
+          <div className="bg-white p-3.5 border border-slate-200 rounded-xl shadow-xs space-y-3 lg:space-y-0 lg:flex lg:items-center lg:justify-between lg:gap-3">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 flex-1 max-w-2xl">
+              {/* Search Input */}
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="Cari nomor dokumen, judul surat, nama karyawan, NIK..."
+                  value={searchDocQuery}
+                  onChange={(e) => setSearchDocQuery(e.target.value)}
+                  className="w-full pl-9 pr-8 py-2 text-xs bg-slate-50/70 focus:bg-white border border-slate-300 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-indigo-500 transition-all font-medium text-slate-800 placeholder-slate-400"
+                />
+                {searchDocQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchDocQuery('')}
+                    className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600"
+                    title="Hapus pencarian"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
 
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
-              <button
-                onClick={() => setActiveTab('upload_docx')}
-                className="inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition-colors shrink-0"
-              >
-                <Upload className="w-3.5 h-3.5 text-slate-500" />
-                <span>+ Upload Template DOCX</span>
-              </button>
-              <button
-                onClick={() => setIsGenerateModalOpen(true)}
-                className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors shrink-0"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Terbitkan Dokumen Baru</span>
-              </button>
+              {/* Filter Jenis Dokumen Dropdown */}
+              <div className="sm:w-56 shrink-0">
+                <select
+                  value={docTypeFilter}
+                  onChange={(e) => setDocTypeFilter(e.target.value)}
+                  className="w-full py-2 px-3 text-xs bg-slate-50/70 focus:bg-white border border-slate-300 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-indigo-500 font-semibold text-slate-700"
+                >
+                  <option value="all">Semua Jenis Dokumen ({documents.length})</option>
+                  {ALL_DOCUMENT_TYPES.map((dt) => (
+                    <option key={dt.type} value={dt.type}>
+                      {dt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
+          </div>
+
+          {/* Counter info */}
+          <div className="flex items-center justify-between text-xs text-slate-500 px-1">
+            <span>
+              Menampilkan <strong className="text-slate-800">{filteredDocs.length}</strong> dari <strong className="text-slate-800">{documents.length}</strong> dokumen resmi diterbitkan.
+            </span>
+            {(searchDocQuery || docTypeFilter !== 'all') && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchDocQuery('');
+                  setDocTypeFilter('all');
+                }}
+                className="text-indigo-600 hover:text-indigo-800 font-semibold underline text-[11px]"
+              >
+                Reset Filter
+              </button>
+            )}
           </div>
 
           {/* TAMPILAN MOBILE & TABLET: Adaptive Card View (< md) */}
           <div className="md:hidden space-y-3">
-            {filteredDocs.map((doc) => {
-              const emp = employees.find((e) => e.id === doc.targetEmployeeId);
-              const tmpl = documentTemplates.find((t) => t.id === doc.templateId);
-              const isDocx = doc.isFromDocxTemplate || tmpl?.sourceType === 'uploaded_docx';
+            {filteredDocs.length === 0 ? (
+              <div className="bg-white border border-slate-200 rounded-xl p-8 text-center space-y-3">
+                <FileText className="w-10 h-10 text-slate-300 mx-auto" />
+                <p className="text-xs text-slate-500 font-medium">Tidak ada dokumen yang sesuai dengan pencarian atau filter.</p>
+              </div>
+            ) : (
+              filteredDocs.map((doc) => {
+                const emp = employees.find((e) => e.id === doc.targetEmployeeId);
+                const tmpl = documentTemplates.find((t) => t.id === doc.templateId);
+                const isDocx = doc.isFromDocxTemplate || tmpl?.sourceType === 'uploaded_docx';
 
-              return (
-                <div
-                  key={doc.id}
-                  onClick={() => setSelectedDoc(doc)}
-                  className="bg-white border border-slate-200 hover:border-indigo-300 rounded-xl p-4 shadow-xs transition-all cursor-pointer active:scale-[0.99] space-y-3"
-                >
-                  {/* Card Header: Doc Number & Type Badge */}
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <span className="font-mono font-bold text-xs text-indigo-700 block">
-                        {doc.documentNumber}
-                      </span>
-                      <h4 className="font-bold text-slate-900 text-xs mt-0.5 leading-snug">
-                        {doc.title}
-                      </h4>
-                    </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
-                        {doc.type}
-                      </span>
-                      {isDocx && (
-                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-100 text-blue-800">
-                          DOCX
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Employee & Signee Details */}
-                  <div className="p-2.5 bg-slate-50/80 rounded-lg border border-slate-100 grid grid-cols-2 gap-2 text-[11px]">
-                    <div>
-                      <span className="text-[10px] text-slate-400 block">Penerima Dokumen:</span>
-                      <div className="font-semibold text-slate-900 truncate">
-                        {emp?.fullName || 'Pihak Terkait'}
+                return (
+                  <div
+                    key={doc.id}
+                    className="bg-white border border-slate-200 hover:border-indigo-300 rounded-xl p-4 shadow-xs transition-all space-y-3"
+                  >
+                    {/* Card Header: Doc Number & Type Badge */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-bold text-xs text-indigo-700">
+                            {doc.documentNumber}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyAnyToken(doc.documentNumber, 'Nomor Surat')}
+                            className="p-1 text-slate-400 hover:text-indigo-600"
+                            title="Salin nomor surat"
+                          >
+                            <Copy className="w-3 h-3" />
+                          </button>
+                        </div>
+                        <h4 className="font-bold text-slate-900 text-xs mt-1 leading-snug">
+                          {doc.title}
+                        </h4>
                       </div>
-                      <div className="text-[10px] text-slate-500 font-mono">{emp?.nik}</div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                          {doc.type}
+                        </span>
+                        {isDocx && (
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-100 text-blue-800">
+                            DOCX
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <div>
-                      <span className="text-[10px] text-slate-400 block">Penanda Tangan:</span>
-                      <div className="font-semibold text-slate-900 truncate">{doc.signeeName}</div>
-                      <div className="text-[10px] text-slate-500 truncate">{doc.signeeRole}</div>
-                    </div>
-                  </div>
 
-                  {/* Card Footer: Date */}
-                  <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-100">
-                    <div className="flex items-center gap-1.5 text-slate-500 text-[11px] font-mono">
-                      <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                      <span>{doc.issueDate}</span>
+                    {/* Signee Details & Status */}
+                    <div className="p-2.5 bg-slate-50/80 rounded-lg border border-slate-100 flex items-center justify-between gap-2 text-[11px]">
+                      <div>
+                        <span className="text-[10px] text-slate-400 block">Penanda Tangan:</span>
+                        <div className="font-semibold text-slate-900 truncate">{doc.signeeName}</div>
+                        <div className="text-[10px] text-slate-500 truncate">{doc.signeeRole}</div>
+                      </div>
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                        <span>{doc.status}</span>
+                      </span>
                     </div>
-                    <span className="text-[10px] font-semibold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">
-                      Klik baris untuk preview
-                    </span>
+
+                    {/* Card Footer */}
+                    <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-100">
+                      <div className="flex items-center gap-1.5 text-slate-500 text-[11px] font-mono">
+                        <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                        <span>{doc.issueDate}</span>
+                      </div>
+                      <span className="text-[10px] font-bold text-indigo-600 flex items-center gap-1">
+                        <Eye className="w-3 h-3" /> Klik untuk Pratinjau & Cetak
+                      </span>
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })
+            )}
           </div>
 
-          {/* TAMPILAN DESKTOP: Full Data Table (>= md) */}
-          <div className="hidden md:block bg-white border border-slate-200 rounded-lg overflow-hidden shadow-xs">
+          {/* TAMPILAN DESKTOP: Clean & Well-Structured Data Table (>= md) */}
+          <div className="hidden md:block bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs">
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs min-w-[750px]">
-                <thead className="bg-slate-50 border-b border-slate-200 text-slate-600">
+              <table className="w-full text-left text-xs min-w-[760px] border-collapse">
+                <thead className="bg-slate-50/90 border-b border-slate-200 text-slate-600 font-semibold select-none">
                   <tr>
-                    <th className="py-2.5 px-3 font-semibold">Nomor Surat Resmi</th>
-                    <th className="py-2.5 px-3 font-semibold">Jenis & Judul Dokumen</th>
-                    <th className="py-2.5 px-3 font-semibold">Sumber Template</th>
-                    <th className="py-2.5 px-3 font-semibold">Karyawan Penerima</th>
-                    <th className="py-2.5 px-3 font-semibold text-center">Tanggal Terbit</th>
-                    <th className="py-2.5 px-3 font-semibold">Penanda Tangan</th>
-                    <th className="py-2.5 px-3 font-semibold text-center">Status</th>
+                    <th className="py-3 px-4 w-72">Nomor Surat & Tanggal Terbit</th>
+                    <th className="py-3 px-4 min-w-[280px]">Jenis & Judul Dokumen Resmi</th>
+                    <th className="py-3 px-4 w-64">Pejabat Penanda Tangan</th>
+                    <th className="py-3 px-4 w-44 text-center">Status Keabsahan</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {filteredDocs.map((doc) => {
-                    const emp = employees.find((e) => e.id === doc.targetEmployeeId);
-                    const tmpl = documentTemplates.find((t) => t.id === doc.templateId);
-                    const isDocx = doc.isFromDocxTemplate || tmpl?.sourceType === 'uploaded_docx';
+                  {filteredDocs.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="py-12 text-center text-slate-400">
+                        <FileText className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+                        <p className="font-semibold text-slate-600">Tidak ada arsip dokumen resmi yang sesuai.</p>
+                        <p className="text-[11px] text-slate-400 mt-1">Coba ubah kata kunci pencarian atau ganti filter jenis dokumen.</p>
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredDocs.map((doc) => {
+                      const tmpl = documentTemplates.find((t) => t.id === doc.templateId);
+                      const isDocx = doc.isFromDocxTemplate || tmpl?.sourceType === 'uploaded_docx';
 
-                    return (
-                      <tr
-                        key={doc.id}
-                        onClick={() => setSelectedDoc(doc)}
-                        className="hover:bg-indigo-50/50 cursor-pointer transition-colors group"
-                        title="Klik baris untuk mem-preview dokumen resmi legal & verifikasi QR"
-                      >
-                        <td className="py-2.5 px-3 font-mono font-bold text-slate-900">
-                          {doc.documentNumber}
-                        </td>
-                        <td className="py-2.5 px-3">
-                          <div className="font-semibold text-slate-900">{doc.title}</div>
-                          <div className="text-[10px] text-indigo-700 font-medium">{doc.type}</div>
-                        </td>
-                        <td className="py-2.5 px-3">
-                          {isDocx ? (
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-100 text-blue-800 border border-blue-200">
-                              <FileCode className="w-3 h-3 text-blue-600" />
-                              <span>File DOCX</span>
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-700">
-                              <span>Sistem HR</span>
-                            </span>
-                          )}
-                        </td>
-                        <td className="py-2.5 px-3">
-                          {emp ? (
+                      return (
+                        <tr
+                          key={doc.id}
+                          onClick={() => setSelectedDoc(doc)}
+                          className="hover:bg-indigo-50/60 transition-colors cursor-pointer group"
+                          title="Klik baris untuk membuka pratinjau, unduh PDF/Word, dan cetak dokumen"
+                        >
+                          {/* 1. Nomor Surat & Tanggal */}
+                          <td className="py-3.5 px-4 align-middle">
                             <div className="flex items-center gap-1.5">
-                              {emp.avatar ? (
-                                <img src={emp.avatar} alt="" className="w-5 h-5 rounded-full object-cover border" />
-                              ) : (
-                                <div className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 font-bold text-[10px] flex items-center justify-center">
-                                  {emp.fullName.charAt(0)}
-                                </div>
-                              )}
-                              <div>
-                                <div className="font-semibold text-slate-900 leading-tight">{emp.fullName}</div>
-                                <div className="text-[10px] text-slate-500 font-mono">{emp.nik}</div>
-                              </div>
+                              <span className="font-mono font-bold text-indigo-900 bg-indigo-50/80 px-2 py-0.5 rounded border border-indigo-200/70 tracking-tight text-[11px]">
+                                {doc.documentNumber}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleCopyAnyToken(doc.documentNumber, 'Nomor Surat');
+                                }}
+                                className="p-1 text-slate-400 hover:text-indigo-600 opacity-60 group-hover:opacity-100 transition-opacity"
+                                title="Salin nomor surat ini"
+                              >
+                                <Copy className="w-3 h-3" />
+                              </button>
                             </div>
-                          ) : (
-                            <span className="text-slate-400">Pihak Terkait</span>
-                          )}
-                        </td>
-                        <td className="py-2.5 px-3 text-center font-mono text-slate-600">
-                          {doc.issueDate}
-                        </td>
-                        <td className="py-2.5 px-3">
-                          <div className="font-semibold text-slate-900">{doc.signeeName}</div>
-                          <div className="text-[10px] text-slate-400">{doc.signeeRole}</div>
-                        </td>
-                        <td className="py-2.5 px-3 text-center">
-                          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                            {doc.status}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                            <div className="flex items-center gap-1 text-[11px] text-slate-500 font-mono mt-1">
+                              <Calendar className="w-3 h-3 text-slate-400" />
+                              <span>{doc.issueDate}</span>
+                            </div>
+                          </td>
+
+                          {/* 2. Jenis & Judul Dokumen */}
+                          <td className="py-3.5 px-4 align-middle">
+                            <div className="font-bold text-slate-900 text-xs leading-snug group-hover:text-indigo-700 transition-colors">
+                              {doc.title}
+                            </div>
+                            <div className="flex items-center gap-1.5 mt-1">
+                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-100">
+                                {doc.type}
+                              </span>
+                              {isDocx ? (
+                                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold bg-blue-100 text-blue-800">
+                                  <FileCode className="w-2.5 h-2.5" />
+                                  <span>DOCX</span>
+                                </span>
+                              ) : (
+                                <span className="px-1.5 py-0.2 rounded text-[9px] font-semibold bg-slate-100 text-slate-600">
+                                  Sistem HR
+                                </span>
+                              )}
+                            </div>
+                          </td>
+
+                          {/* 3. Penanda Tangan */}
+                          <td className="py-3.5 px-4 align-middle">
+                            <div className="font-semibold text-slate-900 leading-tight truncate">{doc.signeeName}</div>
+                            <div className="text-[10px] text-slate-500 truncate mt-0.5 flex items-center gap-1">
+                              <QrCode className="w-3 h-3 text-emerald-600 shrink-0" />
+                              <span>{doc.signeeRole}</span>
+                            </div>
+                          </td>
+
+                          {/* 4. Status Keabsahan & Hint */}
+                          <td className="py-3.5 px-4 text-center align-middle">
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                              <span>{doc.status}</span>
+                            </span>
+                            <div className="text-[9px] text-indigo-600 font-semibold mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              Klik untuk Pratinjau
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
                 </tbody>
               </table>
             </div>
@@ -753,629 +1451,1521 @@ export const DocumentManagement: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 2: UPLOAD & KELOLA TEMPLATE DOCX */}
-      {activeTab === 'upload_docx' && (
-        <div className="space-y-6">
-          {/* Top Banner Information */}
-          <div className="p-4 bg-indigo-50/70 border border-indigo-200 rounded-xl text-xs text-indigo-950 flex items-start gap-3">
-            <Sparkles className="w-5 h-5 text-indigo-600 shrink-0 mt-0.5" />
-            <div className="space-y-1">
-              <strong className="block text-sm font-bold text-indigo-900">
-                Pusat Tata Kelola Template Dokumen DOCX (Microsoft Word):
-              </strong>
-              <p className="leading-relaxed">
-                Anda dapat mengunggah file template berformat <code>.docx</code> standar perusahaan. Gunakan variabel dinamis bertanda kurung kurawal ganda seperti <code className="bg-indigo-100 px-1 py-0.5 rounded font-mono font-bold text-indigo-900">{'{{nama}}'}</code>, <code className="bg-indigo-100 px-1 py-0.5 rounded font-mono font-bold text-indigo-900">{'{{nik}}'}</code>, <code className="bg-indigo-100 px-1 py-0.5 rounded font-mono font-bold text-indigo-900">{'{{jabatan}}'}</code>, dan <code className="bg-indigo-100 px-1 py-0.5 rounded font-mono font-bold text-indigo-900">{'{{gaji_pokok}}'}</code>. Sistem akan otomatis mengisi data karyawan riil, menambahkan nomor surat resmi berformula, dan menyematkan stempel Tanda Tangan QR UU ITE.
-              </p>
+      {/* Hidden File Inputs for DOCX Replacement */}
+      <input
+        ref={studioReplaceInputRef}
+        type="file"
+        accept=".docx,.doc"
+        className="hidden"
+        onChange={(e) => {
+          if (e.target.files && e.target.files[0]) {
+            handleStudioReplaceDocx(e.target.files[0]);
+          }
+        }}
+      />
+      <input
+        ref={templateReplaceInputRef}
+        type="file"
+        accept=".docx,.doc"
+        className="hidden"
+        onChange={handleExecuteReplaceExistingTemplate}
+      />
+
+            {/* TAB 2: STUDIO SIDE-BY-SIDE (EDITOR KIRI, LIVE PREVIEW KANAN) */}
+      {activeTab === 'studio' && (
+        <div className="space-y-4">
+          {/* Studio Top Control Bar */}
+          <div className="bg-white border border-slate-200 rounded-xl p-3.5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 flex-1">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="text-xs font-bold text-slate-800">Pilih Template Naskah:</span>
+              </div>
+              <select
+                value={studioSelectedTemplateId}
+                onChange={(e) => {
+                  const tmpl = documentTemplates.find(t => t.id === e.target.value);
+                  if (tmpl) handleLoadTemplateIntoStudio(tmpl);
+                }}
+                className="py-1.5 px-3 border border-slate-300 rounded-lg text-xs font-semibold bg-white text-slate-800 max-w-md"
+              >
+                {documentTemplates.map((t, idx) => (
+                  <option key={t.id} value={t.id}>
+                    {idx + 1}. {t.name} ({t.type})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <input
+                ref={studioReplaceInputRef}
+                type="file"
+                accept=".docx,.doc"
+                className="hidden"
+                onChange={(e) => {
+                  if (e.target.files && e.target.files[0]) {
+                    handleStudioReplaceWithDocx(e.target.files[0]);
+                  }
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => studioReplaceInputRef.current?.click()}
+                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold border border-slate-300 transition-colors flex items-center gap-1.5"
+                title="Ganti isi template ini dengan file Word (.docx) baru"
+              >
+                <Upload className="w-3.5 h-3.5" />
+                <span>Replace dengan DOCX</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveStudioChanges}
+                className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5"
+              >
+                <Save className="w-3.5 h-3.5" />
+                <span>Simpan Template</span>
+              </button>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            {/* Left Column: Upload Dropzone & Configuration Form */}
-            <div className="lg:col-span-7 space-y-5">
-              {/* Dropzone */}
-              <div
-                onClick={() => fileInputRef.current?.click()}
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-                    handleFileUpload(e.dataTransfer.files[0]);
-                  }
-                }}
-                className="border-2 border-dashed border-indigo-300 hover:border-indigo-600 bg-white hover:bg-indigo-50/40 rounded-xl p-8 text-center cursor-pointer transition-all group shadow-xs space-y-3"
-              >
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".docx,.doc"
-                  className="hidden"
-                  onChange={(e) => {
-                    if (e.target.files && e.target.files[0]) {
-                      handleFileUpload(e.target.files[0]);
-                    }
-                  }}
-                />
-
-                <div className="w-12 h-12 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center mx-auto group-hover:scale-110 transition-transform">
-                  <FileUp className="w-6 h-6" />
-                </div>
-
-                <div>
-                  <h4 className="font-bold text-slate-900 text-sm">
-                    {isParsingDocx ? 'Sedang Membaca & Mengekstrak File DOCX...' : 'Klik atau Tarik File Template DOCX ke Sini'}
-                  </h4>
-                  <p className="text-xs text-slate-500 mt-1">
-                    Mendukung format Microsoft Word (.docx). Ekstraksi variabel, klausul hukum, dan format tabel berjalan 100% lokal di peramban.
-                  </p>
-                </div>
-
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-50 text-indigo-700 rounded-full text-xs font-semibold border border-indigo-200">
-                  <Upload className="w-3 h-3" />
-                  <span>Pilih File Dari Komputer</span>
-                </div>
+          {/* Studio Grid: 2 Kolom Side-by-Side (50% Kiri Editor, 50% Kanan Live Preview A4) */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+            {/* KOLOM KIRI: EDITOR NASKAH, FORMULA, PEJABAT & TAG TOOLS (5 dari 12 kolom) */}
+            <div className="lg:col-span-5 space-y-4">
+              {/* Selector Bagian Konfigurasi Studio (Naskah, Kop Surat, Footer) */}
+              <div className="bg-slate-200/80 p-1 rounded-xl flex items-center gap-1 shadow-2xs">
+                <button
+                  type="button"
+                  onClick={() => setStudioConfigSection('naskah')}
+                  className={`flex-1 py-1.5 px-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    studioConfigSection === 'naskah'
+                      ? 'bg-white text-indigo-700 shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <Edit3 className="w-3.5 h-3.5" />
+                  <span>1. Naskah & TTD</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStudioConfigSection('kop')}
+                  className={`flex-1 py-1.5 px-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    studioConfigSection === 'kop'
+                      ? 'bg-white text-indigo-700 shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <Building2 className="w-3.5 h-3.5" />
+                  <span>2. Kop Surat (Header)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStudioConfigSection('footer')}
+                  className={`flex-1 py-1.5 px-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    studioConfigSection === 'footer'
+                      ? 'bg-white text-indigo-700 shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>3. Footer & Lembar</span>
+                </button>
               </div>
 
-              {/* Sample Templates Quick-Load Library */}
-              <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                    <FileSpreadsheet className="w-4 h-4 text-indigo-600" />
-                    <span>Atau Pilih Dari Template Contoh Baku Indonesia:</span>
-                  </span>
-                  <span className="text-[11px] text-slate-400">Siap pakai & teruji regulasi</span>
-                </div>
+              {/* SECTION 1: NASKAH, FORMULA & PEJABAT PENANDATANGAN */}
+              {studioConfigSection === 'naskah' && (
+                <>
+                  {/* Box 1: Info Judul & Pola Penomoran */}
+                  <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs space-y-3">
+                    <h4 className="text-xs font-bold text-slate-900 border-b border-slate-100 pb-2 flex items-center justify-between">
+                      <span>Identitas & Formula Surat</span>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 font-bold">
+                        {studioTemplateType}
+                      </span>
+                    </h4>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  {SAMPLE_DOCX_PRESETS.map((preset) => (
-                    <div
-                      key={preset.id}
-                      className="p-3 rounded-lg border border-slate-200 hover:border-indigo-400 bg-slate-50/50 hover:bg-indigo-50/30 transition-all flex flex-col justify-between space-y-2 text-xs"
-                    >
-                      <div>
-                        <div className="font-bold text-slate-900 leading-tight">{preset.title}</div>
-                        <div className="text-[10px] text-slate-500 font-mono mt-0.5">{preset.fileName} ({preset.fileSize})</div>
+                    <div>
+                      <label className="text-[11px] font-semibold text-slate-700 block mb-1">
+                        Judul Resmi Dokumen
+                      </label>
+                      <input
+                        type="text"
+                        value={studioTemplateName}
+                        onChange={(e) => setStudioTemplateName(e.target.value)}
+                        className="w-full px-3 py-1.5 border border-slate-300 rounded text-xs font-semibold text-slate-900 bg-white"
+                      />
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-[11px] font-semibold text-slate-700">
+                          Formula Penomoran Otomatis
+                        </label>
+                        <span className="text-[10px] text-slate-400">Gunakan {'{TOKEN}'}</span>
                       </div>
-                      <div className="flex items-center justify-between pt-1">
-                        <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-indigo-100 text-indigo-800">
-                          {preset.type}
-                        </span>
+                      <input
+                        type="text"
+                        value={studioNumberingPattern}
+                        onChange={(e) => setStudioNumberingPattern(e.target.value)}
+                        className="w-full px-3 py-1.5 border border-slate-300 rounded font-mono font-bold text-xs text-indigo-700 bg-indigo-50/30"
+                      />
+                      <div className="flex flex-wrap gap-1 mt-1.5">
+                        {NUMBERING_TOKENS.slice(0, 5).map(t => (
+                          <button
+                            key={t.token}
+                            type="button"
+                            onClick={() => {
+                              setStudioNumberingPattern(prev => prev.endsWith('/') ? `${prev}${t.token}` : `${prev}/${t.token}`);
+                            }}
+                            className="px-1.5 py-0.5 rounded text-[9px] font-mono bg-slate-100 hover:bg-indigo-100 text-slate-700 border border-slate-200"
+                            title={t.description}
+                          >
+                            {t.token}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Box 2: Simulasi Tanda Tangan Dokumen / Approval Fleksibel (Konsep Personalia & Eksternal) */}
+                  <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs space-y-3.5">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
+                      <div>
+                        <h4 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                          <Users className="w-4 h-4 text-indigo-600" />
+                          <span>Simulasi Tanda Tangan Dokumen (Penandatangan / Approval)</span>
+                        </h4>
+                        <p className="text-[10px] text-slate-500 mt-0.5">
+                          Jumlah kolom & label fleksibel (bisa 1, 2, atau 3 kolom). Pejabat dapat dari internal maupun pihak eksternal.
+                        </p>
+                      </div>
+
+                      {/* Preset Switcher Susunan */}
+                      <div className="flex items-center gap-1 shrink-0 flex-wrap">
+                        <span className="text-[10px] text-slate-400 font-medium">Susunan:</span>
                         <button
                           type="button"
-                          onClick={() => handleLoadSamplePreset(preset)}
-                          className="px-2 py-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 hover:bg-white rounded border border-indigo-200 transition-colors"
+                          onClick={() => applyStudioSignatoryPreset('3-tier')}
+                          className={`px-2 py-0.5 rounded text-[10px] font-semibold border transition-all cursor-pointer ${
+                            studioSignatories.length === 3
+                              ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs'
+                              : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                          }`}
+                          title="3 Kolom: Dibuat Oleh · Mengetahui · Menyetujui (Standar SK)"
                         >
-                          Gunakan Format Ini
+                          3 Pihak
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => applyStudioSignatoryPreset('2-tier')}
+                          className={`px-2 py-0.5 rounded text-[10px] font-semibold border transition-all cursor-pointer ${
+                            studioSignatories.length === 2
+                              ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs'
+                              : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                          }`}
+                          title="2 Kolom: Pihak Pertama & Pihak Kedua (Kontrak/BAST/NDA)"
+                        >
+                          2 Pihak
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => applyStudioSignatoryPreset('1-tier')}
+                          className={`px-2 py-0.5 rounded text-[10px] font-semibold border transition-all cursor-pointer ${
+                            studioSignatories.length === 1
+                              ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs'
+                              : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                          }`}
+                          title="1 Kolom: Ditetapkan Oleh (Tunggal)"
+                        >
+                          1 Pihak
                         </button>
                       </div>
                     </div>
-                  ))}
-                </div>
-              </div>
 
-              {/* Uploaded File Config Form */}
-              {parsedDocx && (
-                <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs space-y-4 text-xs">
-                  <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-                    <div>
-                      <h4 className="font-bold text-slate-900 text-sm flex items-center gap-2">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                        <span>Konfigurasi Template: {parsedDocx.fileName}</span>
-                      </h4>
-                      <span className="text-slate-500 text-[11px]">
-                        Ukuran File: {parsedDocx.fileSize} · Ditemukan {parsedDocx.placeholders.length} Variabel Dinamis
-                      </span>
+                    {/* Signatories List Cards */}
+                    <div className="space-y-3">
+                      {studioSignatories.map((sig, idx) => (
+                        <div
+                          key={sig.id || idx}
+                          className="p-3 bg-slate-50/70 border border-slate-200 rounded-lg space-y-2.5 relative group hover:border-indigo-300 transition-colors"
+                        >
+                          <div className="flex items-center justify-between pb-1.5 border-b border-slate-200/60">
+                            <div className="flex items-center gap-1.5">
+                              <span className="w-5 h-5 rounded-full bg-slate-800 text-white flex items-center justify-center font-bold text-[10px]">
+                                {idx + 1}
+                              </span>
+                              <span className="font-semibold text-slate-800 text-[11px]">
+                                Kolom {idx + 1}
+                              </span>
+                              {sig.isExternal && (
+                                <span className="px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 text-[9px] font-bold">
+                                  Pihak Eksternal
+                                </span>
+                              )}
+                            </div>
+
+                            {studioSignatories.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveStudioSignatory(idx)}
+                                className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors cursor-pointer"
+                                title="Hapus kolom penandatangan ini"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+
+                          {/* 1. Keterangan / Label Tanda Tangan */}
+                          <div>
+                            <label className="text-[10px] font-semibold text-slate-600 block mb-0.5">
+                              Keterangan Tanda Tangan *
+                            </label>
+                            <input
+                              type="text"
+                              value={sig.label}
+                              onChange={(e) => handleUpdateStudioSignatory(idx, 'label', e.target.value)}
+                              placeholder="Contoh: Pihak Pertama, Pihak Kedua, Dibuat Oleh, Menyetujui"
+                              className="w-full px-2.5 py-1.5 border border-slate-300 rounded text-xs font-semibold text-slate-900 bg-white"
+                            />
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {['Pihak Pertama', 'Pihak Kedua', 'Dibuat Oleh', 'Mengetahui', 'Menyetujui', 'Disetujui Oleh'].map((chip) => (
+                                <button
+                                  key={chip}
+                                  type="button"
+                                  onClick={() => handleUpdateStudioSignatory(idx, 'label', chip)}
+                                  className={`text-[9px] px-1.5 py-0.5 rounded border transition-colors cursor-pointer ${
+                                    sig.label === chip
+                                      ? 'bg-indigo-50 border-indigo-300 text-indigo-700 font-bold'
+                                      : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-100'
+                                  }`}
+                                >
+                                  {chip}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* 2. Pilih Pejabat atau Input Eksternal */}
+                          <div>
+                            <label className="text-[10px] font-semibold text-slate-600 block mb-0.5">
+                              Pejabat / Penandatangan *
+                            </label>
+                            <EmployeeSelect
+                              employees={employees}
+                              value={sig.employeeId || (sig.name ? '__manual__' : '')}
+                              onChange={(empId) => handleStudioSignatoryEmployeeSelect(idx, empId)}
+                              placeholder="-- Pilih Pejabat Internal / Input Eksternal --"
+                              allowManual
+                              manualLabel="+ Input Manual / Pihak Eksternal"
+                            />
+                          </div>
+
+                          {/* Manual Name & External Org (Jika Manual / Eksternal) */}
+                          {(sig.employeeId === '__manual__' || sig.isExternal || !employees.some(e => e.id === sig.employeeId)) && (
+                            <div className="p-2.5 bg-indigo-50/40 rounded border border-indigo-100 space-y-2">
+                              <div>
+                                <label className="text-[10px] font-semibold text-indigo-900 block mb-0.5">
+                                  Nama Lengkap Pejabat (Internal / Eksternal) *
+                                </label>
+                                <input
+                                  type="text"
+                                  value={sig.name}
+                                  onChange={(e) => handleUpdateStudioSignatory(idx, 'name', e.target.value)}
+                                  placeholder="Contoh: Ir. Budi Santoso, MBA"
+                                  className="w-full px-2.5 py-1.5 border border-indigo-200 rounded text-xs font-semibold text-slate-900 bg-white"
+                                />
+                              </div>
+                              <label className="flex items-center gap-1.5 text-[10px] text-slate-700 font-medium cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={!!sig.isExternal}
+                                  onChange={(e) => handleUpdateStudioSignatory(idx, 'isExternal', e.target.checked)}
+                                  className="w-3.5 h-3.5 text-indigo-600 rounded"
+                                />
+                                <span>Tandai sebagai Pihak Eksternal (Mitra / Rekanan / Notaris / Vendor)</span>
+                              </label>
+                            </div>
+                          )}
+
+                          {/* 3. Jabatan / Peran Resmi */}
+                          <div>
+                            <label className="text-[10px] font-semibold text-slate-600 block mb-0.5">
+                              Jabatan / Peran Resmi *
+                            </label>
+                            <input
+                              type="text"
+                              value={sig.role || ''}
+                              onChange={(e) => handleUpdateStudioSignatory(idx, 'role', e.target.value)}
+                              placeholder="Contoh: President Director & CEO / Kuasa Hukum / Direktur PT Mitra"
+                              className="w-full px-2.5 py-1.5 border border-slate-300 rounded text-xs text-slate-800 bg-white"
+                            />
+                          </div>
+                        </div>
+                      ))}
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={handleSaveUploadedDocxTemplate}
-                      className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold shadow-xs transition-colors"
-                    >
-                      <Save className="w-4 h-4" />
-                      <span>Simpan Template Ini</span>
-                    </button>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="font-semibold text-slate-700 block mb-1">Judul Template Dokumen *</label>
-                      <input
-                        type="text"
-                        value={uploadDocTitle}
-                        onChange={(e) => setUploadDocTitle(e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-300 rounded font-semibold text-slate-900"
-                        placeholder="Contoh: Perjanjian Kerja Waktu Tertentu 2026"
-                      />
-                    </div>
-                    <div>
-                      <label className="font-semibold text-slate-700 block mb-1">Kategori / Jenis Dokumen *</label>
-                      <select
-                        value={uploadDocType}
-                        onChange={(e) => setUploadDocType(e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-300 rounded bg-white font-semibold text-slate-900"
-                      >
-                        <option value="PKWT">PKWT (Perjanjian Kerja Waktu Tertentu)</option>
-                        <option value="PKWTT">PKWTT (Karyawan Tetap)</option>
-                        <option value="Surat Promosi">Surat Promosi & Penyesuaian Jabatan</option>
-                        <option value="Surat Peringatan">Surat Peringatan Disiplin (SP)</option>
-                        <option value="Parklaring">Parklaring (Surat Pengalaman Kerja)</option>
-                        <option value="BAST Aset">BAST (Serah Terima Fasilitas & Aset)</option>
-                        <option value="Offering Letter">Offering Letter Rekrutmen</option>
-                        <option value="Surat Tugas Dinas">Surat Perintah Perjalanan Dinas (SPPD)</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  {/* Formula Penomoran */}
-                  <div>
-                    <label className="font-semibold text-slate-700 block mb-1">
-                      Formula Pola Penomoran Dokumen Otomatis *
-                    </label>
-                    <input
-                      type="text"
-                      value={uploadNumberingPattern}
-                      onChange={(e) => setUploadNumberingPattern(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-300 rounded font-mono font-bold text-indigo-700"
-                    />
-                    {/* Live Simulation Result */}
-                    <div className="mt-2 p-2.5 bg-indigo-50/70 border border-indigo-200/80 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
-                      <div>
-                        <span className="text-[11px] text-indigo-700 font-semibold block">
-                          Simulasi Nomor Surat Riil Berikutnya:
-                        </span>
-                        <span className="font-mono font-bold text-sm text-indigo-950 tracking-tight">
-                          {evaluateNumberingFormula(uploadNumberingPattern, documents.length + 1, currentTenant.code, new Date(), {
-                            deptCode: 'HRD',
-                            docType: uploadDocType,
-                            companyName: currentTenant.name,
-                          })}
-                        </span>
-                      </div>
+                    {/* Tombol Tambah Kolom Penandatangan */}
+                    <div className="pt-1">
                       <button
                         type="button"
-                        onClick={() => setIsTokenGlossaryModalOpen(true)}
-                        className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-700 hover:text-indigo-900 bg-white hover:bg-indigo-100/70 px-2.5 py-1.5 rounded border border-indigo-300 transition-colors shrink-0 shadow-2xs"
+                        onClick={handleAddStudioSignatory}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-100 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-semibold shadow-2xs transition-all hover:border-indigo-400 cursor-pointer"
                       >
-                        <HelpCircle className="w-3.5 h-3.5" />
-                        <span>Kamus Lengkap Tag ({NUMBERING_TOKEN_REGISTRY.length})</span>
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Tambah Kolom Penandatangan</span>
                       </button>
                     </div>
+                  </div>
 
-                    {/* Prominent Token Quick-Picker Grid */}
-                    <div className="mt-2.5 p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1">
-                          <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-                          <span>Daftar Tag / Token Tersedia (Klik untuk Menambahkan ke Pola):</span>
-                        </span>
-                        <span className="text-[10px] text-slate-400">Otomatis berformat hukum RI</span>
+                  {/* Box 3: Editor Teks Klausul Naskah */}
+                  <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs space-y-3">
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                      <h4 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                        <Edit3 className="w-3.5 h-3.5 text-indigo-600" />
+                        <span>Naskah & Klausul Baku</span>
+                      </h4>
+                      <div className="flex items-center gap-2">
+                        <label className="text-[10px] text-slate-500 flex items-center gap-1 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={studioHighlightTags}
+                            onChange={(e) => setStudioHighlightTags(e.target.checked)}
+                            className="w-3 h-3 text-indigo-600 rounded"
+                          />
+                          <span>Sorot Tag</span>
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* Quick Insert Variable Tag Bar */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between text-[10px] text-slate-500 font-semibold">
+                        <span>Klik Tag untuk Menyisipkan di Kursor:</span>
+                        <span>{studioPlaceholders.length} Variabel Aktif</span>
+                      </div>
+                      <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto p-1.5 bg-slate-50 rounded-lg border border-slate-200">
+                        {studioPlaceholders.map(tag => (
+                          <button
+                            key={tag}
+                            type="button"
+                            onClick={() => handleStudioInsertTag(tag)}
+                            className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-white hover:bg-indigo-100 text-indigo-700 border border-slate-200 transition-colors shadow-2xs"
+                            title={`Sisipkan {{${tag}}}`}
+                          >
+                            {`{{${tag}}}`}
+                          </button>
+                        ))}
                       </div>
 
-                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1.5 max-h-48 overflow-y-auto p-1">
-                        {NUMBERING_TOKEN_REGISTRY.map((t) => {
-                          const isCopied = copiedVariable === t.token;
-                          return (
-                            <div
-                              key={t.token}
-                              className="group flex items-center justify-between p-1.5 bg-white hover:bg-indigo-50/70 border border-slate-200 hover:border-indigo-300 rounded text-left transition-all"
+                      {/* Add Custom Tag Inline */}
+                      <div className="flex items-center gap-1.5 pt-1">
+                        <input
+                          type="text"
+                          placeholder="Tambah tag baru (contoh: lokasi_kerja)..."
+                          value={studioNewTagInput}
+                          onChange={(e) => setStudioNewTagInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleStudioAddNewTag();
+                            }
+                          }}
+                          className="flex-1 px-2.5 py-1 border border-slate-300 rounded text-[11px] bg-white"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleStudioAddNewTag}
+                          className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-[11px] font-semibold border border-slate-300"
+                        >
+                          + Tag
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Textarea Naskah & Toolbar Basic Editing Dokumen */}
+                    <div className="space-y-0">
+                      {/* TOOLBAR BASIC EDITING DOKUMEN RESMI (BOLD, ITALIC, UNDERLINES, ALIGNMENT, DLL) */}
+                      <div className="bg-slate-100 border border-slate-300 rounded-t-lg p-2 flex flex-wrap items-center gap-1.5 text-slate-700 shadow-2xs">
+                        {/* Kelompok 1: Font Styling (Bold, Italic, Strikethrough) */}
+                        <div className="flex items-center gap-0.5 bg-white p-0.5 rounded-md border border-slate-200 shadow-2xs">
+                          <button
+                            type="button"
+                            onClick={() => handleStudioApplyFormat('<b>', '</b>', 'teks tebal')}
+                            className="p-1.5 hover:bg-slate-100 hover:text-indigo-600 rounded transition-colors cursor-pointer"
+                            title="Tebal / Bold"
+                          >
+                            <Bold className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleStudioApplyFormat('<i>', '</i>', 'teks miring')}
+                            className="p-1.5 hover:bg-slate-100 hover:text-indigo-600 rounded transition-colors cursor-pointer"
+                            title="Miring / Italic"
+                          >
+                            <Italic className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleStudioApplyFormat('<s style="text-decoration: line-through;">', '</s>', 'teks coret')}
+                            className="p-1.5 hover:bg-slate-100 hover:text-indigo-600 rounded transition-colors cursor-pointer"
+                            title="Coret / Strikethrough"
+                          >
+                            <Strikethrough className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+
+                        {/* Kelompok 2: Underline & Jenis-jenis Garis Bawah (Solid, Double, Dashed, Dotted, Wavy) */}
+                        <div className="relative inline-block text-left" ref={underlineDropdownRef}>
+                          <div className="flex items-center bg-white rounded-md border border-slate-200 shadow-2xs overflow-hidden">
+                            <button
+                              type="button"
+                              onClick={() => handleStudioApplyFormat('<u>', '</u>', 'teks garis bawah')}
+                              className="p-1.5 hover:bg-slate-100 hover:text-indigo-600 transition-colors flex items-center gap-0.5 cursor-pointer"
+                              title="Garis Bawah Tunggal (Solid Baku)"
                             >
+                              <Underline className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setIsUnderlineMenuOpen(!isUnderlineMenuOpen)}
+                              className="px-1 py-1.5 hover:bg-slate-100 hover:text-indigo-600 border-l border-slate-200 transition-colors cursor-pointer"
+                              title="Pilih Ragam Jenis Garis Bawah (Ganda, Putus-putus, Titik, Bergelombang)"
+                            >
+                              <ChevronDown className="w-3 h-3" />
+                            </button>
+                          </div>
+
+                          {/* Dropdown Menu Ragam Jenis Garis Bawah */}
+                          {isUnderlineMenuOpen && (
+                            <div className="absolute left-0 mt-1 w-64 bg-white border border-slate-300 rounded-xl shadow-xl py-1.5 z-40 text-xs">
+                              <div className="px-3 py-1 font-bold text-[10px] text-slate-400 uppercase tracking-wider border-b border-slate-100">
+                                Pilih Ragam Garis Bawah:
+                              </div>
                               <button
                                 type="button"
-                                onClick={() => handleInsertToken(t.token, 'upload')}
-                                className="flex-1 min-w-0 pr-1 text-left"
-                                title={`Klik untuk sisipkan ${t.token} (${t.description})`}
+                                onClick={() => {
+                                  handleStudioApplyFormat('<u style="text-decoration: underline; text-underline-offset: 2.5px;">', '</u>', 'garis bawah tunggal');
+                                  setIsUnderlineMenuOpen(false);
+                                }}
+                                className="w-full text-left px-3 py-1.5 hover:bg-indigo-50 hover:text-indigo-700 flex items-center justify-between cursor-pointer transition-colors"
                               >
-                                <div className="font-mono font-bold text-[11px] text-indigo-700 truncate">
-                                  {t.token}
-                                </div>
-                                <div className="text-[10px] text-slate-500 truncate flex items-center justify-between">
-                                  <span>{t.label}</span>
-                                  <span className="font-mono font-semibold text-slate-700 bg-slate-100 px-1 py-0.2 rounded text-[9px]">
-                                    {t.example}
-                                  </span>
-                                </div>
+                                <span>1. Tunggal / Solid (Standar)</span>
+                                <span style={{ textDecoration: 'underline', textUnderlineOffset: '2.5px' }} className="font-serif text-[11px] font-bold">Contoh</span>
                               </button>
                               <button
                                 type="button"
-                                onClick={() => handleCopyAnyToken(t.token, t.label)}
-                                className="p-1 text-slate-400 hover:text-indigo-600 rounded shrink-0"
-                                title="Salin tag ini"
+                                onClick={() => {
+                                  handleStudioApplyFormat('<u style="text-decoration: underline double; text-underline-offset: 3px;">', '</u>', 'garis bawah ganda');
+                                  setIsUnderlineMenuOpen(false);
+                                }}
+                                className="w-full text-left px-3 py-1.5 hover:bg-indigo-50 hover:text-indigo-700 flex items-center justify-between cursor-pointer transition-colors"
                               >
-                                {isCopied ? (
-                                  <Check className="w-3 h-3 text-emerald-600" />
-                                ) : (
-                                  <Copy className="w-3 h-3" />
-                                )}
+                                <span>2. Ganda / Double</span>
+                                <span style={{ textDecoration: 'underline double', textUnderlineOffset: '3px' }} className="font-serif text-[11px] font-bold">Contoh</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  handleStudioApplyFormat('<u style="text-decoration: underline dashed; text-underline-offset: 3px;">', '</u>', 'garis bawah putus');
+                                  setIsUnderlineMenuOpen(false);
+                                }}
+                                className="w-full text-left px-3 py-1.5 hover:bg-indigo-50 hover:text-indigo-700 flex items-center justify-between cursor-pointer transition-colors"
+                              >
+                                <span>3. Putus-Putus / Dashed</span>
+                                <span style={{ textDecoration: 'underline dashed', textUnderlineOffset: '3px' }} className="font-serif text-[11px] font-bold">Contoh</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  handleStudioApplyFormat('<u style="text-decoration: underline dotted; text-underline-offset: 3px;">', '</u>', 'garis bawah titik');
+                                  setIsUnderlineMenuOpen(false);
+                                }}
+                                className="w-full text-left px-3 py-1.5 hover:bg-indigo-50 hover:text-indigo-700 flex items-center justify-between cursor-pointer transition-colors"
+                              >
+                                <span>4. Titik-Titik / Dotted</span>
+                                <span style={{ textDecoration: 'underline dotted', textUnderlineOffset: '3px' }} className="font-serif text-[11px] font-bold">Contoh</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  handleStudioApplyFormat('<u style="text-decoration: underline wavy; text-underline-offset: 3px;">', '</u>', 'garis bergelombang');
+                                  setIsUnderlineMenuOpen(false);
+                                }}
+                                className="w-full text-left px-3 py-1.5 hover:bg-indigo-50 hover:text-indigo-700 flex items-center justify-between cursor-pointer transition-colors"
+                              >
+                                <span>5. Bergelombang / Wavy</span>
+                                <span style={{ textDecoration: 'underline wavy', textUnderlineOffset: '3px' }} className="font-serif text-[11px] font-bold">Contoh</span>
                               </button>
                             </div>
-                          );
-                        })}
+                          )}
+                        </div>
+
+                        {/* Kelompok 3: Perataan Teks (Alignment: Kiri, Tengah, Kanan, Justify) */}
+                        <div className="flex items-center gap-0.5 bg-white p-0.5 rounded-md border border-slate-200 shadow-2xs">
+                          <button
+                            type="button"
+                            onClick={() => handleStudioApplyFormat('<div style="text-align: left;">', '</div>', 'Teks rata kiri')}
+                            className="p-1.5 hover:bg-slate-100 hover:text-indigo-600 rounded transition-colors cursor-pointer"
+                            title="Rata Kiri (Align Left)"
+                          >
+                            <AlignLeft className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleStudioApplyFormat('<div style="text-align: center;">', '</div>', 'Teks rata tengah')}
+                            className="p-1.5 hover:bg-slate-100 hover:text-indigo-600 rounded transition-colors cursor-pointer"
+                            title="Rata Tengah (Align Center)"
+                          >
+                            <AlignCenter className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleStudioApplyFormat('<div style="text-align: right;">', '</div>', 'Teks rata kanan')}
+                            className="p-1.5 hover:bg-slate-100 hover:text-indigo-600 rounded transition-colors cursor-pointer"
+                            title="Rata Kanan (Align Right)"
+                          >
+                            <AlignRight className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleStudioApplyFormat('<div style="text-align: justify;">', '</div>', 'Teks rata kiri-kanan')}
+                            className="p-1.5 hover:bg-slate-100 hover:text-indigo-600 rounded transition-colors cursor-pointer"
+                            title="Rata Kiri-Kanan (Align Justify)"
+                          >
+                            <AlignJustify className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+
+                        {/* Kelompok 4: Judul BAB & Pasal Perjanjian Resmi */}
+                        <div className="flex items-center gap-0.5 bg-white p-0.5 rounded-md border border-slate-200 shadow-2xs">
+                          <button
+                            type="button"
+                            onClick={() => handleStudioApplyFormat('\n<div style="text-align: center; font-weight: bold; margin-top: 14px; margin-bottom: 4px; text-transform: uppercase;">', '</div>\n', 'BAB I - KETENTUAN UMUM')}
+                            className="px-2 py-1 hover:bg-slate-100 hover:text-indigo-600 rounded transition-colors text-[10px] font-bold cursor-pointer"
+                            title="Format Judul BAB Resmi (Tengah & Tebal)"
+                          >
+                            BAB
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleStudioApplyFormat('\n<div style="text-align: center; font-weight: bold; margin-top: 10px; margin-bottom: 2px;">', '</div>\n', 'Pasal 1 - Ruang Lingkup')}
+                            className="px-2 py-1 hover:bg-slate-100 hover:text-indigo-600 rounded transition-colors text-[10px] font-bold cursor-pointer"
+                            title="Format Judul Pasal Resmi (Tengah & Tebal)"
+                          >
+                            Pasal
+                          </button>
+                        </div>
+
+                        {/* Kelompok 5: Poin Daftar, Pembatas Garis & Pemisah Halaman Fisik */}
+                        <div className="flex items-center gap-0.5 bg-white p-0.5 rounded-md border border-slate-200 shadow-2xs">
+                          <button
+                            type="button"
+                            onClick={() => handleStudioApplyFormat('\n• ', '', 'Poin butir klausul')}
+                            className="p-1.5 hover:bg-slate-100 hover:text-indigo-600 rounded transition-colors cursor-pointer"
+                            title="Daftar Butir (Bullet List)"
+                          >
+                            <List className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleStudioApplyFormat('\n1. ', '', 'Poin bernomor')}
+                            className="p-1.5 hover:bg-slate-100 hover:text-indigo-600 rounded transition-colors cursor-pointer"
+                            title="Daftar Angka (Numbered List)"
+                          >
+                            <ListOrdered className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleStudioApplyFormat('\n<hr style="border: 0; border-top: 1.5px solid #0f172a; margin: 14px 0;" />\n', '', '')}
+                            className="p-1.5 hover:bg-slate-100 hover:text-indigo-600 rounded transition-colors cursor-pointer"
+                            title="Garis Horisontal Pemisah"
+                          >
+                            <Minus className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleStudioApplyFormat('\n[PAGE_BREAK]\n', '', '')}
+                            className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded transition-colors flex items-center gap-1 font-bold text-[10px] border border-indigo-200 cursor-pointer"
+                            title="Sisipkan Batas Halaman Fisik A4 Baru ([PAGE_BREAK])"
+                          >
+                            <Scissors className="w-3 h-3 text-indigo-600" />
+                            <span>Halaman Baru</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      <textarea
+                        ref={studioTextareaRef}
+                        rows={12}
+                        value={studioBodyText}
+                        onChange={(e) => setStudioBodyText(e.target.value)}
+                        className="w-full p-3 border border-slate-300 border-t-0 rounded-b-lg font-mono text-xs text-slate-800 leading-relaxed focus:ring-2 focus:ring-indigo-500 focus:outline-hidden bg-white"
+                        placeholder="Ketik isi naskah dokumen dengan {{variabel_dinamis}} atau gunakan tombol format di atas..."
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* SECTION 2: PENGATURAN KOP SURAT RESMI (HEADER) */}
+              {studioConfigSection === 'kop' && (
+                <div className="space-y-4">
+                  {/* Card 1: Toggle & Gaya Garis Pembatas Kop */}
+                  <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs space-y-3.5">
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                      <div className="flex items-center gap-2">
+                        <Building2 className="w-4 h-4 text-indigo-600" />
+                        <h4 className="text-xs font-bold text-slate-900">Kop Surat Resmi (Halaman 1)</h4>
+                      </div>
+                      <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-800">
+                        <input
+                          type="checkbox"
+                          checked={studioShowLetterhead}
+                          onChange={(e) => setStudioShowLetterhead(e.target.checked)}
+                          className="w-4 h-4 text-indigo-600 rounded"
+                        />
+                        <span>Tampilkan Kop</span>
+                      </label>
+                    </div>
+
+                    {/* Pilihan Gaya Garis Pembatas */}
+                    <div>
+                      <label className="text-[11px] font-semibold text-slate-700 block mb-1.5">
+                        Gaya Garis Pembatas Kop (Border Line):
+                      </label>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        {[
+                          { id: 'double', label: 'Garis Ganda (Resmi)', preview: 'border-b-4 border-double border-slate-900' },
+                          { id: 'bold', label: 'Garis Tebal', preview: 'border-b-2 border-slate-900' },
+                          { id: 'single', label: 'Garis Tipis', preview: 'border-b border-slate-400' },
+                          { id: 'none', label: 'Tanpa Garis', preview: 'border-b border-dashed border-slate-200' },
+                        ].map((styleOpt) => (
+                          <button
+                            key={styleOpt.id}
+                            type="button"
+                            onClick={() => setStudioLetterheadStyle(styleOpt.id as any)}
+                            className={`p-2 rounded-lg border text-left transition-all cursor-pointer ${
+                              studioLetterheadStyle === styleOpt.id
+                                ? 'bg-indigo-50/50 border-indigo-600 text-indigo-900 shadow-2xs ring-1 ring-indigo-600'
+                                : 'bg-white border-slate-200 hover:border-slate-300 text-slate-700'
+                            }`}
+                          >
+                            <span className="text-[10px] font-bold block mb-1">{styleOpt.label}</span>
+                            <div className={`w-full h-1 ${styleOpt.preview}`} />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Pilihan Perataan Kop (Alignment) */}
+                    <div>
+                      <label className="text-[11px] font-semibold text-slate-700 block mb-1.5">
+                        Tata Letak & Perataan Kop Surat:
+                      </label>
+                      <div className="grid grid-cols-3 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setStudioLetterheadAlign('left')}
+                          className={`p-2 rounded-lg border text-left transition-all cursor-pointer flex flex-col gap-1 ${
+                            studioLetterheadAlign === 'left'
+                              ? 'bg-indigo-50/50 border-indigo-600 text-indigo-900 shadow-2xs ring-1 ring-indigo-600 font-bold'
+                              : 'bg-white border-slate-200 hover:border-slate-300 text-slate-700'
+                          }`}
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <AlignLeft className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                            <span className="text-[10px] font-bold">Rata Kiri</span>
+                          </div>
+                          <span className="text-slate-500 text-[9px] line-clamp-1">Logo di kiri, teks di samping</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setStudioLetterheadAlign('center')}
+                          className={`p-2 rounded-lg border text-left transition-all cursor-pointer flex flex-col gap-1 ${
+                            studioLetterheadAlign === 'center'
+                              ? 'bg-indigo-50/50 border-indigo-600 text-indigo-900 shadow-2xs ring-1 ring-indigo-600 font-bold'
+                              : 'bg-white border-slate-200 hover:border-slate-300 text-slate-700'
+                          }`}
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <AlignCenter className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                            <span className="text-[10px] font-bold">Rata Tengah</span>
+                          </div>
+                          <span className="text-slate-500 text-[9px] line-clamp-1">Logo di atas, teks di tengah</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setStudioLetterheadAlign('right')}
+                          className={`p-2 rounded-lg border text-left transition-all cursor-pointer flex flex-col gap-1 ${
+                            studioLetterheadAlign === 'right'
+                              ? 'bg-indigo-50/50 border-indigo-600 text-indigo-900 shadow-2xs ring-1 ring-indigo-600 font-bold'
+                              : 'bg-white border-slate-200 hover:border-slate-300 text-slate-700'
+                          }`}
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <AlignRight className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                            <span className="text-[10px] font-bold">Rata Kanan</span>
+                          </div>
+                          <span className="text-slate-500 text-[9px] line-clamp-1">Logo di kanan, teks ke kanan</span>
+                        </button>
                       </div>
                     </div>
                   </div>
 
-                  {/* Kop Surat & QR Layout */}
-                  <div className="grid grid-cols-2 gap-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
+                  {/* Card 2: Mode Format Kop Surat (Terstruktur vs Teks Bebas / Free Text) */}
+                  <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs space-y-3">
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                      <h4 className="text-xs font-bold text-slate-900">
+                        Format Teks Kop Surat
+                      </h4>
+                      {/* Mode Switcher */}
+                      <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg">
+                        <button
+                          type="button"
+                          onClick={() => setStudioLetterheadMode('structured')}
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer ${
+                            studioLetterheadMode === 'structured'
+                              ? 'bg-white text-indigo-700 shadow-2xs'
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          Form Terstruktur
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setStudioLetterheadMode('freetext')}
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer ${
+                            studioLetterheadMode === 'freetext'
+                              ? 'bg-white text-indigo-700 shadow-2xs'
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          Teks Bebas (Free Text)
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* JIKA MODE FREE TEXT (Teks Bebas Tanpa Title Bawaan) */}
+                    {studioLetterheadMode === 'freetext' ? (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <label className="text-[11px] font-semibold text-slate-700 block">
+                            Naskah Kop Surat Bebas (Tanpa Title / Label Bawaan)
+                          </label>
+                          <span className="text-[10px] text-slate-400">Mendukung multi-baris</span>
+                        </div>
+                        <textarea
+                          rows={5}
+                          value={studioLetterheadFreeText}
+                          onChange={(e) => setStudioLetterheadFreeText(e.target.value)}
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs text-slate-800 bg-white font-serif leading-relaxed"
+                          placeholder={`PT NUSANTARA TEKNOLOGI MANDIRI\nMenara Palma Lt. 18, Jl. HR Rasuna Said, Jakarta Selatan\nHotline: 021-55667788 · info@nusantara.id\nIzin Operasional No: AHU-001234.AH.01.01.TAHUN 2024`}
+                        />
+                        <p className="text-[10px] text-slate-500 leading-snug">
+                          Ketik teks kop surat apa adanya tanpa title bawaan seperti "Telp:" atau "Email:". Teks akan tercetak sesuai perataan (kiri, tengah, kanan).
+                        </p>
+                      </div>
+                    ) : (
+                      /* JIKA MODE FORM TERSTRUKTUR (Hanya menampilkan field yang diisi) */
+                      <div className="space-y-3">
+                        <p className="text-[10px] text-slate-500 italic bg-slate-50 p-2 rounded border border-slate-100">
+                          Catatan: Field yang dikosongkan (seperti Nomor Telepon, Email, Alamat, atau NPWP) tidak akan memunculkan judul label maupun nilainya di lembar dokumen.
+                        </p>
+
+                        <div>
+                          <label className="text-[11px] font-semibold text-slate-700 block mb-1">
+                            Nama Perusahaan / Instansi
+                          </label>
+                          <input
+                            type="text"
+                            value={studioCompanyName}
+                            onChange={(e) => setStudioCompanyName(e.target.value)}
+                            className="w-full px-3 py-1.5 border border-slate-300 rounded text-xs font-semibold text-slate-900 bg-white"
+                            placeholder="Contoh: PT Nusantara Teknologi Mandiri"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-[11px] font-semibold text-slate-700 block mb-1">
+                            Alamat Lengkap Perusahaan
+                          </label>
+                          <textarea
+                            rows={2}
+                            value={studioCompanyAddress}
+                            onChange={(e) => setStudioCompanyAddress(e.target.value)}
+                            className="w-full px-3 py-1.5 border border-slate-300 rounded text-xs text-slate-800 bg-white leading-relaxed"
+                            placeholder="Kosongkan jika tidak ingin mencetak alamat..."
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                          <div>
+                            <label className="text-[10px] font-semibold text-slate-600 block mb-0.5">
+                              Nomor Telepon
+                            </label>
+                            <input
+                              type="text"
+                              value={studioCompanyPhone}
+                              onChange={(e) => setStudioCompanyPhone(e.target.value)}
+                              className="w-full px-2.5 py-1.5 border border-slate-300 rounded text-xs text-slate-800 bg-white"
+                              placeholder="Kosongkan jika tidak ada..."
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-semibold text-slate-600 block mb-0.5">
+                              Alamat Email Resmi
+                            </label>
+                            <input
+                              type="text"
+                              value={studioCompanyEmail}
+                              onChange={(e) => setStudioCompanyEmail(e.target.value)}
+                              className="w-full px-2.5 py-1.5 border border-slate-300 rounded text-xs text-slate-800 bg-white"
+                              placeholder="Kosongkan jika tidak ada..."
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="text-[10px] font-semibold text-slate-600 block mb-0.5">
+                            NPWP Perusahaan
+                          </label>
+                          <input
+                            type="text"
+                            value={studioCompanyNpwp}
+                            onChange={(e) => setStudioCompanyNpwp(e.target.value)}
+                            className="w-full px-2.5 py-1.5 border border-slate-300 rounded text-xs font-mono text-slate-800 bg-white"
+                            placeholder="Kosongkan jika tidak ada..."
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Logo Kop Kustom */}
+                    <div className="pt-2 border-t border-slate-100">
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-[10px] font-semibold text-slate-600">
+                          URL Logo Kop Kustom (Opsional)
+                        </label>
+                        {studioCustomLogoUrl && (
+                          <button
+                            type="button"
+                            onClick={() => setStudioCustomLogoUrl('')}
+                            className="text-[10px] text-rose-600 hover:underline cursor-pointer"
+                          >
+                            Reset ke Logo Perusahaan
+                          </button>
+                        )}
+                      </div>
+                      <input
+                        type="text"
+                        value={studioCustomLogoUrl}
+                        onChange={(e) => setStudioCustomLogoUrl(e.target.value)}
+                        className="w-full px-2.5 py-1.5 border border-slate-300 rounded text-xs text-slate-800 bg-white"
+                        placeholder="https://... (kosongkan untuk menggunakan logo tenant default)"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Card 3: Running Header Halaman Lanjutan */}
+                  <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs space-y-3">
+                    <h4 className="text-xs font-bold text-slate-900 border-b border-slate-100 pb-2 flex items-center justify-between">
+                      <span>Running Header (Halaman 2 ke Atas)</span>
+                      <span className="text-[10px] px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-mono">
+                        Multi-Page
+                      </span>
+                    </h4>
+
                     <div>
-                      <label className="font-semibold text-slate-800 block mb-1">Format Kop Surat (Header)</label>
-                      <select
-                        value={uploadKopPosition}
-                        onChange={(e) => setUploadKopPosition(e.target.value as any)}
-                        className="w-full px-3 py-2 border border-slate-300 rounded bg-white text-xs font-medium"
-                      >
-                        <option value="top">Kop Resmi Sistem (Rekomendasi - Nama, Logo & Garis Ganda)</option>
-                        <option value="embedded">Kop Sudah Ada di Dalam File DOCX</option>
-                        <option value="none">Tanpa Kop (Dokumen Internal)</option>
-                      </select>
+                      <label className="text-[11px] font-semibold text-slate-700 block mb-1">
+                        Teks Judul di Header Halaman Lanjutan
+                      </label>
+                      <input
+                        type="text"
+                        value={studioRunningHeaderText}
+                        onChange={(e) => setStudioRunningHeaderText(e.target.value)}
+                        className="w-full px-3 py-1.5 border border-slate-300 rounded text-xs text-slate-800 bg-white"
+                        placeholder="Kosongkan untuk otomatis menggunakan Judul Dokumen"
+                      />
+                      <p className="text-[10px] text-slate-400 mt-1">
+                        Secara otomatis disandingkan dengan Nomor Dokumen di sisi kanan atas lembar.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* SECTION 3: PENGATURAN FOOTER & LEMBAR RESMI */}
+              {studioConfigSection === 'footer' && (
+                <div className="space-y-4">
+                  {/* Card 1: Catatan Kaki Legal */}
+                  <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs space-y-3">
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                      <h4 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                        <FileText className="w-3.5 h-3.5 text-indigo-600" />
+                        <span>Catatan Kaki Resmi (Footer Legal Notice)</span>
+                      </h4>
                     </div>
 
                     <div>
-                      <label className="font-semibold text-slate-800 block mb-1">Posisi Stempel Tanda Tangan QR</label>
-                      <select
-                        value={uploadQrPosition}
-                        onChange={(e) => setUploadQrPosition(e.target.value as any)}
-                        className="w-full px-3 py-2 border border-slate-300 rounded bg-white text-xs font-medium"
+                      <label className="text-[11px] font-semibold text-slate-700 block mb-1">
+                        Teks Catatan Kaki / Legal Statement
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={studioFooterText}
+                        onChange={(e) => setStudioFooterText(e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs text-slate-800 bg-white leading-relaxed"
+                        placeholder="Teks keterangan legal di bagian paling bawah lembar..."
+                      />
+                      <div className="flex flex-wrap gap-1.5 mt-2">
+                        <span className="text-[10px] text-slate-400 font-medium self-center mr-1">Preset:</span>
+                        <button
+                          type="button"
+                          onClick={() => setStudioFooterText('Dokumen ini sah dan berkekuatan hukum tetap menurut UU ITE No. 11/2008.')}
+                          className="px-2 py-0.5 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-slate-600 rounded text-[10px] border border-slate-200 cursor-pointer"
+                        >
+                          UU ITE Resmi
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setStudioFooterText('STRICTLY CONFIDENTIAL - Dokumen internal rahasia PT Nusantara Teknologi Mandiri.')}
+                          className="px-2 py-0.5 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-slate-600 rounded text-[10px] border border-slate-200 cursor-pointer"
+                        >
+                          Confidential
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setStudioFooterText(`${studioCompanyName} · Dokumen Resmi Terotentikasi HR & Legal Division`)}
+                          className="px-2 py-0.5 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-slate-600 rounded text-[10px] border border-slate-200 cursor-pointer"
+                        >
+                          Divisi HR
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Card 2: Format Nomor Halaman & Tata Letak Footer */}
+                  <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs space-y-3.5">
+                    <h4 className="text-xs font-bold text-slate-900 border-b border-slate-100 pb-2">
+                      Format Nomor Halaman & Tata Letak
+                    </h4>
+
+                    {/* Format Nomor Halaman */}
+                    <div>
+                      <label className="text-[11px] font-semibold text-slate-700 block mb-1.5">
+                        Format Penomoran Halaman:
+                      </label>
+                      <div className="grid grid-cols-2 gap-2">
+                        {[
+                          { id: 'standard', label: 'Halaman X dari Y', desc: 'Standar resmi surat keputusan dinas' },
+                          { id: 'slash', label: 'X / Y', desc: 'Contoh: 1 / 3 (Gaya korporat ringkas)' },
+                          { id: 'simple', label: 'Hal. X', desc: 'Hanya menampilkan nomor halaman aktif' },
+                          { id: 'none', label: 'Sembunyikan', desc: 'Tanpa nomor halaman pada dokumen' },
+                        ].map((opt) => (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            onClick={() => setStudioPageNumFormat(opt.id as any)}
+                            className={`p-2 rounded-lg border text-left transition-all cursor-pointer ${
+                              studioPageNumFormat === opt.id
+                                ? 'bg-indigo-50/50 border-indigo-600 text-indigo-900 shadow-2xs ring-1 ring-indigo-600'
+                                : 'bg-white border-slate-200 hover:border-slate-300 text-slate-700'
+                            }`}
+                          >
+                            <span className="text-[10px] font-bold block">{opt.label}</span>
+                            <span className="text-[9px] text-slate-500 block mt-0.5">{opt.desc}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Perataan Footer */}
+                    <div>
+                      <label className="text-[11px] font-semibold text-slate-700 block mb-1.5">
+                        Tata Letak Posisi Footer:
+                      </label>
+                      <div className="grid grid-cols-3 gap-2">
+                        {[
+                          { id: 'split', label: 'Kiri & Kanan', desc: 'Teks di kiri, nomor di kanan' },
+                          { id: 'center', label: 'Rata Tengah', desc: 'Semua elemen di tengah' },
+                          { id: 'right', label: 'Rata Kanan', desc: 'Nomor halaman di kanan' },
+                        ].map((opt) => (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            onClick={() => setStudioFooterAlign(opt.id as any)}
+                            className={`p-2 rounded-lg border text-left transition-all cursor-pointer ${
+                              studioFooterAlign === opt.id
+                                ? 'bg-indigo-50/50 border-indigo-600 text-indigo-900 shadow-2xs ring-1 ring-indigo-600'
+                                : 'bg-white border-slate-200 hover:border-slate-300 text-slate-700'
+                            }`}
+                          >
+                            <span className="text-[10px] font-bold block">{opt.label}</span>
+                            <span className="text-[9px] text-slate-500 block mt-0.5">{opt.desc}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Garis Batas Footer */}
+                    <div className="pt-2 border-t border-slate-100">
+                      <label className="text-[11px] text-slate-700 flex items-center gap-2 cursor-pointer font-semibold">
+                        <input
+                          type="checkbox"
+                          checked={studioShowFooterBorder}
+                          onChange={(e) => setStudioShowFooterBorder(e.target.checked)}
+                          className="w-3.5 h-3.5 text-indigo-600 rounded"
+                        />
+                        <span>Tampilkan Garis Batas Pemisah Footer (Border Top)</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Card 3: Pilihan Format Ukuran Kertas Fisik (A4 / F4) */}
+                  <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs space-y-3">
+                    <h4 className="text-xs font-bold text-slate-900 border-b border-slate-100 pb-2 flex items-center justify-between">
+                      <span>Ukuran Lembar Dokumen Fisik</span>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 font-bold">
+                        Standar Indonesia
+                      </span>
+                    </h4>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                      <button
+                        type="button"
+                        onClick={() => setStudioPaperSize('A4')}
+                        className={`p-3 rounded-lg border text-left transition-all cursor-pointer ${
+                          studioPaperSize === 'A4'
+                            ? 'bg-indigo-50/50 border-indigo-600 text-indigo-900 shadow-2xs ring-1 ring-indigo-600'
+                            : 'bg-white border-slate-200 hover:border-slate-300 text-slate-700'
+                        }`}
                       >
-                        <option value="bottom-right">Kanan Bawah (Standar Surat Resmi Indonesia)</option>
-                        <option value="bottom-left">Kiri Bawah (Multi-pihak)</option>
-                        <option value="inline">Inline (Pada tag {'{{qr_code}}'})</option>
-                        <option value="none">Tanpa Tanda Tangan QR</option>
-                      </select>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs font-bold">Kertas A4</span>
+                          <span className="text-[10px] font-mono font-bold text-indigo-700 bg-white px-1.5 py-0.2 rounded border border-slate-200">
+                            210 × 297 mm
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-slate-500 leading-snug">
+                          Standar ISO korporat, perjanjian kerja (PKWT/PKWTT), dan laporan umum.
+                        </p>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setStudioPaperSize('F4')}
+                        className={`p-3 rounded-lg border text-left transition-all cursor-pointer ${
+                          studioPaperSize === 'F4'
+                            ? 'bg-indigo-50/50 border-indigo-600 text-indigo-900 shadow-2xs ring-1 ring-indigo-600'
+                            : 'bg-white border-slate-200 hover:border-slate-300 text-slate-700'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs font-bold">Kertas F4 / Folio</span>
+                          <span className="text-[10px] font-mono font-bold text-indigo-700 bg-white px-1.5 py-0.2 rounded border border-slate-200">
+                            215 × 330 mm
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-slate-500 leading-snug">
+                          Standar naskah dinas ketenagakerjaan, kontrak pengadaan, dan dokumen legal RI.
+                        </p>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setStudioPaperSize('A5')}
+                        className={`p-3 rounded-lg border text-left transition-all cursor-pointer ${
+                          studioPaperSize === 'A5'
+                            ? 'bg-indigo-50/50 border-indigo-600 text-indigo-900 shadow-2xs ring-1 ring-indigo-600'
+                            : 'bg-white border-slate-200 hover:border-slate-300 text-slate-700'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs font-bold">Kertas A5</span>
+                          <span className="text-[10px] font-mono font-bold text-indigo-700 bg-white px-1.5 py-0.2 rounded border border-slate-200">
+                            148 × 210 mm
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-slate-500 leading-snug">
+                          Format ringkas voucher slip gaji, pengajuan cuti/izin, tiket IT & ATK.
+                        </p>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Card 4: Keabsahan Hukum & Tanda Tangan Elektronik */}
+                  <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs space-y-3">
+                    <h4 className="text-xs font-bold text-slate-900 border-b border-slate-100 pb-2 flex items-center gap-1.5">
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>Keabsahan & Tanda Tangan Digital</span>
+                    </h4>
+
+                    <div className="space-y-3">
+                      <label className="text-[11px] text-slate-700 flex items-center gap-2 cursor-pointer p-2 rounded-lg border border-slate-200 bg-slate-50/50 hover:bg-slate-50">
+                        <input
+                          type="checkbox"
+                          checked={studioShowQrSignature}
+                          onChange={(e) => setStudioShowQrSignature(e.target.checked)}
+                          className="w-4 h-4 text-indigo-600 rounded"
+                        />
+                        <div>
+                          <span className="font-bold block text-slate-800">QR Digital Signature Para Pihak</span>
+                          <span className="text-[10px] text-slate-500 block">Menampilkan QR Code otentikasi pejabat & para pihak pada kolom tanda tangan</span>
+                        </div>
+                      </label>
+
+                      <div className="p-2.5 rounded-lg border border-slate-200 bg-slate-50/50 space-y-2">
+                        <label className="text-[11px] text-slate-700 flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={studioShowQrValidation}
+                            onChange={(e) => setStudioShowQrValidation(e.target.checked)}
+                            className="w-4 h-4 text-indigo-600 rounded"
+                          />
+                          <div>
+                            <span className="font-bold block text-slate-800">Stempel Sertifikasi Keabsahan UU ITE di Footer</span>
+                            <span className="text-[10px] text-slate-500 block">Menampilkan stempel resmi & QR verifikasi pembuktian hukum UU ITE No. 11/2008 pada area footer</span>
+                          </div>
+                        </label>
+
+                        {/* Opsi Penempatan Stempel UU ITE: Semua Halaman vs Halaman Terakhir */}
+                        {studioShowQrValidation && (
+                          <div className="pt-2 border-t border-slate-200 pl-6 space-y-1.5">
+                            <label className="text-[10px] font-semibold text-slate-600 block">
+                              Posisi Tampil Stempel Sertifikasi UU ITE di Footer:
+                            </label>
+                            <div className="flex items-center gap-3">
+                              <label className="flex items-center gap-1.5 cursor-pointer text-xs text-slate-800">
+                                <input
+                                  type="radio"
+                                  name="qrValidationPlacement"
+                                  checked={studioQrValidationPlacement === 'all_pages'}
+                                  onChange={() => setStudioQrValidationPlacement('all_pages')}
+                                  className="w-3.5 h-3.5 text-indigo-600"
+                                />
+                                <span>Semua Halaman</span>
+                              </label>
+                              <label className="flex items-center gap-1.5 cursor-pointer text-xs text-slate-800">
+                                <input
+                                  type="radio"
+                                  name="qrValidationPlacement"
+                                  checked={studioQrValidationPlacement === 'last_page'}
+                                  onChange={() => setStudioQrValidationPlacement('last_page')}
+                                  className="w-3.5 h-3.5 text-indigo-600"
+                                />
+                                <span>Halaman Terakhir Saja</span>
+                              </label>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
               )}
             </div>
 
-            {/* Right Column: Placeholders Inspector & Live Document Preview */}
-            <div className="lg:col-span-5 space-y-5">
-              {/* Variable Inspector / Glossary */}
-              <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs space-y-3">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                  <div className="flex items-center gap-1.5">
-                    <Layers className="w-4 h-4 text-indigo-600" />
-                    <h4 className="font-bold text-slate-900 text-xs">Pendeteksi Variabel Dinamis</h4>
-                  </div>
-                  <span className="text-[10px] text-slate-400">Klik token untuk menyalin</span>
+            {/* KOLOM KANAN: LIVE PREVIEW DOKUMEN MULTI-HALAMAN REAL (7 dari 12 kolom) */}
+            <div className="lg:col-span-7 space-y-4">
+              {/* Live Preview Top Controls (Simulasikan Pegawai DIHILANGKAN, Ditambahkan Badge/Toggle Kertas) */}
+              <div className="bg-white border border-slate-200 rounded-xl p-3 shadow-xs flex items-center justify-between gap-2.5">
+                <div className="flex items-center gap-2">
+                  <Eye className="w-4 h-4 text-indigo-600" />
+                  <span className="text-xs font-bold text-slate-900">
+                    Live Preview Dokumen Fisik ({studioPaperSize}):
+                  </span>
                 </div>
-
-                {parsedDocx && parsedDocx.placeholders.length > 0 ? (
-                  <div className="space-y-2">
-                    <div className="text-[11px] text-slate-600">
-                      Variabel terdeteksi di dalam file DOCX Anda:
-                    </div>
-                    <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto p-1">
-                      {parsedDocx.placeholders.map((ph) => {
-                        const info = KNOWN_VARIABLE_DESCRIPTIONS[ph];
-                        const isCopied = copiedVariable === ph;
-                        return (
-                          <button
-                            key={ph}
-                            type="button"
-                            onClick={() => handleCopyVariable(ph)}
-                            className={`inline-flex items-center gap-1 text-[11px] font-mono px-2 py-1 rounded border transition-all ${
-                              isCopied
-                                ? 'bg-emerald-100 border-emerald-300 text-emerald-800 font-bold'
-                                : info
-                                ? 'bg-indigo-50 border-indigo-200 text-indigo-800 hover:bg-indigo-100'
-                                : 'bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200'
-                            }`}
-                            title={info ? `${info.label} (Contoh: ${info.example})` : 'Variabel Kustom'}
-                          >
-                            <span>{`{{${ph}}}`}</span>
-                            {isCopied ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-2.5 h-2.5 opacity-50" />}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="p-3 bg-slate-50 rounded text-center text-xs text-slate-500">
-                    Belum ada file DOCX yang diunggah. Silakan unggah file atau gunakan template contoh.
-                  </div>
-                )}
-
-                {/* Legend list of available tokens */}
-                <div className="pt-2 border-t border-slate-100 space-y-1 text-[11px]">
-                  <span className="font-semibold text-slate-700 block">Daftar Tag Standar Sistem:</span>
-                  <div className="grid grid-cols-2 gap-1 text-[10px] text-slate-600 font-mono">
-                    <div>{'{{nama}}'} : Nama Karyawan</div>
-                    <div>{'{{nik}}'} : NIK Internal</div>
-                    <div>{'{{nik_ktp}}'} : KTP 16 Digit</div>
-                    <div>{'{{jabatan}}'} : Posisi Kerja</div>
-                    <div>{'{{departemen}}'} : Divisi</div>
-                    <div>{'{{gaji_pokok}}'} : Gaji Bulanan</div>
-                    <div>{'{{tanggal_mulai}}'} : Tgl Mulai</div>
-                    <div>{'{{nomor_surat}}'} : No. SK Resmi</div>
-                  </div>
+                {/* Opsi Pilih Kertas Cepat A4 / F4 / A5 */}
+                <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+                  <button
+                    type="button"
+                    onClick={() => setStudioPaperSize('A4')}
+                    className={`px-2.5 py-1 rounded text-[11px] font-bold transition-all cursor-pointer ${
+                      studioPaperSize === 'A4'
+                        ? 'bg-white text-indigo-700 shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    A4 (210 × 297 mm)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setStudioPaperSize('F4')}
+                    className={`px-2.5 py-1 rounded text-[11px] font-bold transition-all cursor-pointer ${
+                      studioPaperSize === 'F4'
+                        ? 'bg-white text-indigo-700 shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    F4 / Folio (215 × 330 mm)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setStudioPaperSize('A5')}
+                    className={`px-2.5 py-1 rounded text-[11px] font-bold transition-all cursor-pointer ${
+                      studioPaperSize === 'A5'
+                        ? 'bg-white text-indigo-700 shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    A5 (148 × 210 mm)
+                  </button>
                 </div>
               </div>
 
-              {/* Text Preview extracted from DOCX */}
-              {parsedDocx && (
-                <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs space-y-2">
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                    <span className="font-bold text-xs text-slate-900 flex items-center gap-1.5">
-                      <Eye className="w-3.5 h-3.5 text-indigo-600" />
-                      <span>Cuplikan Isi Teks Ekstraksi DOCX:</span>
-                    </span>
-                    <span className="text-[10px] text-slate-400 font-mono">
-                      {parsedDocx.rawText.length} karakter
-                    </span>
-                  </div>
+              {/* Naskah Dinas Live Preview Render dengan Batasan Panjang (max-h) & Scroll */}
+              {(() => {
+                const fallbackSimulatedEmployee: Employee = (employees && employees[0]) ? employees[0] : ({
+                  id: 'simulated-emp',
+                  tenantId: currentTenant?.id || 'tenant-001',
+                  nik: 'NTM-2024-001',
+                  fullName: 'Ahmad Fauzi, S.Kom.',
+                  email: 'ahmad.fauzi@nusantara.id',
+                  phone: '081298765432',
+                  employmentType: 'Kontrak',
+                  contractDocNumber: '001/PKWT/2024',
+                  contractStartDate: '2023-01-10',
+                  probationStatus: 'Lolos',
+                  department: 'Teknologi & Informasi',
+                  position: 'Senior Software Engineer',
+                  grade: 'L4',
+                  joinDate: '2023-01-10',
+                  status: 'Aktif',
+                  remainingLeaveDays: 12,
+                  basicSalary: 12500000,
+                } as Employee);
+                const simulatedEmployee = (employees && employees.length > 0)
+                  ? (employees.find(e => e.id === studioSimulatedEmpId) || employees[0])
+                  : fallbackSimulatedEmployee;
+                const simulatedDocNumber = evaluateNumberingFormula(
+                  studioNumberingPattern,
+                  documents.length + 1,
+                  currentTenant.code,
+                  new Date()
+                );
+                const resolvedContent = interpolateDocxTemplate(studioBodyText, {
+                  employee: simulatedEmployee,
+                  tenant: currentTenant,
+                  documentNumber: simulatedDocNumber,
+                  signeeName: studioSigneeName,
+                  signeeRole: studioSigneeRole,
+                });
 
-                  <div className="max-h-64 overflow-y-auto p-3 bg-slate-50 rounded border border-slate-100 text-[11px] font-mono text-slate-700 whitespace-pre-line leading-relaxed">
-                    {parsedDocx.rawText.slice(0, 1200)}
-                    {parsedDocx.rawText.length > 1200 && '... [teks dipotong untuk preview]'}
+                const previewDocObj: OfficialDocument = {
+                  id: `studio-live-preview`,
+                  tenantId: currentTenant?.id || 'tenant-001',
+                  type: studioTemplateType,
+                  title: studioTemplateName,
+                  documentNumber: simulatedDocNumber,
+                  issueDate: new Date().toISOString().split('T')[0],
+                  targetEmployeeId: simulatedEmployee.id,
+                  signeeName: studioSigneeName,
+                  signeeRole: studioSigneeRole,
+                  status: 'Resmi Diterbitkan',
+                  contentPreview: resolvedContent,
+                  qrVerificationUrl: `https://nusantara.id/verify/${simulatedDocNumber}?status=valid`,
+                  templateId: studioSelectedTemplateId,
+                };
+
+                return (
+                  <div className="border border-slate-300 rounded-xl overflow-hidden shadow-md bg-slate-200 p-2 sm:p-4 max-h-[82vh] overflow-y-auto">
+                    <OfficialMultiPageDocumentSheet
+                      title={previewDocObj.title}
+                      documentNumber={previewDocObj.documentNumber}
+                      content={previewDocObj.contentPreview}
+                      employee={simulatedEmployee}
+                      tenant={currentTenant}
+                      signeeName={studioSigneeName}
+                      signeeRole={studioSigneeRole}
+                      issueDate={previewDocObj.issueDate}
+                      footerText={studioFooterText}
+                      showLetterhead={studioShowLetterhead}
+                      showQrSignature={studioShowQrSignature}
+                      showQrValidation={studioShowQrValidation}
+                      highlightTags={studioHighlightTags}
+                      paperSize={studioPaperSize}
+                      letterheadCompanyName={studioCompanyName}
+                      letterheadAddress={studioCompanyAddress}
+                      letterheadPhone={studioCompanyPhone}
+                      letterheadEmail={studioCompanyEmail}
+                      letterheadNpwp={studioCompanyNpwp}
+                      letterheadStyle={studioLetterheadStyle}
+                      letterheadAlign={studioLetterheadAlign}
+                      letterheadMode={studioLetterheadMode}
+                      letterheadFreeText={studioLetterheadFreeText}
+                      letterheadCustomLogoUrl={studioCustomLogoUrl}
+                      runningHeaderText={studioRunningHeaderText}
+                      pageNumberFormat={studioPageNumFormat}
+                      footerAlign={studioFooterAlign}
+                      showFooterBorder={studioShowFooterBorder}
+                      qrValidationPlacement={studioQrValidationPlacement}
+                      signatories={studioSignatories}
+                      onSuccessNotice={(t, d) => {
+                        setFeedbackMessage({
+                          title: t,
+                          description: d,
+                          type: 'success',
+                        });
+                      }}
+                    />
                   </div>
-                </div>
-              )}
+                );
+              })()}
             </div>
           </div>
         </div>
       )}
 
-      {/* TAB 3: KOP & POLA PENOMORAN STANDARD */}
+      {/* TAB 3: TEMPLATE DOKUMEN SISTEM */}
       {activeTab === 'templates' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-          {/* List of Templates */}
-          <div className="bg-white p-4 border border-slate-200 rounded-lg space-y-2 shadow-xs">
-            <span className="text-xs font-bold text-slate-700 uppercase tracking-wider block mb-2">
-              Daftar Template Tersedia ({documentTemplates.length}):
-            </span>
-            {documentTemplates.map((tmpl) => (
-              <button
-                key={tmpl.id}
-                onClick={() => handleSelectTemplateForEdit(tmpl)}
-                className={`w-full text-left p-2.5 rounded-md text-xs font-medium border transition-colors ${
-                  editingTemplateId === tmpl.id
-                    ? 'bg-indigo-50 border-indigo-500 text-indigo-900 font-bold'
-                    : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="font-bold truncate">{tmpl.name}</div>
-                  {tmpl.sourceType === 'uploaded_docx' && (
-                    <span className="text-[9px] px-1 py-0.2 rounded bg-blue-100 text-blue-800 shrink-0 font-semibold">
-                      DOCX
-                    </span>
-                  )}
-                </div>
-                <div className="text-[10px] font-mono text-slate-500 mt-0.5 truncate">
-                  Pola: {tmpl.numberingPattern}
-                </div>
-              </button>
-            ))}
-
-            <button
-              type="button"
-              onClick={() => setActiveTab('upload_docx')}
-              className="w-full mt-3 py-2 px-3 border border-dashed border-indigo-300 hover:border-indigo-600 rounded text-xs font-semibold text-indigo-600 hover:bg-indigo-50/50 flex items-center justify-center gap-1.5 transition-colors"
-            >
-              <Upload className="w-3.5 h-3.5" />
-              <span>+ Upload Template DOCX Baru</span>
-            </button>
+        <div className="space-y-5">
+          {/* Top Banner Information */}
+          <div className="p-4 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+            <div>
+              <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
+                <FileCheck2 className="w-4 h-4 text-indigo-600" />
+                <span>Koleksi 20 Template Dokumen Resmi Sistem</span>
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Seluruh template dokumen dinas dan korporat resmi telah terdaftar dan terintegrasi sistem. Pengeditan naskah template, kop surat, formula penomoran, dan simulasi penandatangan dilakukan eksklusif melalui Studio Side-by-Side.
+              </p>
+            </div>
           </div>
 
-          {/* Form Editor */}
-          <div className="lg:col-span-2 bg-white p-5 border border-slate-200 rounded-lg space-y-4 text-xs shadow-xs">
-            <div className="flex justify-between items-center border-b border-slate-200 pb-3">
-              <div>
-                <h3 className="text-sm font-bold text-slate-900">
-                  Konfigurasi Kop Surat & Format: {activeTemplate?.name}
-                </h3>
-                <span className="text-[11px] text-slate-500">
-                  Atur format kop resmi perusahaan dan formula penomoran dokumen otomatis.
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                {activeTemplate?.sourceType === 'uploaded_docx' && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      deleteDocumentTemplate(activeTemplate.id);
-                      setFeedbackMessage({
-                        type: 'info',
-                        title: 'Template Dihapus',
-                        description: `Template "${activeTemplate.name}" telah dihapus.`,
-                      });
-                    }}
-                    className="p-1.5 text-rose-600 hover:bg-rose-50 rounded border border-rose-200 transition-colors"
-                    title="Hapus template ini"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                )}
-                <button
-                  onClick={handleSaveStandardTemplate}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-semibold shadow-xs"
+          {/* Grid 20 Template Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {documentTemplates.map((tmpl, idx) => {
+              const isDocx = tmpl.sourceType === 'uploaded_docx';
+              const placeholderCount = tmpl.extractedPlaceholders?.length || extractPlaceholdersFromText(tmpl.defaultBody || '').length;
+
+              return (
+                <div
+                  key={tmpl.id}
+                  className="bg-white border border-slate-200 hover:border-indigo-400 rounded-xl p-4 shadow-xs transition-all flex flex-col justify-between space-y-3 group"
                 >
-                  <Save className="w-3.5 h-3.5" />
-                  <span>Simpan Perubahan</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Kop Surat Fields */}
-            <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-3">
-              <span className="font-bold text-slate-800 flex items-center gap-1">
-                <Building className="w-3.5 h-3.5 text-indigo-600" />
-                <span>Kop Surat Resmi (Header Perusahaan)</span>
-              </span>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-slate-600 block mb-1">Nama Perusahaan / Organisasi</label>
-                  <input
-                    type="text"
-                    value={editCompanyName}
-                    onChange={(e) => setEditCompanyName(e.target.value)}
-                    className="w-full p-2 border border-slate-300 rounded font-semibold bg-white"
-                  />
-                </div>
-                <div>
-                  <label className="text-slate-600 block mb-1">NPWP Lembaga</label>
-                  <input
-                    type="text"
-                    value={editCompanyNpwp}
-                    onChange={(e) => setEditCompanyNpwp(e.target.value)}
-                    className="w-full p-2 border border-slate-300 rounded font-mono bg-white"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="text-slate-600 block mb-1">Alamat Gedung & Domisili</label>
-                <input
-                  type="text"
-                  value={editCompanyAddress}
-                  onChange={(e) => setEditCompanyAddress(e.target.value)}
-                  className="w-full p-2 border border-slate-300 rounded bg-white"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-slate-600 block mb-1">Telepon</label>
-                  <input
-                    type="text"
-                    value={editCompanyPhone}
-                    onChange={(e) => setEditCompanyPhone(e.target.value)}
-                    className="w-full p-2 border border-slate-300 rounded bg-white font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="text-slate-600 block mb-1">Email Resmi Legal</label>
-                  <input
-                    type="text"
-                    value={editCompanyEmail}
-                    onChange={(e) => setEditCompanyEmail(e.target.value)}
-                    className="w-full p-2 border border-slate-300 rounded bg-white font-mono"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Pola Penomoran */}
-            <div>
-              <label className="font-semibold text-slate-700 block mb-1">
-                Formula Pola Penomoran Otomatis
-              </label>
-              <input
-                type="text"
-                value={editNumberingFormat}
-                onChange={(e) => setEditNumberingFormat(e.target.value)}
-                className="w-full p-2 border border-slate-300 rounded font-mono font-bold text-indigo-700"
-              />
-              {/* Live Simulation Result */}
-              <div className="mt-2 p-2.5 bg-indigo-50/70 border border-indigo-200/80 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
-                <div>
-                  <span className="text-[11px] text-indigo-700 font-semibold block">
-                    Simulasi Format Nomor Template Ini:
-                  </span>
-                  <span className="font-mono font-bold text-sm text-indigo-950 tracking-tight">
-                    {evaluateNumberingFormula(editNumberingFormat, documents.length + 1, currentTenant.code, new Date(), {
-                      deptCode: 'HRD',
-                      docType: activeTemplate?.type || 'SK',
-                      companyName: editCompanyName || currentTenant.name,
-                    })}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setIsTokenGlossaryModalOpen(true)}
-                  className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-700 hover:text-indigo-900 bg-white hover:bg-indigo-100/70 px-2.5 py-1.5 rounded border border-indigo-300 transition-colors shrink-0 shadow-2xs"
-                >
-                  <HelpCircle className="w-3.5 h-3.5" />
-                  <span>Kamus Lengkap Tag ({NUMBERING_TOKEN_REGISTRY.length})</span>
-                </button>
-              </div>
-
-              {/* Prominent Token Quick-Picker Grid */}
-              <div className="mt-2.5 p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1">
-                    <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-                    <span>Daftar Tag / Token Tersedia (Klik untuk Menambahkan ke Pola):</span>
-                  </span>
-                  <span className="text-[10px] text-slate-400">Otomatis berformat hukum RI</span>
-                </div>
-
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1.5 max-h-48 overflow-y-auto p-1">
-                  {NUMBERING_TOKEN_REGISTRY.map((t) => {
-                    const isCopied = copiedVariable === t.token;
-                    return (
-                      <div
-                        key={t.token}
-                        className="group flex items-center justify-between p-1.5 bg-white hover:bg-indigo-50/70 border border-slate-200 hover:border-indigo-300 rounded text-left transition-all"
-                      >
-                        <button
-                          type="button"
-                          onClick={() => handleInsertToken(t.token, 'standard')}
-                          className="flex-1 min-w-0 pr-1 text-left"
-                          title={`Klik untuk sisipkan ${t.token} (${t.description})`}
-                        >
-                          <div className="font-mono font-bold text-[11px] text-indigo-700 truncate">
-                            {t.token}
-                          </div>
-                          <div className="text-[10px] text-slate-500 truncate flex items-center justify-between">
-                            <span>{t.label}</span>
-                            <span className="font-mono font-semibold text-slate-700 bg-slate-100 px-1 py-0.2 rounded text-[9px]">
-                              {t.example}
-                            </span>
-                          </div>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleCopyAnyToken(t.token, t.label)}
-                          className="p-1 text-slate-400 hover:text-indigo-600 rounded shrink-0"
-                          title="Salin tag ini"
-                        >
-                          {isCopied ? (
-                            <Check className="w-3 h-3 text-emerald-600" />
-                          ) : (
-                            <Copy className="w-3 h-3" />
-                          )}
-                        </button>
+                  <div className="space-y-2">
+                    {/* Header: Number & Badges */}
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="w-6 h-6 rounded-full bg-slate-100 group-hover:bg-indigo-100 text-slate-700 group-hover:text-indigo-800 text-[11px] font-bold flex items-center justify-center shrink-0">
+                        {idx + 1}
+                      </span>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                          {tmpl.type}
+                        </span>
+                        {isDocx ? (
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-100 text-blue-800">
+                            DOCX
+                          </span>
+                        ) : (
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-slate-100 text-slate-600">
+                            Sistem
+                          </span>
+                        )}
                       </div>
-                    );
-                  })}
+                    </div>
+
+                    {/* Title */}
+                    <h4 className="font-bold text-slate-900 text-xs leading-snug line-clamp-2">
+                      {tmpl.name}
+                    </h4>
+
+                    {/* Numbering Formula */}
+                    <div className="p-2 bg-slate-50 rounded-lg border border-slate-100 text-[10px] font-mono text-slate-600 truncate">
+                      <span className="text-slate-400 block text-[9px]">Pola Penomoran:</span>
+                      <span className="font-bold text-indigo-700">{tmpl.numberingPattern}</span>
+                    </div>
+
+                    <div className="text-[10px] text-slate-400 flex items-center justify-between">
+                      <span>{placeholderCount} Tag Variabel Dinamis</span>
+                      <span>Kop: {tmpl.kopPosition !== 'none' ? 'Aktif' : 'Nonaktif'}</span>
+                    </div>
+                  </div>
+
+                  {/* Card Action Buttons (Studio Side-by-Side Utama, Preview, Replace Docx) */}
+                  <div className="pt-2 border-t border-slate-100 flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => handleLoadTemplateIntoStudio(tmpl)}
+                      className="flex-1 py-1.5 px-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer"
+                      title="Buka dan edit template ini di Studio Side-by-Side (Editor Kiri & Live Preview Kanan)"
+                    >
+                      <Layout className="w-3.5 h-3.5" />
+                      <span>Buka di Studio</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const simulatedEmployee = employees[0];
+                        const simulatedDocNumber = evaluateNumberingFormula(
+                          tmpl.numberingPattern,
+                          documents.length + 1,
+                          currentTenant.code,
+                          new Date()
+                        );
+                        const resolvedContent = interpolateDocxTemplate(tmpl.defaultBody || '', {
+                          employee: simulatedEmployee,
+                          tenant: currentTenant,
+                          documentNumber: simulatedDocNumber,
+                          signeeName: currentUser.name,
+                          signeeRole: defaultSigneeRole,
+                        });
+
+                        setSelectedDoc({
+                          id: `preview-${tmpl.id}`,
+                          tenantId: currentTenant?.id || 'tenant-001',
+                          type: tmpl.type as DocumentType,
+                          title: tmpl.name,
+                          documentNumber: simulatedDocNumber,
+                          issueDate: new Date().toISOString().split('T')[0],
+                          targetEmployeeId: simulatedEmployee?.id || 'EMP-DEFAULT',
+                          signeeName: currentUser.name,
+                          signeeRole: defaultSigneeRole,
+                          status: 'Resmi Diterbitkan',
+                          contentPreview: resolvedContent,
+                          qrVerificationUrl: `https://nusantara.id/verify/${simulatedDocNumber}?status=valid`,
+                          templateId: tmpl.id,
+                        });
+                      }}
+                      className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[11px] font-semibold border border-slate-200 transition-colors"
+                      title="Pratinjau lembar surat"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleTriggerReplaceExistingTemplate(tmpl.id)}
+                      className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[11px] font-semibold border border-slate-200 transition-colors"
+                      title="Replace isi template dengan file Word (.docx) baru"
+                    >
+                      <Upload className="w-3.5 h-3.5 text-slate-600" />
+                    </button>
+
+                    {isDocx && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          deleteDocumentTemplate(tmpl.id);
+                          setFeedbackMessage({
+                            type: 'info',
+                            title: 'Template Dihapus',
+                            description: `Template "${tmpl.name}" telah dihapus.`,
+                          });
+                        }}
+                        className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg border border-rose-200 transition-colors"
+                        title="Hapus template kustom ini"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </div>
-              </div>
-            </div>
-
-            {/* Judul & Isi Format */}
-            <div>
-              <label className="font-semibold text-slate-700 block mb-1">Judul Dokumen Resmi</label>
-              <input
-                type="text"
-                value={editTitleFormat}
-                onChange={(e) => setEditTitleFormat(e.target.value)}
-                className="w-full p-2 border border-slate-300 rounded font-bold uppercase"
-              />
-            </div>
-
-            <div>
-              <label className="font-semibold text-slate-700 block mb-1">
-                Isi Template Klausul / Kontrak
-              </label>
-              <textarea
-                rows={5}
-                value={editBodyTemplate}
-                onChange={(e) => setEditBodyTemplate(e.target.value)}
-                className="w-full p-2.5 border border-slate-300 rounded font-mono text-[11px] leading-relaxed"
-              />
-              <div className="text-[10px] text-slate-500 mt-1">
-                Gunakan variabel dinamis seperti: {'{{nama}}'}, {'{{nik}}'}, {'{{jabatan}}'}, {'{{departemen}}'}, {'{{gaji_pokok}}'}, {'{{tanggal}}'}.
-              </div>
-            </div>
-
-            <div>
-              <label className="font-semibold text-slate-700 block mb-1">Catatan Kaki (Footer)</label>
-              <input
-                type="text"
-                value={editFooterText}
-                onChange={(e) => setEditFooterText(e.target.value)}
-                className="w-full p-2 border border-slate-300 rounded"
-              />
-            </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -2256,133 +3846,290 @@ PIHAK PERTAMA memberikan upah pokok sebesar {{gaji_pokok}} ({{gaji_terbilang}}) 
         </div>
       )}
 
-      {/* MODAL: TERBITKAN DOKUMEN BARU (DARI TEMPLATE / DOCX) */}
-      {isGenerateModalOpen && (
+      {/* MODAL: EDIT TEMPLATE DOKUMEN RESMI */}
+      {isEditTemplateModalOpen && (
         <div
-          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto"
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 overflow-y-auto"
           onClick={(e) => {
             if (e.target === e.currentTarget) {
-              setIsGenerateModalOpen(false);
+              setIsEditTemplateModalOpen(false);
             }
           }}
         >
           <div
-            className="bg-white rounded-xl shadow-2xl max-w-xl w-full border border-slate-200 overflow-hidden my-6"
+            className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full border border-slate-200 overflow-hidden my-6 flex flex-col max-h-[92vh]"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="px-5 py-3.5 bg-slate-900 text-white flex items-center justify-between">
-              <div>
-                <h3 className="text-sm font-bold">Terbitkan Dokumen Resmi / Surat Keputusan</h3>
-                <span className="text-[11px] text-slate-400">Pilih template standar atau template DOCX yang telah diunggah</span>
+            {/* Modal Header */}
+            <div className="px-5 py-3.5 bg-slate-900 text-white flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center">
+                  <Edit3 className="w-4 h-4 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">Edit Template Naskah Dinas & Klausul</h3>
+                  <p className="text-[11px] text-slate-300">
+                    Menyesuaikan naskah hukum, rumus penomoran, kop surat, dan penandatangan dokumen
+                  </p>
+                </div>
               </div>
-              <button onClick={() => setIsGenerateModalOpen(false)}>
-                <X className="w-4 h-4 text-slate-400 hover:text-white" />
+              <button
+                type="button"
+                onClick={() => setIsEditTemplateModalOpen(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors"
+              >
+                <X className="w-4 h-4" />
               </button>
             </div>
 
-            <form onSubmit={handleGenerateDocument} className="p-5 space-y-4 text-xs">
-              {/* Template Picker */}
-              <div>
-                <label className="font-semibold text-slate-800 block mb-1">Pilih Template Dokumen Acuan *</label>
-                <select
-                  value={selectedTemplateId}
-                  onChange={(e) => setSelectedTemplateId(e.target.value)}
-                  className="w-full p-2.5 border border-slate-300 rounded font-semibold bg-white text-slate-900"
-                >
-                  <optgroup label="Template Dokumen dari File DOCX">
-                    {documentTemplates
-                      .filter((t) => t.sourceType === 'uploaded_docx')
-                      .map((t) => (
-                        <option key={t.id} value={t.id}>
-                          📄 {t.name} ({t.fileName || 'DOCX Upload'})
-                        </option>
-                      ))}
-                  </optgroup>
-                  <optgroup label="Template Dokumen Sistem Bawaan">
-                    {documentTemplates
-                      .filter((t) => t.sourceType !== 'uploaded_docx')
-                      .map((t) => (
-                        <option key={t.id} value={t.id}>
-                          📋 {t.name} ({t.type})
-                        </option>
-                      ))}
-                  </optgroup>
-                </select>
+            {/* Modal Body: Scrollable */}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSaveStandardTemplate();
+              }}
+              className="p-5 space-y-5 overflow-y-auto text-xs"
+            >
+              {/* Bagian 1: Judul Dokumen & Klasifikasi */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="sm:col-span-2">
+                  <label className="font-bold text-slate-800 block mb-1">
+                    Nama / Judul Resmi Naskah Dinas *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editTitleFormat}
+                    onChange={(e) => setEditTitleFormat(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-semibold text-slate-900 bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-800 block mb-1">
+                    Klasifikasi Dokumen
+                  </label>
+                  <div className="px-3 py-2 bg-slate-100 border border-slate-200 rounded-lg font-bold text-indigo-700">
+                    {activeTemplate?.type || 'Dokumen Resmi'}
+                  </div>
+                </div>
               </div>
 
-              {/* Target Employee Selection */}
-              <div>
-                <label className="font-semibold text-slate-800 block mb-1">Pilih Karyawan Penerima Dokumen *</label>
-                <EmployeeSelect
-                  employees={employees}
-                  selectedEmployeeId={targetEmployeeId}
-                  onSelect={(id) => setTargetEmployeeId(id)}
+              {/* Bagian 2: Pola Penomoran Otomatis */}
+              <div className="p-3.5 bg-indigo-50/50 border border-indigo-100 rounded-xl space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="font-bold text-slate-900 block text-xs">
+                    Formula Pola Penomoran Dokumen *
+                  </label>
+                  <span className="text-[10px] text-slate-500 font-mono">
+                    Token otomatis: {'{SEQ}'}, {'{TENANT_CODE}'}, {'{ROMAN_MONTH}'}, {'{YEAR}'}
+                  </span>
+                </div>
+                <input
+                  type="text"
+                  required
+                  value={editNumberingFormat}
+                  onChange={(e) => setEditNumberingFormat(e.target.value)}
+                  className="w-full px-3 py-2 border border-indigo-300 rounded-lg font-mono font-bold text-xs text-indigo-900 bg-white shadow-2xs"
+                />
+                <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                  <span className="text-[10px] text-slate-500 font-semibold">Sisipkan Token:</span>
+                  {NUMBERING_TOKENS.map((t) => (
+                    <button
+                      key={t.token}
+                      type="button"
+                      onClick={() => {
+                        setEditNumberingFormat((prev) =>
+                          prev.endsWith('/') ? `${prev}${t.token}` : `${prev}/${t.token}`
+                        );
+                      }}
+                      className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-white hover:bg-indigo-100 text-indigo-700 border border-indigo-200 transition-colors"
+                      title={t.description}
+                    >
+                      {t.token}
+                    </button>
+                  ))}
+                </div>
+                <div className="text-[11px] text-slate-600 flex items-center gap-2 pt-0.5">
+                  <span className="font-semibold text-slate-500">Contoh Hasil Nomor:</span>
+                  <span className="font-mono font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                    {evaluateNumberingFormula(editNumberingFormat, 1, currentTenant.code, new Date())}
+                  </span>
+                </div>
+              </div>
+
+              {/* Bagian 3: Pejabat Penandatangan Resmi */}
+              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="font-bold text-slate-900 block text-xs flex items-center gap-1.5">
+                    <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>Pejabat Penandatangan Template Ini</span>
+                  </label>
+                  <span className="text-[10px] text-slate-500">
+                    Pejabat yang namanya tercetak di atas QR Terotentikasi Digital
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-700 block mb-1">
+                      Nama Lengkap Pejabat *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={editSigneeTitle}
+                      onChange={(e) => setEditSigneeTitle(e.target.value)}
+                      placeholder="Contoh: Ir. Budi Santoso, MBA"
+                      className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-semibold text-slate-900 bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-700 block mb-1">
+                      Jabatan / Peran Pejabat *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={editSigneeRole}
+                      onChange={(e) => setEditSigneeRole(e.target.value)}
+                      placeholder="Contoh: President Director & CEO"
+                      className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-slate-800 bg-white"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Bagian 4: Kop Surat Perusahaan */}
+              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="font-bold text-slate-900 block text-xs flex items-center gap-1.5">
+                    <Building2 className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>Kop Surat Resmi Perusahaan</span>
+                  </label>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="sm:col-span-2">
+                    <label className="text-[11px] font-semibold text-slate-700 block mb-0.5">
+                      Nama Badan Usaha / PT *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={editCompanyName}
+                      onChange={(e) => setEditCompanyName(e.target.value)}
+                      className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-semibold text-slate-900 bg-white"
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="text-[11px] font-semibold text-slate-700 block mb-0.5">
+                      Alamat Kantor Resmi
+                    </label>
+                    <input
+                      type="text"
+                      value={editCompanyAddress}
+                      onChange={(e) => setEditCompanyAddress(e.target.value)}
+                      className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-slate-800 bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-700 block mb-0.5">
+                      Nomor Telepon
+                    </label>
+                    <input
+                      type="text"
+                      value={editCompanyPhone}
+                      onChange={(e) => setEditCompanyPhone(e.target.value)}
+                      className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-slate-800 bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-700 block mb-0.5">
+                      Email Legal / HR
+                    </label>
+                    <input
+                      type="email"
+                      value={editCompanyEmail}
+                      onChange={(e) => setEditCompanyEmail(e.target.value)}
+                      className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-slate-800 bg-white"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Bagian 5: Isi Naskah Baku Klausul & Variabel Dinamis */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="font-bold text-slate-900 block text-xs">
+                    Isi Naskah Baku & Klausul Hukum *
+                  </label>
+                  <span className="text-[10px] text-slate-500">
+                    Klik tag variabel di bawah untuk menyisipkan ke naskah
+                  </span>
+                </div>
+
+                <div className="flex flex-wrap gap-1 p-2 bg-slate-50 rounded-lg border border-slate-200 max-h-24 overflow-y-auto">
+                  {[
+                    'nama',
+                    'nik',
+                    'jabatan',
+                    'departemen',
+                    'divisi',
+                    'lokasi_kerja',
+                    'gaji_pokok',
+                    'tanggal_mulai',
+                    'nomor_surat',
+                    'nama_perusahaan',
+                    'nama_penandatangan',
+                  ].map((tag) => (
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() => setEditBodyTemplate((prev) => `${prev} {{${tag}}}`)}
+                      className="px-2 py-0.5 rounded text-[10px] font-mono bg-white hover:bg-indigo-100 text-indigo-700 border border-slate-200 transition-colors shadow-2xs"
+                      title={`Sisipkan {{${tag}}}`}
+                    >
+                      {`{{${tag}}}`}
+                    </button>
+                  ))}
+                </div>
+
+                <textarea
+                  rows={10}
+                  required
+                  value={editBodyTemplate}
+                  onChange={(e) => setEditBodyTemplate(e.target.value)}
+                  className="w-full p-3 border border-slate-300 rounded-xl font-mono text-xs text-slate-800 leading-relaxed focus:ring-2 focus:ring-indigo-500 bg-white"
+                  placeholder="Ketik teks klausul surat dengan {{tag_variabel}}..."
                 />
               </div>
 
-              {/* Custom Title Override */}
+              {/* Bagian 6: Catatan Kaki / UU ITE */}
               <div>
-                <label className="font-semibold text-slate-800 block mb-1">
-                  Judul Dokumen Resmi (Opsional)
+                <label className="font-bold text-slate-800 block mb-1">
+                  Catatan Kaki Legalitas / Keabsahan UU ITE
                 </label>
                 <input
                   type="text"
-                  placeholder="Otomatis mengikuti judul template jika dikosongkan..."
-                  value={customDocTitle}
-                  onChange={(e) => setCustomDocTitle(e.target.value)}
-                  className="w-full p-2 border border-slate-300 rounded font-medium"
+                  value={editFooterText}
+                  onChange={(e) => setEditFooterText(e.target.value)}
+                  className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-slate-700 text-xs bg-white"
                 />
               </div>
 
-              {/* Special Note / Custom Clause */}
-              <div>
-                <label className="font-semibold text-slate-800 block mb-1">
-                  Klausul Tambahan / Keterangan Khusus
-                </label>
-                <textarea
-                  rows={3}
-                  value={customAdditionalNotes}
-                  onChange={(e) => setCustomAdditionalNotes(e.target.value)}
-                  placeholder="Kosongkan untuk menggunakan seluruh isi baku dari template yang dipilih..."
-                  className="w-full p-2 border border-slate-300 rounded text-xs leading-relaxed"
-                />
-              </div>
-
-              {/* Numbering Preview */}
-              {(() => {
-                const tmpl = documentTemplates.find((t) => t.id === selectedTemplateId);
-                const nextNo = evaluateNumberingFormula(
-                  tmpl?.numberingPattern || '{SEQ}/HRD-DOC/{TENANT_CODE}/{ROMAN_MONTH}/{YEAR}',
-                  documents.length + 1,
-                  currentTenant.code
-                );
-                return (
-                  <div className="p-3 bg-indigo-50/60 rounded border border-indigo-200 text-indigo-900 text-[11px] flex items-center justify-between">
-                    <div>
-                      <span className="font-bold block">Nomor Dokumen Otomatis:</span>
-                      <span className="font-mono text-indigo-800 font-semibold">{nextNo}</span>
-                    </div>
-                    <div className="text-right text-[10px] text-indigo-700">
-                      Formula: {tmpl?.numberingPattern}
-                    </div>
-                  </div>
-                );
-              })()}
-
-              <div className="flex justify-end gap-2 pt-3 border-t border-slate-200">
+              {/* Modal Actions */}
+              <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-slate-200">
                 <button
                   type="button"
-                  onClick={() => setIsGenerateModalOpen(false)}
-                  className="px-3.5 py-2 border border-slate-300 rounded text-slate-700 hover:bg-slate-50 font-semibold"
+                  onClick={() => setIsEditTemplateModalOpen(false)}
+                  className="px-4 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 font-semibold"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold shadow-xs transition-colors flex items-center gap-1.5"
+                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold shadow-xs transition-colors flex items-center gap-1.5"
                 >
-                  <FileCheck2 className="w-4 h-4" />
-                  <span>Generate Nomor & Tanda Tangan QR</span>
+                  <Save className="w-4 h-4" />
+                  <span>Simpan Perubahan Template</span>
                 </button>
               </div>
             </form>
@@ -2390,10 +4137,10 @@ PIHAK PERTAMA memberikan upah pokok sebesar {{gaji_pokok}} ({{gaji_terbilang}}) 
         </div>
       )}
 
-      {/* MODAL: PREVIEW DOKUMEN RESMI & CETAK PDF */}
+      {/* MODAL: PREVIEW DOKUMEN RESMI & CETAK PDF MULTI-HALAMAN REAL */}
       {selectedDoc && (
         <div
-          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto"
+          className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 overflow-y-auto"
           onClick={(e) => {
             if (e.target === e.currentTarget) {
               setSelectedDoc(null);
@@ -2401,101 +4148,53 @@ PIHAK PERTAMA memberikan upah pokok sebesar {{gaji_pokok}} ({{gaji_terbilang}}) 
           }}
         >
           <div
-            className="bg-white rounded-xl shadow-2xl max-w-3xl w-full border border-slate-200 overflow-hidden my-6 flex flex-col max-h-[92vh]"
+            className="bg-slate-100 rounded-2xl shadow-2xl max-w-4xl w-full border border-slate-300 overflow-hidden my-4 flex flex-col max-h-[94vh]"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Modal Header */}
-            <div className="px-6 py-3.5 bg-slate-900 text-white flex items-center justify-between no-print shrink-0">
+            {/* Modal Top Bar */}
+            <div className="px-5 py-3 bg-slate-900 text-white flex items-center justify-between no-print shrink-0 border-b border-slate-800">
               <div className="flex items-center gap-2">
                 <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                <h3 className="text-xs font-semibold">Surat Keputusan Elektronik Terverifikasi QR UU ITE</h3>
+                <h3 className="text-xs font-semibold">
+                  Naskah Dokumen Resmi Terotentikasi QR UU ITE (Format Kertas A4 Standar)
+                </h3>
               </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => window.print()}
-                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-semibold inline-flex items-center gap-1.5 shadow-2xs transition-colors"
-                  title="Cetak Fisik Dokumen (Printer)"
-                >
-                  <Printer className="w-3.5 h-3.5" />
-                  <span>Cetak</span>
-                </button>
-                <button
-                  onClick={() => window.print()}
-                  className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-900 border border-slate-300 rounded-lg text-xs font-semibold inline-flex items-center gap-1.5 shadow-2xs transition-colors"
-                  title="Unduh Naskah Dokumen Format PDF"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Unduh PDF</span>
-                </button>
-                <button onClick={() => setSelectedDoc(null)} className="text-slate-400 hover:text-white">
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
+              <button
+                onClick={() => setSelectedDoc(null)}
+                className="text-slate-400 hover:text-white p-1 rounded hover:bg-slate-800 transition-colors"
+                title="Tutup Pratinjau"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
 
-            {/* Document Content Canvas */}
-            <div className="p-8 space-y-6 text-slate-900 bg-white text-xs overflow-y-auto print:p-0">
-              {/* Kop Surat Resmi */}
-              <div className="border-b-2 border-slate-900 pb-4 flex items-center justify-between gap-4 text-left">
-                <div className="flex items-center gap-3">
-                  {currentTenant.documentLogoUrl ? (
-                    <img
-                      src={currentTenant.documentLogoUrl}
-                      alt={currentTenant.name}
-                      className="w-12 h-12 rounded-lg object-contain border border-slate-200 p-0.5 bg-white shadow-xs shrink-0"
-                    />
-                  ) : (
-                    <div className="w-12 h-12 rounded-lg bg-indigo-700 text-white flex items-center justify-center font-bold text-xl shadow-xs shrink-0 font-sans">
-                      {currentTenant.logoText || 'N'}
-                    </div>
-                  )}
-                  <div>
-                    <h1 className="text-base font-bold text-slate-900 uppercase tracking-wide">
-                      {currentTenant.name}
-                    </h1>
-                    <p className="text-[11px] text-slate-600">
-                      {currentTenant.address || `Gedung Menara Palma Lantai 18, Jl. HR Rasuna Said, ${currentTenant.city} 12950`}
-                    </p>
-                    <p className="text-[10px] text-slate-500 font-mono">
-                      Telp: +62 21 5566 7788 · Email: legal.hr@nusantara.id · NPWP: {currentTenant.npwp || '01.999.888.7-011.000'}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Judul & Nomor Surat */}
-              <div className="text-center space-y-1">
-                <div className="font-bold text-sm tracking-wide text-slate-900 uppercase underline">
-                  {selectedDoc.title}
-                </div>
-                <div className="font-mono text-xs font-bold text-indigo-700">
-                  Nomor: {selectedDoc.documentNumber}
-                </div>
-              </div>
-
-              {/* Isi Surat */}
-              <div className="space-y-3 leading-relaxed text-slate-800 whitespace-pre-line text-justify border-y border-slate-100 py-4 font-serif text-[12px]">
-                {selectedDoc.contentPreview}
-              </div>
-
-              {/* Tanda Tangan & QR Verification */}
-              <div className="flex justify-between items-end pt-4">
-                <div className="text-[10px] text-slate-400 max-w-sm leading-normal">
-                  <strong className="block text-slate-600 mb-0.5">Kekuatan Hukum Dokumen Elektronik:</strong>
-                  Dokumen ini telah ditandatangani secara elektronik bersertifikat digital dan memiliki kekuatan hukum pembuktian yang sah sesuai UU ITE No. 11 Tahun 2008 Pasal 5 & 11 jo PP 71/2019.
-                </div>
-                <div className="flex items-center gap-4">
-                  <div className="text-right">
-                    <div className="text-[10px] text-slate-400">Jakarta, {selectedDoc.issueDate}</div>
-                    <div className="text-[11px] font-bold text-slate-900 mt-1">{selectedDoc.signeeName}</div>
-                    <div className="text-[10px] text-slate-600">{selectedDoc.signeeRole}</div>
-                  </div>
-                  <QRCodeView
-                    value={selectedDoc.qrVerificationUrl}
-                    size={68}
+            {/* Document Content Canvas Multi-Halaman Real A4 */}
+            <div className="p-4 sm:p-6 bg-slate-200/90 overflow-y-auto flex justify-center">
+              {(() => {
+                const targetEmp = employees.find((e) => e.id === selectedDoc.targetEmployeeId) || employees[0];
+                return (
+                  <OfficialMultiPageDocumentSheet
+                    title={selectedDoc.title}
+                    documentNumber={selectedDoc.documentNumber}
+                    content={selectedDoc.contentPreview}
+                    tenant={currentTenant}
+                    employee={targetEmp}
+                    signeeName={selectedDoc.signeeName}
+                    signeeRole={selectedDoc.signeeRole}
+                    issueDate={selectedDoc.issueDate}
+                    showLetterhead={true}
+                    showQrSignature={true}
+                    showQrValidation={true}
+                    onSuccessNotice={(title, desc) => {
+                      setFeedbackMessage({
+                        title,
+                        description: desc,
+                        type: 'success',
+                      });
+                    }}
                   />
-                </div>
-              </div>
+                );
+              })()}
             </div>
           </div>
         </div>
@@ -2655,7 +4354,7 @@ PIHAK PERTAMA memberikan upah pokok sebesar {{gaji_pokok}} ({{gaji_terbilang}}) 
                                 <div className="inline-flex items-center gap-1">
                                   <button
                                     type="button"
-                                    onClick={() => handleInsertToken(item.token, activeTab === 'upload_docx' ? 'upload' : 'standard')}
+                                    onClick={() => handleInsertToken(item.token, 'standard')}
                                     className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded border border-indigo-200 transition-colors text-[11px]"
                                     title="Sisipkan ke pola penomoran yang sedang diedit"
                                   >

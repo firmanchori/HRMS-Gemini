@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useHrms } from '../../context/HrmsContext';
 import {
   ShoppingCart,
@@ -12,18 +12,25 @@ import {
   Search,
   Filter,
   Printer,
+  Download,
   FileText,
   Star,
   Settings,
   Briefcase,
   Users,
   Eye,
+  MessageSquare,
+  Loader2,
+  FileDown,
 } from 'lucide-react';
 import { ProcurementOrder, Vendor } from '../../types/hrms';
 import { formatRupiah } from '../../utils/taxCalculator';
 import { QRCodeView } from '../common/QRCodeView';
 import { EmployeeSelect } from '../common/EmployeeSelect';
 import { ScrollableTabNav } from '../common/ScrollableTabNav';
+import { WhatsAppIcon } from '../common/WhatsAppIcon';
+import { printPagesDirectly, exportPagesToPdf } from '../../utils/documentPdfExporter';
+import { openWhatsAppChat } from '../../utils/whatsappHelper';
 
 interface ProjectContract {
   id: string;
@@ -91,6 +98,63 @@ export const ProcurementManagement: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<'orders' | 'vendors' | 'projects' | 'invoices' | 'pengaturan'>('orders');
   const [selectedPOForPrint, setSelectedPOForPrint] = useState<ProcurementOrder | null>(null);
+  const poSheetRef = useRef<HTMLDivElement>(null);
+  const [isPrintingPO, setIsPrintingPO] = useState(false);
+  const [isExportingPO, setIsExportingPO] = useState(false);
+  const [isPOWaModalOpen, setIsPOWaModalOpen] = useState(false);
+  const [poWaNumber, setPoWaNumber] = useState('08129876543');
+
+  const handlePrintPO = async () => {
+    if (!poSheetRef.current) return;
+    try {
+      setIsPrintingPO(true);
+      await printPagesDirectly([poSheetRef.current]);
+    } catch (err) {
+      console.error('Print PO failed:', err);
+      alert('Gagal memproses pencetakan dokumen Purchase Order.');
+    } finally {
+      setIsPrintingPO(false);
+    }
+  };
+
+  const handleDownloadPOPdf = async () => {
+    if (!poSheetRef.current || !selectedPOForPrint) return;
+    try {
+      setIsExportingPO(true);
+      const filename = `PO_${(selectedPOForPrint.poNumber || selectedPOForPrint.prNumber).replace(/\//g, '_')}.pdf`;
+      await exportPagesToPdf([poSheetRef.current], filename);
+    } catch (err) {
+      console.error('Download PO PDF failed:', err);
+      alert('Gagal mengunduh berkas PDF Purchase Order.');
+    } finally {
+      setIsExportingPO(false);
+    }
+  };
+
+  const handleOpenPOWaModal = () => {
+    if (selectedPOForPrint) {
+      const ven = vendors.find((v) => v.name === selectedPOForPrint.vendorName);
+      setPoWaNumber(ven?.phone || '08129876543');
+    }
+    setIsPOWaModalOpen(true);
+  };
+
+  const handleSendPOWhatsApp = () => {
+    if (!selectedPOForPrint) return;
+    const poNum = selectedPOForPrint.poNumber || selectedPOForPrint.prNumber;
+    const msg =
+      `*PURCHASE ORDER (PO) RESMI - ${currentTenant.name.toUpperCase()}*\n\n` +
+      `Nomor PO: *${poNum}*\n` +
+      `Kepada Mitra/Vendor: *${selectedPOForPrint.vendorName}*\n` +
+      `Uraian Pengadaan: *${selectedPOForPrint.itemName}*\n` +
+      `Jumlah Kebutuhan: *${selectedPOForPrint.quantity} Unit*\n` +
+      `Total Nilai Pesanan: *${formatRupiah(selectedPOForPrint.estimatedCost)}*\n` +
+      `Pemohon: ${selectedPOForPrint.requestor} (${selectedPOForPrint.department})\n\n` +
+      `Surat Pesanan Pembelian ini diterbitkan secara sah dan tersertifikasi melalui sistem ERP NusaHR Enterprise.\n` +
+      `Verifikasi Dokumen: https://nusahr.id/verify/po/${poNum.replace(/\//g, '-')}`;
+    openWhatsAppChat(poWaNumber || '08129876543', msg);
+    setIsPOWaModalOpen(false);
+  };
 
   // PR Form Modal
   const [isPRModalOpen, setIsPRModalOpen] = useState(false);
@@ -1171,22 +1235,70 @@ export const ProcurementManagement: React.FC = () => {
             className="bg-white rounded-xl shadow-2xl max-w-2xl w-full border border-slate-200 overflow-hidden my-8 cursor-default"
           >
             <div className="px-6 py-3.5 bg-slate-900 text-white flex items-center justify-between no-print">
-              <h3 className="text-xs font-semibold">Dokumen Purchase Order (PO) Resmi</h3>
               <div className="flex items-center gap-2">
+                <FileText className="w-4 h-4 text-indigo-400" />
+                <h3 className="text-xs font-semibold">Dokumen Purchase Order (PO) Resmi</h3>
+                <span className="text-[10px] px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-mono">
+                  {selectedPOForPrint.poNumber || selectedPOForPrint.prNumber}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                {/* Unduh PDF */}
                 <button
-                  onClick={() => window.print()}
-                  className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-white rounded text-xs inline-flex items-center gap-1"
+                  type="button"
+                  onClick={handleDownloadPOPdf}
+                  disabled={isExportingPO}
+                  className="p-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg shadow-2xs transition-colors cursor-pointer disabled:opacity-60 flex items-center justify-center shrink-0"
+                  title="Unduh Berkas PDF Purchase Order"
+                  aria-label="Unduh PDF"
                 >
-                  <Printer className="w-3.5 h-3.5" />
-                  <span>Cetak / PDF</span>
+                  {isExportingPO ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <FileDown className="w-4 h-4" />
+                  )}
                 </button>
-                <button onClick={() => setSelectedPOForPrint(null)}>
-                  <X className="w-4 h-4 text-slate-400 hover:text-white" />
+
+                {/* Cetak Fisik */}
+                <button
+                  type="button"
+                  onClick={handlePrintPO}
+                  disabled={isPrintingPO}
+                  className="p-2 bg-slate-800 hover:bg-slate-700 text-white border border-slate-700 rounded-lg shadow-2xs transition-colors cursor-pointer disabled:opacity-60 flex items-center justify-center shrink-0"
+                  title="Cetak Naskah Dokumen PO Resmi"
+                  aria-label="Cetak PO"
+                >
+                  {isPrintingPO ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Printer className="w-4 h-4" />
+                  )}
+                </button>
+
+                {/* Kirim WhatsApp ke Vendor */}
+                <button
+                  type="button"
+                  onClick={handleOpenPOWaModal}
+                  className="p-2 bg-[#25D366] hover:bg-[#20ba59] text-white rounded-lg shadow-2xs transition-colors cursor-pointer flex items-center justify-center shrink-0"
+                  title="Kirim Purchase Order ke WhatsApp Vendor/Rekanan"
+                  aria-label="Kirim WhatsApp"
+                >
+                  <WhatsAppIcon className="w-4 h-4" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setSelectedPOForPrint(null)}
+                  className="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors ml-1 flex items-center justify-center shrink-0"
+                  title="Tutup (Esc)"
+                  aria-label="Tutup"
+                >
+                  <X className="w-4 h-4" />
                 </button>
               </div>
             </div>
 
-            <div className="p-8 space-y-6 text-slate-800 bg-white text-xs">
+            <div ref={poSheetRef} className="p-8 space-y-6 text-slate-800 bg-white text-xs">
               {/* Header Surat */}
               <div className="flex justify-between items-start border-b-2 border-slate-900 pb-4">
                 <div>
@@ -1271,6 +1383,79 @@ export const ProcurementManagement: React.FC = () => {
                     size={52}
                   />
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Dialog Konfirmasi Kirim WhatsApp PO */}
+      {isPOWaModalOpen && selectedPOForPrint && (
+        <div
+          className="fixed inset-0 z-60 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4"
+          onClick={() => setIsPOWaModalOpen(false)}
+        >
+          <div
+            className="bg-white rounded-xl shadow-2xl max-w-md w-full border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-5 py-3.5 bg-emerald-700 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <WhatsAppIcon className="w-4 h-4 text-emerald-200" />
+                <h3 className="text-sm font-bold">Kirim PO ke WhatsApp Vendor</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsPOWaModalOpen(false)}
+                className="text-emerald-200 hover:text-white p-1 rounded-lg hover:bg-emerald-800 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-xs text-emerald-900 space-y-1">
+                <div className="font-semibold flex items-center gap-1.5 text-emerald-800">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Mitra/Vendor: {selectedPOForPrint.vendorName}</span>
+                </div>
+                <div className="text-[11px] text-emerald-700">
+                  PO: {selectedPOForPrint.poNumber || selectedPOForPrint.prNumber} · Total: {formatRupiah(selectedPOForPrint.estimatedCost)}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Nomor WhatsApp Vendor / PIC
+                </label>
+                <input
+                  type="text"
+                  value={poWaNumber}
+                  onChange={(e) => setPoWaNumber(e.target.value)}
+                  placeholder="0812xxxxxxxx"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-mono focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
+                />
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Pesan mencakup nomor PO resmi, uraian pengadaan, kuantitas, nilai pesanan, dan link verifikasi dokumen NusaHR.
+                </p>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsPOWaModalOpen(false)}
+                  className="px-3.5 py-1.5 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs font-semibold cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSendPOWhatsApp}
+                  className="px-4 py-1.5 rounded-lg bg-[#25D366] hover:bg-[#20ba59] text-white text-xs font-bold flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                >
+                  <WhatsAppIcon className="w-3.5 h-3.5" />
+                  <span>Kirim WhatsApp Sekarang</span>
+                </button>
               </div>
             </div>
           </div>

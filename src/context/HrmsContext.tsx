@@ -5,7 +5,9 @@ import {
   UserRole,
   Employee,
   PersonaliaLog,
+  PersonaliaSignatory,
   PersonaliaActionType,
+  SystemicImpactConfig,
   AttendanceRecord,
   LeaveRequest,
   PayrollRecord,
@@ -183,6 +185,9 @@ interface HrmsContextType {
     effectiveDate: string;
     skDocNumber?: string;
     notes?: string;
+    signatories?: PersonaliaSignatory[];
+    status?: 'Disetujui' | 'Menunggu Approval' | 'Draf';
+    systemicImpact?: SystemicImpactConfig;
   }) => void;
 
   // 2. Attendance & Leave
@@ -769,8 +774,23 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [documentTemplates, setDocumentTemplates] = useState<DocumentTemplateConfig[]>(() => {
-    const saved = localStorage.getItem('nusahr_templates');
-    return saved ? JSON.parse(saved) : INITIAL_DOCUMENT_TEMPLATES;
+    const saved = localStorage.getItem('nusahr_templates_v6');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved) as DocumentTemplateConfig[];
+        const existingIds = new Set(parsed.map(t => t.id));
+        const merged = [...parsed];
+        for (const initTmpl of INITIAL_DOCUMENT_TEMPLATES) {
+          if (!existingIds.has(initTmpl.id)) {
+            merged.push(initTmpl);
+          }
+        }
+        return merged;
+      } catch (e) {
+        console.error('Failed to parse templates', e);
+      }
+    }
+    return INITIAL_DOCUMENT_TEMPLATES;
   });
 
   const [moduleSettings, setModuleSettings] = useState<ModuleSettingsConfig>(() => {
@@ -1017,7 +1037,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [documents]);
 
   useEffect(() => {
-    localStorage.setItem('nusahr_templates', JSON.stringify(documentTemplates));
+    localStorage.setItem('nusahr_templates_v6', JSON.stringify(documentTemplates));
   }, [documentTemplates]);
 
   useEffect(() => {
@@ -1104,6 +1124,9 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     effectiveDate: string;
     skDocNumber?: string;
     notes?: string;
+    signatories?: PersonaliaSignatory[];
+    status?: 'Disetujui' | 'Menunggu Approval' | 'Draf';
+    systemicImpact?: SystemicImpactConfig;
   }) => {
     const emp = employees.find((e) => e.id === action.employeeId);
     if (!emp) return;
@@ -1115,6 +1138,8 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         personaliaLogs.length + 1,
         currentTenant.code
       );
+
+    const finalStatus = action.status || 'Menunggu Approval';
 
     const log: PersonaliaLog = {
       id: `pers-${Date.now()}`,
@@ -1134,8 +1159,8 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       effectiveDate: action.effectiveDate,
       letterNumber,
       reason: action.reason,
-      approvedBy: currentUser.name,
-      status: 'Disetujui',
+      approvedBy: action.signatories?.find((s) => s.label.toLowerCase().includes('menyetujui') || s.label.toLowerCase().includes('disetujui'))?.name || currentUser.name,
+      status: finalStatus,
       notes: action.notes,
       newBranchLocation: action.newBranchLocation,
       contractDurationMonths: action.contractDurationMonths,
@@ -1144,9 +1169,41 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       permanentAppointmentDate: action.permanentAppointmentDate,
       disciplinaryLevel: action.disciplinaryLevel,
       skDocNumber: letterNumber,
+      signatories: action.signatories,
+      systemicImpact: action.systemicImpact,
     };
 
     setPersonaliaLogs((prev) => [log, ...prev]);
+
+    // If it's a draft, do NOT update employee master record yet
+    if (finalStatus === 'Draf') {
+      logAuditAction('Personalia', 'SAVE_DRAFT', log.id, `Simpan draf tindakan personalia ${action.type} untuk ${emp.fullName}`);
+      return;
+    }
+
+    if (finalStatus === 'Menunggu Approval') {
+      // Add to Approval Center queue
+      setApprovalItems((prev) => [
+        {
+          id: `appr-pers-${Date.now()}`,
+          tenantId: currentTenant.id,
+          category: 'Promosi/Personalia',
+          referenceId: log.id,
+          title: `Personalia: ${action.type} - ${emp.fullName}`,
+          requesterId: action.employeeId,
+          department: emp.department || 'Operasional',
+          submittedAt: new Date().toISOString().replace('T', ' ').slice(0, 16),
+          deadlineAt: new Date(Date.now() + 72 * 3600 * 1000).toISOString().replace('T', ' ').slice(0, 16),
+          level: 1,
+          totalLevels: action.signatories?.length || 2,
+          assignedApproverRole: 'manager',
+          status: 'Menunggu',
+          notes: action.reason,
+        },
+        ...prev,
+      ]);
+      logAuditAction('Personalia', 'SUBMIT_FOR_APPROVAL', log.id, `Pengajuan persetujuan SK ${action.type} untuk ${emp.fullName}`);
+    }
 
     // Update employee master record with specific field updates based on action type
     const updates: Partial<Employee> = {};

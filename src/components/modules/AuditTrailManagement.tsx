@@ -1,5 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { useHrms } from '../../context/HrmsContext';
+import { printPagesDirectly } from '../../utils/documentPdfExporter';
 import {
   History,
   Search,
@@ -224,8 +225,10 @@ export const AuditTrailManagement: React.FC = () => {
     }
   };
 
+  const auditContainerRef = useRef<HTMLDivElement>(null);
+
   return (
-    <div className="space-y-5">
+    <div ref={auditContainerRef} className="space-y-5">
       {/* Module Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-200 pb-3">
         <div>
@@ -265,8 +268,13 @@ export const AuditTrailManagement: React.FC = () => {
             <span>Ekspor CSV</span>
           </button>
           <button
-            onClick={() => window.print()}
-            className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md text-xs font-semibold shadow-xs transition-colors"
+            type="button"
+            onClick={async () => {
+              if (auditContainerRef.current) {
+                await printPagesDirectly([auditContainerRef.current]);
+              }
+            }}
+            className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md text-xs font-semibold shadow-xs transition-colors cursor-pointer"
             title="Cetak format cetak resmi laporan audit"
           >
             <Printer className="w-3.5 h-3.5" />

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Employee } from '../../types/hrms';
-import { ChevronDown, Search, Check, User } from 'lucide-react';
+import { ChevronDown, Search, Check, User, Edit3 } from 'lucide-react';
 
 interface EmployeeSelectProps {
   employees: Employee[];
@@ -13,6 +13,8 @@ interface EmployeeSelectProps {
   required?: boolean;
   disabled?: boolean;
   className?: string;
+  allowManual?: boolean;
+  manualLabel?: string;
 }
 
 export const EmployeeSelect: React.FC<EmployeeSelectProps> = ({
@@ -26,6 +28,8 @@ export const EmployeeSelect: React.FC<EmployeeSelectProps> = ({
   required = false,
   disabled = false,
   className = '',
+  allowManual = false,
+  manualLabel = '+ Input Manual / Pihak Eksternal',
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -109,6 +113,20 @@ export const EmployeeSelect: React.FC<EmployeeSelectProps> = ({
               </div>
             </div>
           </div>
+        ) : activeId === '__manual__' ? (
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-7 h-7 rounded-full bg-amber-100 text-amber-700 font-bold text-xs flex items-center justify-center shrink-0">
+              <Edit3 className="w-3.5 h-3.5" />
+            </div>
+            <div className="min-w-0">
+              <div className="font-semibold text-amber-900 truncate leading-tight">
+                Input Manual / Pihak Eksternal
+              </div>
+              <div className="text-[10px] text-amber-700 truncate">
+                Pejabat di luar master karyawan
+              </div>
+            </div>
+          </div>
         ) : (
           <span className="text-slate-400 font-normal">{placeholder}</span>
         )}
@@ -184,6 +202,36 @@ export const EmployeeSelect: React.FC<EmployeeSelectProps> = ({
               </div>
             )}
           </div>
+
+          {/* Optional Manual Entry Option */}
+          {allowManual && (
+            <button
+              type="button"
+              onClick={() => {
+                handleSelectChange('__manual__');
+                setIsOpen(false);
+                setSearch('');
+              }}
+              className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between gap-3 border-t border-slate-200 bg-slate-50/80 hover:bg-amber-50/70 transition-colors ${
+                activeId === '__manual__' ? 'bg-amber-50 text-amber-900 font-bold' : 'text-slate-700'
+              }`}
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-7 h-7 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                  <Edit3 className="w-3.5 h-3.5" />
+                </div>
+                <div>
+                  <div className="font-bold text-slate-900 text-xs">
+                    {manualLabel}
+                  </div>
+                  <div className="text-[10px] text-slate-500">
+                    Input nama & jabatan manual di luar master karyawan
+                  </div>
+                </div>
+              </div>
+              {activeId === '__manual__' && <Check className="w-4 h-4 text-amber-600 shrink-0" />}
+            </button>
+          )}
         </div>
       )}
     </div>

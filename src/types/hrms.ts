@@ -24,7 +24,22 @@ export interface OperationPermissions {
   export: boolean;
 }
 
-export type EmploymentType = 'Tetap' | 'Kontrak' | 'Outsource' | 'Magang';
+export type EmploymentType =
+  | 'Tetap'
+  | 'Kontrak'
+  | 'Paruh Waktu'
+  | 'Harian Lepas'
+  | 'Outsource'
+  | 'Remote'
+  | 'Musiman'
+  | 'Mitra Kerja'
+  | 'Tenaga Ahli'
+  | 'Freelancer'
+  | 'Magang'
+  | 'Sukarelawan'
+  | string;
+
+export type WorkerCategory = 'Karyawan' | 'Non-Karyawan / Mitra Kerja';
 
 export type PTKPStatus = 'TK/0' | 'TK/1' | 'TK/2' | 'TK/3' | 'K/0' | 'K/1' | 'K/2' | 'K/3';
 
@@ -136,6 +151,7 @@ export interface Employee {
   avatar?: string; // photo profile
 
   // 1. Status Kerja & Dokumen Kontrak / SK
+  workerCategory?: WorkerCategory;
   employmentType: EmploymentType;
   contractDocNumber: string;
   candidateId?: string;
@@ -225,6 +241,33 @@ export type PersonaliaActionType =
   | 'Penetapan Plt'
   | 'Penetapan Plt/Pjs';
 
+export interface PersonaliaSignatory {
+  id?: string;
+  label: string; // e.g. 'Dibuat Oleh', 'Mengetahui', 'Menyetujui', 'Disetujui Oleh'
+  employeeId?: string;
+  nik?: string;
+  name: string;
+  role?: string;
+  date?: string;
+}
+
+export interface SystemicImpactConfig {
+  // Compensation Triggers
+  gradeScaleMin?: number;
+  gradeScaleMax?: number;
+  newAllowances?: { name: string; amount: number }[];
+  revokedAllowances?: { name: string; reason?: string }[];
+  
+  // IT & Access Provisioning
+  previousSystemRole?: string;
+  newSystemRole?: string;
+  approvalAuthorities?: string[];
+  
+  // Asset & Facilities Provisioning
+  allocatedAssets?: string[];
+  returnedAssets?: string[];
+}
+
 export interface PersonaliaLog {
   id: string;
   tenantId: string;
@@ -253,6 +296,8 @@ export interface PersonaliaLog {
   permanentAppointmentDate?: string;
   disciplinaryLevel?: 'SP 1' | 'SP 2' | 'SP 3' | 'Skorsing';
   skDocNumber?: string;
+  signatories?: PersonaliaSignatory[];
+  systemicImpact?: SystemicImpactConfig;
 }
 
 // Shifts, Roster & Scheduling
@@ -1030,13 +1075,49 @@ export type DocumentType =
   | 'PKWT'
   | 'PKWTT'
   | 'Surat Promosi'
+  | 'Surat Mutasi'
+  | 'Surat Demosi'
+  | 'Surat Penetapan Plt'
+  | 'Addendum PKWT'
   | 'Surat Peringatan'
+  | 'Surat Peringatan SP 1'
+  | 'Surat Peringatan SP 2'
+  | 'Surat Peringatan SP 3'
+  | 'Paklaring'
   | 'Parklaring'
+  | 'Surat Pemutusan Hubungan Kerja (PHK)'
   | 'BAST Aset'
   | 'Offering Letter'
   | 'Surat Tugas Dinas'
   | 'Surat Perintah Perjalanan Dinas'
-  | 'Surat Keputusan Cuti';
+  | 'Surat Keputusan Cuti'
+  | 'Surat Perintah Lembur'
+  | 'Slip Gaji Karyawan'
+  | 'Formulir Pinjaman / Kasbon'
+  | 'Perjanjian Kerahasiaan (NDA)'
+  | 'SK Pengangkatan Tenaga Ahli'
+  | 'Sertifikat Selesai Magang'
+  | 'Surat Pernyataan Magang'
+  | 'Pengajuan Perjalanan Dinas'
+  | 'Rekap Presensi Karyawan'
+  | 'Pengajuan Koreksi Presensi'
+  | 'Pengajuan Cuti Izin Sakit'
+  | 'Pendaftaran BPJS e-Dabu & SIPP'
+  | 'Bukti Potong Pajak Coretax'
+  | 'Pengajuan Klaim Reimbursement'
+  | 'Perjanjian Pinjaman Karyawan & Simulasi'
+  | 'Penilaian Kinerja KPI & OKR'
+  | 'Surat Tindakan Disiplin'
+  | 'Form Tiketing Internal'
+  | 'Peminjaman Ruang Rapat'
+  | 'Peminjaman Kendaraan Operasional'
+  | 'Permintaan ATK'
+  | 'Purchase Order (PO)'
+  | 'Quotation Penawaran Harga'
+  | 'Kontrak Pengadaan & Termin'
+  | 'Tagihan & Invoice Vendor'
+  | 'Pengajuan Pembelian Hardware'
+  | string;
 
 // Document Templates & Custom Formatting
 export interface DocumentTemplateConfig {
@@ -1045,6 +1126,7 @@ export interface DocumentTemplateConfig {
   type: DocumentType | string;
   name: string;
   numberingPattern: string; // e.g. "{SEQ}/HRD-PKWT/{TENANT}/{ROMAN_MONTH}/{YEAR}"
+  paperSize?: 'A4' | 'F4' | 'A5'; // Ukuran kertas fisik template default (A4, F4 / Folio, A5)
   letterHeadTitle: string;
   letterHeadAddress: string;
   letterHeadNpwp?: string;
@@ -1713,6 +1795,9 @@ export interface UniversalPreviewItem {
   qrPayload?: string;
   signeeName?: string;
   signeeRole?: string;
+  signatories?: PersonaliaSignatory[];
+  systemicImpact?: SystemicImpactConfig;
+  systemicImpactGrid?: { category: string; before: string; after: string; impact: string }[];
   attachments?: { fileName: string; fileSize?: string; fileType?: string }[];
 }
 

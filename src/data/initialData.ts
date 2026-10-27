@@ -3239,53 +3239,1382 @@ export const INITIAL_DOCUMENT_TEMPLATES: DocumentTemplateConfig[] = [
     id: 'tmpl-1',
     tenantId: 'tenant-ntm',
     type: 'PKWT',
-    name: 'Format Baku Perjanjian Kerja Waktu Tertentu (PKWT)',
+    name: 'Perjanjian Kerja Waktu Tertentu (PKWT)',
     numberingPattern: '{SEQ}/HRD-PKWT/{TENANT}/{ROMAN_MONTH}/{YEAR}',
     letterHeadTitle: 'PT NUSANTARA TEKNOLOGI MANDIRI',
     letterHeadAddress: 'Menara Palma Lantai 18, Jl. HR Rasuna Said Blok X-2 Kav. 6, Jakarta Selatan 12950',
-    defaultBody: 'Pada hari ini telah disepakati Perjanjian Kerja Waktu Tertentu antara Manajemen PT Nusantara Teknologi Mandiri dengan Saudara/i {{nama}} (NIK: {{nik}}) yang bertindak selaku {{jabatan}}...',
+    defaultBody: `PERJANJIAN KERJA WAKTU TERTENTU (PKWT)
+Nomor: {{nomor_surat}}
+
+Pada hari ini, bertempat di kantor {{nama_perusahaan}}, para pihak yang bertanda tangan di bawah ini secara sadar dan sukarela bersepakat:
+1. {{penandatangan}}, bertindak selaku {{jabatan_penandatangan}} yang sah mewakili Manajemen {{nama_perusahaan}}, berkedudukan hukum di {{alamat_perusahaan}}, selanjutnya disebut sebagai PIHAK PERTAMA.
+2. {{nama}}, Pemegang KTP NIK: {{nik_ktp}}, bertempat tinggal di {{alamat_karyawan}}, selanjutnya disebut sebagai PIHAK KEDUA.
+
+Kedua belah pihak telah bersepakat mengikatkan diri dalam Perjanjian Kerja Waktu Tertentu (PKWT) dengan syarat-syarat dan ketentuan hukum sebagai berikut:
+
+PASAL 1: TUGAS, JABATAN & LOKASI KERJA
+1. PIHAK PERTAMA mempekerjakan PIHAK KEDUA dan PIHAK KEDUA menyatakan bersedia bekerja pada posisi {{jabatan}} di Departemen {{departemen}} (Grade Golongan: {{grade}}).
+2. Lokasi kerja utama bertempat di kantor {{nama_perusahaan}} di {{alamat_perusahaan}}, dengan kesediaan menjalankan penugasan dinas ke unit kerja atau rekanan perusahaan apabila dibutuhkan operasional.
+
+PASAL 2: JANGKA WAKTU PERJANJIAN
+1. Perjanjian kerja ini berlaku untuk jangka waktu tertentu terhitung mulai {{tanggal_mulai}} sampai dengan {{tanggal_berakhir}}.
+2. Apabila dipandang perlu oleh PIHAK PERTAMA berdasarkan evaluasi kinerja, perpanjangan perjanjian kerja dapat diajukan sesuai koridor regulasi PP No. 35 Tahun 2021 selambat-lambatnya 14 (empat belas) hari kalender sebelum masa kontrak berakhir.
+
+PASAL 3: WAKTU KERJA & ISTIRAHAT
+1. Waktu kerja reguler adalah 8 (delapan) jam per hari atau 40 (empat puluh) jam per minggu, dari hari Senin sampai dengan Jumat pukul 08.30 WIB hingga 17.30 WIB dengan waktu istirahat 1 (satu) jam.
+2. Setiap kelebihan jam kerja di luar ketentuan di atas wajib didasarkan pada Surat Perintah Kerja Lembur (SPL) resmi yang disetujui atasan.
+
+<!-- PAGE_BREAK -->
+
+PASAL 4: UPAH, KOMPENSASI & TUNJANGAN
+1. PIHAK KEDUA berhak menerima Gaji Pokok bulanan sebesar {{gaji_pokok}} ({{gaji_terbilang}}) yang dibayarkan setiap tanggal 25 melalui rekening {{rekening}}.
+2. Status kewajiban perpajakan penghasilan (PPh 21) dicatat dengan kategori PTKP: {{ptkp}} dan Nomor Pokok Wajib Pajak: {{npwp}}.
+3. PIHAK PERTAMA mengikutsertakan PIHAK KEDUA dalam program Jaminan Sosial Ketenagakerjaan (JKK, JKM, JHT) dan BPJS Kesehatan sesuai ketentuan perundang-undangan RI.
+4. Pada saat berakhirnya jangka waktu PKWT, PIHAK KEDUA berhak atas Uang Kompensasi PKWT sesuai masa kerja aktual berdasarkan PP No. 35 Tahun 2021.
+
+PASAL 5: TATA TERTIB, DISIPLIN & KERAHASIAAN
+1. PIHAK KEDUA wajib mematuhi seluruh Peraturan Perusahaan, menjaga etika profesionalisme, serta menggunakan fasilitas inventaris kerja secara bertanggung jawab.
+2. PIHAK KEDUA dilarang keras membocorkan rahasia dagang, data nasabah, maupun kode sumber perangkat lunak {{nama_perusahaan}} kepada pihak manapun baik selama masa kerja maupun setelah berakhirnya hubungan kerja.
+3. Segala pelanggaran tata tertib kerja akan dikenakan tindakan disipliner berjenjang berupa Surat Peringatan (SP) hingga Pemutusan Hubungan Kerja (PHK).
+
+PASAL 6: PENYELESAIAN PERSELISIHAN & DOMISILI HUKUM
+1. Segala perselisihan yang timbul sehubungan dengan pelaksanaan perjanjian kerja ini akan diselesaikan secara musyawarah dan mufakat secara bipartit.
+2. Apabila musyawarah mufakat tidak tercapai, para pihak sepakat memilih domisili hukum yang tetap di Pengadilan Hubungan Industrial (PHI) wilayah Pengadilan Negeri Jakarta Selatan.
+
+PASAL 7: KETENTUAN PENUTUP
+Surat Perjanjian Kerja Waktu Tertentu ini diterbitkan secara sah berkekuatan hukum elektronik sesuai UU ITE No. 11/2008 Pasal 5 & 11 jo PP 71/2019 dan ditandatangani secara digital oleh para pihak.`,
     showQrSignature: true,
     signeeTitle: 'VP of Human Capital',
     signeeRole: 'Pihak Pertama (Manajemen)',
+    extractedPlaceholders: ['nomor_surat', 'nama_perusahaan', 'penandatangan', 'jabatan_penandatangan', 'nama', 'nik', 'nik_ktp', 'alamat_karyawan', 'jabatan', 'departemen', 'grade', 'tanggal_mulai', 'tanggal_berakhir', 'gaji_pokok', 'gaji_terbilang', 'rekening', 'ptkp', 'npwp'],
   },
   {
     id: 'tmpl-2',
     tenantId: 'tenant-ntm',
-    type: 'Surat Promosi',
-    name: 'Surat Keputusan Promosi & Penyesuaian Jabatan',
-    numberingPattern: '{SEQ}/HRD-SK-PROM/{TENANT}/{ROMAN_MONTH}/{YEAR}',
+    type: 'PKWTT',
+    name: 'Surat Keputusan Pengangkatan Karyawan Tetap (PKWTT)',
+    numberingPattern: '{SEQ}/DIR-SK-TETAP/{TENANT}/{ROMAN_MONTH}/{YEAR}',
     letterHeadTitle: 'PT NUSANTARA TEKNOLOGI MANDIRI',
     letterHeadAddress: 'Menara Palma Lantai 18, Jl. HR Rasuna Said Blok X-2 Kav. 6, Jakarta Selatan 12950',
-    defaultBody: 'Menimbang: Dedikasi, evaluasi kinerja KPI, dan kompetensi Saudara/i {{nama}} (NIK: {{nik}}). Memutuskan: Mengangkat yang bersangkutan ke posisi baru sebagai {{jabatan}} terhitung sejak {{tanggal}}...',
+    defaultBody: `SURAT KEPUTUSAN DIREKSI
+PENGANGKATAN KARYAWAN TETAP (PKWTT)
+Nomor: {{nomor_surat}}
+
+MENIMBANG:
+1. Bahwa Saudara/i {{nama}} (NIK: {{nik}}) telah menyelesaikan masa percobaan (probation) dengan hasil evaluasi kinerja, integritas, dan kompetensi yang memenuhi standar kualifikasi perusahaan.
+2. Bahwa dalam rangka pemenuhan formasi kebutuhan sumber daya manusia jangka panjang, dipandang perlu untuk menetapkan status kekaryawanan Saudara/i {{nama}} menjadi Karyawan Tetap.
+
+MENGINGAT:
+1. Undang-Undang No. 13 Tahun 2003 tentang Ketenagakerjaan jo UU Cipta Kerja No. 6 Tahun 2023.
+2. Peraturan Pemerintah No. 35 Tahun 2021 tentang PKWT, Alih Daya, Waktu Kerja, dan Pemutusan Hubungan Kerja.
+3. Peraturan Perusahaan dan Struktur Skala Upah {{nama_perusahaan}} yang berlaku.
+
+MEMUTUSKAN:
+PASAL 1: PENGANGKATAN STATUS KEKARYAWANAN
+Terhitung efektif sejak tanggal {{tanggal_terbit}}, mengangkat Saudara/i {{nama}} (NIK: {{nik}}) sebagai Karyawan Tetap (PKWTT) {{nama_perusahaan}} dengan penempatan posisi {{jabatan}} pada Departemen {{departemen}} (Grade Golongan: {{grade}}).
+
+<!-- PAGE_BREAK -->
+
+PASAL 2: HAK REMUNERASI & FASILITAS
+1. Sebagai Karyawan Tetap, Saudara/i berhak menerima Gaji Pokok bulanan sebesar {{gaji_pokok}} ({{gaji_terbilang}}) yang ditransfer ke rekening {{rekening}}.
+2. Saudara/i berhak atas fasilitas jaminan sosial ketenagakerjaan (BPJS Ketenagakerjaan Program JKK, JKM, JHT, JP), asuransi kesehatan eksekutif, tunjangan hari raya keagamaan (THR), serta hak cuti tahunan sesuai regulasi.
+
+PASAL 3: KEWAJIBAN, TANGGUNG JAWAB & KODE ETIK
+1. Melaksanakan tugas dan tanggung jawab kepemimpinan dengan dedikasi prima, mematuhi seluruh Standard Operating Procedure (SOP) dan Peraturan Perusahaan yang berlaku.
+2. Memegang teguh prinsip kerahasiaan informasi perusahaan dan mencegah terjadinya benturan kepentingan (conflict of interest).
+
+PASAL 4: KETENTUAN PENUTUP
+1. Surat Keputusan ini berlaku mengikat kedua belah pihak sejak tanggal ditetapkan.
+2. Apabila di kemudian hari terdapat kekeliruan dalam penetapan ini, maka akan dilakukan perbaikan dan penyesuaian sebagaimana mestinya.`,
     showQrSignature: true,
-    signeeTitle: 'Direktur Sumber Daya Manusia',
-    signeeRole: 'Pemberi Mandat',
+    signeeTitle: 'President Director & CEO',
+    signeeRole: 'Direksi Perusahaan',
+    extractedPlaceholders: ['nomor_surat', 'nama', 'nik', 'departemen', 'jabatan', 'grade', 'nama_perusahaan', 'gaji_pokok', 'gaji_terbilang', 'tanggal_terbit', 'rekening'],
   },
   {
     id: 'tmpl-3',
     tenantId: 'tenant-ntm',
-    type: 'Offering Letter',
-    name: 'Surat Penawaran Kerja Resmi (Offering Letter)',
-    numberingPattern: '{SEQ}/OL-HRD/{TENANT}/{ROMAN_MONTH}/{YEAR}',
+    type: 'Surat Promosi',
+    name: 'Surat Keputusan Promosi Jabatan & Penyesuaian Upah',
+    numberingPattern: '{SEQ}/HRD-SK-PRO/{TENANT}/{ROMAN_MONTH}/{YEAR}',
     letterHeadTitle: 'PT NUSANTARA TEKNOLOGI MANDIRI',
     letterHeadAddress: 'Menara Palma Lantai 18, Jl. HR Rasuna Said Blok X-2 Kav. 6, Jakarta Selatan 12950',
-    defaultBody: 'Kami dengan senang hati menawarkan kesempatan bergabung bersama PT Nusantara Teknologi Mandiri untuk posisi {{jabatan}} di departemen {{departemen}}...',
+    defaultBody: `SURAT KEPUTUSAN DIREKSI
+PROMOSI JABATAN & KENAIKAN GRADE STRUKTURAL
+Nomor: {{nomor_surat}}
+
+MENIMBANG:
+1. Bahwa Saudara/i {{nama}} (NIK: {{nik}}) telah membuktikan pencapaian Key Performance Indicators (KPI) dengan predikat kinerja sangat memuaskan serta menunjukkan kapasitas kepemimpinan yang unggul.
+2. Bahwa untuk mendukung akselerasi transformasi bisnis dan pengembangan divisi {{departemen}}, dibutuhkan kepemimpinan struktural pada jenjang yang lebih tinggi.
+
+MENGINGAT:
+1. Anggaran Dasar dan Pedoman Jenjang Karier Karyawan {{nama_perusahaan}}.
+2. Hasil Uji Kelayakan dan Kepatutan (Fit & Proper Test) Komite Remunerasi & Karier.
+
+MEMUTUSKAN:
+PASAL 1: PROMOSI JABATAN
+Memberikan Promosi Jabatan kepada Saudara/i {{nama}} dari jenjang sebelumnya menjadi {{jabatan}} pada unit kerja Departemen {{departemen}} (Grade: {{grade}}) terhitung sejak tanggal {{tanggal_terbit}}.
+
+<!-- PAGE_BREAK -->
+
+PASAL 2: PENYESUAIAN REMUNERASI & KOMPENSASI
+1. Sehubungan dengan peningkatan wewenang dan tanggung jawab jabatan baru, gaji pokok Saudara/i disesuaikan menjadi {{gaji_pokok}} ({{gaji_terbilang}}) per bulan.
+2. Saudara/i berhak menerima tunjangan jabatan struktural, tunjangan komunikasi, serta fasilitas pendukung manajerial sesuai tingkatan Grade {{grade}}.
+
+PASAL 3: WEWENANG OPERASIONAL
+1. Memimpin jalannya operasional tim, menetapkan target berkala anggota unit, dan memberikan evaluasi kinerja bawahan.
+2. Menyetujui pengajuan operasional dan anggaran kerja divisi sesuai batas kewenangan finansial perusahaan.
+
+PASAL 4: PENUTUP
+Keputusan ini berlaku sejak tanggal ditetapkan dengan ketentuan bahwa segala hak dan tanggung jawab baru mulai efektif dijalankan terhitung sejak tanggal penerbitan.`,
     showQrSignature: true,
-    signeeTitle: 'Lead Talent Acquisition & People Partner',
-    signeeRole: 'Human Capital Department',
+    signeeTitle: 'Direktur Sumber Daya Manusia',
+    signeeRole: 'Pemberi Mandat',
+    extractedPlaceholders: ['nomor_surat', 'nama', 'nik', 'tanggal_terbit', 'jabatan', 'departemen', 'grade', 'gaji_pokok', 'gaji_terbilang'],
   },
   {
     id: 'tmpl-4',
     tenantId: 'tenant-ntm',
-    type: 'Surat Tugas Dinas',
-    name: 'Surat Perintah Perjalanan Dinas (SPPD)',
+    type: 'Surat Mutasi',
+    name: 'Surat Keputusan Mutasi & Rotasi Unit Kerja',
+    numberingPattern: '{SEQ}/HRD-SK-MUT/{TENANT}/{ROMAN_MONTH}/{YEAR}',
+    letterHeadTitle: 'PT NUSANTARA TEKNOLOGI MANDIRI',
+    letterHeadAddress: 'Menara Palma Lantai 18, Jl. HR Rasuna Said Blok X-2 Kav. 6, Jakarta Selatan 12950',
+    defaultBody: `SURAT KEPUTUSAN MUTASI & ROTASI INTERNAL
+Nomor: {{nomor_surat}}
+
+MENIMBANG:
+Kebutuhan strategis penguatan operasional organisasi dan optimalisasi kapabilitas sumber daya manusia {{nama_perusahaan}}.
+
+MEMUTUSKAN:
+PASAL 1: Terhitung mulai {{tanggal_terbit}}, memindahkan tugas (Mutasi) Saudara/i {{nama}} (NIK: {{nik}}) ke posisi {{jabatan}} pada unit kerja Departemen {{departemen}}.
+PASAL 2: Penyesuaian hak akses sistem dan alokasi ruang kerja unit baru dikoordinasikan bersama Bagian Umum (GA).
+PASAL 3: Seluruh proses serah terima pekerjaan wajib diselesaikan maksimal 7 (tujuh) hari kerja sejak tanggal penerbitan surat keputusan ini.`,
+    showQrSignature: true,
+    signeeTitle: 'VP of Human Capital',
+    signeeRole: 'Pejabat Penetap',
+    extractedPlaceholders: ['nomor_surat', 'nama_perusahaan', 'tanggal_terbit', 'nama', 'nik', 'jabatan', 'departemen'],
+  },
+  {
+    id: 'tmpl-5',
+    tenantId: 'tenant-ntm',
+    type: 'Surat Demosi',
+    name: 'Surat Keputusan Demosi & Penyesuaian Kinerja',
+    numberingPattern: '{SEQ}/HRD-SK-DEM/{TENANT}/{ROMAN_MONTH}/{YEAR}',
+    letterHeadTitle: 'PT NUSANTARA TEKNOLOGI MANDIRI',
+    letterHeadAddress: 'Menara Palma Lantai 18, Jl. HR Rasuna Said Blok X-2 Kav. 6, Jakarta Selatan 12950',
+    defaultBody: `SURAT KEPUTUSAN DEMOSI JABATAN
+Nomor: {{nomor_surat}}
+
+MENIMBANG:
+Hasil evaluasi kinerja komprehensif serta audit kepatuhan manajerial atas Saudara/i {{nama}} (NIK: {{nik}}).
+
+MEMUTUSKAN:
+PASAL 1: Memberlakukan Demosi (penurunan jabatan) kepada Saudara/i {{nama}} menjadi {{jabatan}} pada Departemen {{departemen}} (Grade: {{grade}}).
+PASAL 2: Menyesuaikan kompensasi gaji pokok menjadi {{gaji_pokok}} ({{gaji_terbilang}}) per bulan serta mencabut fasilitas tunjangan struktural sebelumnya.
+PASAL 3: Mewajibkan yang bersangkutan mengikuti Program Peningkatan Kinerja (Performance Improvement Plan) selama 90 hari kalender.`,
+    showQrSignature: true,
+    signeeTitle: 'VP of Human Capital & Compliance',
+    signeeRole: 'Pejabat Penetap Disiplin',
+    extractedPlaceholders: ['nomor_surat', 'nama', 'nik', 'jabatan', 'departemen', 'grade', 'gaji_pokok', 'gaji_terbilang'],
+  },
+  {
+    id: 'tmpl-6',
+    tenantId: 'tenant-ntm',
+    type: 'Surat Penetapan Plt',
+    name: 'Surat Keputusan Penetapan Pelaksana Tugas (Plt / Acting Role)',
+    numberingPattern: '{SEQ}/HRD-SK-PLT/{TENANT}/{ROMAN_MONTH}/{YEAR}',
+    letterHeadTitle: 'PT NUSANTARA TEKNOLOGI MANDIRI',
+    letterHeadAddress: 'Menara Palma Lantai 18, Jl. HR Rasuna Said Blok X-2 Kav. 6, Jakarta Selatan 12950',
+    defaultBody: `SURAT KEPUTUSAN PENETAPAN PELAKSANA TUGAS (PLT)
+Nomor: {{nomor_surat}}
+
+MENIMBANG:
+Mengisi kekosongan kepemimpinan fungsional pada Departemen {{departemen}} guna menjamin kelancaran roda operasional perusahaan.
+
+MEMUTUSKAN:
+PASAL 1: Menunjuk Saudara/i {{nama}} (NIK: {{nik}}) di samping tugas pokoknya saat ini, untuk bertindak selaku Pelaksana Tugas (Plt) {{jabatan}}.
+PASAL 2: Pelaksana Tugas diberikan hak wewenang supervisi manajerial dan approval operasional tingkat unit.
+PASAL 3: Penugasan ini berlaku maksimal 6 (enam) bulan terhitung sejak {{tanggal_terbit}} sampai pejabat definitif ditetapkan.`,
+    showQrSignature: true,
+    signeeTitle: 'Managing Director',
+    signeeRole: 'Direksi Operasional',
+    extractedPlaceholders: ['nomor_surat', 'departemen', 'nama', 'nik', 'jabatan', 'tanggal_terbit'],
+  },
+  {
+    id: 'tmpl-7',
+    tenantId: 'tenant-ntm',
+    type: 'Addendum PKWT',
+    name: 'Addendum Perpanjangan Kontrak Kerja Waktu Tertentu',
+    numberingPattern: '{SEQ}/ADD-PKWT/{TENANT}/{ROMAN_MONTH}/{YEAR}',
+    letterHeadTitle: 'PT NUSANTARA TEKNOLOGI MANDIRI',
+    letterHeadAddress: 'Menara Palma Lantai 18, Jl. HR Rasuna Said Blok X-2 Kav. 6, Jakarta Selatan 12950',
+    defaultBody: `ADDENDUM PERJANJIAN KERJA WAKTU TERTENTU
+Nomor: {{nomor_surat}}
+
+Menyambung Perjanjian Kerja Waktu Tertentu sebelumnya, Manajemen {{nama_perusahaan}} dengan Saudara/i {{nama}} (NIK: {{nik}}), sepakat menyetujui:
+PASAL 1: Memperpanjang jangka waktu hubungan kerja Saudara/i {{nama}} sebagai {{jabatan}} pada Departemen {{departemen}} sampai dengan tanggal {{tanggal_berakhir}}.
+PASAL 2: Besaran Gaji Pokok ditetapkan sebesar {{gaji_pokok}} ({{gaji_terbilang}}) per bulan.
+PASAL 3: Seluruh pasal dan ketentuan dalam perjanjian induk yang tidak diubah dalam addendum ini tetap berlaku sah dan mengikat.`,
+    showQrSignature: true,
+    signeeTitle: 'Head of People Operations',
+    signeeRole: 'Pihak Pertama',
+    extractedPlaceholders: ['nomor_surat', 'nama_perusahaan', 'nama', 'nik', 'jabatan', 'departemen', 'tanggal_berakhir', 'gaji_pokok', 'gaji_terbilang'],
+  },
+  {
+    id: 'tmpl-8',
+    tenantId: 'tenant-ntm',
+    type: 'Surat Peringatan SP 1',
+    name: 'Surat Peringatan Tingkat Pertama (SP-1)',
+    numberingPattern: '{SEQ}/HRD-SP1/{TENANT}/{ROMAN_MONTH}/{YEAR}',
+    letterHeadTitle: 'PT NUSANTARA TEKNOLOGI MANDIRI',
+    letterHeadAddress: 'Menara Palma Lantai 18, Jl. HR Rasuna Said Blok X-2 Kav. 6, Jakarta Selatan 12950',
+    defaultBody: `SURAT PERINGATAN PERTAMA (SP-1)
+Nomor: {{nomor_surat}}
+
+Diberikan kepada:
+Nama: {{nama}}
+NIK: {{nik}}
+Jabatan: {{jabatan}}
+Departemen: {{departemen}}
+
+Berdasarkan hasil catatan presensi dan pelanggaran tata tertib kerja disipliner di lingkungan {{nama_perusahaan}}.
+Melalui surat ini, Manajemen memberikan Peringatan Pertama (SP-1) agar Saudara/i segera memperbaiki kedisiplinan dan kepatuhan kerja.
+Masa berlaku Surat Peringatan ini adalah 6 (enam) bulan terhitung sejak {{tanggal_terbit}}. Apabila terjadi pengulangan pelanggaran, akan ditingkatkan ke sanksi yang lebih berat sesuai UU Ketenagakerjaan.`,
+    showQrSignature: true,
+    signeeTitle: 'Manager Industrial Relations & Compliance',
+    signeeRole: 'Bagian Kedisiplinan Karyawan',
+    extractedPlaceholders: ['nomor_surat', 'nama', 'nik', 'jabatan', 'departemen', 'nama_perusahaan', 'tanggal_terbit'],
+  },
+  {
+    id: 'tmpl-9',
+    tenantId: 'tenant-ntm',
+    type: 'Surat Peringatan SP 2',
+    name: 'Surat Peringatan Tingkat Kedua (SP-2)',
+    numberingPattern: '{SEQ}/HRD-SP2/{TENANT}/{ROMAN_MONTH}/{YEAR}',
+    letterHeadTitle: 'PT NUSANTARA TEKNOLOGI MANDIRI',
+    letterHeadAddress: 'Menara Palma Lantai 18, Jl. HR Rasuna Said Blok X-2 Kav. 6, Jakarta Selatan 12950',
+    defaultBody: `SURAT PERINGATAN KEDUA (SP-2)
+Nomor: {{nomor_surat}}
+
+Diberikan kepada:
+Nama: {{nama}}
+NIK: {{nik}}
+Jabatan: {{jabatan}}
+Departemen: {{departemen}}
+
+Menindaklanjuti ketidakpatuhan berkelanjutan setelah diterbitkannya Surat Peringatan Pertama, Manajemen {{nama_perusahaan}} menetapkan SURAT PERINGATAN KEDUA (SP-2).
+Saudara/i diwajibkan melakukan konseling bersama Human Capital dan mematuhi target perbaikan kedisiplinan. Surat Peringatan ini berlaku selama 6 (enam) bulan sejak {{tanggal_terbit}}.`,
+    showQrSignature: true,
+    signeeTitle: 'VP of Human Capital',
+    signeeRole: 'Pejabat Penegak Disiplin',
+    extractedPlaceholders: ['nomor_surat', 'nama', 'nik', 'jabatan', 'departemen', 'nama_perusahaan', 'tanggal_terbit'],
+  },
+  {
+    id: 'tmpl-10',
+    tenantId: 'tenant-ntm',
+    type: 'Surat Peringatan SP 3',
+    name: 'Surat Peringatan Tingkat Ketiga / Terakhir (SP-3)',
+    numberingPattern: '{SEQ}/HRD-SP3/{TENANT}/{ROMAN_MONTH}/{YEAR}',
+    letterHeadTitle: 'PT NUSANTARA TEKNOLOGI MANDIRI',
+    letterHeadAddress: 'Menara Palma Lantai 18, Jl. HR Rasuna Said Blok X-2 Kav. 6, Jakarta Selatan 12950',
+    defaultBody: `SURAT PERINGATAN KETIGA / TERAKHIR (SP-3)
+Nomor: {{nomor_surat}}
+
+Diberikan kepada:
+Nama: {{nama}}
+NIK: {{nik}}
+Jabatan: {{jabatan}}
+Departemen: {{departemen}}
+
+Diterbitkan sebagai tindakan disiplin tingkat akhir atas pelanggaran berulang terhadap Peraturan Perusahaan {{nama_perusahaan}}.
+Peringatan ini berlaku 6 (enam) bulan terhitung sejak {{tanggal_terbit}}. Pelanggaran lanjutan selama masa aktif ini akan langsung berakibat Pemutusan Hubungan Kerja (PHK) sepihak sesuai ketentuan hukum yang berlaku.`,
+    showQrSignature: true,
+    signeeTitle: 'Director of Human Resources & Legal',
+    signeeRole: 'Direksi Penegak Disiplin',
+    extractedPlaceholders: ['nomor_surat', 'nama', 'nik', 'jabatan', 'departemen', 'nama_perusahaan', 'tanggal_terbit'],
+  },
+  {
+    id: 'tmpl-11',
+    tenantId: 'tenant-ntm',
+    type: 'Offering Letter',
+    name: 'Surat Penawaran Kerja Resmi (Job Offering Letter)',
+    numberingPattern: '{SEQ}/OL-HRD/{TENANT}/{ROMAN_MONTH}/{YEAR}',
+    letterHeadTitle: 'PT NUSANTARA TEKNOLOGI MANDIRI',
+    letterHeadAddress: 'Menara Palma Lantai 18, Jl. HR Rasuna Said Blok X-2 Kav. 6, Jakarta Selatan 12950',
+    defaultBody: `SURAT PENAWARAN KERJA RESMI (OFFERING LETTER)
+Nomor: {{nomor_surat}}
+
+Kepada Yth:
+Saudara/i {{nama}}
+
+Dengan hormat,
+Manajemen {{nama_perusahaan}} dengan bangga menawarkan kesempatan berkarir untuk posisi:
+- Jabatan: {{jabatan}}
+- Departemen: {{departemen}}
+- Gaji Pokok Yang Ditawarkan: {{gaji_pokok}} ({{gaji_terbilang}})
+- Perkiraan Tanggal Mulai: {{tanggal_mulai}}
+
+Fasilitas kompensasi meliputi perlindungan asuransi kesehatan BPJS, tunjangan komunikasi, dan bonus kinerja tahunan. Penawaran ini berlaku 7 (tujuh) hari kerja sejak diterbitkan.`,
+    showQrSignature: true,
+    signeeTitle: 'Head of Talent Acquisition',
+    signeeRole: 'Human Capital Recruitment',
+    extractedPlaceholders: ['nomor_surat', 'nama', 'nama_perusahaan', 'jabatan', 'departemen', 'gaji_pokok', 'gaji_terbilang', 'tanggal_mulai'],
+  },
+  {
+    id: 'tmpl-12',
+    tenantId: 'tenant-ntm',
+    type: 'Surat Perintah Perjalanan Dinas',
+    name: 'Surat Perintah Perjalanan Dinas Resmi (SPPD)',
     numberingPattern: '{SEQ}/SPPD-HRD/{TENANT}/{ROMAN_MONTH}/{YEAR}',
     letterHeadTitle: 'PT NUSANTARA TEKNOLOGI MANDIRI',
     letterHeadAddress: 'Menara Palma Lantai 18, Jl. HR Rasuna Said Blok X-2 Kav. 6, Jakarta Selatan 12950',
-    defaultBody: 'Memberikan tugas kepada Saudara/i {{nama}} (NIK: {{nik}}) untuk melaksanakan perjalanan dinas resmi dalam rangka penugasan perusahaan...',
+    defaultBody: `SURAT PERINTAH PERJALANAN DINAS (SPPD)
+Nomor: {{nomor_surat}}
+
+Pejabat Pemberi Perintah menugaskan kepada:
+1. Nama Pelaksana: {{nama}}
+2. NIK: {{nik}}
+3. Jabatan: {{jabatan}}
+4. Departemen: {{departemen}}
+
+Untuk melaksanakan Perjalanan Dinas Resmi penugasan proyek dan koordinasi operasional terhitung sejak tanggal {{tanggal_terbit}}.
+Seluruh biaya akomodasi, tiket perjalanan, dan uang harian (per diem) dibebankan pada pos anggaran perjalanan dinas {{nama_perusahaan}}.`,
     showQrSignature: true,
     signeeTitle: 'Head of Division / Finance Director',
-    signeeRole: 'Pejabat Pemberi Perintah',
+    signeeRole: 'Pejabat Pemberi Mandat Perjalanan Dinas',
+    extractedPlaceholders: ['nomor_surat', 'nama', 'nik', 'jabatan', 'departemen', 'tanggal_terbit', 'nama_perusahaan'],
+  },
+  {
+    id: 'tmpl-13',
+    tenantId: 'tenant-ntm',
+    type: 'Paklaring',
+    name: 'Surat Keterangan Pengalaman Kerja (Certificate of Employment)',
+    numberingPattern: '{SEQ}/SK-PKL/{TENANT}/{ROMAN_MONTH}/{YEAR}',
+    letterHeadTitle: 'PT NUSANTARA TEKNOLOGI MANDIRI',
+    letterHeadAddress: 'Menara Palma Lantai 18, Jl. HR Rasuna Said Blok X-2 Kav. 6, Jakarta Selatan 12950',
+    defaultBody: `SURAT KETERANGAN PENGALAMAN KERJA (PAKLARING)
+Nomor: {{nomor_surat}}
+
+Manajemen {{nama_perusahaan}} menerangkan dengan sebenarnya bahwa:
+Nama: {{nama}}
+NIK: {{nik}}
+Jabatan Terakhir: {{jabatan}}
+Departemen: {{departemen}}
+
+Telah bekerja dengan integritas dan dedikasi yang baik terhitung sejak {{tanggal_mulai}} sampai dengan {{tanggal_berakhir}}.
+Perusahaan mengucapkan terima kasih dan apresiasi sebesar-besarnya atas sumbangsih tenaga dan pikiran yang telah diberikan.`,
+    showQrSignature: true,
+    signeeTitle: 'VP of Human Capital',
+    signeeRole: 'Atas Nama Manajemen',
+    extractedPlaceholders: ['nomor_surat', 'nama_perusahaan', 'nama', 'nik', 'jabatan', 'departemen', 'tanggal_mulai', 'tanggal_berakhir'],
+  },
+  {
+    id: 'tmpl-14',
+    tenantId: 'tenant-ntm',
+    type: 'Surat Pemutusan Hubungan Kerja (PHK)',
+    name: 'Surat Keputusan Pengakhiran Hubungan Kerja & Exit Clearance',
+    numberingPattern: '{SEQ}/DIR-SK-PHK/{TENANT}/{ROMAN_MONTH}/{YEAR}',
+    letterHeadTitle: 'PT NUSANTARA TEKNOLOGI MANDIRI',
+    letterHeadAddress: 'Menara Palma Lantai 18, Jl. HR Rasuna Said Blok X-2 Kav. 6, Jakarta Selatan 12950',
+    defaultBody: `SURAT KEPUTUSAN PENGAKHIRAN HUBUNGAN KERJA
+Nomor: {{nomor_surat}}
+
+MENIMBANG:
+Ketentuan perundang-undangan ketenagakerjaan RI serta penyelesaian prosedur penonaktifan kerja di {{nama_perusahaan}}.
+
+MEMUTUSKAN:
+PASAL 1: Mengakhiri hubungan kerja Saudara/i {{nama}} (NIK: {{nik}}), jabatan {{jabatan}} pada Departemen {{departemen}} efektif per tanggal {{tanggal_berakhir}}.
+PASAL 2: Hak kompensasi pesangon, penghargaan masa kerja, dan penggantian hak dibayarkan sesuai ketentuan PP 35/2021.
+PASAL 3: Seluruh inventaris, kartu akses, dan data perusahaan wajib diserahterimakan penuh melalui Bagian Umum (GA).`,
+    showQrSignature: true,
+    signeeTitle: 'President Director & CEO',
+    signeeRole: 'Direksi Perusahaan',
+    extractedPlaceholders: ['nomor_surat', 'nama_perusahaan', 'nama', 'nik', 'jabatan', 'departemen', 'tanggal_berakhir'],
+  },
+  {
+    id: 'tmpl-15',
+    tenantId: 'tenant-ntm',
+    type: 'BAST Aset',
+    name: 'Berita Acara Serah Terima Aset & Inventaris Kerja (GA)',
+    numberingPattern: '{SEQ}/BAST-GA/{TENANT}/{ROMAN_MONTH}/{YEAR}',
+    letterHeadTitle: 'PT NUSANTARA TEKNOLOGI MANDIRI',
+    letterHeadAddress: 'Menara Palma Lantai 18, Jl. HR Rasuna Said Blok X-2 Kav. 6, Jakarta Selatan 12950',
+    defaultBody: `BERITA ACARA SERAH TERIMA ASET KERJA (BAST)
+Nomor: {{nomor_surat}}
+
+Pada tanggal {{tanggal_terbit}}, telah dilakukan serah terima fasilitas inventaris logistik antara Bagian Umum {{nama_perusahaan}} dengan:
+Nama Karyawan: {{nama}}
+NIK: {{nik}}
+Posisi / Unit: {{jabatan}} - {{departemen}}
+
+Karyawan bersangkutan menerima fasilitas peralatan kerja dalam kondisi baik dan berfungsi prima. Pihak penerima bertanggung jawab penuh menjaga, merawat, dan mengembalikan aset inventaris saat masa penugasan berakhir.`,
+    showQrSignature: true,
+    signeeTitle: 'General Affairs & Asset Lead',
+    signeeRole: 'Bagian Logistik & Sarana',
+    extractedPlaceholders: ['nomor_surat', 'tanggal_terbit', 'nama_perusahaan', 'nama', 'nik', 'jabatan', 'departemen'],
+  },
+  {
+    id: 'tmpl-16',
+    tenantId: 'tenant-ntm',
+    type: 'Slip Gaji Karyawan',
+    name: 'Bukti Resmi Pembayaran Upah & Slip Gaji Bulanan (Official Payslip)',
+    numberingPattern: '{SEQ}/PAY/{TENANT}/{ROMAN_MONTH}/{YEAR}',
+    letterHeadTitle: 'PT NUSANTARA TEKNOLOGI MANDIRI',
+    letterHeadAddress: 'Menara Palma Lantai 18, Jl. HR Rasuna Said Blok X-2 Kav. 6, Jakarta Selatan 12950',
+    defaultBody: `BUKTI PEMBAYARAN PENGGAJIAN RESMI (PAYSLIP VOUCHER)
+Nomor: {{nomor_surat}}
+
+Nama Karyawan: {{nama}}
+NIK: {{nik}} | Status Pajak: {{ptkp}}
+Jabatan: {{jabatan}} | Departemen: {{departemen}}
+Rekening Transfer: {{rekening}}
+
+KOMPONEN PENGHASILAN:
+1. Gaji Pokok: {{gaji_pokok}} ({{gaji_terbilang}})
+2. Tunjangan Fungsional & Lembur: Sesuai perhitungan absensi presensi
+3. Potongan Wajib: PPh 21, BPJS Ketenagakerjaan (JHT, JP), BPJS Kesehatan
+
+Dokumen ini merupakan bukti sah transfer penggajian dan dilindungi keotentikan QR validasi audit sistem NusaHR Enterprise.`,
+    showQrSignature: true,
+    signeeTitle: 'Payroll & Compensation Manager',
+    signeeRole: 'Finance & Remuneration',
+    extractedPlaceholders: ['nomor_surat', 'nama', 'nik', 'ptkp', 'jabatan', 'departemen', 'rekening', 'gaji_pokok', 'gaji_terbilang'],
+  },
+  {
+    id: 'tmpl-17',
+    tenantId: 'tenant-ntm',
+    type: 'Surat Keputusan Cuti',
+    name: 'Surat Persetujuan & Pengesahan Hak Cuti Karyawan',
+    numberingPattern: '{SEQ}/CUTI-HRD/{TENANT}/{ROMAN_MONTH}/{YEAR}',
+    letterHeadTitle: 'PT NUSANTARA TEKNOLOGI MANDIRI',
+    letterHeadAddress: 'Menara Palma Lantai 18, Jl. HR Rasuna Said Blok X-2 Kav. 6, Jakarta Selatan 12950',
+    defaultBody: `SURAT PERSETUJUAN HAK CUTI KARYAWAN
+Nomor: {{nomor_surat}}
+
+Berdasarkan pengajuan permohonan cuti pada sistem NusaHR, manajemen memberikan persetujuan kepada:
+Nama: {{nama}}
+NIK: {{nik}}
+Jabatan: {{jabatan}}
+Departemen: {{departemen}}
+
+Hak cuti disetujui terhitung mulai tanggal {{tanggal_terbit}}. Seluruh delegasi tugas pekerjaan selama masa cuti telah diserahterimakan kepada rekan kerja pengganti sesuai persetujuan atasan langsung.`,
+    showQrSignature: true,
+    signeeTitle: 'Head of People Operations',
+    signeeRole: 'Human Capital Department',
+    extractedPlaceholders: ['nomor_surat', 'nama', 'nik', 'jabatan', 'departemen', 'tanggal_terbit'],
+  },
+  {
+    id: 'tmpl-18',
+    tenantId: 'tenant-ntm',
+    type: 'Surat Perintah Lembur',
+    name: 'Surat Perintah Kerja Lembur (Overtime Mandate)',
+    numberingPattern: '{SEQ}/SPKL-HRD/{TENANT}/{ROMAN_MONTH}/{YEAR}',
+    letterHeadTitle: 'PT NUSANTARA TEKNOLOGI MANDIRI',
+    letterHeadAddress: 'Menara Palma Lantai 18, Jl. HR Rasuna Said Blok X-2 Kav. 6, Jakarta Selatan 12950',
+    defaultBody: `SURAT PERINTAH KERJA LEMBUR (SPKL)
+Nomor: {{nomor_surat}}
+
+Memberikan instruksi kerja lembur dalam rangka percepatan penyelesaian target operasional kepada:
+Nama: {{nama}}
+NIK: {{nik}}
+Jabatan: {{jabatan}}
+Departemen: {{departemen}}
+
+Kompensasi upah lembur dihitung berlandaskan PP No. 35 Tahun 2021 dan diverifikasi melalui catatan presensi sistem NusaHR.`,
+    showQrSignature: true,
+    signeeTitle: 'Department Head & Operational Lead',
+    signeeRole: 'Pemberi Mandat Lembur',
+    extractedPlaceholders: ['nomor_surat', 'nama', 'nik', 'jabatan', 'departemen'],
+  },
+  {
+    id: 'tmpl-19',
+    tenantId: 'tenant-ntm',
+    type: 'Formulir Pinjaman / Kasbon',
+    name: 'Surat Persetujuan & Perjanjian Fasilitas Pinjaman Karyawan',
+    numberingPattern: '{SEQ}/LOAN-HRD/{TENANT}/{ROMAN_MONTH}/{YEAR}',
+    letterHeadTitle: 'PT NUSANTARA TEKNOLOGI MANDIRI',
+    letterHeadAddress: 'Menara Palma Lantai 18, Jl. HR Rasuna Said Blok X-2 Kav. 6, Jakarta Selatan 12950',
+    defaultBody: `SURAT PERSETUJUAN PINJAMAN KASBON KARYAWAN
+Nomor: {{nomor_surat}}
+
+Pihak Manajemen {{nama_perusahaan}} menyetujui permohonan fasilitas pinjaman dana internal kepada:
+Nama: {{nama}}
+NIK: {{nik}}
+Jabatan: {{jabatan}}
+Departemen: {{departemen}}
+
+Pengembalian pinjaman dilakukan melalui skema pemotongan langsung pada slip penggajian bulanan (payroll deduction) sesuai masa tenor dan plafon yang disepakati.`,
+    showQrSignature: true,
+    signeeTitle: 'Finance Director & Treasury Lead',
+    signeeRole: 'Komite Pembiayaan Internal',
+    extractedPlaceholders: ['nomor_surat', 'nama_perusahaan', 'nama', 'nik', 'jabatan', 'departemen'],
+  },
+  {
+    id: 'tmpl-20',
+    tenantId: 'tenant-ntm',
+    type: 'Perjanjian Kerahasiaan (NDA)',
+    name: 'Non-Disclosure Agreement Kerahasiaan Data & Rahasia Dagang (NDA)',
+    numberingPattern: '{SEQ}/LEGAL-NDA/{TENANT}/{ROMAN_MONTH}/{YEAR}',
+    letterHeadTitle: 'PT NUSANTARA TEKNOLOGI MANDIRI',
+    letterHeadAddress: 'Menara Palma Lantai 18, Jl. HR Rasuna Said Blok X-2 Kav. 6, Jakarta Selatan 12950',
+    defaultBody: `PERJANJIAN KERAHASIAAN INFORMASI & DATA RAHASIA DAGANG (NDA)
+Nomor: {{nomor_surat}}
+
+Antara {{nama_perusahaan}} dengan Saudara/i {{nama}} (NIK: {{nik}}), jabatan {{jabatan}} pada Departemen {{departemen}}.
+PIHAK KEDUA berjanji tidak akan menyebarluaskan, mendistribusikan, menyalin, atau memanfaatkan informasi rahasia, source code, data nasabah, maupun rahasia dagang perusahaan untuk kepentingan pribadi maupun pihak ketiga tanpa izin tertulis dari direksi perusahaan.
+Pelanggaran atas ketentuan ini tunduk pada UU Rahasia Dagang dan UU ITE yang berlaku di wilayah Republik Indonesia.`,
+    showQrSignature: true,
+    signeeTitle: 'Chief Legal Officer & Corporate Secretary',
+    signeeRole: 'Legal & Kepatuhan',
+    extractedPlaceholders: ['nomor_surat', 'nama_perusahaan', 'nama', 'nik', 'jabatan', 'departemen'],
+  },
+  {
+    id: 'tmpl-21',
+    tenantId: 'tenant-ntm',
+    type: 'SK Pengangkatan Tenaga Ahli',
+    name: 'Surat Keputusan Pengangkatan Tenaga Ahli / Konsultan Independen',
+    numberingPattern: '{SEQ}/DIR-SK-AHLI/{TENANT}/{ROMAN_MONTH}/{YEAR}',
+    paperSize: 'A4',
+    letterHeadTitle: 'PT NUSANTARA TEKNOLOGI MANDIRI',
+    letterHeadAddress: 'Menara Palma Lantai 18, Jl. HR Rasuna Said Blok X-2 Kav. 6, Jakarta Selatan 12950',
+    defaultBody: `SURAT KEPUTUSAN DIREKSI
+PENGANGKATAN TENAGA AHLI / KONSULTAN INDEPENDEN
+Nomor: {{nomor_surat}}
+
+MENIMBANG:
+1. Bahwa dalam rangka percepatan inisiatif transformasi digital, arsitektur enterprise, dan penguatan tata kelola kepatuhan hukum korporasi di {{nama_perusahaan}}, diperlukan keahlian khusus dan kepakaran independen tingkat tinggi.
+2. Bahwa Saudara/i {{nama}} (NIK / No. KTP: {{nik_ktp}}) dinilai memiliki kompetensi profesional, rekam jejak industri teruji, dan reputasi keilmuan yang memenuhi syarat untuk diangkat sebagai Tenaga Ahli.
+
+MENGINGAT:
+1. Undang-Undang No. 13 Tahun 2003 tentang Ketenagakerjaan jo UU Cipta Kerja No. 6 Tahun 2023.
+2. Anggaran Dasar dan Pedoman Kemitraan Profesional {{nama_perusahaan}}.
+
+MEMUTUSKAN:
+PASAL 1: PENGANGKATAN & JABATAN
+Mengangkat Saudara/i {{nama}} sebagai Tenaga Ahli / Konsultan Senior pada unit kerja {{departemen}} {{nama_perusahaan}} terhitung sejak {{tanggal_mulai}} sampai dengan {{tanggal_berakhir}}.
+
+PASAL 2: RUANG LINGKUP PENUGASAN (SCOPE OF WORK)
+1. Memberikan arahan strategis, advis teknis, dan audit independen terhadap peta jalan implementasi arsitektur sistem.
+2. Menyusun rekomendasi manajerial dan policy paper berkala kepada jajaran Direksi {{nama_perusahaan}}.
+3. Melakukan pendampingan dan transfer knowledge kepada tim fungsional internal.
+
+<!-- PAGE_BREAK -->
+
+PASAL 3: HONORARIUM, RETENSI & PAJAK
+1. Tenaga Ahli berhak menerima Honorarium Jasa Konsultansi sebesar {{gaji_pokok}} ({{gaji_terbilang}}) per bulan yang dibayarkan melalui transfer ke rekening {{rekening}}.
+2. Pemotongan Pajak Penghasilan (PPh 21 / PPh 23 Tenaga Ahli) dilakukan langsung oleh {{nama_perusahaan}} sesuai ketentuan perpajakan Coretax DJP yang berlaku dengan NPWP: {{npwp}}.
+3. Fasilitas penunjang operasional, ruang kerja konsultasi, dan akses sistem disediakan selama periode penugasan aktif.
+
+PASAL 4: KERAHASIAAN INFORMASI & KEPEMILIKAN INTELEKTUAL
+1. Seluruh dokumen kajian, arsitektur teknis, dan rekomendasi yang dihasilkan merupakan Hak Kekayaan Intelektual (HKI) milik penuh {{nama_perusahaan}}.
+2. Tenaga Ahli wajib mematuhi pakta integritas dan Non-Disclosure Agreement (NDA) serta tidak membocorkan data kepada pihak ketiga tanpa persetujuan tertulis Direksi.
+
+PASAL 5: KETENTUAN PENUTUP
+Surat Keputusan ini berlaku efektif sejak tanggal ditetapkan dan ditandatangani secara sah berkekuatan hukum elektronik.`,
+    showQrSignature: true,
+    signeeTitle: 'President Director & CEO',
+    signeeRole: 'Pemberi Mandat / Direksi',
+    extractedPlaceholders: ['nomor_surat', 'nama_perusahaan', 'nama', 'nik_ktp', 'departemen', 'tanggal_mulai', 'tanggal_berakhir', 'gaji_pokok', 'gaji_terbilang', 'rekening', 'npwp'],
+  },
+  {
+    id: 'tmpl-22',
+    tenantId: 'tenant-ntm',
+    type: 'Sertifikat Selesai Magang',
+    name: 'Sertifikat Telah Selesai Magang (Certificate of Internship Completion)',
+    numberingPattern: '{SEQ}/CERT-INT/{TENANT}/{ROMAN_MONTH}/{YEAR}',
+    paperSize: 'A4',
+    letterHeadTitle: 'PT NUSANTARA TEKNOLOGI MANDIRI',
+    letterHeadAddress: 'Menara Palma Lantai 18, Jl. HR Rasuna Said Blok X-2 Kav. 6, Jakarta Selatan 12950',
+    defaultBody: `SERTIFIKAT KELULUSAN PROGRAM MAGANG
+CERTIFICATE OF INTERNSHIP COMPLETION
+Nomor Registrasi: {{nomor_surat}}
+
+Diberikan dengan bangga kepada:
+{{nama}}
+Nomor Induk / NIM: {{nik}}
+Institusi Pendidikan: {{institusi}}
+
+Telah menyelesaikan secara memuaskan Program Magang Kerja Industri (Certified Internship Program) pada:
+Departemen / Divisi: {{departemen}}
+Posisi / Fokus Keahlian: {{jabatan}}
+Periode Pelaksanaan: {{tanggal_mulai}} s/d {{tanggal_berakhir}}
+
+HASIL EVALUASI KOMPETENSI:
+1. Penguasaan Keterampilan Teknis (Hard Skills): PREDIKAT SANGAT BAIK (A)
+2. Kemampuan Komunikasi & Kerjasama Tim: PREDIKAT SANGAT BAIK (A)
+3. Kedisiplinan, Inisiatif & Etika Kerja: PREDIKAT SANGAT BAIK (A)
+4. Proyek Akhir Magang (Capstone Project): Diterima Penuh oleh Tim Engineering
+
+Manajemen {{nama_perusahaan}} menyampaikan penghargaan dan ucapan terima kasih atas dedikasi serta kontribusi nyata yang telah ditunjukkan selama program magang berlangsung.`,
+    showQrSignature: true,
+    signeeTitle: 'VP of Human Capital & Talent Development',
+    signeeRole: 'Penyelenggara Program Magang',
+    extractedPlaceholders: ['nomor_surat', 'nama', 'nik', 'institusi', 'departemen', 'jabatan', 'tanggal_mulai', 'tanggal_berakhir', 'nama_perusahaan'],
+  },
+  {
+    id: 'tmpl-23',
+    tenantId: 'tenant-ntm',
+    type: 'Surat Pernyataan Magang',
+    name: 'Surat Pernyataan & Perjanjian Kesepakatan Program Magang (Internship Agreement)',
+    numberingPattern: '{SEQ}/INT-AGR/{TENANT}/{ROMAN_MONTH}/{YEAR}',
+    paperSize: 'A4',
+    letterHeadTitle: 'PT NUSANTARA TEKNOLOGI MANDIRI',
+    letterHeadAddress: 'Menara Palma Lantai 18, Jl. HR Rasuna Said Blok X-2 Kav. 6, Jakarta Selatan 12950',
+    defaultBody: `SURAT PERNYATAAN KESEPAKATAN PROGRAM MAGANG
+Nomor: {{nomor_surat}}
+
+Yang bertanda tangan di bawah ini:
+Nama Lengkap: {{nama}}
+NIK / No. KTP: {{nik_ktp}}
+Asal Kampus / Sekolah: {{institusi}}
+Program Studi: {{jurusan}}
+Alamat Domisili: {{alamat_karyawan}}
+Nomor Kontak: {{nomor_telepon}}
+
+Dengan ini menyatakan bersedia dan berjanji mengikatkan diri dalam Program Magang Industri di {{nama_perusahaan}} dengan ketentuan:
+1. Melaksanakan pembelajaran dan praktik kerja di Departemen {{departemen}} mulai tanggal {{tanggal_mulai}} sampai {{tanggal_berakhir}}.
+2. Menerima Uang Saku Transportasi & Makan bulanan sebesar {{gaji_pokok}} yang dibayarkan setiap tanggal cut-off penggajian.
+3. Wajib mematuhi seluruh jam kerja operasional (08.30 - 17.30 WIB), tata tertib berpakaian rapi, dan menjaga nama baik perusahaan.
+4. Menjaga kerahasiaan seluruh dokumen, data pelanggan, kode sumber aplikasi, dan rahasia dagang {{nama_perusahaan}}.
+5. Menyusun laporan akhir kegiatan magang dan mempresentasikannya di hadapan Mentor Pembimbing sebelum masa magang berakhir.
+
+Demikian Surat Pernyataan ini saya buat dengan sadar, penuh rasa tanggung jawab, dan tanpa paksaan dari pihak manapun.`,
+    showQrSignature: true,
+    signeeTitle: 'Head of People Operations',
+    signeeRole: 'Pihak Pertama (Manajemen)',
+    extractedPlaceholders: ['nomor_surat', 'nama', 'nik_ktp', 'institusi', 'jurusan', 'alamat_karyawan', 'nomor_telepon', 'nama_perusahaan', 'departemen', 'tanggal_mulai', 'tanggal_berakhir', 'gaji_pokok'],
+  },
+  {
+    id: 'tmpl-24',
+    tenantId: 'tenant-ntm',
+    type: 'Slip Gaji Karyawan',
+    name: 'Bukti Resmi Pembayaran Gaji Karyawan (Slip Gaji Ringkas A5)',
+    numberingPattern: '{SEQ}/PAY-A5/{TENANT}/{ROMAN_MONTH}/{YEAR}',
+    paperSize: 'A5',
+    letterHeadTitle: 'PT NUSANTARA TEKNOLOGI MANDIRI',
+    letterHeadAddress: 'Menara Palma Lantai 18, Jl. HR Rasuna Said, Jakarta Selatan 12950',
+    defaultBody: `BUKTI TRANSFER PEMBAYARAN PENGGAJIAN (PAYSLIP)
+Periode Penggajian: {{periode_gaji}} | No: {{nomor_surat}}
+
+DATA PEGAWAI:
+Nama: {{nama}} (NIK: {{nik}})
+Jabatan: {{jabatan}} | Divisi: {{departemen}}
+Status Pajak: {{ptkp}} | NPWP: {{npwp}}
+Rekening Tujuan: {{rekening}}
+
+RINCIAN PENERIMAAN:
+1. Gaji Pokok: {{gaji_pokok}}
+2. Tunjangan Tetap / Posisi: {{tunjangan_tetap}}
+3. Tunjangan Transport & Makan: {{tunjangan_makan}}
+4. Kompensasi Lembur Resmi: {{upah_lembur}}
+TOTAL PENGHASILAN BRUTO: {{total_bruto}}
+
+POTONGAN RESMI:
+1. PPh Pasal 21 (Coretax): {{potongan_pph21}}
+2. Iuran BPJS Ketenagakerjaan (JHT 2% + JP 1%): {{potongan_bpjstk}}
+3. Iuran BPJS Kesehatan (1%): {{potongan_bpjskes}}
+4. Potongan Pinjaman Karyawan / Kasbon: {{potongan_kasbon}}
+TOTAL POTONGAN: {{total_potongan}}
+
+GAJI BERSIH DITERIMA (TAKE HOME PAY): {{thp_bersih}}
+Terbilang: {{thp_terbilang}}
+
+Dokumen ini dicetak otomatis dari Sistem HRMS & sah menurut UU ITE No. 11/2008.`,
+    showQrSignature: true,
+    signeeTitle: 'Payroll & Remuneration Lead',
+    signeeRole: 'Finance & Human Capital',
+    extractedPlaceholders: ['periode_gaji', 'nomor_surat', 'nama', 'nik', 'jabatan', 'departemen', 'ptkp', 'npwp', 'rekening', 'gaji_pokok', 'tunjangan_tetap', 'tunjangan_makan', 'upah_lembur', 'total_bruto', 'potongan_pph21', 'potongan_bpjstk', 'potongan_bpjskes', 'potongan_kasbon', 'thp_bersih', 'thp_terbilang'],
+  },
+  {
+    id: 'tmpl-25',
+    tenantId: 'tenant-ntm',
+    type: 'Pengajuan Perjalanan Dinas',
+    name: 'Formulir Permohonan Pengajuan Perjalanan Dinas & Anggaran',
+    numberingPattern: '{SEQ}/REQ-TRAV/{TENANT}/{ROMAN_MONTH}/{YEAR}',
+    paperSize: 'A4',
+    letterHeadTitle: 'PT NUSANTARA TEKNOLOGI MANDIRI',
+    letterHeadAddress: 'Menara Palma Lantai 18, Jl. HR Rasuna Said Blok X-2 Kav. 6, Jakarta Selatan 12950',
+    defaultBody: `FORMULIR PERMOHONAN PENGAJUAN PERJALANAN DINAS
+Nomor Form: {{nomor_surat}}
+
+A. IDENTITAS PEMOHON
+Nama Pemohon: {{nama}}
+NIK: {{nik}}
+Jabatan / Departemen: {{jabatan}} - {{departemen}}
+Nomor Telepon: {{nomor_telepon}}
+
+B. RINCIAN RENCANA PERJALANAN DINAS
+Kota Tujuan: {{kota_tujuan}}
+Lokasi Proyek / Klien: {{nama_klien_lokasi}}
+Tanggal Berangkat: {{tanggal_berangkat}}
+Tanggal Kembali: {{tanggal_kembali}} (Durasi: {{durasi_hari}} Hari Kalender)
+Tujuan & Urgensi Penugasan:
+{{tujuan_penugasan}}
+
+C. ESTIMASI RENCANA ANGGARAN BIAYA (RAB)
+1. Tiket Transportasi (Pesawat / Kereta): {{biaya_tiket}}
+2. Akomodasi Hotel / Penginapan: {{biaya_hotel}}
+3. Uang Harian (Per Diem / Konsumsi / Transport Lokal): {{biaya_perdiem}}
+4. Estimasi Biaya Tak Terduga (Airport Tax, Tol, Parkir): {{biaya_lainnya}}
+TOTAL ESTIMASI ANGGARAN: {{total_estimasi_biaya}}
+Pembebanan Pos Biaya: Cost Center Divisi {{departemen}}
+
+D. PERSETUJUAN & OTORISASI
+Pemohon bersedia mempertanggungjawabkan pengeluaran riil dan menyerahkan Laporan Hasil Perjalanan Dinas selambat-lambatnya 3 (tiga) hari kerja setelah kembali.`,
+    showQrSignature: true,
+    signeeTitle: 'Head of Division / VP',
+    signeeRole: 'Atasan Langsung Pemohon',
+    extractedPlaceholders: ['nomor_surat', 'nama', 'nik', 'jabatan', 'departemen', 'nomor_telepon', 'kota_tujuan', 'nama_klien_lokasi', 'tanggal_berangkat', 'tanggal_kembali', 'durasi_hari', 'tujuan_penugasan', 'biaya_tiket', 'biaya_hotel', 'biaya_perdiem', 'biaya_lainnya', 'total_estimasi_biaya'],
+  },
+  {
+    id: 'tmpl-26',
+    tenantId: 'tenant-ntm',
+    type: 'Rekap Presensi Karyawan',
+    name: 'Lembar Rekapitulasi Presensi & Lembur Per Karyawan (Per Cut Off)',
+    numberingPattern: '{SEQ}/REKAP-ATT/{TENANT}/{ROMAN_MONTH}/{YEAR}',
+    paperSize: 'A4',
+    letterHeadTitle: 'PT NUSANTARA TEKNOLOGI MANDIRI',
+    letterHeadAddress: 'Menara Palma Lantai 18, Jl. HR Rasuna Said Blok X-2 Kav. 6, Jakarta Selatan 12950',
+    defaultBody: `LEMBAR REKAPITULASI PRESENSI & KEHADIRAN KERJA
+Periode Cut-Off: {{periode_cut_off}} | Dokumen: {{nomor_surat}}
+
+DATA KARYAWAN:
+Nama Karyawan: {{nama}}
+NIK: {{nik}}
+Departemen: {{departemen}}
+Jabatan: {{jabatan}}
+Skema Kerja: {{skema_kerja}} (WFO / Hybrid / Remote)
+
+RINGKASAN STATISTIK KEHADIRAN:
+- Total Hari Kerja Efektif: {{total_hari_kerja}} Hari
+- Total Hadir Tepat Waktu: {{total_hadir}} Hari
+- Total Terlambat Masuk: {{total_terlambat}} Kali (Akumulasi: {{total_menit_terlambat}} Menit)
+- Total Pulang Cepat: {{total_pulang_cepat}} Kali
+- Cuti Tahunan Diambil: {{total_cuti}} Hari
+- Izin Sakit (Disertai Surat Dokter): {{total_sakit}} Hari
+- Izin Khusus Resmi: {{total_izin}} Hari
+- Mangkir / Tanpa Keterangan (Alpa): {{total_alpa}} Hari
+
+RINCIAN JAM KERJA LEMBUR (OVERTIME):
+- Lembur Hari Kerja Reguler: {{lembur_hari_kerja}} Jam
+- Lembur Akhir Pekan / Hari Libur Nasional: {{lembur_hari_libur}} Jam
+- Total Jam Lembur Terkonversi: {{total_jam_lembur}} Jam
+
+CATATAN VERIFIKASI OPERASIONAL HC:
+Data presensi di atas telah diverifikasi dengan mesin absensi biometrik & GPS Mobile Check-in sistem NusaHR dan siap diproses sebagai dasar perhitungan payroll penggajian.`,
+    showQrSignature: true,
+    signeeTitle: 'Attendance & People Operations Specialist',
+    signeeRole: 'Verifikator Presensi HC',
+    extractedPlaceholders: ['periode_cut_off', 'nomor_surat', 'nama', 'nik', 'departemen', 'jabatan', 'skema_kerja', 'total_hari_kerja', 'total_hadir', 'total_terlambat', 'total_menit_terlambat', 'total_pulang_cepat', 'total_cuti', 'total_sakit', 'total_izin', 'total_alpa', 'lembur_hari_kerja', 'lembur_hari_libur', 'total_jam_lembur'],
+  },
+  {
+    id: 'tmpl-27',
+    tenantId: 'tenant-ntm',
+    type: 'Pengajuan Koreksi Presensi',
+    name: 'Formulir Pengajuan Koreksi Jam Presensi & Kehadiran (A5)',
+    numberingPattern: '{SEQ}/KOR-PRES/{TENANT}/{ROMAN_MONTH}/{YEAR}',
+    paperSize: 'A5',
+    letterHeadTitle: 'PT NUSANTARA TEKNOLOGI MANDIRI',
+    letterHeadAddress: 'Menara Palma Lantai 18, Jl. HR Rasuna Said, Jakarta Selatan 12950',
+    defaultBody: `FORMULIR PENGAJUAN KOREKSI JAM PRESENSI
+Nomor: {{nomor_surat}}
+
+DATA PEMOHON:
+Nama: {{nama}} (NIK: {{nik}})
+Divisi / Jabatan: {{departemen}} - {{jabatan}}
+Tanggal Kejadian: {{tanggal_kejadian}}
+
+KOREKSI YANG DIMOHONKAN:
+- Jam Masuk Semula: {{jam_masuk_lama}} -> Dimohon Menjadi: {{jam_masuk_baru}}
+- Jam Pulang Semula: {{jam_pulang_lama}} -> Dimohon Menjadi: {{jam_pulang_baru}}
+
+ALASAN KOREKSI:
+[ {{kategori_alasan}} ]
+Uraian Penjelasan:
+{{penjelasan_koreksi}}
+
+Saksi Rekan Kerja / Pihak Mengetahui: {{nama_saksi}} (NIK: {{nik_saksi}})
+
+PERSETUJUAN:
+Dengan menandatangani formulir ini, Pemohon menyatakan keterangan di atas adalah benar dan dapat dipertanggungjawabkan sesuai Peraturan Perusahaan.`,
+    showQrSignature: true,
+    signeeTitle: 'Direct Supervisor / Manager',
+    signeeRole: 'Pemberi Approval Presensi',
+    extractedPlaceholders: ['nomor_surat', 'nama', 'nik', 'departemen', 'jabatan', 'tanggal_kejadian', 'jam_masuk_lama', 'jam_masuk_baru', 'jam_pulang_lama', 'jam_pulang_baru', 'kategori_alasan', 'penjelasan_koreksi', 'nama_saksi', 'nik_saksi'],
+  },
+  {
+    id: 'tmpl-28',
+    tenantId: 'tenant-ntm',
+    type: 'Pengajuan Cuti Izin Sakit',
+    name: 'Formulir Permohonan Hak Cuti, Izin Kerja & Sakit (A5)',
+    numberingPattern: '{SEQ}/LEAVE/{TENANT}/{ROMAN_MONTH}/{YEAR}',
+    paperSize: 'A5',
+    letterHeadTitle: 'PT NUSANTARA TEKNOLOGI MANDIRI',
+    letterHeadAddress: 'Menara Palma Lantai 18, Jl. HR Rasuna Said, Jakarta Selatan 12950',
+    defaultBody: `FORMULIR PENGAJUAN CUTI, IZIN & SAKIT
+Nomor: {{nomor_surat}}
+
+DATA KARYAWAN:
+Nama: {{nama}} (NIK: {{nik}})
+Departemen / Jabatan: {{departemen}} - {{jabatan}}
+Sisa Hak Cuti Tahunan: {{sisa_cuti}} Hari
+
+JENIS PERMOHONAN:
+[ {{jenis_permohonan}} ] (Cuti Tahunan / Izin Khusus / Sakit Surat Dokter)
+Tanggal Pelaksanaan: {{tanggal_mulai}} s/d {{tanggal_selesai}} ({{jumlah_hari}} Hari Kerja)
+Alasan / Keterangan:
+{{keterangan_cuti}}
+
+PELIMPAHAN PEKERJAAN (HANDOVER):
+Selama masa ketidakhadiran, tugas operasional mendesak dilimpahkan kepada:
+Nama Pengganti: {{nama_pengganti}} (NIK: {{nik_pengganti}})
+Kontak Darurat Pemohon: {{nomor_darurat}}
+
+Formulir ini telah diverifikasi atasan langsung dan disahkan Bagian SDM.`,
+    showQrSignature: true,
+    signeeTitle: 'Head of People Operations',
+    signeeRole: 'Human Capital Department',
+    extractedPlaceholders: ['nomor_surat', 'nama', 'nik', 'departemen', 'jabatan', 'sisa_cuti', 'jenis_permohonan', 'tanggal_mulai', 'tanggal_selesai', 'jumlah_hari', 'keterangan_cuti', 'nama_pengganti', 'nik_pengganti', 'nomor_darurat'],
+  },
+  {
+    id: 'tmpl-29',
+    tenantId: 'tenant-ntm',
+    type: 'Pendaftaran BPJS e-Dabu & SIPP',
+    name: 'Surat Pengantar Pendaftaran / Mutasi Kepesertaan BPJS Kesehatan (e-Dabu) & Ketenagakerjaan (SIPP)',
+    numberingPattern: '{SEQ}/BPJS-MUT/{TENANT}/{ROMAN_MONTH}/{YEAR}',
+    paperSize: 'A4',
+    letterHeadTitle: 'PT NUSANTARA TEKNOLOGI MANDIRI',
+    letterHeadAddress: 'Menara Palma Lantai 18, Jl. HR Rasuna Said Blok X-2 Kav. 6, Jakarta Selatan 12950',
+    defaultBody: `SURAT PENGANTAR PENDAFTARAN & MUTASI KEPESERTAAN BPJS
+Nomor: {{nomor_surat}}
+
+Kepada Yth:
+Kepala Kantor Cabang BPJS Kesehatan / BPJS Ketenagakerjaan
+Wilayah Jakarta Selatan
+
+Dengan hormat,
+Bersama surat ini, {{nama_perusahaan}} (Kode Badan Usaha: {{kode_badan_usaha}}) mengajukan permohonan pembaruan data kepesertaan melalui kanal resmi e-Dabu / SIPP Online untuk pegawai kami:
+
+A. DATA UTAMA PEKERJA:
+Nama Lengkap: {{nama}}
+Nomor KTP (NIK 16 Digit): {{nik_ktp}}
+Nomor Kartu Keluarga (KK): {{no_kk}}
+Nomor KPJ BPJS Ketenagakerjaan: {{nomor_bpjstk}}
+Nomor Kartu BPJS Kesehatan: {{nomor_bpjskes}}
+Tanggal Efektif Masuk Kerja: {{tanggal_mulai}}
+Gaji Dasar Pelaporan (Upah Terlapor): {{gaji_pokok}}
+
+B. JENIS TINDAKAN ADMINISTRASI:
+[ {{jenis_tindakan_bpjs}} ]
+( ) Pendaftaran Peserta Baru & Penambahan Anggota Keluarga
+( ) Pengalihan / Pindah Badan Usaha dari Perusahaan Sebelumnya
+( ) Penonaktifan Peserta Karena Berakhir Hubungan Kerja
+
+Perusahaan bertanggung jawab penuh atas kebenaran data yang disampaikan dan kepatuhan pembayaran iuran tepat waktu setiap bulannya.`,
+    showQrSignature: true,
+    signeeTitle: 'Compensation & Benefits Specialist',
+    signeeRole: 'Penanggung Jawab PIC e-Dabu & SIPP',
+    extractedPlaceholders: ['nomor_surat', 'nama_perusahaan', 'kode_badan_usaha', 'nama', 'nik_ktp', 'no_kk', 'nomor_bpjstk', 'nomor_bpjskes', 'tanggal_mulai', 'gaji_pokok', 'jenis_tindakan_bpjs'],
+  },
+  {
+    id: 'tmpl-30',
+    tenantId: 'tenant-ntm',
+    type: 'Bukti Potong Pajak Coretax',
+    name: 'Bukti Pemotongan Pajak Penghasilan PPh Pasal 21 (Standar Coretax DJP)',
+    numberingPattern: '{SEQ}/BUPOT-21/CT/{TENANT}/{ROMAN_MONTH}/{YEAR}',
+    paperSize: 'A4',
+    letterHeadTitle: 'PT NUSANTARA TEKNOLOGI MANDIRI',
+    letterHeadAddress: 'Menara Palma Lantai 18, Jl. HR Rasuna Said Blok X-2 Kav. 6, Jakarta Selatan 12950',
+    defaultBody: `KEMENTERIAN KEUANGAN REPUBLIK INDONESIA
+DIREKTORAT JENDERAL PAJAK - SISTEM CORETAX DJP
+BUKTI PEMOTONGAN PAJAK PENGHASILAN PASAL 21 BULANAN / FINAL (FORMULIR BPA1)
+Nomor Bukti Potong: {{nomor_surat}}
+
+A. IDENTITAS PEMOTONG PAJAK:
+Nama Pemotong: {{nama_perusahaan}}
+NPWP 16 Digit / NITKU: {{npwp_perusahaan_16}}
+Alamat Terdaftar KPP: {{alamat_perusahaan}}
+
+B. IDENTITAS PENERIMA PENGHASILAN YANG DIPOTONG:
+Nama Penerima: {{nama}}
+NIK (Nomor Induk Kependudukan 16 Digit): {{nik_ktp}}
+NPWP 16 Digit: {{npwp_karyawan_16}}
+Status PTKP: {{ptkp}} | Kode Objek Pajak: 21-100-01 (Pegawai Tetap)
+Masa / Tahun Pajak: {{masa_pajak}} {{tahun_pajak}}
+
+C. RINCIAN PERHITUNGAN PPH PASAL 21:
+1. Jumlah Penghasilan Bruto: {{penghasilan_bruto}}
+2. Biaya Jabatan (Maksimal Rp 500.000 / bln): {{biaya_jabatan}}
+3. Iuran Pensiun / JHT yang ditanggung Pegawai: {{iuran_pensiun}}
+4. Penghasilan Neto Disetahunkan: {{penghasilan_neto_tahunan}}
+5. Penghasilan Tidak Kena Pajak (PTKP): {{nilai_ptkp}}
+6. Penghasilan Kena Pajak (PKP): {{pkp_tahunan}}
+7. Tarif Pajak Berlaku: {{tarif_pajak_persen}}
+8. PPh Pasal 21 Terutang & Dipotong Masa Ini: {{pph21_terutang}}
+Terbilang: {{pph21_terbilang}}
+
+D. PERNYATAAN PEMOTONG:
+Pajak yang dipotong telah disetor ke Kas Negara melalui Sistem Penerimaan Negara Terpadu Modul Coretax menggunakan Kode Billing DJP.`,
+    showQrSignature: true,
+    signeeTitle: 'Tax & Compliance Manager',
+    signeeRole: 'Kuasa Wajib Pajak Pemotong',
+    extractedPlaceholders: ['nomor_surat', 'nama_perusahaan', 'npwp_perusahaan_16', 'alamat_perusahaan', 'nama', 'nik_ktp', 'npwp_karyawan_16', 'ptkp', 'masa_pajak', 'tahun_pajak', 'penghasilan_bruto', 'biaya_jabatan', 'iuran_pensiun', 'penghasilan_neto_tahunan', 'nilai_ptkp', 'pkp_tahunan', 'tarif_pajak_persen', 'pph21_terutang', 'pph21_terbilang'],
+  },
+  {
+    id: 'tmpl-31',
+    tenantId: 'tenant-ntm',
+    type: 'Pengajuan Klaim Reimbursement',
+    name: 'Formulir Pengajuan Klaim Biaya Operasional & Reimbursement',
+    numberingPattern: '{SEQ}/REIMB/{TENANT}/{ROMAN_MONTH}/{YEAR}',
+    paperSize: 'A4',
+    letterHeadTitle: 'PT NUSANTARA TEKNOLOGI MANDIRI',
+    letterHeadAddress: 'Menara Palma Lantai 18, Jl. HR Rasuna Said Blok X-2 Kav. 6, Jakarta Selatan 12950',
+    defaultBody: `FORMULIR PENGAJUAN KLAIM BIAYA (REIMBURSEMENT VOUCHER)
+Nomor Voucher: {{nomor_surat}}
+
+A. INFORMASI KARYAWAN
+Nama Karyawan: {{nama}}
+NIK: {{nik}}
+Departemen / Divisi: {{departemen}}
+Nomor Rekening Penerima: {{rekening}}
+
+B. TABEL RINCIAN PENGELUARAN AKTUAL:
+1. Biaya Transportasi, BBM & Tol Operasional: {{biaya_bbm_tol}}
+2. Biaya Jamuan Klien / Rapat Bisnis Eksternal: {{biaya_entertainment}}
+3. Biaya Pembelian Perlengkapan Kantor Darurat: {{biaya_perlengkapan}}
+4. Klaim Rawat Jalan / Manfaat Medis Kacamata: {{biaya_kesehatan}}
+5. Biaya Penunjang Lainnya: {{biaya_lainnya}}
+
+TOTAL NOMINAL KLAIM: {{total_klaim}}
+Terbilang: {{total_klaim_terbilang}}
+
+C. KELENGKAPAN BUKTI PENDUKUNG:
+Seluruh bukti kuitansi asli, struk electronic thermal, dan faktur pajak telah diperiksa keabsahannya oleh Bagian Verifikasi Keuangan.`,
+    showQrSignature: true,
+    signeeTitle: 'Finance & Accounting Lead',
+    signeeRole: 'Pemeriksa Otorisasi Keuangan',
+    extractedPlaceholders: ['nomor_surat', 'nama', 'nik', 'departemen', 'rekening', 'biaya_bbm_tol', 'biaya_entertainment', 'biaya_perlengkapan', 'biaya_kesehatan', 'biaya_lainnya', 'total_klaim', 'total_klaim_terbilang'],
+  },
+  {
+    id: 'tmpl-32',
+    tenantId: 'tenant-ntm',
+    type: 'Perjanjian Pinjaman Karyawan & Simulasi',
+    name: 'Surat Perjanjian Fasilitas Pinjaman Karyawan & Simulasi Angsuran',
+    numberingPattern: '{SEQ}/LOAN-AGR/{TENANT}/{ROMAN_MONTH}/{YEAR}',
+    paperSize: 'A4',
+    letterHeadTitle: 'PT NUSANTARA TEKNOLOGI MANDIRI',
+    letterHeadAddress: 'Menara Palma Lantai 18, Jl. HR Rasuna Said Blok X-2 Kav. 6, Jakarta Selatan 12950',
+    defaultBody: `SURAT PERJANJIAN PINJAMAN KARYAWAN & SIMULASI ANGSURAN
+Nomor: {{nomor_surat}}
+
+Pada hari ini, bertempat di kantor {{nama_perusahaan}}, dibuat kesepakatan pinjaman dana internal antara:
+1. {{penandatangan}}, bertindak mewakili Manajemen {{nama_perusahaan}} selaku PIHAK PERTAMA (Pemberi Pinjaman).
+2. {{nama}}, NIK: {{nik}}, Jabatan: {{jabatan}} pada Departemen {{departemen}}, selaku PIHAK KEDUA (Peminjam).
+
+Kedua belah pihak menyepakati ketentuan pinjaman lunak sebagai berikut:
+PASAL 1: PLAFON PINJAMAN & TUJUAN
+PIHAK PERTAMA memberikan pinjaman kepada PIHAK KEDUA sebesar {{jumlah_pinjaman}} ({{jumlah_terbilang}}) untuk keperluan dana darurat / kesejahteraan keluarga.
+
+PASAL 2: TENOR & JADWAL PEMOTONGAN GAJI
+1. Jangka waktu pengembalian pinjaman disepakati selama {{tenor_bulan}} bulan berturut-turut.
+2. Besaran angsuran pokok per bulan adalah sebesar {{angsuran_per_bulan}} ({{angsuran_terbilang}}).
+3. Angsuran dipotong langsung secara otomatis dari penghasilan bulanan (Payroll Deduction) setiap tanggal 25 mulai bulan {{bulan_mulai_potong}} hingga {{bulan_selesai_potong}}.
+
+PASAL 3: PENYELESAIAN SISA PINJAMAN
+Apabila PIHAK KEDUA mengundurkan diri, di-PHK, atau berakhir masa kerjanya sebelum pinjaman lunas, sisa pokok pinjaman akan diperhitungkan langsung dari uang pesangon, kompensasi, dan hak gaji terakhir.`,
+    showQrSignature: true,
+    signeeTitle: 'Finance Director & Treasury Lead',
+    signeeRole: 'Pihak Pertama (Manajemen)',
+    extractedPlaceholders: ['nomor_surat', 'nama_perusahaan', 'penandatangan', 'nama', 'nik', 'jabatan', 'departemen', 'jumlah_pinjaman', 'jumlah_terbilang', 'tenor_bulan', 'angsuran_per_bulan', 'angsuran_terbilang', 'bulan_mulai_potong', 'bulan_selesai_potong'],
+  },
+  {
+    id: 'tmpl-33',
+    tenantId: 'tenant-ntm',
+    type: 'Penilaian Kinerja KPI & OKR',
+    name: 'Lembar Evaluasi Penilaian Kinerja Karyawan Real-time (KPI & OKR)',
+    numberingPattern: '{SEQ}/KPI-EVAL/{TENANT}/{ROMAN_MONTH}/{YEAR}',
+    paperSize: 'A4',
+    letterHeadTitle: 'PT NUSANTARA TEKNOLOGI MANDIRI',
+    letterHeadAddress: 'Menara Palma Lantai 18, Jl. HR Rasuna Said Blok X-2 Kav. 6, Jakarta Selatan 12950',
+    defaultBody: `LEMBAR EVALUASI PENILAIAN KINERJA KARYAWAN (KPI & OKR)
+Periode Penilaian: {{periode_penilaian}} | Dokumen: {{nomor_surat}}
+
+IDENTITAS PEGAWAI:
+Nama Karyawan: {{nama}} (NIK: {{nik}})
+Jabatan & Grade: {{jabatan}} (Grade {{grade}})
+Departemen: {{departemen}}
+Atasan Penilai: {{nama_atasan_penilai}}
+
+A. MATRIKS TARGET OBJECTIVE & KEY RESULTS (OKR):
+1. Key Result 1 (Bobot 35%): {{kr_1_nama}} | Realisasi Capaian: {{kr_1_skor}}%
+2. Key Result 2 (Bobot 35%): {{kr_2_nama}} | Realisasi Capaian: {{kr_2_skor}}%
+3. Key Result 3 (Bobot 30%): {{kr_3_nama}} | Realisasi Capaian: {{kr_3_skor}}%
+NILAI AKHIR OKR & TARGET KERJA: {{nilai_akhir_okr}} / 100
+
+B. EVALUASI NILAI BUDAYA KERJA & KOMPETENSI (CORE VALUES):
+- Integritas, Kepemimpinan & Inisiatif Solutif: {{nilai_integritas}}
+- Kolaborasi Lintas Fungsi & Komunikasi Tim: {{nilai_kolaborasi}}
+
+C. PREDIKAT KINERJA AKHIR:
+PREDIKAT: [ {{predikat_kinerja}} ] (Exceeds Expectations / Meets Expectations)
+Rekomendasi Tindak Lanjut: Berhak menerima bonus insentif tahunan dan nominasi pengembangan promosi karir berikutnya.`,
+    showQrSignature: true,
+    signeeTitle: 'VP of Human Capital & Performance',
+    signeeRole: 'Komite Evaluasi Kinerja',
+    extractedPlaceholders: ['periode_penilaian', 'nomor_surat', 'nama', 'nik', 'jabatan', 'grade', 'departemen', 'nama_atasan_penilai', 'kr_1_nama', 'kr_1_skor', 'kr_2_nama', 'kr_2_skor', 'kr_3_nama', 'kr_3_skor', 'nilai_akhir_okr', 'nilai_integritas', 'nilai_kolaborasi', 'predikat_kinerja'],
+  },
+  {
+    id: 'tmpl-34',
+    tenantId: 'tenant-ntm',
+    type: 'Surat Tindakan Disiplin',
+    name: 'Surat Peringatan & Tindakan Disiplin Resmi Perusahaan',
+    numberingPattern: '{SEQ}/DISC/{TENANT}/{ROMAN_MONTH}/{YEAR}',
+    paperSize: 'A4',
+    letterHeadTitle: 'PT NUSANTARA TEKNOLOGI MANDIRI',
+    letterHeadAddress: 'Menara Palma Lantai 18, Jl. HR Rasuna Said Blok X-2 Kav. 6, Jakarta Selatan 12950',
+    defaultBody: `SURAT TINDAKAN DISIPLIN RESMI (SANCTION NOTICE)
+Nomor: {{nomor_surat}}
+
+Diberikan kepada:
+Nama: {{nama}}
+NIK: {{nik}}
+Jabatan: {{jabatan}}
+Departemen: {{departemen}}
+
+MENIMBANG:
+1. Hasil klarifikasi bipartit dan Berita Acara Pemeriksaan Pelanggaran Tata Tertib Kerja tertanggal {{tanggal_pemeriksaan}}.
+2. Bahwa Saudara/i terbukti melanggar ketentuan Pasal {{pasal_pelanggaran}} Peraturan Perusahaan {{nama_perusahaan}} perihal {{uraian_pelanggaran}}.
+
+MEMUTUSKAN:
+1. Menetapkan Tindakan Disiplin berupa: [ {{tingkat_sanksi}} ].
+2. Memberikan masa pembinaan disiplin selama 6 (enam) bulan terhitung sejak tanggal {{tanggal_terbit}}.
+3. Apabila selama masa pembinaan yang bersangkutan melakukan pelanggaran serupa atau tindakan indisipliner lainnya, perusahaan akan menjatuhkan sanksi lanjutan yang lebih berat hingga Pemutusan Hubungan Kerja (PHK).`,
+    showQrSignature: true,
+    signeeTitle: 'Head of Industrial Relations & Compliance',
+    signeeRole: 'Pejabat Penegak Tata Tertib',
+    extractedPlaceholders: ['nomor_surat', 'nama', 'nik', 'jabatan', 'departemen', 'tanggal_pemeriksaan', 'pasal_pelanggaran', 'nama_perusahaan', 'uraian_pelanggaran', 'tingkat_sanksi', 'tanggal_terbit'],
+  },
+  {
+    id: 'tmpl-35',
+    tenantId: 'tenant-ntm',
+    type: 'Form Tiketing Internal',
+    name: 'Formulir Tiket Permintaan Layanan IT & Helpdesk Internal (A5)',
+    numberingPattern: '{SEQ}/TCK-IT/{TENANT}/{ROMAN_MONTH}/{YEAR}',
+    paperSize: 'A5',
+    letterHeadTitle: 'PT NUSANTARA TEKNOLOGI MANDIRI',
+    letterHeadAddress: 'Menara Palma Lantai 18, Jl. HR Rasuna Said, Jakarta Selatan 12950',
+    defaultBody: `TIKET PERMINTAAN LAYANAN IT & HELPDESK (SERVICE TICKET)
+Nomor Tiket: {{nomor_surat}} | Prioritas: {{tingkat_urgensi}}
+
+DATA PELAPOR:
+Nama Pemohon: {{nama}} (NIK: {{nik}})
+Unit Kerja / Divisi: {{departemen}}
+Lokasi Meja / Lantai: {{lokasi_kerja}}
+
+KLASIFIKASI PERMINTAAN:
+[ {{kategori_layanan}} ] (Hardware / Software Bug / Akses Jaringan / Akun Email)
+Uraian Kendala / Permintaan:
+{{deskripsi_tiket}}
+
+PENANGANAN TIM IT SUPPORT:
+Teknisi Bertugas: {{nama_teknisi_it}}
+Waktu Mulai: {{waktu_mulai}} | Estimasi Selesai (SLA): {{waktu_estimasi}}
+Status Tiket: DISOLVE & VERIFIKASI USER`,
+    showQrSignature: true,
+    signeeTitle: 'IT Infrastructure & Support Lead',
+    signeeRole: 'Helpdesk Operations',
+    extractedPlaceholders: ['nomor_surat', 'tingkat_urgensi', 'nama', 'nik', 'departemen', 'lokasi_kerja', 'kategori_layanan', 'deskripsi_tiket', 'nama_teknisi_it', 'waktu_mulai', 'waktu_estimasi'],
+  },
+  {
+    id: 'tmpl-36',
+    tenantId: 'tenant-ntm',
+    type: 'Peminjaman Ruang Rapat',
+    name: 'Formulir Reservasi & Peminjaman Ruang Rapat / Aula Pertemuan (A5)',
+    numberingPattern: '{SEQ}/REQ-ROOM/{TENANT}/{ROMAN_MONTH}/{YEAR}',
+    paperSize: 'A5',
+    letterHeadTitle: 'PT NUSANTARA TEKNOLOGI MANDIRI',
+    letterHeadAddress: 'Menara Palma Lantai 18, Jl. HR Rasuna Said, Jakarta Selatan 12950',
+    defaultBody: `FORMULIR RESERVASI & PEMINJAMAN RUANG RAPAT
+Nomor Reservasi: {{nomor_surat}}
+
+DATA PEMINJAM:
+Nama Penanggung Jawab: {{nama}} (NIK: {{nik}})
+Departemen: {{departemen}} | Telp: {{nomor_telepon}}
+
+RINCIAN PEMINJAMAN:
+Nama Ruang Rapat: {{nama_ruang_rapat}} (Kapasitas: {{kapasitas_orang}} Orang)
+Hari & Tanggal: {{tanggal_rapat}}
+Waktu Pemakaian: Pukul {{jam_mulai}} s/d {{jam_selesai}} WIB
+Agenda / Topik Pertemuan:
+{{agenda_rapat}}
+
+FASILITAS TAMBAHAN YANG DIPERLUKAN:
+[ ] Proyektor & Layar / Video Conference Zoom Room
+[ ] Wireless Mic & Sound System
+[ ] Layanan Konsumsi Rapat (Coffee Break & Snack)
+Persetujuan GA: Disetujui & Jadwal Telah Dibukukan pada Kalender Ruangan.`,
+    showQrSignature: true,
+    signeeTitle: 'General Affairs Coordinator',
+    signeeRole: 'Pengelola Fasilitas Ruangan',
+    extractedPlaceholders: ['nomor_surat', 'nama', 'nik', 'departemen', 'nomor_telepon', 'nama_ruang_rapat', 'kapasitas_orang', 'tanggal_rapat', 'jam_mulai', 'jam_selesai', 'agenda_rapat'],
+  },
+  {
+    id: 'tmpl-37',
+    tenantId: 'tenant-ntm',
+    type: 'Peminjaman Kendaraan Operasional',
+    name: 'Formulir Peminjaman Kendaraan Operasional Kantor (Mobil Dinas)',
+    numberingPattern: '{SEQ}/VEH-REQ/{TENANT}/{ROMAN_MONTH}/{YEAR}',
+    paperSize: 'A4',
+    letterHeadTitle: 'PT NUSANTARA TEKNOLOGI MANDIRI',
+    letterHeadAddress: 'Menara Palma Lantai 18, Jl. HR Rasuna Said Blok X-2 Kav. 6, Jakarta Selatan 12950',
+    defaultBody: `FORMULIR PEMINJAMAN KENDARAAN OPERASIONAL KANTOR
+Nomor Surat Jalan: {{nomor_surat}}
+
+A. IDENTITAS PEMINJAM & DRIVER
+Nama Peminjam / Penanggung Jawab: {{nama}} (NIK: {{nik}})
+Departemen: {{departemen}}
+Nama Pengemudi (Driver): {{nama_driver}} (No. SIM: {{nomor_sim}})
+
+B. DATA KENDARAAN DINAS:
+Jenis / Model Kendaraan: {{model_kendaraan}}
+Nomor Polisi (Plat): {{nomor_polisi}}
+Warna Kendaraan: {{warna_kendaraan}}
+
+C. JADWAL & LOKASI TUJUAN PENUGASAN:
+Tujuan Perjalanan Dinas: {{kota_tujuan}}
+Keperluan Operasional: {{keperluan_dinas}}
+Tanggal & Jam Berangkat: {{tanggal_berangkat}} Pukul {{jam_berangkat}} WIB
+Rencana Tanggal Kembali: {{tanggal_kembali}} Pukul {{jam_kembali}} WIB
+
+D. CATATAN KILOMETER & KONDISI FISIK:
+- Odometer (KM) Keberangkatan: {{km_awal}} KM
+- Odometer (KM) Kepulangan: {{km_akhir}} KM
+- Saldo Kartu e-Toll Diserahkan: {{saldo_etoll}}
+Kondisi Fisik: Bersih, kelengkapan surat STNK asli terlampir, dan siap jalan.`,
+    showQrSignature: true,
+    signeeTitle: 'GA Fleet & Transportation Lead',
+    signeeRole: 'Pengelola Armada Kendaraan',
+    extractedPlaceholders: ['nomor_surat', 'nama', 'nik', 'departemen', 'nama_driver', 'nomor_sim', 'model_kendaraan', 'nomor_polisi', 'warna_kendaraan', 'kota_tujuan', 'keperluan_dinas', 'tanggal_berangkat', 'jam_berangkat', 'tanggal_kembali', 'jam_kembali', 'km_awal', 'km_akhir', 'saldo_etoll'],
+  },
+  {
+    id: 'tmpl-38',
+    tenantId: 'tenant-ntm',
+    type: 'Permintaan ATK',
+    name: 'Formulir Permintaan Alat Tulis Kantor & Logistik Kerja (ATK - A5)',
+    numberingPattern: '{SEQ}/REQ-ATK/{TENANT}/{ROMAN_MONTH}/{YEAR}',
+    paperSize: 'A5',
+    letterHeadTitle: 'PT NUSANTARA TEKNOLOGI MANDIRI',
+    letterHeadAddress: 'Menara Palma Lantai 18, Jl. HR Rasuna Said, Jakarta Selatan 12950',
+    defaultBody: `FORMULIR PERMINTAAN ALAT TULIS KANTOR (ATK)
+Nomor Permintaan: {{nomor_surat}}
+
+PEMOHON:
+Nama: {{nama}} (NIK: {{nik}})
+Departemen / Unit: {{departemen}} | Tanggal: {{tanggal_terbit}}
+
+DAFTAR BARANG YANG DIMINTA:
+1. Kertas HVS A4 80gr: {{jumlah_kertas}} Rim
+2. Ballpoint / Pena Box: {{jumlah_pena}} Lusin
+3. Ordner Binder Dokumen: {{jumlah_binder}} Pcs
+4. Sticky Notes Post-it: {{jumlah_notes}} Pad
+5. Kebutuhan Lainnya: {{kebutuhan_lainnya}}
+
+Keterangan Penggunaan:
+{{alasan_kebutuhan}}
+
+Status Gudang GA: Barang telah disiapkan dan diserahterimakan dalam kondisi lengkap.`,
+    showQrSignature: true,
+    signeeTitle: 'GA Warehouse & Inventory Officer',
+    signeeRole: 'Petugas Logistik GA',
+    extractedPlaceholders: ['nomor_surat', 'nama', 'nik', 'departemen', 'tanggal_terbit', 'jumlah_kertas', 'jumlah_pena', 'jumlah_binder', 'jumlah_notes', 'kebutuhan_lainnya', 'alasan_kebutuhan'],
+  },
+  {
+    id: 'tmpl-39',
+    tenantId: 'tenant-ntm',
+    type: 'Purchase Order (PO)',
+    name: 'Surat Pesanan Pembelian Resmi (Purchase Order / PO Barang & Jasa)',
+    numberingPattern: '{SEQ}/PO-PROC/{TENANT}/{ROMAN_MONTH}/{YEAR}',
+    paperSize: 'A4',
+    letterHeadTitle: 'PT NUSANTARA TEKNOLOGI MANDIRI',
+    letterHeadAddress: 'Menara Palma Lantai 18, Jl. HR Rasuna Said Blok X-2 Kav. 6, Jakarta Selatan 12950',
+    defaultBody: `PURCHASE ORDER (SURAT PESANAN PEMBELIAN)
+Nomor PO: {{nomor_surat}} | Tanggal PO: {{tanggal_terbit}}
+
+KEPADA VENDOR REKANAN:
+Nama Perusahaan Vendor: {{nama_vendor}}
+NPWP Vendor: {{npwp_vendor}}
+Alamat Vendor: {{alamat_vendor}}
+Up. Kontak Person: {{pic_vendor}} (Telp: {{telepon_vendor}})
+
+DETAIL PESANAN BARANG / JASA:
+1. Item: {{item_1_nama}} | Qty: {{item_1_qty}} | Harga Satuan: {{item_1_harga}} | Subtotal: {{item_1_subtotal}}
+2. Item: {{item_2_nama}} | Qty: {{item_2_qty}} | Harga Satuan: {{item_2_harga}} | Subtotal: {{item_2_subtotal}}
+
+TOTAL SEBELUM PAJAK: {{total_sebelum_pajak}}
+PPN 11%: {{nilai_ppn}}
+GRAND TOTAL TAGIHAN: {{grand_total_po}}
+Terbilang: {{grand_total_terbilang}}
+
+SYARAT & KETENTUAN PEMBELIAN:
+1. Batas Waktu Pengiriman: Selambat-lambatnya tanggal {{tanggal_pengiriman_maksimal}}.
+2. Tempat Penyerahan: Kantor {{nama_perusahaan}} (Kondisi Franco Jakarta).
+3. Syarat Pembayaran (TOP): Net 30 hari kalender setelah barang diterima lengkap bersama Faktur Pajak & Invoice resmi.`,
+    showQrSignature: true,
+    signeeTitle: 'Head of Procurement & Supply Chain',
+    signeeRole: 'Otorisasi Pengadaan Perusahaan',
+    extractedPlaceholders: ['nomor_surat', 'tanggal_terbit', 'nama_vendor', 'npwp_vendor', 'alamat_vendor', 'pic_vendor', 'telepon_vendor', 'item_1_nama', 'item_1_qty', 'item_1_harga', 'item_1_subtotal', 'item_2_nama', 'item_2_qty', 'item_2_harga', 'item_2_subtotal', 'total_sebelum_pajak', 'nilai_ppn', 'grand_total_po', 'grand_total_terbilang', 'tanggal_pengiriman_maksimal', 'nama_perusahaan'],
+  },
+  {
+    id: 'tmpl-40',
+    tenantId: 'tenant-ntm',
+    type: 'Quotation Penawaran Harga',
+    name: 'Surat Penawaran Harga Resmi (Official Quotation / Proposal Harga)',
+    numberingPattern: '{SEQ}/QUO-SALES/{TENANT}/{ROMAN_MONTH}/{YEAR}',
+    paperSize: 'A4',
+    letterHeadTitle: 'PT NUSANTARA TEKNOLOGI MANDIRI',
+    letterHeadAddress: 'Menara Palma Lantai 18, Jl. HR Rasuna Said Blok X-2 Kav. 6, Jakarta Selatan 12950',
+    defaultBody: `SURAT PENAWARAN HARGA RESMI (COMMERCIAL QUOTATION)
+Nomor Penawaran: {{nomor_surat}} | Tanggal: {{tanggal_terbit}}
+
+Kepada Yth:
+{{nama_klien}}
+{{instansi_klien}}
+{{alamat_klien}}
+
+Dengan hormat,
+Menindaklanjuti diskusi perihal kebutuhan solusi HRMS & Digital Workspace, dengan ini kami sampaikan proposal penawaran harga terbaik:
+
+RINCIAN LISENSI & LAYANAN PROFESIONAL:
+1. Lisensi Paket NusaHR Enterprise: {{harga_lisensi}}
+2. Biaya Implementasi & Integrasi Sistem Coretax/e-Dabu: {{harga_implementasi}}
+3. Pelatihan Pengguna (User Training & Change Management): {{harga_training}}
+4. Layanan Maintenance & Dukungan Teknis 24/7 SLA 99.9%: {{harga_sla}}
+
+TOTAL INVESTASI PENAWARAN: {{total_penawaran}}
+(Harga belum termasuk PPN 11%)
+
+KETENTUAN KOMERSIAL:
+1. Masa Berlaku Penawaran: 30 (tiga puluh) hari kalender sejak tanggal diterbitkan.
+2. Skema Termin Pembayaran: Down Payment (DP) 30%, Pelaksanaan UAT 40%, Go-Live 30%.
+3. Waktu Pengerjaan Proyek: 60 (enam puluh) hari kalender sejak Purchase Order diterima.`,
+    showQrSignature: true,
+    signeeTitle: 'VP of Commercial & Enterprise Solutions',
+    signeeRole: 'Pemberi Penawaran Resmi',
+    extractedPlaceholders: ['nomor_surat', 'tanggal_terbit', 'nama_klien', 'instansi_klien', 'alamat_klien', 'harga_lisensi', 'harga_implementasi', 'harga_training', 'harga_sla', 'total_penawaran'],
+  },
+  {
+    id: 'tmpl-41',
+    tenantId: 'tenant-ntm',
+    type: 'Kontrak Pengadaan & Termin',
+    name: 'Surat Perjanjian Kontrak Pengadaan Berbasis Proyek & Jadwal Termin Pembayaran',
+    numberingPattern: '{SEQ}/LEG-KTR-PROC/{TENANT}/{ROMAN_MONTH}/{YEAR}',
+    paperSize: 'F4',
+    letterHeadTitle: 'PT NUSANTARA TEKNOLOGI MANDIRI',
+    letterHeadAddress: 'Menara Palma Lantai 18, Jl. HR Rasuna Said Blok X-2 Kav. 6, Jakarta Selatan 12950',
+    defaultBody: `SURAT PERJANJIAN KERJA SAMA PENGADAAN BERBASIS PROYEK
+Nomor Kontrak: {{nomor_surat}}
+
+Pada hari ini, bertempat di Jakarta, para pihak yang bertanda tangan di bawah ini:
+1. {{penandatangan}}, Direktur {{nama_perusahaan}}, bertindak atas nama perusahaan, selanjutnya disebut PIHAK PERTAMA (Pemberi Kerja).
+2. {{nama_direktur_vendor}}, Direktur {{nama_vendor}}, berkedudukan di {{alamat_vendor}}, selanjutnya disebut PIHAK KEDUA (Penyedia Jasa).
+
+Para pihak bersepakat mengadakan perjanjian pengadaan dengan ketentuan:
+PASAL 1: LINGKUP PEKERJAAN
+PIHAK PERTAMA menunjuk PIHAK KEDUA untuk melaksanakan pekerjaan {{nama_proyek}} dengan rincian deliverable sesuai Kerangka Acuan Kerja (KAK) terlampir.
+
+PASAL 2: NILAI KONTRAK & JADWAL TERMIN PEMBAYARAN
+Total nilai kontrak pengadaan ini adalah sebesar {{nilai_kontrak}} ({{nilai_terbilang}}) dengan jadwal termin pembayaran sebagai berikut:
+- Termin I (Uang Muka / DP 30%): Dibayarkan setelah penandatanganan kontrak dan penyerahan Garansi Uang Muka.
+- Termin II (Milestone Progres 40%): Dibayarkan setelah penyelesaian tahap integrasi dan pengujian UAT dinyatakan lulus.
+- Termin III (Pelunasan 30%): Dibayarkan setelah penandatanganan Berita Acara Serah Terima (BAST) Final dan masa retensi.
+
+<!-- PAGE_BREAK -->
+
+PASAL 3: WAKTU PELAKSANAAN & DENDA KETERLAMBATAN
+1. Seluruh pekerjaan wajib diselesaikan selambat-lambatnya dalam waktu {{durasi_hari_kerja}} hari kerja.
+2. Apabila terjadi keterlambatan sepihak oleh PIHAK KEDUA, dikenakan denda sebesar 1‰ (satu permil) per hari keterlambatan dari nilai kontrak maksimal 5%.
+
+PASAL 4: JAMINAN PEMELIHARAAN (WARRANTY) & PENYELESAIAN SENGKETA
+PIHAK KEDUA memberikan jaminan garansi pemeliharaan selama 12 (dua belas) bulan terhitung sejak penandatanganan BAST Final. Segala perselisihan akan diselesaikan melalui Badan Arbitrase Nasional Indonesia (BANI).`,
+    showQrSignature: true,
+    signeeTitle: 'President Director & CEO',
+    signeeRole: 'Pihak Pertama (Pemberi Kerja)',
+    extractedPlaceholders: ['nomor_surat', 'penandatangan', 'nama_perusahaan', 'nama_direktur_vendor', 'nama_vendor', 'alamat_vendor', 'nama_proyek', 'nilai_kontrak', 'nilai_terbilang', 'durasi_hari_kerja'],
+  },
+  {
+    id: 'tmpl-42',
+    tenantId: 'tenant-ntm',
+    type: 'Tagihan & Invoice Vendor',
+    name: 'Lembar Verifikasi Tagihan & Invoice Vendor / Surat Perintah Bayar (SPB)',
+    numberingPattern: '{SEQ}/FIN-SPB/{TENANT}/{ROMAN_MONTH}/{YEAR}',
+    paperSize: 'A4',
+    letterHeadTitle: 'PT NUSANTARA TEKNOLOGI MANDIRI',
+    letterHeadAddress: 'Menara Palma Lantai 18, Jl. HR Rasuna Said Blok X-2 Kav. 6, Jakarta Selatan 12950',
+    defaultBody: `SURAT PERINTAH BAYAR (SPB) & VERIFIKASI TAGIHAN VENDOR
+Nomor SPB: {{nomor_surat}} | Tanggal: {{tanggal_terbit}}
+
+DATA TAGIHAN VENDOR:
+Nama Vendor Rekanan: {{nama_vendor}}
+Nomor Invoice Vendor: {{nomor_invoice}}
+Nomor Faktur Pajak: {{nomor_faktur_pajak}}
+Nomor Purchase Order Terkait: {{nomor_po}}
+Nomor BAST Penerimaan: {{nomor_bast}}
+
+VERIFIKASI TIGA PIHAK (3-WAY MATCHING):
+[ X ] Dokumen Purchase Order Asli Telah Diverifikasi
+[ X ] Berita Acara Serah Terima Barang / Jasa (BAST) Sah
+[ X ] Faktur Pajak Terverifikasi Valid pada DJP Coretax System
+
+RINCIAN PERHITUNGAN PEMBAYARAN:
+Nilai Tagihan Bruto: {{nilai_bruto}}
+PPN 11%: {{nilai_ppn}}
+Potongan PPh Pasal 23 (2% Jasa): -{{potongan_pph23}}
+JUMLAH BERSIH YANG DIBAYARKAN (NET PAYABLE): {{jumlah_bersih_bayar}}
+Terbilang: {{jumlah_bersih_terbilang}}
+
+Instruksi Rekening Transfer:
+Bank: {{nama_bank_vendor}} | No. Rekening: {{rekening_vendor}} | A.n: {{nama_vendor}}`,
+    showQrSignature: true,
+    signeeTitle: 'Finance & Treasury Director',
+    signeeRole: 'Otorisator Pembayaran Keuangan',
+    extractedPlaceholders: ['nomor_surat', 'tanggal_terbit', 'nama_vendor', 'nomor_invoice', 'nomor_faktur_pajak', 'nomor_po', 'nomor_bast', 'nilai_bruto', 'nilai_ppn', 'potongan_pph23', 'jumlah_bersih_bayar', 'jumlah_bersih_terbilang', 'nama_bank_vendor', 'rekening_vendor'],
+  },
+  {
+    id: 'tmpl-43',
+    tenantId: 'tenant-ntm',
+    type: 'Pengajuan Pembelian Hardware',
+    name: 'Formulir Pengajuan Pengadaan Perangkat Keras / Hardware / Laptop Kerja',
+    numberingPattern: '{SEQ}/REQ-HW/{TENANT}/{ROMAN_MONTH}/{YEAR}',
+    paperSize: 'A4',
+    letterHeadTitle: 'PT NUSANTARA TEKNOLOGI MANDIRI',
+    letterHeadAddress: 'Menara Palma Lantai 18, Jl. HR Rasuna Said Blok X-2 Kav. 6, Jakarta Selatan 12950',
+    defaultBody: `FORMULIR PERMOHONAN PENGADAAN HARDWARE / LAPTOP KERJA
+Nomor Pengajuan: {{nomor_surat}}
+
+A. IDENTITAS PENGGUNA (USER):
+Nama Karyawan: {{nama}}
+NIK: {{nik}}
+Departemen / Posisi: {{departemen}} - {{jabatan}}
+Alasan Pengadaan: [ {{kategori_pengadaan}} ] (Pegawai Baru / Upgrade Beban Kerja / Penggantian Rusak)
+
+B. JUSTIFIKASI TEKNIS & KEBUTUHAN KERJA:
+{{justifikasi_kebutuhan}}
+
+C. REKOMENDASI SPESIFIKASI DARI IT LEAD:
+- Model Perangkat: {{model_laptop}}
+- Processor: {{processor_spec}}
+- Memori (RAM): {{ram_spec}}
+- Penyimpanan (Storage): {{storage_spec}}
+- Estimasi Biaya Pengadaan: {{estimasi_harga}}
+- Ketersediaan Anggaran CAPEX: Tersedia pada Alokasi Anggaran IT Q-{{kuartal_anggaran}}
+
+D. REKOMENDASI & OTORISASI:
+Permohonan ini direkomendasikan untuk diproses pembeliannya melalui Divisi Pengadaan (Procurement).`,
+    showQrSignature: true,
+    signeeTitle: 'Chief Information Officer (CIO)',
+    signeeRole: 'Otorisasi Infrastruktur Teknologi',
+    extractedPlaceholders: ['nomor_surat', 'nama', 'nik', 'departemen', 'jabatan', 'kategori_pengadaan', 'justifikasi_kebutuhan', 'model_laptop', 'processor_spec', 'ram_spec', 'storage_spec', 'estimasi_harga', 'kuartal_anggaran'],
   },
 ];
 

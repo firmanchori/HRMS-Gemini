@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useHrms } from '../../context/HrmsContext';
+import { printPagesDirectly } from '../../utils/documentPdfExporter';
 import {
   Network,
   Users,
@@ -187,8 +188,10 @@ export const OrgChartManagement: React.FC = () => {
     );
   };
 
+  const chartContainerRef = useRef<HTMLDivElement>(null);
+
   return (
-    <div className="space-y-6">
+    <div ref={chartContainerRef} className="space-y-6">
       {/* Header & Entity Picker */}
       <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -231,8 +234,13 @@ export const OrgChartManagement: React.FC = () => {
           </button>
 
           <button
-            onClick={() => window.print()}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-medium transition-colors"
+            type="button"
+            onClick={async () => {
+              if (chartContainerRef.current) {
+                await printPagesDirectly([chartContainerRef.current]);
+              }
+            }}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-medium transition-colors cursor-pointer"
           >
             <Printer className="w-4 h-4" />
             <span>Export Chart</span>

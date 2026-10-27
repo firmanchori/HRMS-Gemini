@@ -1,5 +1,5 @@
-import React, { useMemo } from 'react';
-import { generateQRMatrix } from '../../utils/qrGenerator';
+import React, { useState, useEffect } from 'react';
+import QRCode from 'qrcode';
 
 interface QRCodeViewProps {
   value: string;
@@ -16,41 +16,56 @@ export const QRCodeView: React.FC<QRCodeViewProps> = ({
   subLabel,
   showBorder = true,
 }) => {
-  const matrix = useMemo(() => generateQRMatrix(value, 25), [value]);
-  const matrixSize = matrix.length;
-  const cellSize = size / matrixSize;
+  const [dataUrl, setDataUrl] = useState<string>('');
+
+  useEffect(() => {
+    let isMounted = true;
+    QRCode.toDataURL(value, {
+      width: size * 2, // 2x for sharp retina canvas & crisp print
+      margin: 1,
+      errorCorrectionLevel: 'M',
+      color: {
+        dark: '#0f172a',
+        light: '#ffffff',
+      },
+    })
+      .then((url) => {
+        if (isMounted) setDataUrl(url);
+      })
+      .catch((err) => {
+        console.error('Failed to generate authentic QR Code:', err);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [value, size]);
 
   return (
     <div
-      className={`inline-flex flex-col items-center bg-white p-3 ${
-        showBorder ? 'border border-slate-200 rounded-lg shadow-xs' : ''
+      className={`inline-flex flex-col items-center bg-white ${
+        showBorder ? 'p-2 border border-slate-200 rounded-lg shadow-xs' : ''
       }`}
     >
-      <svg
-        width={size}
-        height={size}
-        viewBox={`0 0 ${size} ${size}`}
-        className="shape-rendering-crispEdges"
-      >
-        <rect width={size} height={size} fill="#ffffff" />
-        {matrix.map((row, r) =>
-          row.map((filled, c) => {
-            if (!filled) return null;
-            return (
-              <rect
-                key={`${r}-${c}`}
-                x={c * cellSize}
-                y={r * cellSize}
-                width={cellSize}
-                height={cellSize}
-                fill="#0f172a"
-              />
-            );
-          })
-        )}
-      </svg>
+      {dataUrl ? (
+        <img
+          src={dataUrl}
+          width={size}
+          height={size}
+          alt={`QR Code: ${value}`}
+          className="block"
+          style={{ imageRendering: 'pixelated', width: size, height: size }}
+        />
+      ) : (
+        <div
+          style={{ width: size, height: size }}
+          className="bg-slate-50 animate-pulse rounded flex items-center justify-center text-[10px] text-slate-400 font-mono"
+        >
+          Memuat QR...
+        </div>
+      )}
       {label && (
-        <span className="mt-2 text-xs font-semibold text-slate-800 font-mono tracking-tight text-center">
+        <span className="mt-1.5 text-xs font-semibold text-slate-800 font-mono tracking-tight text-center">
           {label}
         </span>
       )}

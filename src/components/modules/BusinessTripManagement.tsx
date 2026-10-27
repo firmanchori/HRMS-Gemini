@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useHrms } from '../../context/HrmsContext';
 import {
   Plane,
@@ -19,6 +19,9 @@ import {
   Printer,
   Download,
   ChevronRight,
+  MessageSquare,
+  Loader2,
+  FileDown,
 } from 'lucide-react';
 import { EmployeeSelect } from '../common/EmployeeSelect';
 import { QRCodeView } from '../common/QRCodeView';
@@ -28,6 +31,9 @@ import { validateDateRange, validateDateString } from '../../utils/dateValidator
 import { formatRupiah } from '../../utils/taxCalculator';
 import { BusinessTripRequest } from '../../types/hrms';
 import { ScrollableTabNav } from '../common/ScrollableTabNav';
+import { WhatsAppIcon } from '../common/WhatsAppIcon';
+import { printPagesDirectly, exportPagesToPdf } from '../../utils/documentPdfExporter';
+import { openWhatsAppChat } from '../../utils/whatsappHelper';
 
 export const BusinessTripManagement: React.FC = () => {
   const {
@@ -46,6 +52,64 @@ export const BusinessTripManagement: React.FC = () => {
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedTripForDoc, setSelectedTripForDoc] = useState<BusinessTripRequest | null>(null);
+  const sppdSheetRef = useRef<HTMLDivElement>(null);
+  const [isPrintingSppd, setIsPrintingSppd] = useState(false);
+  const [isExportingSppd, setIsExportingSppd] = useState(false);
+  const [isSppdWaModalOpen, setIsSppdWaModalOpen] = useState(false);
+  const [sppdWaNumber, setSppdWaNumber] = useState('08129876543');
+
+  const handlePrintSppd = async () => {
+    if (!sppdSheetRef.current) return;
+    try {
+      setIsPrintingSppd(true);
+      await printPagesDirectly([sppdSheetRef.current]);
+    } catch (err) {
+      console.error('Print SPPD failed:', err);
+      alert('Gagal memproses pencetakan fisik dokumen SPPD.');
+    } finally {
+      setIsPrintingSppd(false);
+    }
+  };
+
+  const handleDownloadSppdPdf = async () => {
+    if (!sppdSheetRef.current || !selectedTripForDoc) return;
+    try {
+      setIsExportingSppd(true);
+      const filename = `SPPD_${selectedTripForDoc.tripNumber.replace(/\//g, '_')}.pdf`;
+      await exportPagesToPdf([sppdSheetRef.current], filename);
+    } catch (err) {
+      console.error('Download SPPD PDF failed:', err);
+      alert('Gagal mengunduh berkas PDF SPPD.');
+    } finally {
+      setIsExportingSppd(false);
+    }
+  };
+
+  const handleOpenSppdWaModal = () => {
+    if (selectedTripForDoc) {
+      const emp = employees.find((e) => e.id === selectedTripForDoc.employeeId);
+      setSppdWaNumber(emp?.phone || '08129876543');
+    }
+    setIsSppdWaModalOpen(true);
+  };
+
+  const handleSendSppdWhatsApp = () => {
+    if (!selectedTripForDoc) return;
+    const sppdEmp = employees.find((e) => e.id === selectedTripForDoc.employeeId);
+    const msg =
+      `*SURAT PERINTAH PERJALANAN DINAS (SPPD) - ${currentTenant.name.toUpperCase()}*\n\n` +
+      `Nomor: *${selectedTripForDoc.tripNumber}*\n` +
+      `Penerima Tugas: *${sppdEmp?.fullName || 'Karyawan'}* (NIK: ${sppdEmp?.nik || '-'})\n` +
+      `Jabatan: ${sppdEmp?.position || '-'}\n` +
+      `Kota Tujuan: *${selectedTripForDoc.destinationCity}*\n` +
+      `Lama Tugas: *${selectedTripForDoc.totalDays} Hari* (${selectedTripForDoc.startDate} s/d ${selectedTripForDoc.endDate})\n` +
+      `Keperluan: ${selectedTripForDoc.purpose}\n` +
+      `Alokasi Anggaran: *${formatRupiah(selectedTripForDoc.estimatedCost)}*\n\n` +
+      `Dokumen dinas resmi ini telah disahkan secara elektronik dan diakui secara hukum.\n` +
+      `Verifikasi Dokumen: https://nusahr.enterprise/verify-sppd?doc=${selectedTripForDoc.tripNumber.replace(/\//g, '-')}`;
+    openWhatsAppChat(sppdWaNumber || sppdEmp?.phone || '08129876543', msg);
+    setIsSppdWaModalOpen(false);
+  };
 
   // Form State
   const [employeeId, setEmployeeId] = useState(employees[0]?.id || '');
@@ -943,17 +1007,71 @@ export const BusinessTripManagement: React.FC = () => {
             className="bg-white rounded-xl shadow-2xl max-w-2xl w-full border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="px-5 py-4 bg-slate-900 text-white flex items-center justify-between">
-              <div>
+            <div className="px-5 py-3.5 bg-slate-900 text-white flex items-center justify-between no-print">
+              <div className="flex items-center gap-2">
+                <FileText className="w-4 h-4 text-indigo-400" />
                 <h3 className="text-sm font-bold">Surat Perintah Perjalanan Dinas (SPPD)</h3>
-                <span className="text-[11px] text-slate-400 font-mono">{selectedTripForDoc.tripNumber}</span>
+                <span className="text-[10px] px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-mono">
+                  {selectedTripForDoc.tripNumber}
+                </span>
               </div>
-              <button onClick={() => setSelectedTripForDoc(null)}>
-                <X className="w-4 h-4 text-slate-400 hover:text-white" />
-              </button>
+              <div className="flex items-center gap-2">
+                {/* Unduh Berkas PDF */}
+                <button
+                  type="button"
+                  onClick={handleDownloadSppdPdf}
+                  disabled={isExportingSppd}
+                  className="p-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg shadow-2xs transition-colors cursor-pointer disabled:opacity-60 flex items-center justify-center shrink-0"
+                  title="Unduh Berkas SPPD Format PDF"
+                  aria-label="Unduh PDF"
+                >
+                  {isExportingSppd ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <FileDown className="w-4 h-4" />
+                  )}
+                </button>
+
+                {/* Cetak Fisik Naskah A4 */}
+                <button
+                  type="button"
+                  onClick={handlePrintSppd}
+                  disabled={isPrintingSppd}
+                  className="p-2 bg-slate-800 hover:bg-slate-700 text-white border border-slate-700 rounded-lg shadow-2xs transition-colors cursor-pointer disabled:opacity-60 flex items-center justify-center shrink-0"
+                  title="Cetak Fisik Dokumen SPPD (Printer)"
+                  aria-label="Cetak SPPD"
+                >
+                  {isPrintingSppd ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Printer className="w-4 h-4" />
+                  )}
+                </button>
+
+                {/* Kirim WhatsApp */}
+                <button
+                  type="button"
+                  onClick={handleOpenSppdWaModal}
+                  className="p-2 bg-[#25D366] hover:bg-[#20ba59] text-white rounded-lg shadow-2xs transition-colors cursor-pointer flex items-center justify-center shrink-0"
+                  title="Kirim Penugasan SPPD ke WhatsApp Karyawan"
+                  aria-label="Kirim WhatsApp"
+                >
+                  <WhatsAppIcon className="w-4 h-4" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setSelectedTripForDoc(null)}
+                  className="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors ml-1 flex items-center justify-center shrink-0"
+                  title="Tutup (Esc)"
+                  aria-label="Tutup"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             </div>
 
-            <div className="p-8 overflow-y-auto space-y-6 text-slate-900 font-serif leading-relaxed text-xs">
+            <div ref={sppdSheetRef} className="p-8 overflow-y-auto space-y-6 text-slate-900 font-serif leading-relaxed text-xs bg-white">
               {/* Kop Surat */}
               <div className="border-b-2 border-slate-900 pb-4 text-center space-y-1">
                 <h1 className="text-base font-bold tracking-wider font-sans uppercase">
@@ -1061,30 +1179,80 @@ export const BusinessTripManagement: React.FC = () => {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      )}
 
-            <div className="px-5 py-3 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
+      {/* Modal Dialog Konfirmasi Kirim WhatsApp SPPD */}
+      {isSppdWaModalOpen && selectedTripForDoc && (
+        <div
+          className="fixed inset-0 z-60 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4"
+          onClick={() => setIsSppdWaModalOpen(false)}
+        >
+          <div
+            className="bg-white rounded-xl shadow-2xl max-w-md w-full border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-5 py-3.5 bg-emerald-700 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <WhatsAppIcon className="w-4 h-4 text-emerald-200" />
+                <h3 className="text-sm font-bold">Kirim Penugasan SPPD ke WhatsApp</h3>
+              </div>
               <button
-                onClick={() => setSelectedTripForDoc(null)}
-                className="px-4 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded font-semibold text-xs"
+                type="button"
+                onClick={() => setIsSppdWaModalOpen(false)}
+                className="text-emerald-200 hover:text-white p-1 rounded-lg hover:bg-emerald-800 transition-colors cursor-pointer"
               >
-                Tutup
+                <X className="w-4 h-4" />
               </button>
-              <button
-                onClick={() => window.print()}
-                className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg font-semibold text-xs flex items-center gap-1.5 shadow-2xs"
-                title="Cetak Fisik Dokumen SPPD"
-              >
-                <Printer className="w-3.5 h-3.5" />
-                <span>Cetak</span>
-              </button>
-              <button
-                onClick={() => window.print()}
-                className="px-3.5 py-1.5 bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 rounded-lg font-semibold text-xs flex items-center gap-1.5 shadow-2xs"
-                title="Unduh Berkas SPPD Format PDF"
-              >
-                <Download className="w-3.5 h-3.5" />
-                <span>Unduh PDF</span>
-              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-xs text-emerald-900 space-y-1">
+                <div className="font-semibold flex items-center gap-1.5 text-emerald-800">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>
+                    Karyawan: {employees.find((e) => e.id === selectedTripForDoc.employeeId)?.fullName}
+                  </span>
+                </div>
+                <div className="text-[11px] text-emerald-700">
+                  Tujuan: {selectedTripForDoc.destinationCity} · {selectedTripForDoc.totalDays} Hari ({selectedTripForDoc.startDate})
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Nomor WhatsApp Penerima Tugas
+                </label>
+                <input
+                  type="text"
+                  value={sppdWaNumber}
+                  onChange={(e) => setSppdWaNumber(e.target.value)}
+                  placeholder="0812xxxxxxxx"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-mono focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
+                />
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Format nomor Indonesia: 08xx atau 628xx. Pesan mencakup nomor SPPD, kota tujuan, durasi dinas, alokasi biaya, dan link verifikasi digital NusaHR.
+                </p>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsSppdWaModalOpen(false)}
+                  className="px-3.5 py-1.5 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs font-semibold cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSendSppdWhatsApp}
+                  className="px-4 py-1.5 rounded-lg bg-[#25D366] hover:bg-[#20ba59] text-white text-xs font-bold flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                >
+                  <WhatsAppIcon className="w-3.5 h-3.5" />
+                  <span>Kirim WhatsApp Sekarang</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -117,6 +117,8 @@ import {
 } from '../../types/hrms';
 import { DEFAULT_ONBOARDING_CHECKLIST_TEMPLATES } from '../../data/initialData';
 import { formatRupiah, calculatePPh21TER, calculateBPJS } from '../../utils/taxCalculator';
+import { printPagesDirectly, exportPagesToPdf } from '../../utils/documentPdfExporter';
+import { WhatsAppIcon } from '../common/WhatsAppIcon';
 
 
 // ===================== DYNAMIC OFFERING CALCULATOR ENGINE =====================
@@ -10459,17 +10461,41 @@ PT Nusantara Multi Talenta Tbk`);
               </div>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => window.print()}
-                  className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs flex items-center gap-1 transition-colors"
+                  type="button"
+                  onClick={async (e) => {
+                    const docEl = (e.currentTarget.closest('.bg-white') as HTMLElement)?.querySelector('.p-8') as HTMLElement;
+                    if (docEl) {
+                      await exportPagesToPdf([docEl], `FPTK_${previewFptk.reqNumber.replace(/\//g, '_')}.pdf`);
+                    }
+                  }}
+                  className="p-1.5 rounded-lg bg-rose-700 hover:bg-rose-600 text-white transition-colors cursor-pointer shadow-xs flex items-center justify-center shrink-0"
+                  title="Unduh Lembar FPTK Format PDF"
+                  aria-label="Unduh PDF"
                 >
-                  <Printer className="w-3.5 h-3.5" />
-                  <span>Cetak</span>
+                  <Download className="w-4 h-4" />
                 </button>
                 <button
-                  onClick={() => setPreviewFptk(null)}
-                  className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
+                  type="button"
+                  onClick={async (e) => {
+                    const docEl = (e.currentTarget.closest('.bg-white') as HTMLElement)?.querySelector('.p-8') as HTMLElement;
+                    if (docEl) {
+                      await printPagesDirectly([docEl]);
+                    }
+                  }}
+                  className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors cursor-pointer border border-slate-700 flex items-center justify-center shrink-0"
+                  title="Cetak Naskah FPTK Fisik A4"
+                  aria-label="Cetak Naskah FPTK"
                 >
-                  <X className="w-5 h-5" />
+                  <Printer className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreviewFptk(null)}
+                  className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer flex items-center justify-center shrink-0"
+                  title="Tutup"
+                  aria-label="Tutup"
+                >
+                  <X className="w-4 h-4" />
                 </button>
               </div>
             </div>
@@ -13004,28 +13030,35 @@ PT Nusantara Multi Talenta Tbk`);
                   <button
                     type="button"
                     onClick={() => handleDownloadCv(previewCvCandidate)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors"
-                    title="Unduh Berkas CV ini"
+                    className="p-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg shadow-xs transition-colors flex items-center justify-center shrink-0 cursor-pointer"
+                    title="Unduh Berkas CV"
+                    aria-label="Unduh CV"
                   >
-                    <Download className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">Download File</span>
+                    <Download className="w-4 h-4" />
                   </button>
                   <button
                     type="button"
-                    onClick={() => window.print()}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold border border-slate-700 transition-colors"
-                    title="Cetak Dokumen"
+                    onClick={async (e) => {
+                      const modalEl = e.currentTarget.closest('.bg-white.rounded-2xl') as HTMLElement;
+                      const cvPaper = (modalEl?.querySelector('.max-w-2xl') as HTMLElement) || modalEl;
+                      if (cvPaper) {
+                        await printPagesDirectly([cvPaper]);
+                      }
+                    }}
+                    className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg border border-slate-700 transition-colors cursor-pointer flex items-center justify-center shrink-0"
+                    title="Cetak Naskah CV Resmi"
+                    aria-label="Cetak CV"
                   >
-                    <Printer className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">Cetak</span>
+                    <Printer className="w-4 h-4" />
                   </button>
                   <button
                     type="button"
                     onClick={() => setPreviewCvCandidate(null)}
-                    className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors ml-1"
+                    className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors ml-1 flex items-center justify-center shrink-0"
                     title="Tutup Pratinjau"
+                    aria-label="Tutup Pratinjau"
                   >
-                    <X className="w-5 h-5" />
+                    <X className="w-4 h-4" />
                   </button>
                 </div>
               </div>
@@ -17517,10 +17550,10 @@ PT Nusantara Multi Talenta Tbk`);
                         <button
                           type="button"
                           onClick={() => handleSendMcuLetterViaWhatsApp(mcuCandidate)}
-                          className="px-2 py-1 rounded bg-emerald-100 hover:bg-emerald-200 text-emerald-800 font-bold text-[10px] flex items-center gap-1 transition-colors"
+                          className="px-2 py-1 rounded bg-[#25D366] hover:bg-[#20ba59] text-white font-bold text-[10px] flex items-center gap-1 transition-colors"
                           title="Kirim via WhatsApp"
                         >
-                          <MessageSquare className="w-3 h-3 text-emerald-700" />
+                          <WhatsAppIcon className="w-3 h-3" />
                           <span>Kirim WA</span>
                         </button>
                         <button
@@ -17763,62 +17796,69 @@ PT Nusantara Multi Talenta Tbk`);
               </div>
 
               {/* Action Toolbar: Print, Download, WA, Email, Share, Tutup */}
-              <div className="flex flex-wrap items-center gap-1.5 self-end sm:self-auto">
+              <div className="flex items-center gap-1.5 self-end sm:self-auto shrink-0">
                 <button
                   type="button"
-                  onClick={() => window.print()}
-                  className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors border border-slate-700 cursor-pointer"
+                  onClick={async (e) => {
+                    const modalEl = e.currentTarget.closest('.bg-white.rounded-2xl') as HTMLElement;
+                    const letterPaper = (modalEl?.querySelector('.max-w-2xl') as HTMLElement) || modalEl;
+                    if (letterPaper) {
+                      await printPagesDirectly([letterPaper]);
+                    }
+                  }}
+                  className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-lg transition-colors border border-slate-700 cursor-pointer flex items-center justify-center shrink-0"
                   title="Cetak Surat Pengantar (Print)"
+                  aria-label="Cetak Surat Pengantar"
                 >
-                  <Printer className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Cetak</span>
+                  <Printer className="w-4 h-4" />
                 </button>
 
                 <button
                   type="button"
                   onClick={() => handleDownloadMcuLetter(mcuCandidate)}
-                  className="px-2.5 py-1.5 bg-teal-700 hover:bg-teal-600 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-2xs cursor-pointer"
+                  className="p-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg transition-colors shadow-2xs cursor-pointer flex items-center justify-center shrink-0"
                   title="Unduh Dokumen PDF"
+                  aria-label="Unduh PDF"
                 >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Download</span>
+                  <Download className="w-4 h-4" />
                 </button>
 
                 <button
                   type="button"
                   onClick={() => handleSendMcuLetterViaWhatsApp(mcuCandidate)}
-                  className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-2xs cursor-pointer"
+                  className="p-2 bg-[#25D366] hover:bg-[#20ba59] text-white rounded-lg transition-colors shadow-2xs cursor-pointer flex items-center justify-center shrink-0"
                   title="Kirim Surat Pengantar via WhatsApp ke Pelamar"
+                  aria-label="Kirim WhatsApp"
                 >
-                  <MessageSquare className="w-3.5 h-3.5" />
-                  <span>Kirim WA</span>
+                  <WhatsAppIcon className="w-4 h-4" />
                 </button>
 
                 <button
                   type="button"
                   onClick={() => handleSendMcuLetterViaEmail(mcuCandidate)}
-                  className="px-2.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-2xs cursor-pointer"
+                  className="p-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors shadow-2xs cursor-pointer flex items-center justify-center shrink-0"
                   title="Kirim via Email Resmi ke Pelamar"
+                  aria-label="Kirim Email"
                 >
-                  <Mail className="w-3.5 h-3.5" />
-                  <span>Kirim Email</span>
+                  <Mail className="w-4 h-4" />
                 </button>
 
                 <button
                   type="button"
                   onClick={() => handleShareMcuLetterLink(mcuCandidate)}
-                  className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors border border-slate-700 cursor-pointer"
+                  className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition-colors border border-slate-700 cursor-pointer flex items-center justify-center shrink-0"
                   title="Salin Tautan Surat Pengantar"
+                  aria-label="Share Link"
                 >
-                  <Share2 className="w-3.5 h-3.5" />
-                  <span className="hidden md:inline">Share</span>
+                  <Share2 className="w-4 h-4" />
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setIsPreviewMcuLetterOpen(false)}
-                  className="p-1.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors ml-1 cursor-pointer"
+                  className="p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors ml-1 cursor-pointer flex items-center justify-center shrink-0"
                   title="Tutup Pratinjau"
+                  aria-label="Tutup Pratinjau"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -18020,9 +18060,9 @@ PT Nusantara Multi Talenta Tbk`);
                 <button
                   type="button"
                   onClick={() => handleSendMcuLetterViaWhatsApp(mcuCandidate)}
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-xs transition-colors flex items-center gap-1.5 shadow-2xs"
+                  className="px-4 py-2 bg-[#25D366] hover:bg-[#20ba59] text-white rounded-lg font-bold text-xs transition-colors flex items-center gap-1.5 shadow-2xs"
                 >
-                  <MessageSquare className="w-3.5 h-3.5" />
+                  <WhatsAppIcon className="w-3.5 h-3.5" />
                   <span className="whitespace-nowrap">Kirim via WhatsApp</span>
                 </button>
               </div>
@@ -19211,42 +19251,53 @@ PT Nusantara Multi Talenta Tbk`);
                         setIsOfferingDocPreviewOpen(false);
                         handleOpenOfferingModal(activeCandidate);
                       }}
-                      className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg font-semibold flex items-center gap-1.5 text-xs transition-colors whitespace-nowrap"
+                      className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg font-semibold flex items-center gap-1.5 text-xs transition-colors whitespace-nowrap"
+                      title="Buka Kalkulator & Form Offering"
                     >
                       <Calculator className="w-3.5 h-3.5 text-indigo-600" />
                       <span>Kalkulator & Form</span>
                     </button>
                     <button
                       type="button"
-                      onClick={() => window.print()}
-                      className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-semibold flex items-center gap-1.5 text-xs transition-colors whitespace-nowrap"
+                      onClick={async (e) => {
+                        const modalEl = e.currentTarget.closest('.bg-white.rounded-2xl') as HTMLElement;
+                        const docPaper = (modalEl?.querySelector('.max-w-2xl') as HTMLElement) || modalEl;
+                        if (docPaper) {
+                          await printPagesDirectly([docPaper]);
+                        }
+                      }}
+                      className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors cursor-pointer flex items-center justify-center shrink-0 border border-slate-300"
+                      title="Cetak Offering Letter"
+                      aria-label="Cetak Offering Letter"
                     >
-                      <Printer className="w-3.5 h-3.5" />
-                      <span>Cetak</span>
+                      <Printer className="w-4 h-4" />
                     </button>
                     <button
                       type="button"
                       onClick={() => handleDownloadOfferingLetter(activeCandidate)}
-                      className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-semibold flex items-center gap-1.5 text-xs transition-colors whitespace-nowrap"
+                      className="p-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg transition-colors shadow-2xs flex items-center justify-center shrink-0"
+                      title="Unduh Offering Letter (PDF)"
+                      aria-label="Unduh PDF"
                     >
-                      <Download className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>Download</span>
+                      <Download className="w-4 h-4" />
                     </button>
                     <button
                       type="button"
                       onClick={() => handleSendOfferingViaWhatsApp(activeCandidate)}
-                      className="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-lg font-semibold flex items-center gap-1.5 text-xs transition-colors whitespace-nowrap"
+                      className="p-2 bg-[#25D366] hover:bg-[#20ba59] text-white rounded-lg transition-colors shadow-2xs flex items-center justify-center shrink-0"
+                      title="Kirim ke WhatsApp Kandidat"
+                      aria-label="Kirim WhatsApp"
                     >
-                      <MessageSquare className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>Kirim WA</span>
+                      <WhatsAppIcon className="w-4 h-4" />
                     </button>
                     <button
                       type="button"
                       onClick={() => handleSendOfferingViaEmail(activeCandidate)}
-                      className="px-3.5 py-2 bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-300 rounded-lg font-semibold flex items-center gap-1.5 text-xs transition-colors whitespace-nowrap"
+                      className="p-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors shadow-2xs flex items-center justify-center shrink-0"
+                      title="Kirim ke Email Kandidat"
+                      aria-label="Kirim Email"
                     >
-                      <Mail className="w-3.5 h-3.5 text-blue-600" />
-                      <span>Kirim Email</span>
+                      <Mail className="w-4 h-4" />
                     </button>
                   </div>
 
@@ -20922,27 +20973,35 @@ PT Nusantara Multi Talenta Tbk`);
                   <button
                     type="button"
                     onClick={() => handleDownloadContractNda(selectedContractProcess, contractDocTab)}
-                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 border border-slate-700 transition-colors cursor-pointer"
-                    title="Unduh file dokumen resmi"
+                    className="p-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg transition-colors cursor-pointer shadow-2xs flex items-center justify-center shrink-0"
+                    title={`Unduh Dokumen ${contractDocTab === 'contract' ? 'Kontrak' : 'NDA'} (PDF)`}
+                    aria-label="Unduh Dokumen"
                   >
-                    <Download className="w-3.5 h-3.5 text-emerald-400" />
-                    <span className="hidden sm:inline">Download</span>
+                    <Download className="w-4 h-4" />
                   </button>
                   <button
                     type="button"
-                    onClick={() => window.print()}
-                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 border border-slate-700 transition-colors cursor-pointer"
-                    title="Cetak lembar resmi"
+                    onClick={async (e) => {
+                      const modalEl = e.currentTarget.closest('.bg-white.rounded-2xl') as HTMLElement;
+                      const contractPaper = (modalEl?.querySelector('.max-w-3xl') as HTMLElement) || modalEl;
+                      if (contractPaper) {
+                        await printPagesDirectly([contractPaper]);
+                      }
+                    }}
+                    className="p-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg border border-slate-700 transition-colors cursor-pointer flex items-center justify-center shrink-0"
+                    title="Cetak Naskah Dokumen Resmi Fisik A4"
+                    aria-label="Cetak Dokumen"
                   >
-                    <Printer className="w-3.5 h-3.5 text-blue-400" />
-                    <span className="hidden sm:inline">Print</span>
+                    <Printer className="w-4 h-4" />
                   </button>
                   <button
                     type="button"
                     onClick={() => setIsContractNdaModalOpen(false)}
-                    className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+                    className="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer flex items-center justify-center shrink-0"
+                    title="Tutup"
+                    aria-label="Tutup"
                   >
-                    <X className="w-5 h-5" />
+                    <X className="w-4 h-4" />
                   </button>
                 </div>
               </div>
@@ -21281,19 +21340,27 @@ PT Nusantara Multi Talenta Tbk`);
                   <button
                     type="button"
                     onClick={() => handleDownloadContractNda(selectedContractProcess, contractDocTab)}
-                    className="px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+                    className="p-2 bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 rounded-lg transition-colors cursor-pointer flex items-center justify-center shrink-0 shadow-2xs"
+                    title={`Download (${contractDocTab === 'contract' ? 'Kontrak' : 'NDA'})`}
+                    aria-label="Download"
                   >
-                    <Download className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>Download ({contractDocTab === 'contract' ? 'Kontrak' : 'NDA'})</span>
+                    <Download className="w-4 h-4 text-emerald-600" />
                   </button>
 
                   <button
                     type="button"
-                    onClick={() => window.print()}
-                    className="px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+                    onClick={async (e) => {
+                      const modalEl = e.currentTarget.closest('.bg-white.rounded-2xl') as HTMLElement;
+                      const contractPaper = (modalEl?.querySelector('.max-w-3xl') as HTMLElement) || modalEl;
+                      if (contractPaper) {
+                        await printPagesDirectly([contractPaper]);
+                      }
+                    }}
+                    className="p-2 bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 rounded-lg transition-colors cursor-pointer flex items-center justify-center shrink-0 shadow-2xs"
+                    title="Cetak Dokumen Fisik A4"
+                    aria-label="Cetak Dokumen"
                   >
-                    <Printer className="w-3.5 h-3.5 text-blue-600" />
-                    <span>Print Dokumen</span>
+                    <Printer className="w-4 h-4 text-blue-600" />
                   </button>
 
                   <button
@@ -22031,9 +22098,9 @@ PT Nusantara Multi Talenta Tbk`);
                     href={`https://wa.me/${(selectedTalentCandidate.phone || '').replace(/[^0-9]/g, '')}`}
                     target="_blank"
                     rel="noreferrer"
-                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                    className="px-3 py-1.5 bg-[#25D366] hover:bg-[#20ba59] text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
                   >
-                    <MessageSquare className="w-3.5 h-3.5" />
+                    <WhatsAppIcon className="w-3.5 h-3.5" />
                     <span>WhatsApp</span>
                   </a>
                   <a

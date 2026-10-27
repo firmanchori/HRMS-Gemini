@@ -48,7 +48,6 @@ export async function exportElementToPdf(
     pdf.save(fileName.endsWith('.pdf') ? fileName : `${fileName}.pdf`);
   } catch (err) {
     console.error('Gagal mengekspor PDF secara otomatis:', err);
-    // Fallback to window.print if html2canvas fails
-    window.print();
+    throw err;
   }
 }

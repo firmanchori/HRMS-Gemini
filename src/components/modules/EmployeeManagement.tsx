@@ -43,6 +43,7 @@ import {
 } from 'lucide-react';
 import {
   EmploymentType,
+  WorkerCategory,
   PTKPStatus,
   Employee,
   Candidate,
@@ -107,6 +108,7 @@ export const EmployeeManagement: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'karyawan' | 'probation' | 'contracts' | 'nikformat' | 'pengaturan'>('karyawan');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<string>('all');
+  const [filterWorkerCategory, setFilterWorkerCategory] = useState<string>('all');
   const [filterDept, setFilterDept] = useState<string>('all');
 
   // Modals
@@ -222,6 +224,7 @@ export const EmployeeManagement: React.FC = () => {
   const [newPersonalEmail, setNewPersonalEmail] = useState('');
   const [newPhone, setNewPhone] = useState('0812' + Math.floor(10000000 + Math.random() * 90000000));
   const [newType, setNewType] = useState<EmploymentType>('Tetap');
+  const [newWorkerCategory, setNewWorkerCategory] = useState<WorkerCategory>('Karyawan');
   const [newContractDoc, setNewContractDoc] = useState('');
   const [newDept, setNewDept] = useState('Engineering');
   const [newPosition, setNewPosition] = useState('');
@@ -364,6 +367,33 @@ export const EmployeeManagement: React.FC = () => {
     reader.readAsDataURL(file);
   };
 
+  // Helper Kategori Pekerja & Badge Status Hubungan Kerja
+  const getWorkerCategory = (emp: Employee): WorkerCategory => {
+    if (emp.workerCategory) return emp.workerCategory;
+    const nonKaryawanKeywords = ['mitra', 'ahli', 'konsultan', 'freelance', 'lepas', 'magang', 'intern', 'sukarela', 'volunteer'];
+    const typeLower = (emp.employmentType || '').toLowerCase();
+    if (nonKaryawanKeywords.some((k) => typeLower.includes(k))) {
+      return 'Non-Karyawan / Mitra Kerja';
+    }
+    return 'Karyawan';
+  };
+
+  const getEmploymentTypeBadgeStyle = (type: string) => {
+    const norm = (type || '').toLowerCase();
+    if (norm.includes('tetap')) return 'bg-emerald-100 text-emerald-800 border-emerald-200';
+    if (norm.includes('kontrak')) return 'bg-blue-100 text-blue-800 border-blue-200';
+    if (norm.includes('ahli') || norm.includes('konsultan')) return 'bg-purple-100 text-purple-800 border-purple-200';
+    if (norm.includes('mitra') || norm.includes('partnership')) return 'bg-indigo-100 text-indigo-800 border-indigo-200';
+    if (norm.includes('freelance') || norm.includes('lepas')) return 'bg-cyan-100 text-cyan-800 border-cyan-200';
+    if (norm.includes('magang') || norm.includes('intern')) return 'bg-amber-100 text-amber-800 border-amber-200';
+    if (norm.includes('outsource') || norm.includes('alih')) return 'bg-orange-100 text-orange-800 border-orange-200';
+    if (norm.includes('paruh') || norm.includes('part-time')) return 'bg-teal-100 text-teal-800 border-teal-200';
+    if (norm.includes('remote') || norm.includes('jarak')) return 'bg-sky-100 text-sky-800 border-sky-200';
+    if (norm.includes('musiman')) return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+    if (norm.includes('sukarela')) return 'bg-pink-100 text-pink-800 border-pink-200';
+    return 'bg-slate-100 text-slate-800 border-slate-200';
+  };
+
   // Filtered employees
   const filteredEmployees = employees.filter((emp) => {
     const matchesSearch =
@@ -372,9 +402,11 @@ export const EmployeeManagement: React.FC = () => {
       (emp?.contractDocNumber || '').toLowerCase().includes((searchQuery || '').toLowerCase()) ||
       (emp?.nikKtp || '').includes(searchQuery || '') ||
       (emp?.position || '').toLowerCase().includes((searchQuery || '').toLowerCase());
+    const matchesCategory =
+      filterWorkerCategory === 'all' || getWorkerCategory(emp) === filterWorkerCategory;
     const matchesType = filterType === 'all' || emp.employmentType === filterType;
     const matchesDept = filterDept === 'all' || emp.department === filterDept;
-    return matchesSearch && matchesType && matchesDept;
+    return matchesSearch && matchesCategory && matchesType && matchesDept;
   });
 
   const departments = Array.from(new Set(employees.map((e) => e.department)));
@@ -432,6 +464,7 @@ export const EmployeeManagement: React.FC = () => {
     setNewPersonalEmail('');
     setNewPhone('0812' + Math.floor(10000000 + Math.random() * 90000000));
     setNewType('Tetap');
+    setNewWorkerCategory('Karyawan');
     setNewDept('Engineering');
     setNewPosition('');
     setNewGrade('L3');
@@ -849,6 +882,7 @@ export const EmployeeManagement: React.FC = () => {
       email: newEmail.trim() || `${newName.toLowerCase().replace(/\s+/g, '.')}@${currentTenant.code.toLowerCase()}.id`,
       personalEmail: newPersonalEmail.trim() || `${newName.toLowerCase().replace(/\s+/g, '.')}@gmail.com`,
       phone: newPhone.trim(),
+      workerCategory: newWorkerCategory,
       employmentType: newType,
       contractDocNumber: docNo,
       contractStartDate: newContractStartDate || newJoinDate,
@@ -1114,17 +1148,41 @@ export const EmployeeManagement: React.FC = () => {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex lg:items-center gap-2 w-full lg:w-auto">
-              <div className="relative flex-1 sm:w-48 lg:w-48">
+              <div className="relative flex-1 sm:w-44 lg:w-44">
+                <select
+                  value={filterWorkerCategory}
+                  onChange={(e) => setFilterWorkerCategory(e.target.value)}
+                  className="w-full text-xs border border-slate-300 rounded-lg py-2 px-3 bg-white font-medium text-slate-700 outline-none focus:border-indigo-500 cursor-pointer shadow-2xs"
+                >
+                  <option value="all">Semua Jenis Pekerja</option>
+                  <option value="Karyawan">Karyawan</option>
+                  <option value="Non-Karyawan / Mitra Kerja">Non-Karyawan / Mitra</option>
+                </select>
+              </div>
+
+              <div className="relative flex-1 sm:w-52 lg:w-52">
                 <select
                   value={filterType}
                   onChange={(e) => setFilterType(e.target.value)}
                   className="w-full text-xs border border-slate-300 rounded-lg py-2 px-3 bg-white font-medium text-slate-700 outline-none focus:border-indigo-500 cursor-pointer shadow-2xs"
                 >
                   <option value="all">Semua Status Hubungan</option>
-                  <option value="Tetap">Tetap (PKWTT)</option>
-                  <option value="Kontrak">Kontrak (PKWT)</option>
-                  <option value="Outsource">Outsource</option>
-                  <option value="Magang">Magang (Intern)</option>
+                  <optgroup label="Karyawan (Internal)">
+                    <option value="Tetap">Tetap (PKWTT)</option>
+                    <option value="Kontrak">Kontrak (PKWT)</option>
+                    <option value="Paruh Waktu">Pekerja Paruh Waktu (Part-time)</option>
+                    <option value="Harian Lepas">Karyawan Harian Lepas (Casual)</option>
+                    <option value="Outsource">Karyawan Outsourcing (Alih Daya)</option>
+                    <option value="Remote">Pekerja Jarak Jauh (Remote Worker)</option>
+                    <option value="Musiman">Pekerja Musiman / Sementara</option>
+                  </optgroup>
+                  <optgroup label="Non-Karyawan / Kemitraan">
+                    <option value="Mitra Kerja">Mitra Kerja (Partnership)</option>
+                    <option value="Tenaga Ahli">Tenaga Ahli / Konsultan</option>
+                    <option value="Freelancer">Pekerja Lepas (Freelancer)</option>
+                    <option value="Magang">Peserta Magang (Intern)</option>
+                    <option value="Sukarelawan">Sukarelawan (Volunteer)</option>
+                  </optgroup>
                 </select>
               </div>
 
@@ -1143,11 +1201,12 @@ export const EmployeeManagement: React.FC = () => {
                 </select>
               </div>
 
-              {(filterType !== 'all' || filterDept !== 'all' || searchQuery) && (
+              {(filterType !== 'all' || filterWorkerCategory !== 'all' || filterDept !== 'all' || searchQuery) && (
                 <button
                   type="button"
                   onClick={() => {
                     setFilterType('all');
+                    setFilterWorkerCategory('all');
                     setFilterDept('all');
                     setSearchQuery('');
                   }}
@@ -1208,17 +1267,20 @@ export const EmployeeManagement: React.FC = () => {
                       </div>
                     </div>
 
-                    <span
-                      className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold shrink-0 ${
-                        emp.employmentType === 'Tetap'
-                          ? 'bg-emerald-100 text-emerald-800'
-                          : emp.employmentType === 'Kontrak'
-                          ? 'bg-blue-100 text-blue-800'
-                          : 'bg-amber-100 text-amber-800'
-                      }`}
-                    >
-                      {emp.employmentType}
-                    </span>
+                    <div className="flex flex-col gap-1 shrink-0 items-end">
+                      <span
+                        className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold border ${getEmploymentTypeBadgeStyle(
+                          emp.employmentType
+                        )}`}
+                      >
+                        {emp.employmentType}
+                      </span>
+                      {getWorkerCategory(emp) === 'Non-Karyawan / Mitra Kerja' && (
+                        <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-purple-50 text-purple-700 font-semibold border border-purple-200">
+                          Mitra / Non-Karyawan
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   {/* Position & Department */}
@@ -1331,17 +1393,24 @@ export const EmployeeManagement: React.FC = () => {
                         </div>
                       </td>
                       <td className="py-2.5 px-3">
-                        <span
-                          className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
-                            emp.employmentType === 'Tetap'
-                              ? 'bg-emerald-100 text-emerald-800'
-                              : emp.employmentType === 'Kontrak'
-                              ? 'bg-blue-100 text-blue-800'
-                              : 'bg-amber-100 text-amber-800'
-                          }`}
-                        >
-                          {emp.employmentType}
-                        </span>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span
+                            className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold border ${getEmploymentTypeBadgeStyle(
+                              emp.employmentType
+                            )}`}
+                          >
+                            {emp.employmentType}
+                          </span>
+                          {getWorkerCategory(emp) === 'Non-Karyawan / Mitra Kerja' ? (
+                            <span className="text-[9px] px-1.5 py-0.2 rounded bg-purple-50 text-purple-700 font-semibold border border-purple-200">
+                              Mitra
+                            </span>
+                          ) : (
+                            <span className="text-[9px] px-1.5 py-0.2 rounded bg-slate-50 text-slate-600 font-medium border border-slate-200">
+                              Karyawan
+                            </span>
+                          )}
+                        </div>
                         <div className="text-[10px] text-slate-600 font-mono truncate max-w-[170px] mt-0.5" title={emp.contractDocNumber}>
                           {emp.contractDocNumber}
                         </div>
@@ -2001,7 +2070,7 @@ export const EmployeeManagement: React.FC = () => {
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
                         <div>
                           <label className="font-medium text-slate-700 block mb-1">Nomor HP / WhatsApp *</label>
                           <input
@@ -2014,6 +2083,18 @@ export const EmployeeManagement: React.FC = () => {
                         </div>
 
                         <div>
+                          <label className="font-medium text-slate-700 block mb-1">Klasifikasi Pekerja</label>
+                          <select
+                            value={newWorkerCategory}
+                            onChange={(e) => setNewWorkerCategory(e.target.value as WorkerCategory)}
+                            className="w-full px-3 py-2 border border-slate-300 rounded bg-white font-medium cursor-pointer"
+                          >
+                            <option value="Karyawan">Karyawan (Internal)</option>
+                            <option value="Non-Karyawan / Mitra Kerja">Non-Karyawan / Mitra Kerja</option>
+                          </select>
+                        </div>
+
+                        <div>
                           <label className="font-medium text-slate-700 block mb-1">Status Hubungan Kerja</label>
                           <select
                             value={newType}
@@ -2021,13 +2102,31 @@ export const EmployeeManagement: React.FC = () => {
                               const t = e.target.value as any;
                               setNewType(t);
                               setNewNik(generateNextNik(t, currentEntity?.id));
+                              const nonKaryawanKeywords = ['mitra', 'ahli', 'konsultan', 'freelance', 'lepas', 'magang', 'intern', 'sukarela', 'volunteer'];
+                              if (nonKaryawanKeywords.some((k) => t.toLowerCase().includes(k))) {
+                                setNewWorkerCategory('Non-Karyawan / Mitra Kerja');
+                              } else {
+                                setNewWorkerCategory('Karyawan');
+                              }
                             }}
-                            className="w-full px-3 py-2 border border-slate-300 rounded bg-white font-medium cursor-pointer"
+                            className="w-full px-3 py-2 border border-slate-300 rounded bg-white font-medium cursor-pointer text-xs"
                           >
-                            <option value="Tetap">Tetap (PKWTT)</option>
-                            <option value="Kontrak">Kontrak (PKWT)</option>
-                            <option value="Outsource">Outsource</option>
-                            <option value="Magang">Magang (Intern)</option>
+                            <optgroup label="Karyawan (Internal)">
+                              <option value="Tetap">Tetap (PKWTT)</option>
+                              <option value="Kontrak">Kontrak (PKWT)</option>
+                              <option value="Paruh Waktu">Pekerja Paruh Waktu (Part-time)</option>
+                              <option value="Harian Lepas">Karyawan Harian Lepas (Casual Workers)</option>
+                              <option value="Outsource">Karyawan Outsourcing (Alih Daya)</option>
+                              <option value="Remote">Pekerja Jarak Jauh (Remote Worker)</option>
+                              <option value="Musiman">Pekerja Musiman / Sementara</option>
+                            </optgroup>
+                            <optgroup label="Non-Karyawan / Mitra Kerja">
+                              <option value="Mitra Kerja">Mitra Kerja (Partnership)</option>
+                              <option value="Tenaga Ahli">Tenaga Ahli / Konsultan (Expert)</option>
+                              <option value="Freelancer">Pekerja Lepas (Freelancer)</option>
+                              <option value="Magang">Peserta Magang (Intern)</option>
+                              <option value="Sukarelawan">Sukarelawan (Volunteer)</option>
+                            </optgroup>
                           </select>
                         </div>
 
@@ -3460,10 +3559,18 @@ export const EmployeeManagement: React.FC = () => {
                       className={`px-2 py-0.5 rounded text-[10px] font-bold shrink-0 ${
                         selectedEmployee.employmentType === 'Tetap'
                           ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                          : 'bg-blue-500/20 text-blue-300 border border-blue-500/40'
+                          : 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/40'
                       }`}
                     >
-                      {selectedEmployee.employmentType} (PKW{selectedEmployee.employmentType === 'Tetap' ? 'TT' : 'T'})
+                      {selectedEmployee.employmentType}
+                      {selectedEmployee.employmentType === 'Tetap'
+                        ? ' (PKWTT)'
+                        : selectedEmployee.employmentType === 'Kontrak'
+                        ? ' (PKWT)'
+                        : ''}
+                    </span>
+                    <span className="text-[10px] bg-slate-800 text-purple-300 border border-purple-500/30 px-2 py-0.5 rounded font-mono shrink-0">
+                      {getWorkerCategory(selectedEmployee)}
                     </span>
                     <span className="text-[10px] bg-slate-800 text-slate-300 px-2 py-0.5 rounded font-mono shrink-0">
                       Grade {selectedEmployee.grade || 'L3'}
@@ -3579,7 +3686,10 @@ export const EmployeeManagement: React.FC = () => {
                       <div>
                         <span className="text-slate-500 block text-[11px]">Status Ketenagakerjaan</span>
                         <strong className="text-emerald-700 text-xs">
-                          {selectedEmployee.employmentType} (PKW{selectedEmployee.employmentType === 'Tetap' ? 'TT' : 'T'})
+                          {selectedEmployee.employmentType}{' '}
+                          <span className="text-[10px] text-slate-500 font-normal">
+                            ({getWorkerCategory(selectedEmployee)})
+                          </span>
                         </strong>
                       </div>
                       <div>

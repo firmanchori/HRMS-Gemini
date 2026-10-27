@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useHrms } from '../../context/HrmsContext';
 import {
   Calculator,
@@ -27,6 +27,9 @@ import {
   Gift,
   Sliders,
   TrendingUp,
+  MessageSquare,
+  Loader2,
+  FileDown,
 } from 'lucide-react';
 import { PayrollRecord, Employee } from '../../types/hrms';
 import { formatRupiah, calculatePPh21TER, calculateBPJS, calculateOvertimePay } from '../../utils/taxCalculator';
@@ -36,6 +39,9 @@ import { CurrencyInput } from '../common/CurrencyInput';
 import { SalaryComponentManagement } from './SalaryComponentManagement';
 import { GradeSalaryManagement } from './GradeSalaryManagement';
 import { ScrollableTabNav } from '../common/ScrollableTabNav';
+import { WhatsAppIcon } from '../common/WhatsAppIcon';
+import { printPagesDirectly, exportPagesToPdf } from '../../utils/documentPdfExporter';
+import { openWhatsAppChat, WhatsAppTemplates } from '../../utils/whatsappHelper';
 
 interface ReimbursementClaim {
   id: string;
@@ -131,6 +137,11 @@ export const PayrollManagement: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'payroll' | 'reimburse' | 'thr_phk' | 'komponen' | 'golongan' | 'pengaturan'>('payroll');
   const [period, setPeriod] = useState('Oktober 2026');
   const [selectedPayslip, setSelectedPayslip] = useState<PayrollRecord | null>(null);
+  const payslipSheetRef = useRef<HTMLDivElement>(null);
+  const [isExportingPayslip, setIsExportingPayslip] = useState(false);
+  const [isPrintingPayslip, setIsPrintingPayslip] = useState(false);
+  const [isPayslipWaModalOpen, setIsPayslipWaModalOpen] = useState(false);
+  const [payslipWaNumber, setPayslipWaNumber] = useState('08129876543');
 
   // Reimbursement State
   const [claims, setClaims] = useState<ReimbursementClaim[]>(INITIAL_REIMBURSEMENTS);
@@ -181,6 +192,55 @@ export const PayrollManagement: React.FC = () => {
   const selectedEmployee = selectedPayslip
     ? employees.find((e) => e.id === selectedPayslip.employeeId)
     : null;
+
+  const handlePrintPayslip = async () => {
+    if (!payslipSheetRef.current) return;
+    try {
+      setIsPrintingPayslip(true);
+      await printPagesDirectly([payslipSheetRef.current]);
+    } catch (err) {
+      console.error('Print payslip failed:', err);
+      alert('Gagal memproses pencetakan fisik dokumen slip gaji.');
+    } finally {
+      setIsPrintingPayslip(false);
+    }
+  };
+
+  const handleDownloadPayslipPdf = async () => {
+    if (!payslipSheetRef.current || !selectedPayslip || !selectedEmployee) return;
+    try {
+      setIsExportingPayslip(true);
+      const filename = `Slip_Gaji_${selectedEmployee.nik}_${selectedPayslip.period.replace(/\s+/g, '_')}.pdf`;
+      await exportPagesToPdf([payslipSheetRef.current], filename);
+    } catch (err) {
+      console.error('Download payslip PDF failed:', err);
+      alert('Gagal mengunduh berkas PDF slip gaji.');
+    } finally {
+      setIsExportingPayslip(false);
+    }
+  };
+
+  const handleOpenPayslipWaModal = () => {
+    if (selectedEmployee) {
+      setPayslipWaNumber(selectedEmployee.phone || '08129876543');
+    }
+    setIsPayslipWaModalOpen(true);
+  };
+
+  const handleSendPayslipWhatsApp = () => {
+    if (!selectedPayslip || !selectedEmployee) return;
+    const msg = WhatsAppTemplates.payslip({
+      employeeName: selectedEmployee.fullName,
+      nik: selectedEmployee.nik,
+      companyName: currentTenant.name,
+      period: selectedPayslip.period,
+      thpAmount: formatRupiah(selectedPayslip.netPay),
+      pph21Amount: formatRupiah(selectedPayslip.pph21Amount),
+      basicSalary: formatRupiah(selectedPayslip.basicSalary),
+    });
+    openWhatsAppChat(payslipWaNumber || selectedEmployee.phone || '08129876543', msg);
+    setIsPayslipWaModalOpen(false);
+  };
 
   // Reimbursement Actions
   const handleAddClaim = (e: React.FormEvent) => {
@@ -1298,35 +1358,70 @@ export const PayrollManagement: React.FC = () => {
           >
             {/* Top Toolbar */}
             <div className="px-6 py-3.5 bg-slate-900 text-white flex items-center justify-between no-print">
-              <div className="text-xs font-semibold">Slip Gaji Elektronik Terverifikasi (PPh 21 TER 2024)</div>
+              <div className="text-xs font-semibold flex items-center gap-2">
+                <span>Slip Gaji Elektronik Terverifikasi (PPh 21 TER 2024)</span>
+                <span className="hidden sm:inline-block text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono">
+                  RESMI A4
+                </span>
+              </div>
               <div className="flex items-center gap-2">
-                {/* Cetak Fisik / Printer */}
-                <button
-                  onClick={() => window.print()}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-semibold shadow-2xs transition-colors"
-                  title="Cetak Fisik Dokumen Slip Gaji (Printer)"
-                >
-                  <Printer className="w-3.5 h-3.5" />
-                  <span>Cetak</span>
-                </button>
-
                 {/* Unduh Berkas PDF */}
                 <button
-                  onClick={() => window.print()}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-900 border border-slate-300 rounded-lg text-xs font-semibold shadow-2xs transition-colors"
-                  title="Unduh Berkas Digital PDF"
+                  type="button"
+                  onClick={handleDownloadPayslipPdf}
+                  disabled={isExportingPayslip}
+                  className="p-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg shadow-2xs transition-colors cursor-pointer disabled:opacity-60 flex items-center justify-center shrink-0"
+                  title="Unduh Berkas Digital PDF Resmi"
+                  aria-label="Unduh PDF"
                 >
-                  <Download className="w-3.5 h-3.5 text-slate-800" />
-                  <span>Unduh PDF</span>
+                  {isExportingPayslip ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <FileDown className="w-4 h-4" />
+                  )}
                 </button>
-                <button onClick={() => setSelectedPayslip(null)}>
-                  <X className="w-4 h-4 text-slate-400 hover:text-white" />
+
+                {/* Cetak Fisik Dokumen (Pencetakan Naskah Bersih Non-window.print) */}
+                <button
+                  type="button"
+                  onClick={handlePrintPayslip}
+                  disabled={isPrintingPayslip}
+                  className="p-2 bg-slate-800 hover:bg-slate-700 text-white border border-slate-700 rounded-lg shadow-2xs transition-colors cursor-pointer disabled:opacity-60 flex items-center justify-center shrink-0"
+                  title="Cetak Fisik Dokumen Slip Gaji (Printer)"
+                  aria-label="Cetak Slip Gaji"
+                >
+                  {isPrintingPayslip ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Printer className="w-4 h-4" />
+                  )}
+                </button>
+
+                {/* Kirim WhatsApp */}
+                <button
+                  type="button"
+                  onClick={handleOpenPayslipWaModal}
+                  className="p-2 bg-[#25D366] hover:bg-[#20ba59] text-white rounded-lg shadow-2xs transition-colors cursor-pointer flex items-center justify-center shrink-0"
+                  title="Kirim Rincian Slip Gaji ke WhatsApp Karyawan"
+                  aria-label="Kirim WhatsApp"
+                >
+                  <WhatsAppIcon className="w-4 h-4" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setSelectedPayslip(null)}
+                  className="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors ml-1 flex items-center justify-center shrink-0"
+                  title="Tutup (Esc)"
+                  aria-label="Tutup"
+                >
+                  <X className="w-4 h-4" />
                 </button>
               </div>
             </div>
 
             {/* Payslip Document Body */}
-            <div className="p-8 space-y-6 text-slate-800 bg-white">
+            <div ref={payslipSheetRef} className="p-8 space-y-6 text-slate-800 bg-white">
               {/* Slip Header */}
               <div className="flex justify-between items-start border-b-2 border-slate-900 pb-4">
                 <div>
@@ -1513,6 +1608,94 @@ export const PayrollManagement: React.FC = () => {
                     size={52}
                   />
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Dialog Konfirmasi Kirim WhatsApp Slip Gaji */}
+      {isPayslipWaModalOpen && selectedEmployee && selectedPayslip && (
+        <div
+          className="fixed inset-0 z-60 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4"
+          onClick={() => setIsPayslipWaModalOpen(false)}
+        >
+          <div
+            className="bg-white rounded-xl shadow-2xl max-w-md w-full border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-5 py-3.5 bg-emerald-700 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <WhatsAppIcon className="w-4 h-4 text-emerald-200" />
+                <h3 className="text-sm font-bold">Kirim Rincian Slip Gaji ke WhatsApp</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsPayslipWaModalOpen(false)}
+                className="text-emerald-200 hover:text-white p-1 rounded-lg hover:bg-emerald-800 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-xs text-emerald-900 space-y-1">
+                <div className="font-semibold flex items-center gap-1.5 text-emerald-800">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Karyawan: {selectedEmployee.fullName} ({selectedEmployee.nik})</span>
+                </div>
+                <div className="text-[11px] text-emerald-700">
+                  Periode: {selectedPayslip.period} · THP: {formatRupiah(selectedPayslip.netPay)}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Nomor WhatsApp Tujuan
+                </label>
+                <input
+                  type="text"
+                  value={payslipWaNumber}
+                  onChange={(e) => setPayslipWaNumber(e.target.value)}
+                  placeholder="0812xxxxxxxx"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-mono focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
+                />
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Format nomor Indonesia: 08xx atau 628xx. Pesan mencakup rincian gaji pokok, tunjangan, potongan PPh 21 TER, take home pay, dan tautan verifikasi keabsahan.
+                </p>
+              </div>
+
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-[11px] text-slate-600 space-y-1 max-h-32 overflow-y-auto font-mono">
+                <div className="text-slate-400 text-[10px] font-sans font-semibold uppercase">Pratinjau Pesan WA:</div>
+                <p className="whitespace-pre-line leading-relaxed">
+                  {WhatsAppTemplates.payslip({
+                    employeeName: selectedEmployee.fullName,
+                    nik: selectedEmployee.nik,
+                    companyName: currentTenant.name,
+                    period: selectedPayslip.period,
+                    thpAmount: formatRupiah(selectedPayslip.netPay),
+                    pph21Amount: formatRupiah(selectedPayslip.pph21Amount),
+                    basicSalary: formatRupiah(selectedPayslip.basicSalary),
+                  })}
+                </p>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsPayslipWaModalOpen(false)}
+                  className="px-3.5 py-1.5 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs font-semibold cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSendPayslipWhatsApp}
+                  className="px-4 py-1.5 rounded-lg bg-[#25D366] hover:bg-[#20ba59] text-white text-xs font-bold flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                >
+                  <WhatsAppIcon className="w-3.5 h-3.5" />
+                  <span>Kirim WhatsApp Sekarang</span>
+                </button>
               </div>
             </div>
           </div>
