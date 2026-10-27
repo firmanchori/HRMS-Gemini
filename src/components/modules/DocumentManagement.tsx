@@ -60,6 +60,10 @@ import {
   FolderKanban,
   LayoutGrid,
   Image as ImageIcon,
+  Undo,
+  Redo,
+  Table,
+  XCircle,
 } from 'lucide-react';
 import { OfficialDocument, DocumentType, DocumentTemplateConfig, Employee } from '../../types/hrms';
 import { QRCodeView } from '../common/QRCodeView';
@@ -366,6 +370,143 @@ export const DocumentManagement: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Studio History (Undo / Redo) States & Helpers
+  const studioHistoryRef = useRef<string[]>([documentTemplates[0]?.defaultBody || '']);
+  const studioHistoryIndexRef = useRef<number>(0);
+  const lastHistoryPushTimeRef = useRef<number>(Date.now());
+  const [canStudioUndo, setCanStudioUndo] = useState(false);
+  const [canStudioRedo, setCanStudioRedo] = useState(false);
+
+  const updateStudioHistoryState = (newHistory: string[], newIndex: number) => {
+    studioHistoryRef.current = newHistory;
+    studioHistoryIndexRef.current = newIndex;
+    setCanStudioUndo(newIndex > 0);
+    setCanStudioRedo(newIndex < newHistory.length - 1);
+  };
+
+  const pushToStudioHistory = (newText: string, immediate = false) => {
+    const currentHist = studioHistoryRef.current;
+    const currentIndex = studioHistoryIndexRef.current;
+    const now = Date.now();
+
+    if (currentHist[currentIndex] === newText) return;
+
+    if (immediate || now - lastHistoryPushTimeRef.current > 700) {
+      const sliced = currentHist.slice(0, currentIndex + 1);
+      const nextHist = [...sliced, newText].slice(-50);
+      updateStudioHistoryState(nextHist, nextHist.length - 1);
+      lastHistoryPushTimeRef.current = now;
+    } else {
+      const updated = [...currentHist];
+      updated[currentIndex] = newText;
+      studioHistoryRef.current = updated;
+    }
+  };
+
+  const handleStudioUndo = () => {
+    if (studioHistoryIndexRef.current > 0) {
+      const nextIdx = studioHistoryIndexRef.current - 1;
+      const prevText = studioHistoryRef.current[nextIdx];
+      updateStudioHistoryState(studioHistoryRef.current, nextIdx);
+      setStudioBodyText(prevText);
+    }
+  };
+
+  const handleStudioRedo = () => {
+    if (studioHistoryIndexRef.current < studioHistoryRef.current.length - 1) {
+      const nextIdx = studioHistoryIndexRef.current + 1;
+      const nextText = studioHistoryRef.current[nextIdx];
+      updateStudioHistoryState(studioHistoryRef.current, nextIdx);
+      setStudioBodyText(nextText);
+    }
+  };
+
+  // Studio Table Creation State & Handler
+  const [isTableDropdownOpen, setIsTableDropdownOpen] = useState(false);
+  const [tableCustomRows, setTableCustomRows] = useState(3);
+  const [tableCustomCols, setTableCustomCols] = useState(3);
+  const [tableCustomUseHeader, setTableCustomUseHeader] = useState(true);
+  const tableDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close Table Menu on Click Outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (tableDropdownRef.current && !tableDropdownRef.current.contains(event.target as Node)) {
+        setIsTableDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const generateTableHtml = (rows: number, cols: number, withHeader: boolean) => {
+    let html = '\n<table style="width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 11px;">\n';
+    if (withHeader) {
+      html += '  <thead>\n    <tr style="background-color: #f1f5f9;">\n';
+      for (let c = 0; c < cols; c++) {
+        const title = c === 0 ? 'No' : c === 1 ? 'Uraian / Deskripsi' : c === 2 ? 'Keterangan' : `Kolom ${c + 1}`;
+        html += `      <th style="border: 1px solid #cbd5e1; padding: 6px 10px; text-align: left; font-weight: bold;">${title}</th>\n`;
+      }
+      html += '    </tr>\n  </thead>\n';
+    }
+    html += '  <tbody>\n';
+    const bodyRows = withHeader ? rows - 1 : rows;
+    for (let r = 0; r < Math.max(1, bodyRows); r++) {
+      html += '    <tr>\n';
+      for (let c = 0; c < cols; c++) {
+        const val = c === 0 ? `${r + 1}.` : `Data baris ${r + 1} kolom ${c + 1}`;
+        html += `      <td style="border: 1px solid #cbd5e1; padding: 6px 10px;">${val}</td>\n`;
+      }
+      html += '    </tr>\n';
+    }
+    html += '  </tbody>\n</table>\n';
+    return html;
+  };
+
+  const handleStudioInsertTable = (rows: number, cols: number, withHeader = true) => {
+    const tableMarkup = generateTableHtml(rows, cols, withHeader);
+    const textarea = studioTextareaRef.current;
+    if (!textarea) {
+      const updated = `${studioBodyText}\n${tableMarkup}`;
+      setStudioBodyText(updated);
+      pushToStudioHistory(updated, true);
+    } else {
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const text = studioBodyText;
+      const before = text.substring(0, start);
+      const after = text.substring(end, text.length);
+      const updated = `${before}\n${tableMarkup}\n${after}`;
+      setStudioBodyText(updated);
+      pushToStudioHistory(updated, true);
+      setTimeout(() => {
+        textarea.focus();
+        textarea.setSelectionRange(start + tableMarkup.length + 2, start + tableMarkup.length + 2);
+      }, 50);
+    }
+    setIsTableDropdownOpen(false);
+    setFeedbackMessage({
+      type: 'success',
+      title: 'Tabel Berhasil Disisipkan',
+      description: `Tabel format resmi (${cols} kolom × ${rows} baris) telah ditambahkan ke naskah dokumen.`,
+    });
+  };
+
+  // Handler Batal Edit Template dari Studio Side by Side
+  const handleCancelStudioEdit = () => {
+    const original = documentTemplates.find((t) => t.id === studioSelectedTemplateId);
+    if (!original) return;
+
+    handleLoadTemplateIntoStudio(original);
+    updateStudioHistoryState([original.defaultBody || ''], 0);
+
+    setFeedbackMessage({
+      type: 'info',
+      title: 'Perubahan Dibatalkan',
+      description: `Seluruh editan naskah & konfigurasi template "${original.name}" telah dikembalikan ke kondisi tersimpan semula.`,
+    });
+  };
+
   // Studio Basic Document Formatting Handler (Bold, Italic, Underlines, Alignment, dll)
   const handleStudioApplyFormat = (
     openTag: string,
@@ -386,6 +527,7 @@ export const DocumentManagement: React.FC = () => {
     const newText = currentText.substring(0, start) + replacement + currentText.substring(end);
 
     setStudioBodyText(newText);
+    pushToStudioHistory(newText, true);
 
     setTimeout(() => {
       textarea.focus();
@@ -802,6 +944,8 @@ export const DocumentManagement: React.FC = () => {
       ? tmpl.extractedPlaceholders
       : extractPlaceholdersFromText(tmpl.defaultBody || '');
     setStudioPlaceholders(foundPlaceholders);
+
+    updateStudioHistoryState([tmpl.defaultBody || ''], 0);
 
     setActiveTab('studio');
     setFeedbackMessage({
@@ -1729,8 +1873,17 @@ export const DocumentManagement: React.FC = () => {
               </button>
               <button
                 type="button"
+                onClick={handleCancelStudioEdit}
+                className="px-3.5 py-1.5 bg-white hover:bg-rose-50 text-slate-700 hover:text-rose-700 rounded-lg text-xs font-semibold border border-slate-300 hover:border-rose-300 transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                title="Batalkan seluruh editan dan kembalikan ke kondisi template semula"
+              >
+                <XCircle className="w-3.5 h-3.5 text-rose-500" />
+                <span>Batal Edit</span>
+              </button>
+              <button
+                type="button"
                 onClick={handleSaveStudioChanges}
-                className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5"
+                className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
               >
                 <Save className="w-3.5 h-3.5" />
                 <span>Simpan Template</span>
@@ -2184,8 +2337,30 @@ export const DocumentManagement: React.FC = () => {
 
                     {/* Textarea Naskah & Toolbar Basic Editing Dokumen */}
                     <div className="space-y-0">
-                      {/* TOOLBAR BASIC EDITING DOKUMEN RESMI (BOLD, ITALIC, UNDERLINES, ALIGNMENT, DLL) */}
+                      {/* TOOLBAR BASIC EDITING DOKUMEN RESMI (UNDO, REDO, BOLD, ITALIC, UNDERLINES, ALIGNMENT, TABEL, DLL) */}
                       <div className="bg-slate-100 border border-slate-300 rounded-t-lg p-2 flex flex-wrap items-center gap-1.5 text-slate-700 shadow-2xs">
+                        {/* Kelompok 0: Riwayat Perubahan (Undo & Redo) */}
+                        <div className="flex items-center gap-0.5 bg-white p-0.5 rounded-md border border-slate-200 shadow-2xs">
+                          <button
+                            type="button"
+                            onClick={handleStudioUndo}
+                            disabled={!canStudioUndo}
+                            className="p-1.5 hover:bg-slate-100 hover:text-indigo-600 rounded transition-colors cursor-pointer disabled:opacity-35 disabled:cursor-not-allowed"
+                            title="Undo / Batalkan perubahan teks terakhir (Ctrl+Z)"
+                          >
+                            <Undo className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleStudioRedo}
+                            disabled={!canStudioRedo}
+                            className="p-1.5 hover:bg-slate-100 hover:text-indigo-600 rounded transition-colors cursor-pointer disabled:opacity-35 disabled:cursor-not-allowed"
+                            title="Redo / Ulangi perubahan teks berikutnya (Ctrl+Y atau Ctrl+Shift+Z)"
+                          >
+                            <Redo className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+
                         {/* Kelompok 1: Font Styling (Bold, Italic, Strikethrough) */}
                         <div className="flex items-center gap-0.5 bg-white p-0.5 rounded-md border border-slate-200 shadow-2xs">
                           <button
@@ -2382,6 +2557,146 @@ export const DocumentManagement: React.FC = () => {
                           >
                             <Minus className="w-3.5 h-3.5" />
                           </button>
+
+                          {/* FUNGSI MEMBUAT TABEL (Sebelah Kiri Halaman Baru) */}
+                          <div className="relative inline-block" ref={tableDropdownRef}>
+                            <button
+                              type="button"
+                              onClick={() => setIsTableDropdownOpen(!isTableDropdownOpen)}
+                              className="px-2 py-1 bg-white hover:bg-slate-50 text-slate-700 rounded transition-colors flex items-center gap-1 font-bold text-[10px] border border-slate-300 cursor-pointer shadow-2xs"
+                              title="Sisipkan Tabel Resmi ke Dokumen"
+                            >
+                              <Table className="w-3 h-3 text-indigo-600" />
+                              <span>Tabel</span>
+                              <ChevronDown className="w-2.5 h-2.5 text-slate-400" />
+                            </button>
+
+                            {/* Dropdown Menu Pembuatan Tabel */}
+                            {isTableDropdownOpen && (
+                              <div className="absolute right-0 sm:left-0 mt-1.5 w-72 bg-white border border-slate-300 rounded-xl shadow-xl p-3 z-50 text-xs space-y-3 animate-fadeIn">
+                                <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
+                                  <div className="flex items-center gap-1.5 font-bold text-slate-900 text-xs">
+                                    <Table className="w-3.5 h-3.5 text-indigo-600" />
+                                    <span>Sisipkan Tabel Resmi</span>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => setIsTableDropdownOpen(false)}
+                                    className="p-1 hover:bg-slate-100 text-slate-400 hover:text-slate-600 rounded cursor-pointer"
+                                  >
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+
+                                {/* Preset Tabel Populer */}
+                                <div className="space-y-1">
+                                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                                    Pilihan Format Cepat:
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleStudioInsertTable(3, 3, true)}
+                                    className="w-full text-left px-2.5 py-1.5 hover:bg-indigo-50 hover:text-indigo-700 rounded-md transition-colors flex items-center justify-between text-[11px] cursor-pointer"
+                                  >
+                                    <span>Tabel Standar 3×3 (No, Uraian, Ket)</span>
+                                    <span className="text-[10px] text-slate-400 font-mono">3 Kolom</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleStudioInsertTable(4, 4, true)}
+                                    className="w-full text-left px-2.5 py-1.5 hover:bg-indigo-50 hover:text-indigo-700 rounded-md transition-colors flex items-center justify-between text-[11px] cursor-pointer"
+                                  >
+                                    <span>Tabel Rincian Biaya / Komponen</span>
+                                    <span className="text-[10px] text-slate-400 font-mono">4 Kolom</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleStudioInsertTable(3, 2, true)}
+                                    className="w-full text-left px-2.5 py-1.5 hover:bg-indigo-50 hover:text-indigo-700 rounded-md transition-colors flex items-center justify-between text-[11px] cursor-pointer"
+                                  >
+                                    <span>Tabel 2 Kolom (Spesifikasi / Hak)</span>
+                                    <span className="text-[10px] text-slate-400 font-mono">2 Kolom</span>
+                                  </button>
+                                </div>
+
+                                {/* Pembuatan Tabel Kustom */}
+                                <div className="border-t border-slate-100 pt-2 space-y-2">
+                                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                                    Ukuran Kustom:
+                                  </span>
+                                  <div className="grid grid-cols-2 gap-2">
+                                    <div>
+                                      <label className="text-[10px] font-semibold text-slate-600 block mb-0.5">
+                                        Jumlah Kolom:
+                                      </label>
+                                      <div className="flex items-center border border-slate-300 rounded bg-slate-50">
+                                        <button
+                                          type="button"
+                                          onClick={() => setTableCustomCols(Math.max(1, tableCustomCols - 1))}
+                                          className="px-2 py-1 text-slate-600 hover:bg-slate-200 font-bold cursor-pointer"
+                                        >
+                                          -
+                                        </button>
+                                        <span className="flex-1 text-center font-mono font-bold text-slate-800 text-[11px]">
+                                          {tableCustomCols}
+                                        </span>
+                                        <button
+                                          type="button"
+                                          onClick={() => setTableCustomCols(Math.min(8, tableCustomCols + 1))}
+                                          className="px-2 py-1 text-slate-600 hover:bg-slate-200 font-bold cursor-pointer"
+                                        >
+                                          +
+                                        </button>
+                                      </div>
+                                    </div>
+                                    <div>
+                                      <label className="text-[10px] font-semibold text-slate-600 block mb-0.5">
+                                        Jumlah Baris:
+                                      </label>
+                                      <div className="flex items-center border border-slate-300 rounded bg-slate-50">
+                                        <button
+                                          type="button"
+                                          onClick={() => setTableCustomRows(Math.max(1, tableCustomRows - 1))}
+                                          className="px-2 py-1 text-slate-600 hover:bg-slate-200 font-bold cursor-pointer"
+                                        >
+                                          -
+                                        </button>
+                                        <span className="flex-1 text-center font-mono font-bold text-slate-800 text-[11px]">
+                                          {tableCustomRows}
+                                        </span>
+                                        <button
+                                          type="button"
+                                          onClick={() => setTableCustomRows(Math.min(15, tableCustomRows + 1))}
+                                          className="px-2 py-1 text-slate-600 hover:bg-slate-200 font-bold cursor-pointer"
+                                        >
+                                          +
+                                        </button>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  <label className="flex items-center gap-1.5 text-[11px] text-slate-700 cursor-pointer pt-0.5">
+                                    <input
+                                      type="checkbox"
+                                      checked={tableCustomUseHeader}
+                                      onChange={(e) => setTableCustomUseHeader(e.target.checked)}
+                                      className="rounded text-indigo-600 w-3.5 h-3.5"
+                                    />
+                                    <span>Gunakan Baris Judul Header (Abu-abu)</span>
+                                  </label>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => handleStudioInsertTable(tableCustomRows, tableCustomCols, tableCustomUseHeader)}
+                                    className="w-full py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md font-bold text-xs shadow-xs transition-colors cursor-pointer mt-1"
+                                  >
+                                    Sisipkan Tabel ({tableCustomCols} Kolom × {tableCustomRows} Baris)
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
                           <button
                             type="button"
                             onClick={() => handleStudioApplyFormat('\n[PAGE_BREAK]\n', '', '')}
@@ -2398,7 +2713,25 @@ export const DocumentManagement: React.FC = () => {
                         ref={studioTextareaRef}
                         rows={12}
                         value={studioBodyText}
-                        onChange={(e) => setStudioBodyText(e.target.value)}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setStudioBodyText(val);
+                          pushToStudioHistory(val, false);
+                        }}
+                        onKeyDown={(e) => {
+                          if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+                            if (e.shiftKey) {
+                              e.preventDefault();
+                              handleStudioRedo();
+                            } else {
+                              e.preventDefault();
+                              handleStudioUndo();
+                            }
+                          } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+                            e.preventDefault();
+                            handleStudioRedo();
+                          }
+                        }}
                         className="w-full p-3 border border-slate-300 border-t-0 rounded-b-lg font-mono text-xs text-slate-800 leading-relaxed focus:ring-2 focus:ring-indigo-500 focus:outline-hidden bg-white"
                         placeholder="Ketik isi naskah dokumen dengan {{variabel_dinamis}} atau gunakan tombol format di atas..."
                       />

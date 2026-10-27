@@ -90,6 +90,10 @@ const parseDocumentContentToHtml = (content: string, highlightTags: boolean = fa
   // Preserve linebreaks outside of div/p/h1-h6/hr tags
   html = html.replace(/([^>\r\n])\n/g, '$1<br/>');
 
+  // Clean up any extraneous <br/> tags around table elements
+  html = html.replace(/<br\s*\/?>\s*(<\/?(table|thead|tbody|tr|th|td))/gi, '$1');
+  html = html.replace(/(<\/?(table|thead|tbody|tr|th|td)[^>]*>)\s*<br\s*\/?>/gi, '$1');
+
   return html;
 };
 
