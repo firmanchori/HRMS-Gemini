@@ -109,12 +109,19 @@ export const ALL_DOCUMENT_TYPES: { type: DocumentType | string; label: string; c
   { type: 'Non-Disclosure Agreement (NDA)', label: 'Non-Disclosure Agreement (NDA Kerahasiaan)', category: 'Legal & Kepatuhan' },
 ];
 
-export {
+import {
   TEMPLATE_CATEGORIES,
   getTemplateCategory,
   renderCategoryIcon,
 } from '../../utils/documentCategoryHelper';
-export type { TemplateCategory } from '../../utils/documentCategoryHelper';
+import type { TemplateCategory } from '../../utils/documentCategoryHelper';
+
+export {
+  TEMPLATE_CATEGORIES,
+  getTemplateCategory,
+  renderCategoryIcon,
+};
+export type { TemplateCategory };
 
 export const extractPlaceholdersFromText = (text: string): string[] => {
   const matches = text.match(/\{\{([a-zA-Z0-9_-]+)\}\}/g);
