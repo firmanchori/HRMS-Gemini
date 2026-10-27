@@ -1809,7 +1809,7 @@ export const DocumentManagement: React.FC = () => {
           </div>
 
           {/* Studio Grid: 2 Kolom Side-by-Side (50% Kiri Editor, 50% Kanan Live Preview A4) */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
             {/* KOLOM KIRI: EDITOR NASKAH, FORMULA, PEJABAT & TAG TOOLS (5 dari 12 kolom) */}
             <div className="lg:col-span-5 space-y-4">
               {/* Selector Bagian Konfigurasi Studio (Naskah, Kop Surat, Footer) */}
@@ -3035,8 +3035,8 @@ export const DocumentManagement: React.FC = () => {
               )}
             </div>
 
-            {/* KOLOM KANAN: LIVE PREVIEW DOKUMEN MULTI-HALAMAN REAL (7 dari 12 kolom) */}
-            <div className="lg:col-span-7 space-y-4">
+            {/* KOLOM KANAN: LIVE PREVIEW DOKUMEN MULTI-HALAMAN REAL (Sticky Saat Scroll) */}
+            <div className="lg:col-span-7 space-y-3 lg:sticky lg:top-2 self-start z-10">
               {/* Live Preview Top Controls (Simulasikan Pegawai DIHILANGKAN, Ditambahkan Badge/Toggle Kertas) */}
               <div className="bg-white border border-slate-200 rounded-xl p-3 shadow-xs flex items-center justify-between gap-2.5">
                 <div className="flex items-center gap-2">
@@ -3138,7 +3138,7 @@ export const DocumentManagement: React.FC = () => {
                 };
 
                 return (
-                  <div className="border border-slate-300 rounded-xl overflow-hidden shadow-md bg-slate-200 p-2 sm:p-4 max-h-[82vh] overflow-y-auto">
+                  <div className="border border-slate-300 rounded-xl overflow-hidden shadow-md bg-slate-200 p-2 sm:p-4 max-h-[calc(100vh-140px)] overflow-y-auto">
                     <OfficialMultiPageDocumentSheet
                       title={previewDocObj.title}
                       documentNumber={previewDocObj.documentNumber}
