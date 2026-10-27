@@ -59,7 +59,7 @@ const ALL_MODULES: ModuleDefinition[] = [
   },
   {
     id: 'organization',
-    name: 'Struktur Organisasi & Tree',
+    name: 'Struktur Organisasi',
     group: 'Operasional & Personalia',
     description: 'Bagan organisasi interaktif, relasi korporasi Holding/Anak/Cucu, pengaturan Divisi & Departemen fleksibel',
     keywords: ['organisasi', 'struktur', 'tree', 'bagan', 'holding', 'anak perusahaan', 'cucu perusahaan', 'divisi', 'departemen', 'jabatan', 'posisi'],
@@ -83,7 +83,7 @@ const ALL_MODULES: ModuleDefinition[] = [
   },
   {
     id: 'personalia',
-    name: 'Personalia (Promosi & Demosi)',
+    name: 'Personalia',
     group: 'Operasional & Personalia',
     description: 'Manajemen pergerakan karir, promosi jabatan, rotasi, demosi, dan mutasi',
     keywords: ['personalia', 'promosi', 'demosi', 'mutasi', 'rotasi', 'karir', 'jabatan', 'grade'],
@@ -91,7 +91,7 @@ const ALL_MODULES: ModuleDefinition[] = [
   },
   {
     id: 'attendance',
-    name: 'Presensi, Shift & Cuti',
+    name: 'Presensi',
     group: 'Operasional & Personalia',
     description: 'Pencatatan kehadiran, geofencing, shift roster, tukar shift, lembur, dan cuti',
     keywords: ['presensi', 'absensi', 'kehadiran', 'shift', 'cuti', 'leave', 'lembur', 'overtime', 'clock in', 'absen'],
@@ -99,7 +99,7 @@ const ALL_MODULES: ModuleDefinition[] = [
   },
   {
     id: 'trips',
-    name: 'Perjalanan Dinas (SPPD)',
+    name: 'Perjalanan Dinas',
     group: 'Operasional & Personalia',
     description: 'Pengajuan surat perintah perjalanan dinas, estimasi biaya, akomodasi, dan reimbursement',
     keywords: ['sppd', 'perjalanan dinas', 'dinas', 'travel', 'tiket', 'hotel', 'uang saku', 'reimbursement'],
@@ -107,7 +107,7 @@ const ALL_MODULES: ModuleDefinition[] = [
   },
   {
     id: 'approvals',
-    name: 'Pusat Approval Bertingkat',
+    name: 'Approval',
     group: 'Operasional & Personalia',
     description: 'Pusat persetujuan cuti, lembur, SPPD, pembelian, kasbon, dan pendelegasian wewenang',
     keywords: ['approval', 'persetujuan', 'verifikasi', 'delegasi', 'atasan', 'approve', 'reject'],
@@ -115,7 +115,7 @@ const ALL_MODULES: ModuleDefinition[] = [
   },
   {
     id: 'payroll',
-    name: 'Payroll & PPh 21 TER 2024',
+    name: 'Payroll',
     group: 'Kompensasi & Keuangan',
     description: 'Penggajian otomatis, perhitungan tarif efektif rata-rata (TER), BPJS, dan slip gaji',
     keywords: ['payroll', 'gaji', 'pph 21', 'ter 2024', 'pajak', 'slip gaji', 'bpjs', 'tunjangan', 'thr', 'take home pay'],
@@ -123,7 +123,7 @@ const ALL_MODULES: ModuleDefinition[] = [
   },
   {
     id: 'loans',
-    name: 'Pinjaman & Kasbon Karyawan',
+    name: 'Pinjaman',
     group: 'Kompensasi & Keuangan',
     description: 'Simulasi plafon kasbon, jadwal angsuran, approval pinjaman, dan potong gaji otomatis',
     keywords: ['pinjaman', 'kasbon', 'loan', 'angsuran', 'cicilan', 'bunga', 'potong gaji', 'keuangan'],
@@ -131,7 +131,7 @@ const ALL_MODULES: ModuleDefinition[] = [
   },
   {
     id: 'kpi',
-    name: 'Penilaian Kinerja (KPI Real-time)',
+    name: 'Penilaian (KPI & OKR)',
     group: 'Talenta & Kepatuhan',
     description: 'Target kinerja karyawan, tracking OKR kuartalan, evaluasi berkala, dan scoring',
     keywords: ['kpi', 'kinerja', 'performance', 'okr', 'penilaian', 'evaluasi', 'target', 'bobot'],
@@ -155,7 +155,7 @@ const ALL_MODULES: ModuleDefinition[] = [
   },
   {
     id: 'offboarding',
-    name: 'Offboarding & Pesangon PP 35/2021',
+    name: 'Offboarding',
     group: 'Talenta & Kepatuhan',
     description: 'Proses pengunduran diri/PHK, kalkulator kompensasi pesangon, dan exit clearance',
     keywords: ['offboarding', 'pesangon', 'pp 35', 'phk', 'resign', 'exit interview', 'clearance', 'kompensasi'],
@@ -163,7 +163,7 @@ const ALL_MODULES: ModuleDefinition[] = [
   },
   {
     id: 'assets',
-    name: 'GA, Aset QR & Perbaikan',
+    name: 'General Affair',
     group: 'General Affairs & Pengadaan',
     description: 'Inventarisasi aset fisik dengan QR code, riwayat servis/maintenance, dan peminjaman fasilitas',
     keywords: ['aset', 'asset', 'ga', 'general affairs', 'inventaris', 'qr code', 'servis', 'maintenance', 'ruangan', 'kendaraan'],
@@ -171,7 +171,7 @@ const ALL_MODULES: ModuleDefinition[] = [
   },
   {
     id: 'procurement',
-    name: 'Pengadaan, PO & Vendor',
+    name: 'Procurement',
     group: 'General Affairs & Pengadaan',
     description: 'Purchase Requisition (PR), Purchase Order (PO), direktori vendor, dan invoice barang/jasa',
     keywords: ['pengadaan', 'procurement', 'po', 'pr', 'vendor', 'supplier', 'invoice', 'pembelian', 'order'],
@@ -179,7 +179,7 @@ const ALL_MODULES: ModuleDefinition[] = [
   },
   {
     id: 'documents',
-    name: 'Tata Kelola Dokumen Legal & QR',
+    name: 'Manajemen Dokumen',
     group: 'General Affairs & Pengadaan',
     description: 'Format kop surat, penomoran otomatis, upload template DOCX, dan Tanda Tangan QR tervalidasi',
     keywords: ['dokumen', 'surat', 'legal', 'kop surat', 'template', 'docx', 'ttd qr', 'penomoran', 'sk', 'kontrak'],

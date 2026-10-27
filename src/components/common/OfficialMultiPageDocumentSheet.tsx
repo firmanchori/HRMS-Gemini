@@ -61,6 +61,10 @@ interface OfficialMultiPageDocumentSheetProps {
   qrValidationPlacement?: 'all_pages' | 'last_page';
   // Simulasi Tanda Tangan Fleksibel
   signatories?: DocumentSignatory[];
+  // Editor WYSIWYG Langsung di Naskah Preview (MS Word Style)
+  isEditable?: boolean;
+  onContentChange?: (contentHtml: string) => void;
+  editorRef?: React.RefObject<HTMLDivElement | null>;
 }
 
 const parseDocumentContentToHtml = (content: string, highlightTags: boolean = false): string => {
@@ -130,6 +134,9 @@ export const OfficialMultiPageDocumentSheet: React.FC<OfficialMultiPageDocumentS
   showFooterBorder = true,
   qrValidationPlacement = 'all_pages',
   signatories,
+  isEditable = false,
+  onContentChange,
+  editorRef,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
@@ -269,9 +276,11 @@ export const OfficialMultiPageDocumentSheet: React.FC<OfficialMultiPageDocumentS
 
   // Handler Kirim Pesan & Tautan Dokumen Resmi via WhatsApp
   const handleSendWhatsApp = () => {
-    const message = `*PEMBERITAHUAN DOKUMEN RESMI - ${tenant.name.toUpperCase()}*
+    const empName = employee?.fullName || 'Karyawan';
+    const empNik = employee?.nik || '-';
+    const message = `*PEMBERITAHUAN DOKUMEN RESMI - ${(tenant?.name || 'PERUSAHAAN').toUpperCase()}*
 
-Yth. *${employee.fullName}* (NIK: ${employee.nik}),
+Yth. *${empName}* (NIK: ${empNik}),
 Berikut kami sampaikan dokumen resmi Anda yang telah diterbitkan dan tersertifikasi digital:
 
 📄 *Jenis Dokumen:* ${title}
@@ -286,13 +295,13 @@ Dokumen ini memiliki kekuatan hukum sah dan mengikat menurut UU ITE Republik Ind
 
 Terima kasih,
 *Human Capital & Legal Directorate*
-${tenant.name}`;
+${tenant?.name || 'Perusahaan'}`;
 
     openWhatsAppChat(waPhoneNumber, message);
     setIsWaModalOpen(false);
     onSuccessNotice?.(
       'Dokumen Terkirim ke WhatsApp',
-      `Tautan verifikasi dan naskah resmi diteruskan ke WhatsApp ${employee.fullName} (${waPhoneNumber}).`
+      `Tautan verifikasi dan naskah resmi diteruskan ke WhatsApp ${empName} (${waPhoneNumber}).`
     );
   };
 
@@ -561,14 +570,71 @@ ${tenant.name}`;
                     </div>
                   )}
 
-                  {/* Isi Naskah Halaman Ini (Mendukung Rich-Text Formatting HTML, Underline ragam jenis, & Alignment) */}
-                  <div
-                    className={`text-[11.5px] leading-relaxed text-slate-800 py-2 document-sheet-body ${
-                      highlightTags ? 'selection:bg-amber-200' : ''
-                    }`}
-                    style={{ wordBreak: 'break-word' }}
-                    dangerouslySetInnerHTML={{ __html: parseDocumentContentToHtml(pageContent, highlightTags) }}
-                  />
+                  {/* Isi Naskah Halaman Ini (Mendukung Rich-Text Formatting HTML, Visual Table, & Token Drag-n-Drop) */}
+                  {isEditable ? (
+                    <div
+                      ref={idx === 0 ? (editorRef as any) : undefined}
+                      contentEditable={true}
+                      suppressContentEditableWarning={true}
+                      onInput={(e) => {
+                        if (totalPages <= 1) {
+                          onContentChange?.(e.currentTarget.innerHTML);
+                        } else {
+                          const updated = [...pages];
+                          updated[idx] = e.currentTarget.innerHTML;
+                          onContentChange?.(updated.join('\n\n[PAGE_BREAK]\n\n'));
+                        }
+                      }}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = 'copy';
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        const token = e.dataTransfer.getData('application/token') || e.dataTransfer.getData('text/plain');
+                        if (token) {
+                          const textToInsert = token.startsWith('{{') ? token : `{{${token}}}`;
+                          if (document.caretRangeFromPoint) {
+                            const range = document.caretRangeFromPoint(e.clientX, e.clientY);
+                            if (range) {
+                              const sel = window.getSelection();
+                              sel?.removeAllRanges();
+                              sel?.addRange(range);
+                            }
+                          } else if ((document as any).caretPositionFromPoint) {
+                            const pos = (document as any).caretPositionFromPoint(e.clientX, e.clientY);
+                            if (pos) {
+                              const range = document.createRange();
+                              range.setStart(pos.offsetNode, pos.offset);
+                              range.collapse(true);
+                              const sel = window.getSelection();
+                              sel?.removeAllRanges();
+                              sel?.addRange(range);
+                            }
+                          }
+                          document.execCommand('insertText', false, textToInsert);
+                          if (totalPages <= 1) {
+                            onContentChange?.(e.currentTarget.innerHTML);
+                          } else {
+                            const updated = [...pages];
+                            updated[idx] = e.currentTarget.innerHTML;
+                            onContentChange?.(updated.join('\n\n[PAGE_BREAK]\n\n'));
+                          }
+                        }
+                      }}
+                      className="text-[11.5px] leading-relaxed text-slate-800 py-2 document-sheet-body outline-none focus:ring-2 focus:ring-indigo-400/40 p-2.5 min-h-[420px] cursor-text rounded-lg border border-dashed border-indigo-200 bg-white shadow-2xs hover:border-indigo-400 transition-colors"
+                      style={{ wordBreak: 'break-word' }}
+                      dangerouslySetInnerHTML={{ __html: parseDocumentContentToHtml(pageContent, highlightTags) }}
+                    />
+                  ) : (
+                    <div
+                      className={`text-[11.5px] leading-relaxed text-slate-800 py-2 document-sheet-body ${
+                        highlightTags ? 'selection:bg-amber-200' : ''
+                      }`}
+                      style={{ wordBreak: 'break-word' }}
+                      dangerouslySetInnerHTML={{ __html: parseDocumentContentToHtml(pageContent, highlightTags) }}
+                    />
+                  )}
                 </div>
 
                 {/* Bagian Bawah Lembar: Kolom TTD di Halaman Terakhir atau Running Footer */}
@@ -779,7 +845,7 @@ ${tenant.name}`;
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold text-slate-900 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-emerald-500"
               />
               <span className="text-[10px] text-slate-500 block">
-                Penerima: <strong>{employee.fullName}</strong> ({employee.nik} - {employee.position})
+                Penerima: <strong>{employee?.fullName || 'Karyawan'}</strong> ({employee?.nik || '-'} - {employee?.position || 'Staff'})
               </span>
             </div>
 

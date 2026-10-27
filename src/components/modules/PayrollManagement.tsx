@@ -30,9 +30,23 @@ import {
   MessageSquare,
   Loader2,
   FileDown,
+  UserMinus,
+  ExternalLink,
 } from 'lucide-react';
-import { PayrollRecord, Employee } from '../../types/hrms';
-import { formatRupiah, calculatePPh21TER, calculateBPJS, calculateOvertimePay } from '../../utils/taxCalculator';
+import { PayrollRecord, Employee, PTKPStatus } from '../../types/hrms';
+import {
+  formatRupiah,
+  calculatePPh21TER,
+  calculateBPJS,
+  calculateOvertimePay,
+  calculateAnnualPPh21Pasal17,
+  calculatePesangonTax,
+  calculateNonEmployeeTax,
+  calculateDailyWorkerTax,
+  getPTKPAmount,
+  PTKP_VALUES,
+  getTERCategory,
+} from '../../utils/taxCalculator';
 import { QRCodeView } from '../common/QRCodeView';
 import { EmployeeSelect } from '../common/EmployeeSelect';
 import { CurrencyInput } from '../common/CurrencyInput';
@@ -135,7 +149,7 @@ export const PayrollManagement: React.FC = () => {
     });
   };
 
-  const [activeTab, setActiveTab] = useState<'payroll' | 'reimburse' | 'thr_phk' | 'komponen' | 'golongan' | 'pengaturan'>('payroll');
+  const [activeTab, setActiveTab] = useState<'payroll' | 'reimburse' | 'thr_phk' | 'kalkulator_pajak' | 'komponen' | 'golongan' | 'pengaturan'>('payroll');
   const [period, setPeriod] = useState('Oktober 2026');
   const [selectedPayslip, setSelectedPayslip] = useState<PayrollRecord | null>(null);
   const payslipSheetRef = useRef<HTMLDivElement>(null);
@@ -154,12 +168,36 @@ export const PayrollManagement: React.FC = () => {
   const [claimReceiptNo, setClaimReceiptNo] = useState('');
   const [claimDesc, setClaimDesc] = useState('');
 
-  // THR & PHK Simulator State
-  const [simType, setSimType] = useState<'thr' | 'phk'>('thr');
+  // THR & PHK State
+  const [thrSubTab, setThrSubTab] = useState<'proses_thr' | 'proses_pesangon'>('proses_thr');
+  const [thrOccasion, setThrOccasion] = useState('Hari Raya Idul Fitri 1447 H');
+  const [thrPaymentDate, setThrPaymentDate] = useState('2026-03-24');
+  const [thrSearchQuery, setThrSearchQuery] = useState('');
+  const [paidThrEmpIds, setPaidThrEmpIds] = useState<string[]>(['emp-001']);
+  const [selectedThrEmployee, setSelectedThrEmployee] = useState<Employee | null>(null);
+  const [isThrSlipModalOpen, setIsThrSlipModalOpen] = useState(false);
+
+  // Pesangon State
+  const [simType, setSimType] = useState<'thr' | 'phk'>('phk');
   const [simEmpId, setSimEmpId] = useState(employees[0]?.id || '');
   const [simTenureYears, setSimTenureYears] = useState(3);
   const [simTenureMonths, setSimTenureMonths] = useState(6);
   const [simPhkReason, setSimPhkReason] = useState<'Efisiensi' | 'Pailit' | 'Pensiun' | 'Pelanggaran SP3'>('Efisiensi');
+
+  // Kalkulator Pajak DJP State (mengacu pada kalkulator.pajak.go.id)
+  const [djpTaxType, setDjpTaxType] = useState<'pegawai_tetap_bulanan' | 'pegawai_tetap_tahunan' | 'pegawai_tidak_tetap' | 'bukan_pegawai' | 'pesangon_sekaligus'>('pegawai_tetap_bulanan');
+  const [djpTaxMethod, setDjpTaxMethod] = useState<'gross' | 'gross_up'>('gross');
+  const [djpPtkp, setDjpPtkp] = useState<PTKPStatus>('TK/0');
+  const [djpBasicSalary, setDjpBasicSalary] = useState<number>(10000000);
+  const [djpFixedAllowance, setDjpFixedAllowance] = useState<number>(2500000);
+  const [djpVariableAllowance, setDjpVariableAllowance] = useState<number>(1000000);
+  const [djpBonusThr, setDjpBonusThr] = useState<number>(0);
+  const [djpIncludeJkkJkm, setDjpIncludeJkkJkm] = useState<boolean>(true);
+  const [djpIncludePensionJht, setDjpIncludePensionJht] = useState<boolean>(true);
+  const [djpDailyWage, setDjpDailyWage] = useState<number>(650000);
+  const [djpWorkDays, setDjpWorkDays] = useState<number>(15);
+  const [djpNonEmpGross, setDjpNonEmpGross] = useState<number>(25000000);
+  const [djpPesangonGross, setDjpPesangonGross] = useState<number>(125000000);
 
   // Settings State
   const [lateCutRate, setLateCutRate] = useState(moduleSettings.attendance.latePenaltyPerHour || 50000);
@@ -382,7 +420,19 @@ export const PayrollManagement: React.FC = () => {
           }`}
         >
           <Gift className="w-3.5 h-3.5" />
-          <span>Kalkulator THR & PHK</span>
+          <span>Proses THR & Pesangon</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('kalkulator_pajak')}
+          className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
+            activeTab === 'kalkulator_pajak'
+              ? 'border-slate-900 text-slate-950 font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+          }`}
+        >
+          <Percent className="w-3.5 h-3.5" />
+          <span>Kalkulator Pajak DJP</span>
         </button>
 
         <button
@@ -920,183 +970,979 @@ export const PayrollManagement: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 3: KALKULATOR THR & PHK */}
+      {/* TAB 3: PROSES THR & PESANGON */}
       {activeTab === 'thr_phk' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-          <div className="lg:col-span-1 bg-white p-5 border border-slate-200 rounded-lg space-y-4">
-            <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-              <Calculator className="w-4 h-4 text-indigo-600" />
-              <span>Parameter Simulasi THR / PHK</span>
-            </h3>
-
-            <div>
-              <label className="text-xs font-semibold text-slate-700 block mb-1">Jenis Perhitungan</label>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setSimType('thr')}
-                  className={`py-2 px-3 text-xs font-semibold rounded-md border text-center transition-colors ${
-                    simType === 'thr'
-                      ? 'bg-indigo-600 text-white border-indigo-600'
-                      : 'bg-white text-slate-700 border-slate-300'
-                  }`}
-                >
-                  THR Keagamaan
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSimType('phk')}
-                  className={`py-2 px-3 text-xs font-semibold rounded-md border text-center transition-colors ${
-                    simType === 'phk'
-                      ? 'bg-indigo-600 text-white border-indigo-600'
-                      : 'bg-white text-slate-700 border-slate-300'
-                  }`}
-                >
-                  Pesangon PHK
-                </button>
-              </div>
+        <div className="space-y-5">
+          {/* Sub Tab Navigation: Proses THR Batch vs Kompensasi Pesangon PHK */}
+          <div className="bg-white p-3 border border-slate-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+            <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-lg">
+              <button
+                type="button"
+                onClick={() => setThrSubTab('proses_thr')}
+                className={`px-3.5 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                  thrSubTab === 'proses_thr'
+                    ? 'bg-white text-indigo-700 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Gift className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Proses THR Karyawan (Batch & Slip)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setThrSubTab('proses_pesangon')}
+                className={`px-3.5 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                  thrSubTab === 'proses_pesangon'
+                    ? 'bg-white text-indigo-700 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <UserMinus className="w-3.5 h-3.5 text-rose-600" />
+                <span>Proses Hak Pesangon PHK (PP 35/2021)</span>
+              </button>
             </div>
 
-            <div>
-              <label className="text-xs font-semibold text-slate-700 block mb-1">Pilih Karyawan</label>
-              <EmployeeSelect
-                employees={employees}
-                selectedEmployeeId={simEmpId}
-                onSelect={(id) => setSimEmpId(id)}
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="text-xs font-semibold text-slate-700 block mb-1">Masa Kerja (Tahun)</label>
-                <input
-                  type="number"
-                  min="0"
-                  max="40"
-                  value={simTenureYears}
-                  onChange={(e) => setSimTenureYears(Number(e.target.value))}
-                  className="w-full p-2 text-xs border border-slate-300 rounded-md font-mono"
-                />
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-slate-700 block mb-1">Sisa (Bulan)</label>
-                <input
-                  type="number"
-                  min="0"
-                  max="11"
-                  value={simTenureMonths}
-                  onChange={(e) => setSimTenureMonths(Number(e.target.value))}
-                  className="w-full p-2 text-xs border border-slate-300 rounded-md font-mono"
-                />
-              </div>
-            </div>
-
-            {simType === 'phk' && (
-              <div>
-                <label className="text-xs font-semibold text-slate-700 block mb-1">Alasan Pemutusan Hubungan Kerja</label>
-                <select
-                  value={simPhkReason}
-                  onChange={(e) => setSimPhkReason(e.target.value as any)}
-                  className="w-full p-2 text-xs border border-slate-300 rounded-md bg-white font-medium"
-                >
-                  <option value="Efisiensi">Efisiensi Perusahaan (0.5x UP)</option>
-                  <option value="Pailit">Perusahaan Pailit / Tutup (0.5x UP)</option>
-                  <option value="Pensiun">Mencapai Usia Pensiun (1.75x UP)</option>
-                  <option value="Pelanggaran SP3">Pelanggaran Disiplin SP3 (0.5x UP)</option>
-                </select>
+            {thrSubTab === 'proses_thr' && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="flex items-center gap-1 text-xs">
+                  <span className="text-slate-500 font-medium">Hari Raya:</span>
+                  <input
+                    type="text"
+                    value={thrOccasion}
+                    onChange={(e) => setThrOccasion(e.target.value)}
+                    className="px-2.5 py-1 text-xs border border-slate-300 rounded-md font-semibold text-slate-800 bg-white"
+                  />
+                </div>
+                <div className="flex items-center gap-1 text-xs">
+                  <span className="text-slate-500 font-medium">Jatuh Tempo (H-7):</span>
+                  <input
+                    type="date"
+                    value={thrPaymentDate}
+                    onChange={(e) => setThrPaymentDate(e.target.value)}
+                    className="px-2 py-1 text-xs border border-slate-300 rounded-md font-mono text-slate-800 bg-white"
+                  />
+                </div>
               </div>
             )}
-
-            <div className="p-3 bg-slate-50 border border-slate-200 rounded-md text-xs text-slate-600 space-y-1">
-              <div className="flex justify-between">
-                <span>Gaji Pokok + Tunjangan Tetap:</span>
-                <span className="font-mono font-bold">{formatRupiah(baseSalaryForSim)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Total Bulan Bekerja:</span>
-                <span className="font-mono font-bold">{totalMonthsWorked} Bulan</span>
-              </div>
-            </div>
           </div>
 
-          {/* Results Card */}
-          <div className="lg:col-span-2 bg-white p-5 border border-slate-200 rounded-lg space-y-4">
-            <h3 className="text-sm font-bold text-slate-900">
-              {simType === 'thr'
-                ? 'Rincian Hak Tunjangan Hari Raya (Permenaker No. 6/2016)'
-                : 'Rincian Kompensasi & Pesangon PHK (PP No. 35/2021)'}
-            </h3>
+          {/* SUB-VIEW 1: PROSES THR BATCH & SLIP */}
+          {thrSubTab === 'proses_thr' && (() => {
+            // Kalkulasi THR untuk semua karyawan aktif
+            const activeEmployees = employees.filter((e) => e.status === 'Aktif');
+            const targetPayDate = new Date(thrPaymentDate || '2026-03-24');
 
-            {simType === 'thr' ? (
+            const thrCalculations = activeEmployees.map((emp) => {
+              const join = new Date(emp.joinDate || '2024-01-01');
+              // Hitung selisih bulan kerja
+              let months = (targetPayDate.getFullYear() - join.getFullYear()) * 12 + (targetPayDate.getMonth() - join.getMonth());
+              if (targetPayDate.getDate() < join.getDate()) months -= 1;
+              const tenureMonths = Math.max(0, months);
+              const tenureYears = Math.floor(tenureMonths / 12);
+              const remMonths = tenureMonths % 12;
+
+              const baseWage = emp.basicSalary;
+              let thrGross = 0;
+              let formulaDesc = '';
+
+              if (tenureMonths >= 12) {
+                thrGross = baseWage;
+                formulaDesc = '1x Upah Penuh (Masa Kerja ≥ 12 Bln)';
+              } else if (tenureMonths >= 1) {
+                thrGross = Math.round((tenureMonths / 12) * baseWage);
+                formulaDesc = `Prorata (${tenureMonths}/12) x Upah`;
+              } else {
+                thrGross = 0;
+                formulaDesc = 'Masa Kerja < 1 Bln (Tidak Berhak)';
+              }
+
+              // Pajak PPh 21 TER atas THR
+              const terResult = calculatePPh21TER(thrGross, (emp.ptkpStatus as PTKPStatus) || 'TK/0');
+              const thrTax = terResult.taxAmount;
+              const thrNet = Math.max(0, thrGross - thrTax);
+              const isPaid = paidThrEmpIds.includes(emp.id);
+
+              return {
+                employee: emp,
+                tenureMonths,
+                tenureYears,
+                remMonths,
+                baseWage,
+                thrGross,
+                formulaDesc,
+                terCategory: terResult.category,
+                terRate: terResult.ratePercent,
+                thrTax,
+                thrNet,
+                isPaid,
+              };
+            });
+
+            const filteredThr = thrCalculations.filter((t) =>
+              !thrSearchQuery ||
+              t.employee.fullName.toLowerCase().includes(thrSearchQuery.toLowerCase()) ||
+              t.employee.nik.toLowerCase().includes(thrSearchQuery.toLowerCase()) ||
+              t.employee.department.toLowerCase().includes(thrSearchQuery.toLowerCase())
+            );
+
+            const totalThrGross = thrCalculations.reduce((sum, t) => sum + t.thrGross, 0);
+            const totalThrTax = thrCalculations.reduce((sum, t) => sum + t.thrTax, 0);
+            const totalThrNet = thrCalculations.reduce((sum, t) => sum + t.thrNet, 0);
+            const totalPaidCount = thrCalculations.filter((t) => t.isPaid).length;
+
+            return (
               <div className="space-y-4">
-                <div className="p-4 bg-indigo-50 border border-indigo-200 rounded-lg">
-                  <div className="text-xs text-indigo-800 font-medium">Estimasi THR Bruto:</div>
-                  <div className="text-2xl font-bold font-mono text-indigo-900 mt-1">
-                    {formatRupiah(thrAmount)}
-                  </div>
-                  <div className="text-[11px] text-indigo-700 mt-1">
-                    {totalMonthsWorked >= 12
-                      ? 'Masa kerja >= 12 bulan berhak atas 1 bulan upah penuh.'
-                      : `Masa kerja proporsional: (${totalMonthsWorked}/12) x Upah sebulan.`}
-                  </div>
-                </div>
-
-                <div className="p-4 border border-slate-200 rounded-lg space-y-2 text-xs">
-                  <div className="font-semibold text-slate-800 mb-2">Ketentuan Regulasi THR Kemnaker:</div>
-                  <p className="text-slate-600">
-                    1. Wajib dibayarkan paling lambat 7 hari sebelum hari raya keagamaan.
-                  </p>
-                  <p className="text-slate-600">
-                    2. Dikenakan pemotongan PPh 21 tarif pasal 17/TER akumulasi pada masa pajak pembayaran THR.
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
-                    <span className="text-[11px] text-slate-500 block">Uang Pesangon (UP)</span>
-                    <span className="text-sm font-bold font-mono text-slate-900">
-                      {formatRupiah(totalPesangonUP)}
+                {/* Metrics Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                  <div className="p-4 bg-white border border-slate-200 rounded-xl shadow-2xs">
+                    <span className="text-xs text-slate-500 block mb-1">Total Karyawan Penerima</span>
+                    <span className="text-2xl font-bold font-mono text-slate-900">
+                      {thrCalculations.filter((t) => t.thrGross > 0).length} Orang
                     </span>
-                    <span className="text-[10px] text-slate-400 block mt-0.5">
-                      {upMonths} bln x {factorUP}x upah
-                    </span>
+                    <div className="text-[11px] text-slate-500 mt-1">Dari {activeEmployees.length} karyawan aktif</div>
                   </div>
 
-                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
-                    <span className="text-[11px] text-slate-500 block">Uang Penghargaan (UPMK)</span>
-                    <span className="text-sm font-bold font-mono text-slate-900">
-                      {formatRupiah(totalUPMK)}
+                  <div className="p-4 bg-white border border-slate-200 rounded-xl shadow-2xs">
+                    <span className="text-xs text-slate-500 block mb-1">Anggaran THR Bruto</span>
+                    <span className="text-xl font-bold font-mono text-indigo-700">
+                      {formatRupiah(totalThrGross)}
                     </span>
-                    <span className="text-[10px] text-slate-400 block mt-0.5">{upmkMonths} bulan upah</span>
+                    <div className="text-[11px] text-indigo-600 mt-1">Permenaker No. 6/2016</div>
                   </div>
 
-                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
-                    <span className="text-[11px] text-slate-500 block">Uang Penggantian Hak (UPH)</span>
-                    <span className="text-sm font-bold font-mono text-slate-900">
-                      {formatRupiah(totalUPH)}
+                  <div className="p-4 bg-white border border-slate-200 rounded-xl shadow-2xs">
+                    <span className="text-xs text-slate-500 block mb-1">Estimasi PPh 21 TER</span>
+                    <span className="text-xl font-bold font-mono text-rose-700">
+                      {formatRupiah(totalThrTax)}
                     </span>
-                    <span className="text-[10px] text-slate-400 block mt-0.5">15% x (UP + UPMK)</span>
+                    <div className="text-[11px] text-slate-500 mt-1">PP 58/2023 TER Bulanan</div>
                   </div>
-                </div>
 
-                <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center justify-between">
-                  <div>
-                    <span className="text-xs font-semibold text-emerald-800">Total Paket Kompensasi PHK</span>
-                    <div className="text-2xl font-bold font-mono text-emerald-900 mt-0.5">
-                      {formatRupiah(totalPaketPHK)}
+                  <div className="p-4 bg-white border border-slate-200 rounded-xl shadow-2xs">
+                    <span className="text-xs text-slate-500 block mb-1">Total THR Bersih (Netto)</span>
+                    <span className="text-xl font-bold font-mono text-emerald-700">
+                      {formatRupiah(totalThrNet)}
+                    </span>
+                    <div className="text-[11px] text-emerald-600 mt-1">
+                      {totalPaidCount} / {activeEmployees.length} Lunas ditransfer
                     </div>
                   </div>
-                  <span className="text-xs font-bold px-3 py-1 bg-emerald-200 text-emerald-900 rounded font-mono">
-                    PP 35/2021
-                  </span>
+                </div>
+
+                {/* Table Control Bar */}
+                <div className="bg-white p-3 border border-slate-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+                  <div className="relative flex-1 max-w-sm">
+                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={thrSearchQuery}
+                      onChange={(e) => setThrSearchQuery(e.target.value)}
+                      placeholder="Cari nama, NIK, divisi karyawan..."
+                      className="w-full pl-8 pr-3 py-1.5 border border-slate-300 rounded-lg text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const allIds = activeEmployees.map((e) => e.id);
+                        setPaidThrEmpIds((prev) => (prev.length === allIds.length ? [] : allIds));
+                      }}
+                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold shadow-2xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>{paidThrEmpIds.length === activeEmployees.length ? 'Batalkan Semua' : 'Tandai Semua Lunas'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Processed THR Table */}
+                <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
+                      <tr>
+                        <th className="py-2.5 px-3">Karyawan & NIK</th>
+                        <th className="py-2.5 px-3">Tgl Masuk & Masa Kerja</th>
+                        <th className="py-2.5 px-3 text-right">Upah Pokok</th>
+                        <th className="py-2.5 px-3">Formula Regulasi</th>
+                        <th className="py-2.5 px-3 text-right">THR Bruto</th>
+                        <th className="py-2.5 px-3 text-right">PPh 21 TER</th>
+                        <th className="py-2.5 px-3 text-right">THR Netto</th>
+                        <th className="py-2.5 px-3 text-center">Status Pembayaran</th>
+                        <th className="py-2.5 px-3 text-center">Aksi Dokumen</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {filteredThr.map((t) => (
+                        <tr key={t.employee.id} className="hover:bg-slate-50 transition-colors">
+                          <td className="py-2.5 px-3">
+                            <div className="font-bold text-slate-900">{t.employee.fullName}</div>
+                            <div className="text-[10px] text-slate-500 font-mono">
+                              {t.employee.nik} · {t.employee.position}
+                            </div>
+                          </td>
+                          <td className="py-2.5 px-3">
+                            <div className="font-mono text-slate-800">{t.employee.joinDate}</div>
+                            <div className="text-[10px] text-indigo-700 font-semibold">
+                              {t.tenureYears > 0 ? `${t.tenureYears} Thn ` : ''}{t.remMonths} Bln
+                            </div>
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-800">
+                            {formatRupiah(t.baseWage)}
+                          </td>
+                          <td className="py-2.5 px-3">
+                            <span className="text-[11px] text-slate-700 block">{t.formulaDesc}</span>
+                            <span className="text-[10px] text-slate-400">PTKP: {t.employee.ptkpStatus || 'TK/0'}</span>
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-mono font-bold text-indigo-700">
+                            {formatRupiah(t.thrGross)}
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-mono text-rose-700">
+                            {formatRupiah(t.thrTax)}
+                            <div className="text-[9.5px] text-slate-400 font-mono">
+                              {t.terCategory} ({t.terRate}%)
+                            </div>
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-mono font-extrabold text-emerald-800">
+                            {formatRupiah(t.thrNet)}
+                          </td>
+                          <td className="py-2.5 px-3 text-center">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setPaidThrEmpIds((prev) =>
+                                  prev.includes(t.employee.id)
+                                    ? prev.filter((id) => id !== t.employee.id)
+                                    : [...prev, t.employee.id]
+                                );
+                              }}
+                              className={`px-2.5 py-1 rounded text-[11px] font-bold transition-colors cursor-pointer ${
+                                t.isPaid
+                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-300'
+                                  : 'bg-amber-50 text-amber-700 border border-amber-300 hover:bg-amber-100'
+                              }`}
+                            >
+                              {t.isPaid ? '✓ Lunas Ditransfer' : 'Menunggu Transfer'}
+                            </button>
+                          </td>
+                          <td className="py-2.5 px-3 text-center">
+                            <div className="flex items-center justify-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedThrEmployee(t.employee);
+                                  setIsThrSlipModalOpen(true);
+                                }}
+                                className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                                title="Lihat & Cetak Slip THR Resmi"
+                              >
+                                <Eye className="w-3 h-3 text-indigo-600" />
+                                <span>Slip THR</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const text = `Halo ${t.employee.fullName}, berikut rincian Tunjangan Hari Raya (THR) ${thrOccasion} Anda:\n• Masa Kerja: ${t.tenureYears} Tahun ${t.remMonths} Bulan\n• THR Bruto: ${formatRupiah(t.thrGross)}\n• Potongan PPh 21 TER: ${formatRupiah(t.thrTax)}\n• THR Bersih Diterima: ${formatRupiah(t.thrNet)}\nJatuh tempo: ${thrPaymentDate}. Terima kasih atas dedikasi Anda di ${currentTenant.name}!`;
+                                  openWhatsAppChat(t.employee.phone || '08129876543', text);
+                                }}
+                                className="p-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded transition-colors cursor-pointer"
+                                title="Kirim Slip THR via WhatsApp"
+                              >
+                                <WhatsAppIcon className="w-3.5 h-3.5 text-emerald-600" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </div>
-            )}
-          </div>
+            );
+          })()}
+
+          {/* SUB-VIEW 2: PROSES HAK PESANGON PHK (PP 35/2021) */}
+          {thrSubTab === 'proses_pesangon' && (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+              <div className="lg:col-span-1 bg-white p-5 border border-slate-200 rounded-xl space-y-4 shadow-2xs">
+                <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                  <Calculator className="w-4 h-4 text-rose-600" />
+                  <span>Parameter Pemutusan Hubungan Kerja</span>
+                </h3>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 block mb-1">Pilih Karyawan</label>
+                  <EmployeeSelect
+                    employees={employees}
+                    selectedEmployeeId={simEmpId}
+                    onSelect={(id) => setSimEmpId(id)}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-xs font-semibold text-slate-700 block mb-1">Masa Kerja (Tahun)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="40"
+                      value={simTenureYears}
+                      onChange={(e) => setSimTenureYears(Number(e.target.value))}
+                      className="w-full p-2 text-xs border border-slate-300 rounded-md font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-700 block mb-1">Sisa (Bulan)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="11"
+                      value={simTenureMonths}
+                      onChange={(e) => setSimTenureMonths(Number(e.target.value))}
+                      className="w-full p-2 text-xs border border-slate-300 rounded-md font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 block mb-1">Alasan Pemutusan Hubungan Kerja (PP 35/2021)</label>
+                  <select
+                    value={simPhkReason}
+                    onChange={(e) => setSimPhkReason(e.target.value as any)}
+                    className="w-full p-2 text-xs border border-slate-300 rounded-md bg-white font-medium"
+                  >
+                    <option value="Efisiensi">Efisiensi Perusahaan (0.5x UP + 1x UPMK + 15% UPH)</option>
+                    <option value="Pailit">Perusahaan Pailit / Merugi (0.5x UP + 1x UPMK + 15% UPH)</option>
+                    <option value="Pensiun">Mencapai Usia Pensiun Normal (1.75x UP + 1x UPMK + 15% UPH)</option>
+                    <option value="Pelanggaran SP3">Pelanggaran Disiplin SP3 (0.5x UP + 1x UPMK + 15% UPH)</option>
+                  </select>
+                </div>
+
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-600 space-y-1.5">
+                  <div className="flex justify-between">
+                    <span>Gaji Pokok Karyawan:</span>
+                    <span className="font-mono font-bold">{formatRupiah(baseSalaryForSim)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Masa Kerja Total:</span>
+                    <span className="font-mono font-bold">{simTenureYears} Tahun {simTenureMonths} Bulan</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Dasar Hukum:</span>
+                    <span className="font-semibold text-indigo-700">PP No. 35 Tahun 2021</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Rincian Kompensasi & Pajak Pesangon PP 68/2009 */}
+              <div className="lg:col-span-2 bg-white p-5 border border-slate-200 rounded-xl space-y-4 shadow-2xs">
+                {(() => {
+                  const pesangonTaxRes = calculatePesangonTax(totalPaketPHK);
+                  const netPesangon = Math.max(0, totalPaketPHK - pesangonTaxRes.tax);
+
+                  return (
+                    <div className="space-y-4">
+                      <div className="border-b border-slate-100 pb-2 flex items-center justify-between">
+                        <h3 className="text-sm font-bold text-slate-900">
+                          Rincian Kompensasi Hak Karyawan & Pajak Pesangon Final
+                        </h3>
+                        <span className="px-2 py-0.5 rounded bg-rose-50 text-rose-700 font-bold text-[10.5px]">
+                          PP 35/2021 & PP 68/2009
+                        </span>
+                      </div>
+
+                      {/* 3 Komponen Kompensasi Pokok */}
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                          <span className="text-[11px] text-slate-500 block">Uang Pesangon (UP)</span>
+                          <span className="text-sm font-bold font-mono text-slate-900">
+                            {formatRupiah(totalPesangonUP)}
+                          </span>
+                          <span className="text-[10px] text-slate-400 block mt-0.5">
+                            {upMonths} bln x {factorUP}x upah
+                          </span>
+                        </div>
+
+                        <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                          <span className="text-[11px] text-slate-500 block">Uang Penghargaan (UPMK)</span>
+                          <span className="text-sm font-bold font-mono text-slate-900">
+                            {formatRupiah(totalUPMK)}
+                          </span>
+                          <span className="text-[10px] text-slate-400 block mt-0.5">{upmkMonths} bulan upah</span>
+                        </div>
+
+                        <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                          <span className="text-[11px] text-slate-500 block">Uang Penggantian Hak (UPH)</span>
+                          <span className="text-sm font-bold font-mono text-slate-900">
+                            {formatRupiah(totalUPH)}
+                          </span>
+                          <span className="text-[10px] text-slate-400 block mt-0.5">15% x (UP + UPMK)</span>
+                        </div>
+                      </div>
+
+                      {/* Pajak Pesangon Final PP 68/2009 Tier Breakdown */}
+                      <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg space-y-2">
+                        <div className="text-xs font-bold text-slate-800 flex items-center justify-between">
+                          <span>Potongan PPh 21 Final atas Uang Pesangon Dibayar Sekaligus (PP 68/2009)</span>
+                          <span className="font-mono text-rose-700 font-bold">{formatRupiah(pesangonTaxRes.tax)}</span>
+                        </div>
+                        <div className="space-y-1 pt-1">
+                          {pesangonTaxRes.tiers.map((t, idx) => (
+                            <div key={idx} className="flex items-center justify-between text-[11px] text-slate-600">
+                              <span>• Lapisan {idx + 1} ({t.tier} tarif {t.rate}%):</span>
+                              <span className="font-mono">{formatRupiah(t.taxInTier)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Total Akhir Diterima */}
+                      <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div>
+                          <span className="text-xs font-bold text-emerald-800">Total Hak Pesangon Bersih Diterima Karyawan</span>
+                          <div className="text-2xl font-bold font-mono text-emerald-900 mt-0.5">
+                            {formatRupiah(netPesangon)}
+                          </div>
+                          <div className="text-[11px] text-emerald-700 mt-0.5">
+                            Bruto {formatRupiah(totalPaketPHK)} dikurangi PPh 21 Final {formatRupiah(pesangonTaxRes.tax)}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              alert(`Rincian hak pesangon untuk karyawan ${employees.find((e) => e.id === simEmpId)?.fullName || 'Karyawan'} telah diteruskan ke alur Offboarding & Clearance.`);
+                            }}
+                            className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <Send className="w-3.5 h-3.5" />
+                            <span>Kirim ke Modul Offboarding</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+          )}
         </div>
       )}
+
+      {/* TAB 4: KALKULATOR PAJAK DJP (MENGACU PADA https://kalkulator.pajak.go.id/) */}
+      {activeTab === 'kalkulator_pajak' && (() => {
+        // Objek Pajak Logic
+        let grossIncomeCalc = 0;
+        let taxResultDetail: any = null;
+
+        if (djpTaxType === 'pegawai_tetap_bulanan') {
+          const jkkJkm = djpIncludeJkkJkm ? Math.round(djpBasicSalary * 0.0054) : 0;
+          grossIncomeCalc = djpBasicSalary + djpFixedAllowance + djpVariableAllowance + djpBonusThr + jkkJkm;
+          const terCalc = calculatePPh21TER(grossIncomeCalc, djpPtkp);
+          taxResultDetail = {
+            gross: grossIncomeCalc,
+            terCategory: terCalc.category,
+            terRate: terCalc.ratePercent,
+            taxAmount: terCalc.taxAmount,
+            netPay: grossIncomeCalc - terCalc.taxAmount,
+          };
+        } else if (djpTaxType === 'pegawai_tetap_tahunan') {
+          // Masa Pajak Terakhir (Desember / Pasal 17)
+          const monthlyGross = djpBasicSalary + djpFixedAllowance + djpVariableAllowance;
+          const annualGross = (monthlyGross * 12) + djpBonusThr;
+          const annualBiayaJabatan = Math.min(6000000, Math.round(annualGross * 0.05));
+          const annualPension = djpIncludePensionJht ? Math.round(djpBasicSalary * 0.03 * 12) : 0;
+          const annualNetto = Math.max(0, annualGross - annualBiayaJabatan - annualPension);
+          const ptkpVal = getPTKPAmount(djpPtkp);
+          const pkp = Math.max(0, annualNetto - ptkpVal);
+          const pasal17Res = calculateAnnualPPh21Pasal17(pkp);
+          taxResultDetail = {
+            annualGross,
+            annualBiayaJabatan,
+            annualPension,
+            annualNetto,
+            ptkpVal,
+            pkp,
+            pasal17Res,
+            taxAmount: pasal17Res.tax,
+            netAnnual: annualGross - pasal17Res.tax,
+          };
+        } else if (djpTaxType === 'pegawai_tidak_tetap') {
+          const dailyRes = calculateDailyWorkerTax(djpDailyWage, djpWorkDays);
+          taxResultDetail = {
+            dailyWage: djpDailyWage,
+            workDays: djpWorkDays,
+            dailyTax: dailyRes.dailyTax,
+            ratePercent: dailyRes.dailyRatePercent,
+            totalGross: dailyRes.totalGross,
+            taxAmount: dailyRes.totalTax,
+            netPay: dailyRes.totalGross - dailyRes.totalTax,
+          };
+        } else if (djpTaxType === 'bukan_pegawai') {
+          const nonEmpRes = calculateNonEmployeeTax(djpNonEmpGross);
+          taxResultDetail = {
+            gross: djpNonEmpGross,
+            dpp: nonEmpRes.dpp,
+            ratePercent: nonEmpRes.ratePercent,
+            taxAmount: nonEmpRes.tax,
+            netPay: djpNonEmpGross - nonEmpRes.tax,
+          };
+        } else {
+          // Pesangon Sekaligus Final PP 68/2009
+          const pesangonRes = calculatePesangonTax(djpPesangonGross);
+          taxResultDetail = {
+            gross: djpPesangonGross,
+            taxAmount: pesangonRes.tax,
+            tiers: pesangonRes.tiers,
+            netPay: djpPesangonGross - pesangonRes.tax,
+          };
+        }
+
+        return (
+          <div className="space-y-5">
+            {/* Official Banner Header */}
+            <div className="p-4 bg-gradient-to-r from-indigo-900 to-slate-900 text-white rounded-xl shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-0.5 rounded bg-amber-400 text-slate-950 text-[10px] font-extrabold uppercase tracking-wide">
+                    Coretax DJP Online
+                  </span>
+                  <span className="text-xs text-indigo-200">PP No. 58/2023 & PMK No. 168/2023</span>
+                </div>
+                <h3 className="text-base font-extrabold tracking-tight">
+                  Kalkulator Pajak Resmi PPh Pasal 21 DJP
+                </h3>
+                <p className="text-xs text-slate-300 max-w-2xl">
+                  Simulasi perhitungan pajak resmi mengacu pada sistem administrasi perpajakan Direktorat Jenderal Pajak (kalkulator.pajak.go.id).
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <a
+                  href="https://kalkulator.pajak.go.id/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 shadow-xs"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Kunjungi Portal DJP Asli</span>
+                </a>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+              {/* Kolom Kiri: Parameter Input Form (5 Kolom) */}
+              <div className="lg:col-span-5 bg-white p-5 border border-slate-200 rounded-xl space-y-4 shadow-2xs">
+                <div className="border-b border-slate-100 pb-2.5">
+                  <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wide">
+                    1. Pengaturan Objek Pajak & Wajib Pajak
+                  </h4>
+                </div>
+
+                {/* Jenis Objek Pajak */}
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 block mb-1">
+                    Jenis Pemotongan Pajak PPh 21
+                  </label>
+                  <select
+                    value={djpTaxType}
+                    onChange={(e) => setDjpTaxType(e.target.value as any)}
+                    className="w-full p-2 text-xs border border-slate-300 rounded-lg bg-white font-semibold text-slate-900"
+                  >
+                    <option value="pegawai_tetap_bulanan">21-100-01: Pegawai Tetap (Masa Jan - Nov / TER Bulanan)</option>
+                    <option value="pegawai_tetap_tahunan">21-100-01: Pegawai Tetap Masa Terakhir (Desember / Pasal 17)</option>
+                    <option value="pegawai_tidak_tetap">21-100-03: Pegawai Tidak Tetap / Tenaga Lepas Harian</option>
+                    <option value="bukan_pegawai">21-100-07: Bukan Pegawai (Imbalan Tenaga Ahli)</option>
+                    <option value="pesangon_sekaligus">21-401-01: Pesangon Dibayarkan Sekaligus (Final PP 68/2009)</option>
+                  </select>
+                </div>
+
+                {/* Skema Metode Pemotongan Gross vs Gross Up */}
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 block mb-1">Skema Metode Pemotongan</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setDjpTaxMethod('gross')}
+                      className={`py-2 px-3 text-xs font-bold rounded-lg border text-center transition-colors cursor-pointer ${
+                        djpTaxMethod === 'gross'
+                          ? 'bg-slate-900 text-white border-slate-900'
+                          : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+                      }`}
+                    >
+                      Gross (Karyawan)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDjpTaxMethod('gross_up')}
+                      className={`py-2 px-3 text-xs font-bold rounded-lg border text-center transition-colors cursor-pointer ${
+                        djpTaxMethod === 'gross_up'
+                          ? 'bg-indigo-600 text-white border-indigo-600'
+                          : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+                      }`}
+                    >
+                      Gross-Up (Tunjangan PPh)
+                    </button>
+                  </div>
+                </div>
+
+                {/* Status PTKP */}
+                {(djpTaxType === 'pegawai_tetap_bulanan' || djpTaxType === 'pegawai_tetap_tahunan') && (
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs font-semibold text-slate-700">Status PTKP Karyawan</label>
+                      <span className="text-[10px] font-mono font-bold text-indigo-700">
+                        {getTERCategory(djpPtkp)}
+                      </span>
+                    </div>
+                    <select
+                      value={djpPtkp}
+                      onChange={(e) => setDjpPtkp(e.target.value as any)}
+                      className="w-full p-2 text-xs border border-slate-300 rounded-lg bg-white font-bold text-slate-900"
+                    >
+                      <optgroup label="Tidak Kawin (TK)">
+                        <option value="TK/0">TK/0 - Tidak Kawin Tanpa Tanggungan (Rp 54 Jt - TER A)</option>
+                        <option value="TK/1">TK/1 - Tidak Kawin 1 Tanggungan (Rp 58.5 Jt - TER A)</option>
+                        <option value="TK/2">TK/2 - Tidak Kawin 2 Tanggungan (Rp 63 Jt - TER B)</option>
+                        <option value="TK/3">TK/3 - Tidak Kawin 3 Tanggungan (Rp 67.5 Jt - TER B)</option>
+                      </optgroup>
+                      <optgroup label="Kawin (K)">
+                        <option value="K/0">K/0 - Kawin Tanpa Tanggungan (Rp 58.5 Jt - TER A)</option>
+                        <option value="K/1">K/1 - Kawin 1 Tanggungan (Rp 63 Jt - TER B)</option>
+                        <option value="K/2">K/2 - Kawin 2 Tanggungan (Rp 67.5 Jt - TER B)</option>
+                        <option value="K/3">K/3 - Kawin 3 Tanggungan (Rp 72 Jt - TER C)</option>
+                      </optgroup>
+                    </select>
+                  </div>
+                )}
+
+                {/* Input Komponen Tergantung Jenis Objek Pajak */}
+                <div className="border-t border-slate-100 pt-3 space-y-3">
+                  <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wide">
+                    2. Variabel Komponen Penghasilan
+                  </h4>
+
+                  {(djpTaxType === 'pegawai_tetap_bulanan' || djpTaxType === 'pegawai_tetap_tahunan') && (
+                    <>
+                      <div>
+                        <label className="text-[11px] font-semibold text-slate-700 block mb-1">Gaji Pokok Sebulan</label>
+                        <CurrencyInput
+                          value={djpBasicSalary}
+                          onChange={(val) => setDjpBasicSalary(val)}
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[11px] font-semibold text-slate-700 block mb-1">Tunjangan Tetap</label>
+                          <CurrencyInput
+                            value={djpFixedAllowance}
+                            onChange={(val) => setDjpFixedAllowance(val)}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[11px] font-semibold text-slate-700 block mb-1">Tunjangan Variabel / Lembur</label>
+                          <CurrencyInput
+                            value={djpVariableAllowance}
+                            onChange={(val) => setDjpVariableAllowance(val)}
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-[11px] font-semibold text-slate-700 block mb-1">Bonus / THR / Gratifikasi</label>
+                        <CurrencyInput
+                          value={djpBonusThr}
+                          onChange={(val) => setDjpBonusThr(val)}
+                        />
+                      </div>
+                      <div className="space-y-1.5 pt-1 text-xs text-slate-700">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={djpIncludeJkkJkm}
+                            onChange={(e) => setDjpIncludeJkkJkm(e.target.checked)}
+                            className="w-3.5 h-3.5 text-indigo-600 rounded"
+                          />
+                          <span>Premi JKK (0.24%) & JKM (0.3%) Ditanggung Pemberi Kerja</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={djpIncludePensionJht}
+                            onChange={(e) => setDjpIncludePensionJht(e.target.checked)}
+                            className="w-3.5 h-3.5 text-indigo-600 rounded"
+                          />
+                          <span>Iuran JHT (2%) & Pensiun (1%) Ditanggung Karyawan (Pengurang)</span>
+                        </label>
+                      </div>
+                    </>
+                  )}
+
+                  {djpTaxType === 'pegawai_tidak_tetap' && (
+                    <>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[11px] font-semibold text-slate-700 block mb-1">Upah Harian</label>
+                          <CurrencyInput
+                            value={djpDailyWage}
+                            onChange={(val) => setDjpDailyWage(val)}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[11px] font-semibold text-slate-700 block mb-1">Jumlah Hari Kerja</label>
+                          <input
+                            type="number"
+                            min="1"
+                            max="31"
+                            value={djpWorkDays}
+                            onChange={(e) => setDjpWorkDays(Number(e.target.value))}
+                            className="w-full p-2 text-xs border border-slate-300 rounded-lg font-mono font-bold"
+                          />
+                        </div>
+                      </div>
+                      <div className="p-2.5 bg-slate-50 border border-slate-200 rounded text-[11px] text-slate-600">
+                        Ketentuan PMK 168/2023: Upah harian ≤ Rp 450.000 tarif 0%. Upah harian Rp 450.001 - Rp 2.500.000 dikenakan TER Harian 0.5%.
+                      </div>
+                    </>
+                  )}
+
+                  {djpTaxType === 'bukan_pegawai' && (
+                    <div>
+                      <label className="text-[11px] font-semibold text-slate-700 block mb-1">Penghasilan Bruto Imbalan Jasa / Fee</label>
+                      <CurrencyInput
+                        value={djpNonEmpGross}
+                        onChange={(val) => setDjpNonEmpGross(val)}
+                      />
+                      <div className="text-[11px] text-slate-500 mt-1">
+                        DPP = 50% x Penghasilan Bruto. Dikenakan tarif umum Pasal 17 UU PPh.
+                      </div>
+                    </div>
+                  )}
+
+                  {djpTaxType === 'pesangon_sekaligus' && (
+                    <div>
+                      <label className="text-[11px] font-semibold text-slate-700 block mb-1">Total Penghasilan Uang Pesangon Bruto</label>
+                      <CurrencyInput
+                        value={djpPesangonGross}
+                        onChange={(val) => setDjpPesangonGross(val)}
+                      />
+                      <div className="text-[11px] text-slate-500 mt-1">
+                        Sesuai PP 68/2009: 0 s/d 50 Juta (0%), 50 s/d 100 Juta (5%), 100 s/d 500 Juta (15%), &gt; 500 Juta (25%).
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Kolom Kanan: Rincian Hasil Perhitungan Resmi Coretax DJP (7 Kolom) */}
+              <div className="lg:col-span-7 bg-white p-5 border border-slate-200 rounded-xl space-y-4 shadow-2xs">
+                <div className="border-b border-slate-100 pb-2.5 flex items-center justify-between">
+                  <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wide">
+                    Hasil Perhitungan Pajak (Formulir Simulasi Coretax)
+                  </h4>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200">
+                    STATUS: VALID
+                  </span>
+                </div>
+
+                {/* Display output by Tax Object */}
+                {djpTaxType === 'pegawai_tetap_bulanan' && (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                        <span className="text-[11px] text-slate-500 block">Penghasilan Bruto Sebulan</span>
+                        <span className="text-sm font-bold font-mono text-slate-900">
+                          {formatRupiah(taxResultDetail.gross)}
+                        </span>
+                      </div>
+                      <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-lg">
+                        <span className="text-[11px] text-indigo-700 block">Kategori & Tarif TER</span>
+                        <span className="text-sm font-bold font-mono text-indigo-950">
+                          {taxResultDetail.terCategory} ({taxResultDetail.terRate}%)
+                        </span>
+                      </div>
+                      <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg">
+                        <span className="text-[11px] text-rose-700 block">PPh Pasal 21 Terutang</span>
+                        <span className="text-sm font-bold font-mono text-rose-900">
+                          {formatRupiah(taxResultDetail.taxAmount)}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between">
+                      <div>
+                        <span className="text-xs font-bold text-emerald-800">Penghasilan Bersih (Take Home Pay)</span>
+                        <div className="text-2xl font-bold font-mono text-emerald-950 mt-0.5">
+                          {formatRupiah(taxResultDetail.netPay)}
+                        </div>
+                      </div>
+                      {djpTaxMethod === 'gross_up' && (
+                        <div className="text-right">
+                          <span className="text-[11px] font-semibold text-indigo-800 block">Tunjangan Pajak (Gross-Up)</span>
+                          <span className="text-sm font-bold font-mono text-indigo-900">
+                            +{formatRupiah(taxResultDetail.taxAmount)}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {djpTaxType === 'pegawai_tetap_tahunan' && (
+                  <div className="space-y-3 text-xs">
+                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-1.5">
+                      <div className="flex justify-between">
+                        <span>Penghasilan Bruto Setahun:</span>
+                        <span className="font-mono font-bold">{formatRupiah(taxResultDetail.annualGross)}</span>
+                      </div>
+                      <div className="flex justify-between text-slate-500">
+                        <span>• Biaya Jabatan (5% maks Rp 6 Jt):</span>
+                        <span className="font-mono">-{formatRupiah(taxResultDetail.annualBiayaJabatan)}</span>
+                      </div>
+                      <div className="flex justify-between text-slate-500">
+                        <span>• Iuran Pensiun / JHT Setahun:</span>
+                        <span className="font-mono">-{formatRupiah(taxResultDetail.annualPension)}</span>
+                      </div>
+                      <div className="flex justify-between font-semibold border-t border-slate-200 pt-1">
+                        <span>Penghasilan Netto Setahun:</span>
+                        <span className="font-mono text-indigo-700">{formatRupiah(taxResultDetail.annualNetto)}</span>
+                      </div>
+                      <div className="flex justify-between text-slate-500">
+                        <span>• PTKP ({djpPtkp}):</span>
+                        <span className="font-mono">-{formatRupiah(taxResultDetail.ptkpVal)}</span>
+                      </div>
+                      <div className="flex justify-between font-bold border-t border-slate-200 pt-1 text-slate-900">
+                        <span>Penghasilan Kena Pajak (PKP):</span>
+                        <span className="font-mono text-indigo-900">{formatRupiah(taxResultDetail.pkp)}</span>
+                      </div>
+                    </div>
+
+                    {/* Lapisan Tarif Pasal 17 */}
+                    <div className="p-3 border border-slate-200 rounded-lg space-y-1.5">
+                      <span className="font-bold text-slate-800 block">Rincian Lapisan Tarif Pasal 17 UU PPh:</span>
+                      {taxResultDetail.pasal17Res.tiers.map((tier: any, i: number) => (
+                        <div key={i} className="flex justify-between text-[11px] text-slate-600">
+                          <span>Lapisan {i + 1} ({tier.tier} - {tier.rate}%):</span>
+                          <span className="font-mono">{formatRupiah(tier.taxInTier)}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-lg flex items-center justify-between">
+                      <span className="font-bold text-rose-900">Total PPh 21 Setahun Terutang:</span>
+                      <span className="text-xl font-bold font-mono text-rose-950">
+                        {formatRupiah(taxResultDetail.taxAmount)}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {djpTaxType === 'pegawai_tidak_tetap' && (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                        <span className="text-[11px] text-slate-500 block">Total Upah ({taxResultDetail.workDays} Hari)</span>
+                        <span className="text-sm font-bold font-mono text-slate-900">
+                          {formatRupiah(taxResultDetail.totalGross)}
+                        </span>
+                      </div>
+                      <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg">
+                        <span className="text-[11px] text-rose-700 block">PPh 21 Terutang (TER Harian {taxResultDetail.ratePercent}%)</span>
+                        <span className="text-sm font-bold font-mono text-rose-900">
+                          {formatRupiah(taxResultDetail.taxAmount)}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl">
+                      <span className="text-xs font-bold text-emerald-800 block">Upah Bersih Diterima Tenaga Kerja</span>
+                      <span className="text-2xl font-bold font-mono text-emerald-950">
+                        {formatRupiah(taxResultDetail.netPay)}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {djpTaxType === 'bukan_pegawai' && (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                        <span className="text-[11px] text-slate-500 block">Dasar Pengenaan Pajak (50% x Bruto)</span>
+                        <span className="text-sm font-bold font-mono text-slate-900">
+                          {formatRupiah(taxResultDetail.dpp)}
+                        </span>
+                      </div>
+                      <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg">
+                        <span className="text-[11px] text-rose-700 block">PPh 21 Terutang ({taxResultDetail.ratePercent}%)</span>
+                        <span className="text-sm font-bold font-mono text-rose-900">
+                          {formatRupiah(taxResultDetail.taxAmount)}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl">
+                      <span className="text-xs font-bold text-emerald-800 block">Imbalan Bersih Diterima</span>
+                      <span className="text-2xl font-bold font-mono text-emerald-950">
+                        {formatRupiah(taxResultDetail.netPay)}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {djpTaxType === 'pesangon_sekaligus' && (
+                  <div className="space-y-4">
+                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-1.5">
+                      <span className="text-xs font-bold text-slate-800 block">Rincian Lapisan Tarif Final PP 68/2009:</span>
+                      {taxResultDetail.tiers.map((t: any, i: number) => (
+                        <div key={i} className="flex justify-between text-[11px] text-slate-600">
+                          <span>{t.tier} ({t.rate}%):</span>
+                          <span className="font-mono">{formatRupiah(t.taxInTier)}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between">
+                      <div>
+                        <span className="text-xs font-bold text-emerald-800 block">Pesangon Bersih Diterima</span>
+                        <span className="text-2xl font-bold font-mono text-emerald-950">
+                          {formatRupiah(taxResultDetail.netPay)}
+                        </span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-[11px] text-rose-700 font-semibold block">Total Pajak Final</span>
+                        <span className="text-sm font-bold font-mono text-rose-800">
+                          {formatRupiah(taxResultDetail.taxAmount)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Print and Copy Action Buttons */}
+                <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const summary = `SIMULASI PPh 21 RESMI DJP CORETAX\n• Objek Pajak: ${djpTaxType}\n• Skema: ${djpTaxMethod}\n• Pajak Terutang: ${formatRupiah(taxResultDetail.taxAmount)}\n• Bersih Diterima: ${formatRupiah(taxResultDetail.netPay || taxResultDetail.netAnnual)}\nSimulasi dihitung via HRMS Nusantara mengacu kalkulator.pajak.go.id`;
+                      navigator.clipboard.writeText(summary);
+                      alert('Ringkasan simulasi pajak DJP berhasil disalin ke clipboard!');
+                    }}
+                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+                  >
+                    Salin Ringkasan
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => window.print()}
+                    className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    <span>Cetak Formulir DJP</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* TAB 4: PENGATURAN PAYROLL */}
       {activeTab === 'pengaturan' && (
@@ -1714,7 +2560,199 @@ export const PayrollManagement: React.FC = () => {
         </div>
       )}
 
+      {/* Modal: Slip Tunjangan Hari Raya (THR) Resmi */}
+      {isThrSlipModalOpen && selectedThrEmployee && (() => {
+        const emp = selectedThrEmployee;
+        const targetPayDate = new Date(thrPaymentDate || '2026-03-24');
+        const join = new Date(emp.joinDate || '2024-01-01');
+        let months = (targetPayDate.getFullYear() - join.getFullYear()) * 12 + (targetPayDate.getMonth() - join.getMonth());
+        if (targetPayDate.getDate() < join.getDate()) months -= 1;
+        const tenureMonths = Math.max(0, months);
+        const tenureYears = Math.floor(tenureMonths / 12);
+        const remMonths = tenureMonths % 12;
+
+        const baseWage = emp.basicSalary;
+        let thrGross = 0;
+        let formulaDesc = '';
+        if (tenureMonths >= 12) {
+          thrGross = baseWage;
+          formulaDesc = '1x Upah Pokok Penuh (Masa Kerja ≥ 12 Bulan)';
+        } else if (tenureMonths >= 1) {
+          thrGross = Math.round((tenureMonths / 12) * baseWage);
+          formulaDesc = `Prorata (${tenureMonths}/12) x Upah Pokok`;
+        } else {
+          thrGross = 0;
+          formulaDesc = 'Masa Kerja < 1 Bulan';
+        }
+
+        const terRes = calculatePPh21TER(thrGross, (emp.ptkpStatus as PTKPStatus) || 'TK/0');
+        const thrTax = terRes.taxAmount;
+        const thrNet = Math.max(0, thrGross - thrTax);
+        const docNo = `THR/${currentTenant.code}/${new Date().getFullYear()}/${emp.nik.slice(-4)}`;
+
+        return (
+          <div
+            className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setIsThrSlipModalOpen(false);
+            }}
+          >
+            <div
+              className="bg-white rounded-xl shadow-2xl max-w-lg w-full border border-slate-200 overflow-hidden animate-fadeIn my-4"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Slip Header */}
+              <div className="bg-slate-900 text-white p-4 flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-bold flex items-center gap-1.5">
+                    <Gift className="w-4 h-4 text-amber-400" />
+                    <span>Bukti Pembayaran Tunjangan Hari Raya (THR)</span>
+                  </h3>
+                  <span className="text-[10px] text-slate-300 font-mono">No: {docNo}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsThrSlipModalOpen(false)}
+                  className="p-1 hover:bg-slate-800 rounded text-slate-400 hover:text-white cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Slip Body */}
+              <div className="p-5 space-y-4 text-xs">
+                {/* Company Letterhead mini */}
+                <div className="text-center border-b border-slate-200 pb-3">
+                  <h4 className="text-sm font-extrabold text-slate-900 uppercase tracking-wide">
+                    {currentTenant.name}
+                  </h4>
+                  <p className="text-[10.5px] text-slate-500 font-mono mt-0.5">
+                    Perayaan: {thrOccasion} · Batas Pembayaran: {thrPaymentDate}
+                  </p>
+                </div>
+
+                {/* Employee Info */}
+                <div className="grid grid-cols-2 gap-2 p-3 bg-slate-50 border border-slate-200 rounded-lg text-[11px]">
+                  <div>
+                    <span className="text-slate-400 block">Nama Penerima:</span>
+                    <span className="font-bold text-slate-900">{emp.fullName}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block">NIK & Status:</span>
+                    <span className="font-mono font-bold text-slate-800">{emp.nik} · {emp.employmentType}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block">Jabatan / Divisi:</span>
+                    <span className="text-slate-800">{emp.position} ({emp.department})</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block">Masa Kerja Efektif:</span>
+                    <span className="font-semibold text-indigo-700">
+                      {tenureYears > 0 ? `${tenureYears} Tahun ` : ''}{remMonths} Bulan
+                    </span>
+                  </div>
+                </div>
+
+                {/* Calculation Table */}
+                <div className="border border-slate-200 rounded-lg overflow-hidden">
+                  <table className="w-full text-left">
+                    <thead className="bg-slate-100 text-slate-600 font-semibold border-b border-slate-200">
+                      <tr>
+                        <th className="py-2 px-3">Komponen Remunerasi</th>
+                        <th className="py-2 px-3 text-right">Jumlah</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      <tr>
+                        <td className="py-2 px-3">
+                          <span className="font-semibold text-slate-800">Gaji Pokok Acuan</span>
+                          <span className="text-[10px] text-slate-400 block">Sesuai kontrak kerja aktif</span>
+                        </td>
+                        <td className="py-2 px-3 text-right font-mono font-semibold text-slate-800">
+                          {formatRupiah(baseWage)}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td className="py-2 px-3">
+                          <span className="font-semibold text-slate-800">Tunjangan Hari Raya (THR) Bruto</span>
+                          <span className="text-[10px] text-indigo-600 block">{formulaDesc}</span>
+                        </td>
+                        <td className="py-2 px-3 text-right font-mono font-bold text-indigo-700">
+                          {formatRupiah(thrGross)}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td className="py-2 px-3">
+                          <span className="font-semibold text-rose-700">Potongan PPh 21 TER ({terRes.category} {terRes.ratePercent}%)</span>
+                          <span className="text-[10px] text-slate-400 block">Berdasarkan PP 58/2023 & PTKP {emp.ptkpStatus || 'TK/0'}</span>
+                        </td>
+                        <td className="py-2 px-3 text-right font-mono font-semibold text-rose-700">
+                          -{formatRupiah(thrTax)}
+                        </td>
+                      </tr>
+                    </tbody>
+                    <tfoot className="bg-emerald-50 border-t border-emerald-200 text-emerald-950 font-bold">
+                      <tr>
+                        <td className="py-2.5 px-3">TOTAL THR BERSIH DITERIMA (TAKE HOME)</td>
+                        <td className="py-2.5 px-3 text-right font-mono text-sm font-extrabold text-emerald-800">
+                          {formatRupiah(thrNet)}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+
+                {/* QR Code Keabsahan & Signature Info */}
+                <div className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                  <div className="space-y-0.5">
+                    <span className="text-[10px] text-slate-500 uppercase tracking-wide font-bold block">
+                      Tanda Tangan Elektronik Sah
+                    </span>
+                    <span className="text-[11px] text-slate-700 font-semibold block">
+                      Finance & Remuneration Department
+                    </span>
+                    <span className="text-[9.5px] text-slate-400">
+                      Dokumen resmi diterbitkan secara sah dan tersertifikasi sistem HRMS.
+                    </span>
+                  </div>
+                  <div className="p-1.5 bg-white border border-slate-200 rounded-md shrink-0 shadow-2xs">
+                    <QRCodeView
+                      value={`https://nusantara.id/verify/thr?doc=${encodeURIComponent(docNo)}&emp=${encodeURIComponent(emp.nik)}&amt=${thrNet}`}
+                      size={54}
+                    />
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const text = `Halo ${emp.fullName}, berikut ringkasan Slip THR resmi Anda:\n• Dokumen: ${docNo}\n• Masa Kerja: ${tenureYears} Thn ${remMonths} Bln\n• THR Bruto: ${formatRupiah(thrGross)}\n• Potongan PPh 21 TER: ${formatRupiah(thrTax)}\n• THR Bersih: ${formatRupiah(thrNet)}\nJatuh tempo: ${thrPaymentDate}. Selamat merayakan ${thrOccasion}!`;
+                      openWhatsAppChat(emp.phone || '08129876543', text);
+                    }}
+                    className="px-3.5 py-1.5 bg-[#25D366] hover:bg-[#20ba59] text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                  >
+                    <WhatsAppIcon className="w-3.5 h-3.5" />
+                    <span>Kirim WA</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => window.print()}
+                    className="px-4 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    <span>Cetak Slip THR</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Module Document Modal: Payroll, Pajak & BPJS */}
+
       <ModuleDocumentModal
         isOpen={isDocModalOpen}
         onClose={() => setIsDocModalOpen(false)}

@@ -184,6 +184,164 @@ export function calculateSeverancePay(monthlyWage: number, yearsOfService: numbe
   return { pesangonMonths, upmkMonths, totalSeverance };
 }
 
+export const PTKP_VALUES: Record<PTKPStatus, number> = {
+  'TK/0': 54000000,
+  'TK/1': 58500000,
+  'TK/2': 63000000,
+  'TK/3': 67500000,
+  'K/0': 58500000,
+  'K/1': 63000000,
+  'K/2': 67500000,
+  'K/3': 72000000,
+};
+
+export function getPTKPAmount(ptkp: PTKPStatus): number {
+  return PTKP_VALUES[ptkp] || 54000000;
+}
+
+export function calculateAnnualPPh21Pasal17(taxableIncome: number): {
+  tax: number;
+  tiers: { tier: string; rate: number; taxableInTier: number; taxInTier: number }[];
+} {
+  let remaining = Math.max(0, taxableIncome);
+  let totalTax = 0;
+  const tiers: { tier: string; rate: number; taxableInTier: number; taxInTier: number }[] = [];
+
+  // Lapisan 1: 0 - 60jt (5%)
+  const tier1Amount = Math.min(remaining, 60000000);
+  const tier1Tax = tier1Amount * 0.05;
+  totalTax += tier1Tax;
+  remaining -= tier1Amount;
+  tiers.push({ tier: 's/d Rp 60 Juta', rate: 5, taxableInTier: tier1Amount, taxInTier: tier1Tax });
+
+  // Lapisan 2: 60jt - 250jt (15%)
+  if (remaining > 0) {
+    const tier2Amount = Math.min(remaining, 190000000);
+    const tier2Tax = tier2Amount * 0.15;
+    totalTax += tier2Tax;
+    remaining -= tier2Amount;
+    tiers.push({ tier: '> Rp 60 Jt s/d 250 Jt', rate: 15, taxableInTier: tier2Amount, taxInTier: tier2Tax });
+  }
+
+  // Lapisan 3: 250jt - 500jt (25%)
+  if (remaining > 0) {
+    const tier3Amount = Math.min(remaining, 250000000);
+    const tier3Tax = tier3Amount * 0.25;
+    totalTax += tier3Tax;
+    remaining -= tier3Amount;
+    tiers.push({ tier: '> Rp 250 Jt s/d 500 Jt', rate: 25, taxableInTier: tier3Amount, taxInTier: tier3Tax });
+  }
+
+  // Lapisan 4: 500jt - 5 Milyar (30%)
+  if (remaining > 0) {
+    const tier4Amount = Math.min(remaining, 4500000000);
+    const tier4Tax = tier4Amount * 0.30;
+    totalTax += tier4Tax;
+    remaining -= tier4Amount;
+    tiers.push({ tier: '> Rp 500 Jt s/d 5 Milyar', rate: 30, taxableInTier: tier4Amount, taxInTier: tier4Tax });
+  }
+
+  // Lapisan 5: > 5 Milyar (35%)
+  if (remaining > 0) {
+    const tier5Tax = remaining * 0.35;
+    totalTax += tier5Tax;
+    tiers.push({ tier: 'Diatas Rp 5 Milyar', rate: 35, taxableInTier: remaining, taxInTier: tier5Tax });
+  }
+
+  return { tax: Math.round(totalTax), tiers };
+}
+
+/**
+ * PPh Pasal 21 Final atas Pesangon Dibayar Sekaligus (PP 68/2009)
+ */
+export function calculatePesangonTax(severanceGross: number): {
+  tax: number;
+  tiers: { tier: string; rate: number; taxableInTier: number; taxInTier: number }[];
+} {
+  let remaining = Math.max(0, severanceGross);
+  let totalTax = 0;
+  const tiers: { tier: string; rate: number; taxableInTier: number; taxInTier: number }[] = [];
+
+  // Lapisan 1: 0 - 50jt (0%)
+  const tier1Amount = Math.min(remaining, 50000000);
+  const tier1Tax = 0;
+  totalTax += tier1Tax;
+  remaining -= tier1Amount;
+  tiers.push({ tier: 's/d Rp 50 Juta (Bebas Pajak)', rate: 0, taxableInTier: tier1Amount, taxInTier: tier1Tax });
+
+  // Lapisan 2: > 50jt s/d 100jt (5%)
+  if (remaining > 0) {
+    const tier2Amount = Math.min(remaining, 50000000);
+    const tier2Tax = tier2Amount * 0.05;
+    totalTax += tier2Tax;
+    remaining -= tier2Amount;
+    tiers.push({ tier: '> Rp 50 Jt s/d 100 Jt', rate: 5, taxableInTier: tier2Amount, taxInTier: tier2Tax });
+  }
+
+  // Lapisan 3: > 100jt s/d 500jt (15%)
+  if (remaining > 0) {
+    const tier3Amount = Math.min(remaining, 400000000);
+    const tier3Tax = tier3Amount * 0.15;
+    totalTax += tier3Tax;
+    remaining -= tier3Amount;
+    tiers.push({ tier: '> Rp 100 Jt s/d 500 Jt', rate: 15, taxableInTier: tier3Amount, taxInTier: tier3Tax });
+  }
+
+  // Lapisan 4: > 500jt (25%)
+  if (remaining > 0) {
+    const tier4Tax = remaining * 0.25;
+    totalTax += tier4Tax;
+    tiers.push({ tier: '> Rp 500 Juta', rate: 25, taxableInTier: remaining, taxInTier: tier4Tax });
+  }
+
+  return { tax: Math.round(totalTax), tiers };
+}
+
+/**
+ * PPh 21 Bukan Pegawai (Tenaga Ahli / Imbalan)
+ * DPP = 50% x Penghasilan Bruto
+ */
+export function calculateNonEmployeeTax(grossAmount: number): {
+  dpp: number;
+  ratePercent: number;
+  tax: number;
+} {
+  const dpp = Math.round(grossAmount * 0.5);
+  // Tarif Pasal 17 untuk Bukan Pegawai (Lapisan 1: 5%, selanjutnya jika kumulatif)
+  let rate = 5;
+  if (dpp > 60000000 && dpp <= 250000000) rate = 15;
+  else if (dpp > 250000000 && dpp <= 500000000) rate = 25;
+  else if (dpp > 500000000) rate = 30;
+
+  const tax = Math.round((dpp * rate) / 100);
+  return { dpp, ratePercent: rate, tax };
+}
+
+/**
+ * PPh 21 Pegawai Tidak Tetap / Tenaga Kerja Lepas Harian
+ */
+export function calculateDailyWorkerTax(dailyWage: number, workDays: number): {
+  dailyRatePercent: number;
+  dailyTax: number;
+  totalGross: number;
+  totalTax: number;
+} {
+  let dailyRatePercent = 0;
+  if (dailyWage <= 450000) {
+    dailyRatePercent = 0;
+  } else if (dailyWage <= 2500000) {
+    dailyRatePercent = 0.5; // TER Harian
+  } else {
+    dailyRatePercent = 1.0;
+  }
+
+  const dailyTax = Math.round((dailyWage * dailyRatePercent) / 100);
+  const totalGross = dailyWage * workDays;
+  const totalTax = dailyTax * workDays;
+
+  return { dailyRatePercent, dailyTax, totalGross, totalTax };
+}
+
 export function formatRupiah(amount: number): string {
   return new Intl.NumberFormat('id-ID', {
     style: 'currency',
@@ -191,3 +349,4 @@ export function formatRupiah(amount: number): string {
     maximumFractionDigits: 0,
   }).format(amount);
 }
+

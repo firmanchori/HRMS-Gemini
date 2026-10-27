@@ -59,7 +59,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       title: 'OPERASIONAL & PERSONALIA',
       items: [
         { id: 'dashboard', label: 'Ringkasan Dashboard', icon: LayoutDashboard },
-        { id: 'organization', label: 'Struktur Organisasi & Tree', icon: Network },
+        { id: 'organization', label: 'Struktur Organisasi', icon: Network },
         { id: 'recruitment', label: 'Rekrutmen & Onboarding', icon: UserPlus },
         {
           id: 'employees',
@@ -67,10 +67,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
           icon: Users,
           badge: employees.length,
         },
-        { id: 'personalia', label: 'Personalia (Promosi & Demosi)', icon: TrendingUp },
-        { id: 'attendance', label: 'Presensi, Shift & Cuti', icon: Clock },
-        { id: 'trips', label: 'Perjalanan Dinas (SPPD)', icon: Plane },
-        { id: 'approvals', label: 'Pusat Approval Bertingkat', icon: ShieldCheck },
+        { id: 'personalia', label: 'Personalia', icon: TrendingUp },
+        { id: 'attendance', label: 'Presensi', icon: Clock },
+        { id: 'trips', label: 'Perjalanan Dinas', icon: Plane },
+        { id: 'approvals', label: 'Approval', icon: ShieldCheck },
       ],
     },
     {
@@ -82,24 +82,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
     {
       title: 'KOMPENSASI & KEUANGAN',
       items: [
-        { id: 'payroll', label: 'Payroll & PPh 21 TER', icon: Calculator },
-        { id: 'loans', label: 'Pinjaman & Simulasi Kasbon', icon: Wallet },
+        { id: 'payroll', label: 'Payroll', icon: Calculator },
+        { id: 'loans', label: 'Pinjaman', icon: Wallet },
       ],
     },
     {
       title: 'TALENTA & KEPATUHAN',
       items: [
-        { id: 'kpi', label: 'Penilaian KPI Real-time', icon: Target },
+        { id: 'kpi', label: 'Penilaian (KPI & OKR)', icon: Target },
         { id: 'compliance', label: 'Kepatuhan & Sanksi SP/PHK', icon: AlertTriangle },
-        { id: 'offboarding', label: 'Offboarding & Pesangon', icon: UserMinus },
+        { id: 'offboarding', label: 'Offboarding', icon: UserMinus },
       ],
     },
     {
       title: 'GENERAL AFFAIRS & PENGADAAN',
       items: [
-        { id: 'assets', label: 'GA, Aset QR & Perbaikan', icon: QrCode },
-        { id: 'procurement', label: 'Procurement, PO & Vendor', icon: ShoppingCart },
-        { id: 'documents', label: 'Dokumen, Kop & Penomoran QR', icon: FileText },
+        { id: 'assets', label: 'General Affair', icon: QrCode },
+        { id: 'procurement', label: 'Procurement', icon: ShoppingCart },
+        { id: 'documents', label: 'Manajemen Dokumen', icon: FileText },
       ],
     },
     {

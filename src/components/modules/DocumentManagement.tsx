@@ -63,6 +63,7 @@ import {
   Undo,
   Redo,
   Table,
+  Tag,
   XCircle,
 } from 'lucide-react';
 import { OfficialDocument, DocumentType, DocumentTemplateConfig, Employee } from '../../types/hrms';
@@ -193,8 +194,9 @@ export const DocumentManagement: React.FC = () => {
   const [studioPageNumFormat, setStudioPageNumFormat] = useState<'standard' | 'simple' | 'slash' | 'none'>('standard');
   const [studioFooterAlign, setStudioFooterAlign] = useState<'split' | 'center' | 'right'>('split');
   const [studioShowFooterBorder, setStudioShowFooterBorder] = useState<boolean>(true);
-  const [studioQrValidationPlacement, setStudioQrValidationPlacement] = useState<'all_pages' | 'last_page'>('all_pages');
   const [studioConfigSection, setStudioConfigSection] = useState<'naskah' | 'kop' | 'footer'>('naskah');
+  const [studioViewMode, setStudioViewMode] = useState<'token' | 'preview'>('token');
+  const studioWysiwygEditorRef = useRef<HTMLDivElement>(null);
 
   // Pejabat Penandatangan Dokumen / Simulasi TTD (Fleksibel & Eksternal seperti di Personalia)
   const [studioSignatories, setStudioSignatories] = useState<DocumentSignatory[]>([
@@ -472,30 +474,38 @@ export const DocumentManagement: React.FC = () => {
 
   const handleStudioInsertTable = (rows: number, cols: number, withHeader = true) => {
     const tableMarkup = generateTableHtml(rows, cols, withHeader);
-    const textarea = studioTextareaRef.current;
-    if (!textarea) {
-      const updated = `${studioBodyText}\n${tableMarkup}`;
-      setStudioBodyText(updated);
-      pushToStudioHistory(updated, true);
+    if (studioViewMode === 'token' && studioWysiwygEditorRef.current) {
+      studioWysiwygEditorRef.current.focus();
+      document.execCommand('insertHTML', false, tableMarkup);
+      const newHtml = studioWysiwygEditorRef.current.innerHTML;
+      setStudioBodyText(newHtml);
+      pushToStudioHistory(newHtml, true);
     } else {
-      const start = textarea.selectionStart;
-      const end = textarea.selectionEnd;
-      const text = studioBodyText;
-      const before = text.substring(0, start);
-      const after = text.substring(end, text.length);
-      const updated = `${before}\n${tableMarkup}\n${after}`;
-      setStudioBodyText(updated);
-      pushToStudioHistory(updated, true);
-      setTimeout(() => {
-        textarea.focus();
-        textarea.setSelectionRange(start + tableMarkup.length + 2, start + tableMarkup.length + 2);
-      }, 50);
+      const textarea = studioTextareaRef.current;
+      if (!textarea) {
+        const updated = `${studioBodyText}\n${tableMarkup}`;
+        setStudioBodyText(updated);
+        pushToStudioHistory(updated, true);
+      } else {
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        const text = studioBodyText;
+        const before = text.substring(0, start);
+        const after = text.substring(end, text.length);
+        const updated = `${before}\n${tableMarkup}\n${after}`;
+        setStudioBodyText(updated);
+        pushToStudioHistory(updated, true);
+        setTimeout(() => {
+          textarea.focus();
+          textarea.setSelectionRange(start + tableMarkup.length + 2, start + tableMarkup.length + 2);
+        }, 50);
+      }
     }
     setIsTableDropdownOpen(false);
     setFeedbackMessage({
       type: 'success',
-      title: 'Tabel Berhasil Disisipkan',
-      description: `Tabel format resmi (${cols} kolom × ${rows} baris) telah ditambahkan ke naskah dokumen.`,
+      title: 'Tabel Visual Berhasil Disisipkan',
+      description: `Tabel format resmi (${cols} kolom × ${rows} baris) telah ditambahkan ke lembar dokumen layaknya MS Word.`,
     });
   };
 
@@ -520,6 +530,39 @@ export const DocumentManagement: React.FC = () => {
     closeTag: string,
     defaultPlaceholder: string = 'teks'
   ) => {
+    if (studioViewMode === 'token' && studioWysiwygEditorRef.current) {
+      studioWysiwygEditorRef.current.focus();
+      if (openTag === '<b>') {
+        document.execCommand('bold', false);
+      } else if (openTag === '<i>') {
+        document.execCommand('italic', false);
+      } else if (openTag.includes('text-decoration: underline')) {
+        document.execCommand('underline', false);
+      } else if (openTag.includes('text-decoration: line-through')) {
+        document.execCommand('strikeThrough', false);
+      } else if (openTag.includes('text-align: left')) {
+        document.execCommand('justifyLeft', false);
+      } else if (openTag.includes('text-align: center')) {
+        document.execCommand('justifyCenter', false);
+      } else if (openTag.includes('text-align: right')) {
+        document.execCommand('justifyRight', false);
+      } else if (openTag.includes('text-align: justify')) {
+        document.execCommand('justifyFull', false);
+      } else if (openTag.includes('•')) {
+        document.execCommand('insertUnorderedList', false);
+      } else if (openTag.includes('1.')) {
+        document.execCommand('insertOrderedList', false);
+      } else {
+        const sel = window.getSelection();
+        const selectedText = sel?.toString() || defaultPlaceholder;
+        document.execCommand('insertHTML', false, `${openTag}${selectedText}${closeTag}`);
+      }
+      const newHtml = studioWysiwygEditorRef.current.innerHTML;
+      setStudioBodyText(newHtml);
+      pushToStudioHistory(newHtml, false);
+      return;
+    }
+
     const textarea = studioTextareaRef.current;
     if (!textarea) return;
 
@@ -545,6 +588,7 @@ export const DocumentManagement: React.FC = () => {
       }
     }, 10);
   };
+
 
   // Branding states for Kop Surat Logo & App Favicon
   const [docLogoInput, setDocLogoInput] = useState(currentTenant.documentLogoUrl || '');
@@ -1082,30 +1126,44 @@ export const DocumentManagement: React.FC = () => {
     });
   };
 
-  // Handler Sisipkan Tag ke Cursor Textarea Studio
+  // Handler Sisipkan Tag ke Cursor Editor Preview / Textarea Studio
   const handleInsertTagToStudioTextarea = (tag: string) => {
     const tagToInsert = `{{${tag}}}`;
-    const textarea = studioTextareaRef.current;
-    if (!textarea) {
-      setStudioBodyText((prev) => `${prev} ${tagToInsert}`);
+    if (studioViewMode === 'token' && studioWysiwygEditorRef.current) {
+      studioWysiwygEditorRef.current.focus();
+      document.execCommand('insertText', false, tagToInsert);
+      const newHtml = studioWysiwygEditorRef.current.innerHTML;
+      setStudioBodyText(newHtml);
+      pushToStudioHistory(newHtml, false);
     } else {
-      const start = textarea.selectionStart;
-      const end = textarea.selectionEnd;
-      const text = studioBodyText;
-      const before = text.substring(0, start);
-      const after = text.substring(end, text.length);
-      setStudioBodyText(`${before}${tagToInsert}${after}`);
-      setTimeout(() => {
-        textarea.focus();
-        textarea.setSelectionRange(start + tagToInsert.length, start + tagToInsert.length);
-      }, 50);
+      const textarea = studioTextareaRef.current;
+      if (!textarea) {
+        setStudioBodyText((prev) => `${prev} ${tagToInsert}`);
+      } else {
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        const text = studioBodyText;
+        const before = text.substring(0, start);
+        const after = text.substring(end, text.length);
+        const updated = `${before}${tagToInsert}${after}`;
+        setStudioBodyText(updated);
+        pushToStudioHistory(updated, true);
+        setTimeout(() => {
+          textarea.focus();
+          textarea.setSelectionRange(start + tagToInsert.length, start + tagToInsert.length);
+        }, 50);
+      }
+    }
+    if (!studioPlaceholders.includes(tag)) {
+      setStudioPlaceholders((prev) => [...prev, tag]);
     }
     setFeedbackMessage({
       type: 'info',
       title: `Tag ${tagToInsert} Disisipkan`,
-      description: 'Tag telah disisipkan ke posisi kursor teks dokumen.',
+      description: 'Tag telah disisipkan ke posisi kursor naskah dokumen.',
     });
   };
+
 
   // Handler Sisipkan Pemisah Halaman Fisik (Page Break)
   const handleInsertPageBreak = () => {
@@ -2299,16 +2357,23 @@ export const DocumentManagement: React.FC = () => {
                                   <button
                                     key={tag}
                                     type="button"
+                                    draggable={true}
+                                    onDragStart={(e) => {
+                                      e.dataTransfer.setData('text/plain', `{{${tag}}}`);
+                                      e.dataTransfer.setData('application/token', tag);
+                                      e.dataTransfer.effectAllowed = 'copy';
+                                    }}
                                     onClick={() => {
                                       handleStudioInsertTag(tag);
                                       if (!studioPlaceholders.includes(tag)) {
                                         setStudioPlaceholders((prev) => [...prev, tag]);
                                       }
                                     }}
-                                    className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-slate-50 hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-300 text-slate-700 border border-slate-200 transition-colors shadow-2xs cursor-pointer group"
-                                    title={tooltip}
+                                    className="px-2 py-1 rounded text-[10.5px] font-mono bg-slate-50 hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-300 text-slate-700 border border-slate-200 transition-colors shadow-2xs cursor-grab active:cursor-grabbing group flex items-center gap-1"
+                                    title={`${tooltip} (Drag & drop ke dokumen atau klik langsung)`}
                                   >
-                                    <span className="text-slate-400 font-sans group-hover:text-indigo-500">+</span> {`{{${tag}}}`}
+                                    <span className="text-slate-400 font-sans group-hover:text-indigo-500 font-bold">+</span>
+                                    <span>{`{{${tag}}}`}</span>
                                   </button>
                                 );
                               })
@@ -3365,16 +3430,41 @@ export const DocumentManagement: React.FC = () => {
               )}
             </div>
 
-            {/* KOLOM KANAN: LIVE PREVIEW DOKUMEN MULTI-HALAMAN REAL (Sticky Saat Scroll) */}
+            {/* KOLOM KANAN: WYSIWYG EDITOR LANGSUNG PADA LEMBAR DOKUMEN & LIVE PREVIEW (Sticky Saat Scroll) */}
             <div className="lg:col-span-7 space-y-3 lg:sticky lg:top-2 self-start z-10">
-              {/* Live Preview Top Controls (Simulasikan Pegawai DIHILANGKAN, Ditambahkan Badge/Toggle Kertas) */}
-              <div className="bg-white border border-slate-200 rounded-xl p-3 shadow-xs flex items-center justify-between gap-2.5">
+              {/* Top Controls: Mode Switcher & Paper Size */}
+              <div className="bg-white border border-slate-200 rounded-xl p-3 shadow-xs flex flex-wrap items-center justify-between gap-2.5">
+                {/* 2 Mode Switcher */}
                 <div className="flex items-center gap-2">
-                  <Eye className="w-4 h-4 text-indigo-600" />
-                  <span className="text-xs font-bold text-slate-900">
-                    Live Preview Dokumen Fisik ({studioPaperSize}):
-                  </span>
+                  <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Mode:</span>
+                  <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+                    <button
+                      type="button"
+                      onClick={() => setStudioViewMode('token')}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                        studioViewMode === 'token'
+                          ? 'bg-indigo-600 text-white shadow-xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      <Tag className="w-3.5 h-3.5" />
+                      <span>Mode Token (Editor Langsung)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setStudioViewMode('preview')}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                        studioViewMode === 'preview'
+                          ? 'bg-indigo-600 text-white shadow-xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      <span>Mode Preview (Sample Asli)</span>
+                    </button>
+                  </div>
                 </div>
+
                 {/* Opsi Pilih Kertas Cepat A4 / F4 / A5 */}
                 <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg border border-slate-200">
                   <button
@@ -3397,7 +3487,7 @@ export const DocumentManagement: React.FC = () => {
                         : 'text-slate-600 hover:text-slate-900'
                     }`}
                   >
-                    F4 / Folio (215 × 330 mm)
+                    F4 (Folio)
                   </button>
                   <button
                     type="button"
@@ -3408,12 +3498,298 @@ export const DocumentManagement: React.FC = () => {
                         : 'text-slate-600 hover:text-slate-900'
                     }`}
                   >
-                    A5 (148 × 210 mm)
+                    A5
                   </button>
                 </div>
               </div>
 
-              {/* Naskah Dinas Live Preview Render dengan Batasan Panjang (max-h) & Scroll */}
+              {/* Mode Banner & MS Word Ribbon Bar */}
+              {studioViewMode === 'token' ? (
+                <div className="bg-white border border-indigo-200 rounded-xl p-2.5 shadow-xs space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs px-1">
+                    <div className="flex items-center gap-1.5 text-indigo-900 font-semibold text-[11px]">
+                      <Sparkles className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                      <span>Ketik & edit langsung di lembar dokumen di bawah. Drag-and-drop token atau klik tabel visual layaknya MS Word.</span>
+                    </div>
+                    <label className="flex items-center gap-1.5 text-[10.5px] font-semibold text-slate-600 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={studioHighlightTags}
+                        onChange={(e) => setStudioHighlightTags(e.target.checked)}
+                        className="w-3.5 h-3.5 text-indigo-600 rounded"
+                      />
+                      <span>Sorot Token</span>
+                    </label>
+                  </div>
+
+                  {/* Ribbon Toolbar */}
+                  <div className="bg-slate-50 border border-slate-200 rounded-lg p-1.5 flex flex-wrap items-center gap-1 text-slate-700">
+                    {/* Undo / Redo */}
+                    <div className="flex items-center gap-0.5 bg-white p-0.5 rounded border border-slate-200 shadow-2xs">
+                      <button
+                        type="button"
+                        onClick={handleStudioUndo}
+                        disabled={!canStudioUndo}
+                        className="p-1.5 hover:bg-slate-100 hover:text-indigo-600 rounded transition-colors cursor-pointer disabled:opacity-35 disabled:cursor-not-allowed"
+                        title="Undo (Ctrl+Z)"
+                      >
+                        <Undo className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleStudioRedo}
+                        disabled={!canStudioRedo}
+                        className="p-1.5 hover:bg-slate-100 hover:text-indigo-600 rounded transition-colors cursor-pointer disabled:opacity-35 disabled:cursor-not-allowed"
+                        title="Redo (Ctrl+Y)"
+                      >
+                        <Redo className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    {/* Font Styling */}
+                    <div className="flex items-center gap-0.5 bg-white p-0.5 rounded border border-slate-200 shadow-2xs">
+                      <button
+                        type="button"
+                        onClick={() => handleStudioApplyFormat('<b>', '</b>', 'teks tebal')}
+                        className="p-1.5 hover:bg-slate-100 hover:text-indigo-600 rounded transition-colors cursor-pointer"
+                        title="Tebal (Bold)"
+                      >
+                        <Bold className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleStudioApplyFormat('<i>', '</i>', 'teks miring')}
+                        className="p-1.5 hover:bg-slate-100 hover:text-indigo-600 rounded transition-colors cursor-pointer"
+                        title="Miring (Italic)"
+                      >
+                        <Italic className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleStudioApplyFormat('<u style="text-decoration: underline; text-underline-offset: 2.5px;">', '</u>', 'teks garis bawah')}
+                        className="p-1.5 hover:bg-slate-100 hover:text-indigo-600 rounded transition-colors cursor-pointer"
+                        title="Garis Bawah (Underline)"
+                      >
+                        <Underline className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleStudioApplyFormat('<s style="text-decoration: line-through;">', '</s>', 'teks coret')}
+                        className="p-1.5 hover:bg-slate-100 hover:text-indigo-600 rounded transition-colors cursor-pointer"
+                        title="Coret (Strikethrough)"
+                      >
+                        <Strikethrough className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    {/* Alignment */}
+                    <div className="flex items-center gap-0.5 bg-white p-0.5 rounded border border-slate-200 shadow-2xs">
+                      <button
+                        type="button"
+                        onClick={() => handleStudioApplyFormat('<div style="text-align: left;">', '</div>', 'rata kiri')}
+                        className="p-1.5 hover:bg-slate-100 hover:text-indigo-600 rounded transition-colors cursor-pointer"
+                        title="Rata Kiri"
+                      >
+                        <AlignLeft className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleStudioApplyFormat('<div style="text-align: center;">', '</div>', 'rata tengah')}
+                        className="p-1.5 hover:bg-slate-100 hover:text-indigo-600 rounded transition-colors cursor-pointer"
+                        title="Rata Tengah"
+                      >
+                        <AlignCenter className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleStudioApplyFormat('<div style="text-align: right;">', '</div>', 'rata kanan')}
+                        className="p-1.5 hover:bg-slate-100 hover:text-indigo-600 rounded transition-colors cursor-pointer"
+                        title="Rata Kanan"
+                      >
+                        <AlignRight className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleStudioApplyFormat('<div style="text-align: justify;">', '</div>', 'rata kiri kanan')}
+                        className="p-1.5 hover:bg-slate-100 hover:text-indigo-600 rounded transition-colors cursor-pointer"
+                        title="Rata Kiri-Kanan (Justify)"
+                      >
+                        <AlignJustify className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    {/* Lists & Page Break */}
+                    <div className="flex items-center gap-0.5 bg-white p-0.5 rounded border border-slate-200 shadow-2xs">
+                      <button
+                        type="button"
+                        onClick={() => handleStudioApplyFormat('\n• ', '', 'Poin butir')}
+                        className="p-1.5 hover:bg-slate-100 hover:text-indigo-600 rounded transition-colors cursor-pointer"
+                        title="Bullet List"
+                      >
+                        <List className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleStudioApplyFormat('\n1. ', '', 'Poin bernomor')}
+                        className="p-1.5 hover:bg-slate-100 hover:text-indigo-600 rounded transition-colors cursor-pointer"
+                        title="Numbered List"
+                      >
+                        <ListOrdered className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleStudioApplyFormat('\n[PAGE_BREAK]\n', '', '')}
+                        className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded transition-colors flex items-center gap-1 font-bold text-[10px] border border-indigo-200 cursor-pointer"
+                        title="Sisipkan Batas Halaman Fisik Baru ([PAGE_BREAK])"
+                      >
+                        <Scissors className="w-3 h-3 text-indigo-600" />
+                        <span>Hal Baru</span>
+                      </button>
+                    </div>
+
+                    {/* Sisipkan Tabel Visual */}
+                    <div className="relative inline-block" ref={tableDropdownRef}>
+                      <button
+                        type="button"
+                        onClick={() => setIsTableDropdownOpen(!isTableDropdownOpen)}
+                        className="px-2 py-1 bg-white hover:bg-slate-50 text-slate-700 rounded transition-colors flex items-center gap-1 font-bold text-[10.5px] border border-slate-300 cursor-pointer shadow-2xs"
+                        title="Sisipkan Tabel Visual Resmi ke Lembar Dokumen"
+                      >
+                        <Table className="w-3.5 h-3.5 text-indigo-600" />
+                        <span>Tabel Visual</span>
+                        <ChevronDown className="w-2.5 h-2.5 text-slate-400" />
+                      </button>
+
+                      {isTableDropdownOpen && (
+                        <div className="absolute right-0 sm:left-0 mt-1.5 w-72 bg-white border border-slate-300 rounded-xl shadow-xl p-3 z-50 text-xs space-y-3 animate-fadeIn">
+                          <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
+                            <div className="flex items-center gap-1.5 font-bold text-slate-900 text-xs">
+                              <Table className="w-3.5 h-3.5 text-indigo-600" />
+                              <span>Sisipkan Tabel Visual</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setIsTableDropdownOpen(false)}
+                              className="p-1 hover:bg-slate-100 text-slate-400 hover:text-slate-600 rounded cursor-pointer"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+
+                          <div className="space-y-1">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                              Pilihan Cepat:
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleStudioInsertTable(3, 3, true)}
+                              className="w-full text-left px-2.5 py-1.5 hover:bg-indigo-50 hover:text-indigo-700 rounded-md transition-colors flex items-center justify-between text-[11px] cursor-pointer"
+                            >
+                              <span>Tabel Standar 3×3 (No, Uraian, Ket)</span>
+                              <span className="text-[10px] text-slate-400 font-mono">3 Kolom</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleStudioInsertTable(4, 4, true)}
+                              className="w-full text-left px-2.5 py-1.5 hover:bg-indigo-50 hover:text-indigo-700 rounded-md transition-colors flex items-center justify-between text-[11px] cursor-pointer"
+                            >
+                              <span>Tabel Rincian Biaya / Komponen</span>
+                              <span className="text-[10px] text-slate-400 font-mono">4 Kolom</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleStudioInsertTable(3, 2, true)}
+                              className="w-full text-left px-2.5 py-1.5 hover:bg-indigo-50 hover:text-indigo-700 rounded-md transition-colors flex items-center justify-between text-[11px] cursor-pointer"
+                            >
+                              <span>Tabel 2 Kolom (Spesifikasi / Hak)</span>
+                              <span className="text-[10px] text-slate-400 font-mono">2 Kolom</span>
+                            </button>
+                          </div>
+
+                          <div className="border-t border-slate-100 pt-2 space-y-2">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                              Ukuran Kustom:
+                            </span>
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <label className="text-[10px] font-semibold text-slate-600 block mb-0.5">Kolom:</label>
+                                <div className="flex items-center border border-slate-300 rounded bg-slate-50">
+                                  <button
+                                    type="button"
+                                    onClick={() => setTableCustomCols(Math.max(1, tableCustomCols - 1))}
+                                    className="px-2 py-1 text-slate-600 hover:bg-slate-200 font-bold cursor-pointer"
+                                  >
+                                    -
+                                  </button>
+                                  <span className="flex-1 text-center font-mono font-bold text-slate-800 text-[11px]">
+                                    {tableCustomCols}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => setTableCustomCols(Math.min(8, tableCustomCols + 1))}
+                                    className="px-2 py-1 text-slate-600 hover:bg-slate-200 font-bold cursor-pointer"
+                                  >
+                                    +
+                                  </button>
+                                </div>
+                              </div>
+                              <div>
+                                <label className="text-[10px] font-semibold text-slate-600 block mb-0.5">Baris:</label>
+                                <div className="flex items-center border border-slate-300 rounded bg-slate-50">
+                                  <button
+                                    type="button"
+                                    onClick={() => setTableCustomRows(Math.max(1, tableCustomRows - 1))}
+                                    className="px-2 py-1 text-slate-600 hover:bg-slate-200 font-bold cursor-pointer"
+                                  >
+                                    -
+                                  </button>
+                                  <span className="flex-1 text-center font-mono font-bold text-slate-800 text-[11px]">
+                                    {tableCustomRows}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => setTableCustomRows(Math.min(15, tableCustomRows + 1))}
+                                    className="px-2 py-1 text-slate-600 hover:bg-slate-200 font-bold cursor-pointer"
+                                  >
+                                    +
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                            <label className="flex items-center gap-1.5 text-[11px] text-slate-700 cursor-pointer pt-0.5">
+                              <input
+                                type="checkbox"
+                                checked={tableCustomUseHeader}
+                                onChange={(e) => setTableCustomUseHeader(e.target.checked)}
+                                className="rounded text-indigo-600 w-3.5 h-3.5"
+                              />
+                              <span>Gunakan Baris Header</span>
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => handleStudioInsertTable(tableCustomRows, tableCustomCols, tableCustomUseHeader)}
+                              className="w-full py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md font-bold text-xs shadow-xs transition-colors cursor-pointer mt-1"
+                            >
+                              Sisipkan Tabel ({tableCustomCols} Kolom × {tableCustomRows} Baris)
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-2.5 shadow-xs flex items-center justify-between text-xs text-emerald-900">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span className="font-medium text-[11.5px]">
+                      Mode Preview (Sample Asli): Seluruh token dinamis dan tabel terisi dengan data sampel pegawai ({employees[0]?.fullName || 'Ahmad Fauzi'}). Siap dicetak langsung atau diekspor ke PDF / DOCX.
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Naskah Dinas Live Preview / Editable Sheet Render dengan Batasan Panjang & Scroll */}
               {(() => {
                 const fallbackSimulatedEmployee: Employee = (employees && employees[0]) ? employees[0] : ({
                   id: 'simulated-emp',
@@ -3472,7 +3848,13 @@ export const DocumentManagement: React.FC = () => {
                     <OfficialMultiPageDocumentSheet
                       title={previewDocObj.title}
                       documentNumber={previewDocObj.documentNumber}
-                      content={previewDocObj.contentPreview}
+                      content={studioViewMode === 'token' ? studioBodyText : previewDocObj.contentPreview}
+                      isEditable={studioViewMode === 'token'}
+                      editorRef={studioWysiwygEditorRef}
+                      onContentChange={(newHtml) => {
+                        setStudioBodyText(newHtml);
+                        pushToStudioHistory(newHtml, false);
+                      }}
                       employee={simulatedEmployee}
                       tenant={currentTenant}
                       signeeName={studioSigneeName}
@@ -3482,7 +3864,7 @@ export const DocumentManagement: React.FC = () => {
                       showLetterhead={studioShowLetterhead}
                       showQrSignature={studioShowQrSignature}
                       showQrValidation={studioShowQrValidation}
-                      highlightTags={studioHighlightTags}
+                      highlightTags={studioViewMode === 'token' && studioHighlightTags}
                       paperSize={studioPaperSize}
                       letterheadCompanyName={studioCompanyName}
                       letterheadAddress={studioCompanyAddress}
