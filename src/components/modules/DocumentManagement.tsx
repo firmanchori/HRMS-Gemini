@@ -2061,7 +2061,7 @@ export const DocumentManagement: React.FC = () => {
                       <div>
                         <h4 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
                           <Users className="w-4 h-4 text-indigo-600" />
-                          <span>Simulasi Tanda Tangan Dokumen (Penandatangan / Approval)</span>
+                          <span>Penandatangan / Approval</span>
                         </h4>
                         <p className="text-[10px] text-slate-500 mt-0.5">
                           Jumlah kolom & label fleksibel (bisa 1, 2, atau 3 kolom). Pejabat dapat dari internal maupun pihak eksternal.
