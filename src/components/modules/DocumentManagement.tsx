@@ -181,6 +181,7 @@ export const DocumentManagement: React.FC = () => {
   const [studioShowLetterhead, setStudioShowLetterhead] = useState(true);
   const [studioShowQrSignature, setStudioShowQrSignature] = useState(true);
   const [studioShowQrValidation, setStudioShowQrValidation] = useState(true);
+  const [studioQrValidationPlacement, setStudioQrValidationPlacement] = useState<'all_pages' | 'last_page'>('all_pages');
   // Pengaturan Ukuran Kertas Studio (A4, F4, atau A5)
   const [studioPaperSize, setStudioPaperSize] = useState<'A4' | 'F4' | 'A5'>('A4');
   // Pengaturan Kop Surat (Header) & Footer Studio Side-by-Side
@@ -651,13 +652,13 @@ export const DocumentManagement: React.FC = () => {
   const handleInsertToken = (token: string, target: 'upload' | 'standard') => {
     if (target === 'upload') {
       setUploadNumberingPattern((prev) => {
-        if (!prev) return token;
-        return prev.endsWith('/') ? `${prev}${token}` : `${prev}/${token}`;
+        if (!prev || prev.trim() === '') return token;
+        return prev.endsWith('/') || prev.endsWith('-') ? `${prev}${token}` : `${prev}/${token}`;
       });
     } else {
       setEditNumberingFormat((prev) => {
-        if (!prev) return token;
-        return prev.endsWith('/') ? `${prev}${token}` : `${prev}/${token}`;
+        if (!prev || prev.trim() === '') return token;
+        return prev.endsWith('/') || prev.endsWith('-') ? `${prev}${token}` : `${prev}/${token}`;
       });
     }
     setFeedbackMessage({
@@ -2043,7 +2044,10 @@ export const DocumentManagement: React.FC = () => {
                             key={t.token}
                             type="button"
                             onClick={() => {
-                              setStudioNumberingPattern(prev => prev.endsWith('/') ? `${prev}${t.token}` : `${prev}/${t.token}`);
+                              setStudioNumberingPattern(prev => {
+                                if (!prev || prev.trim() === '') return t.token;
+                                return prev.endsWith('/') ? `${prev}${t.token}` : `${prev}/${t.token}`;
+                              });
                             }}
                             className="px-1.5 py-0.5 rounded text-[9px] font-mono bg-slate-100 hover:bg-indigo-100 text-slate-700 border border-slate-200"
                             title={t.description}
@@ -3446,9 +3450,10 @@ export const DocumentManagement: React.FC = () => {
                           ? 'bg-indigo-600 text-white shadow-xs'
                           : 'text-slate-600 hover:text-slate-900'
                       }`}
+                      title="Edit naskah dan tag variabel secara real-time langsung di atas lembar dokumen"
                     >
                       <Tag className="w-3.5 h-3.5" />
-                      <span>Mode Token (Editor Langsung)</span>
+                      <span>Mode Preview Editor (Live Edit)</span>
                     </button>
                     <button
                       type="button"
@@ -3458,6 +3463,7 @@ export const DocumentManagement: React.FC = () => {
                           ? 'bg-indigo-600 text-white shadow-xs'
                           : 'text-slate-600 hover:text-slate-900'
                       }`}
+                      title="Pratinjau naskah dokumen final dengan data sampel pegawai dan tanda tangan resmi"
                     >
                       <Eye className="w-3.5 h-3.5" />
                       <span>Mode Preview (Sample Asli)</span>
@@ -5865,3 +5871,5 @@ PIHAK PERTAMA memberikan upah pokok sebesar {{gaji_pokok}} ({{gaji_terbilang}}) 
     </div>
   );
 };
+
+export default DocumentManagement;

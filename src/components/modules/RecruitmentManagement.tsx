@@ -103,6 +103,7 @@ import {
   PTKPStatus,
   JobRequisition,
   JobVacancy,
+  JobVacancySlaHistory,
   JobPostingChannel,
   FptkPositionReason,
   FptkSignatory,
@@ -1200,6 +1201,76 @@ export const RecruitmentManagement: React.FC = () => {
     const timer = setTimeout(() => setToastFeedback(null), 3800);
     return () => clearTimeout(timer);
   }, [toastFeedback]);
+
+  // SLA Rekrutmen States & Auto-Close
+  const [slaExtendModalVacancy, setSlaExtendModalVacancy] = useState<JobVacancy | null>(null);
+  const [slaHistoryModalVacancy, setSlaHistoryModalVacancy] = useState<JobVacancy | null>(null);
+  const [slaExtendDays, setSlaExtendDays] = useState<number>(14);
+  const [slaExtendReason, setSlaExtendReason] = useState<string>('');
+  const [slaExtendBy, setSlaExtendBy] = useState<string>('');
+
+  // Auto-close Lowongan jika batas waktu SLA sudah terlewati
+  useEffect(() => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    vacancies.forEach((vac) => {
+      let closeDate = vac.targetCloseDate;
+      if (!closeDate && vac.postedDate) {
+        const pDate = new Date(vac.postedDate);
+        pDate.setDate(pDate.getDate() + (vac.slaDays || 30));
+        closeDate = pDate.toISOString().split('T')[0];
+      }
+
+      if (vac.status === 'Buka' && closeDate && closeDate < todayStr) {
+        updateVacancy(vac.id, {
+          status: 'Ditutup',
+          isClosedBySla: true,
+          targetCloseDate: closeDate,
+        });
+      }
+    });
+  }, [vacancies]);
+
+  // Handler Perpanjangan SLA Lowongan
+  const handleExtendVacancySla = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!slaExtendModalVacancy) return;
+    if (!slaExtendReason.trim()) {
+      alert('Alasan perpanjangan SLA lowongan wajib diisi untuk rekam jejak audit.');
+      return;
+    }
+
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
+    const currentClose = slaExtendModalVacancy.targetCloseDate || todayStr;
+    const baseDate = new Date(currentClose < todayStr ? todayStr : currentClose);
+    baseDate.setDate(baseDate.getDate() + Number(slaExtendDays));
+    const newCloseDate = baseDate.toISOString().split('T')[0];
+
+    const historyItem: JobVacancySlaHistory = {
+      id: `sla-ext-${Date.now()}`,
+      extendedAt: new Date().toISOString(),
+      extendedBy: slaExtendBy || currentUser?.name || 'Recruitment Specialist',
+      previousCloseDate: currentClose,
+      newCloseDate,
+      addedDays: Number(slaExtendDays),
+      reason: slaExtendReason.trim(),
+    };
+
+    updateVacancy(slaExtendModalVacancy.id, {
+      targetCloseDate: newCloseDate,
+      status: 'Buka',
+      isClosedBySla: false,
+      slaDays: (slaExtendModalVacancy.slaDays || 30) + Number(slaExtendDays),
+      slaHistory: [...(slaExtendModalVacancy.slaHistory || []), historyItem],
+    });
+
+    setToastFeedback(
+      `SLA Lowongan '${slaExtendModalVacancy.title}' berhasil diperpanjang +${slaExtendDays} hari (Batas Baru: ${newCloseDate})!`
+    );
+    setSlaExtendModalVacancy(null);
+    setSlaExtendReason('');
+    setSlaExtendDays(14);
+  };
 
   // Rejection note state
   const [rejectionReasonInput, setRejectionReasonInput] = useState('');
@@ -6962,15 +7033,28 @@ PT Nusantara Multi Talenta Tbk`);
                           </span>
                         </div>
                       </div>
-                      <span
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                          vac.status === 'Buka'
-                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                            : 'bg-slate-100 text-slate-600'
-                        }`}
-                      >
-                        {vac.status === 'Buka' ? '● Aktif Tayang' : 'Ditutup'}
-                      </span>
+                      <div className="flex flex-col items-end gap-1 shrink-0">
+                        <span
+                          className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${
+                            vac.status === 'Buka'
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              : vac.isClosedBySla
+                              ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                              : 'bg-slate-100 text-slate-600 border border-slate-200'
+                          }`}
+                        >
+                          {vac.status === 'Buka'
+                            ? '● Aktif Tayang'
+                            : vac.isClosedBySla
+                            ? '● Ditutup Otomatis (SLA Berakhir)'
+                            : 'Ditutup'}
+                        </span>
+                        {vac.slaHistory && vac.slaHistory.length > 0 && (
+                          <span className="text-[9px] font-semibold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200">
+                            Diperpanjang {vac.slaHistory.length}x
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     <p className="text-xs text-slate-600 line-clamp-2">
@@ -6991,6 +7075,84 @@ PT Nusantara Multi Talenta Tbk`);
                         <span className="font-bold text-slate-800">{vac.salaryRange}</span>
                       </div>
                     </div>
+
+                    {/* SLA Pemenuhan Lowongan Tracking Box */}
+                    {(() => {
+                      const todayStr = new Date().toISOString().split('T')[0];
+                      let closeDate = vac.targetCloseDate;
+                      if (!closeDate && vac.postedDate) {
+                        const pDate = new Date(vac.postedDate);
+                        pDate.setDate(pDate.getDate() + (vac.slaDays || 30));
+                        closeDate = pDate.toISOString().split('T')[0];
+                      }
+                      const daysLeft = closeDate
+                        ? Math.ceil((new Date(closeDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
+                        : null;
+                      const isExpired = daysLeft !== null && daysLeft <= 0;
+
+                      return (
+                        <div className={`p-2.5 rounded-lg border text-xs flex flex-col gap-2 ${
+                          isExpired
+                            ? 'bg-rose-50/70 border-rose-200 text-rose-900'
+                            : daysLeft !== null && daysLeft <= 5
+                            ? 'bg-amber-50/70 border-amber-200 text-amber-900'
+                            : 'bg-indigo-50/60 border-indigo-200 text-indigo-900'
+                        }`}>
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-1.5 font-semibold text-[11px]">
+                              <Clock className="w-3.5 h-3.5 shrink-0" />
+                              <span>SLA Batas Waktu Rekrutmen:</span>
+                            </div>
+                            <span className="font-mono font-bold text-[11px]">
+                              {closeDate || '30 Hari Standar'}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-between text-[11px] gap-2 pt-1 border-t border-slate-200/60">
+                            <div>
+                              {daysLeft !== null ? (
+                                isExpired ? (
+                                  <span className="font-bold text-rose-700">
+                                    ⚠️ Batas Waktu Terlewati ({Math.abs(daysLeft)} hari lalu)
+                                  </span>
+                                ) : (
+                                  <span className="font-medium text-slate-700">
+                                    Sisa Waktu:{' '}
+                                    <strong className="text-slate-900 font-bold">{daysLeft} Hari Lagi</strong>
+                                  </span>
+                                )
+                              ) : (
+                                <span className="text-slate-500">Durasi: {vac.slaDays || 30} Hari</span>
+                              )}
+                            </div>
+
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              {vac.slaHistory && vac.slaHistory.length > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => setSlaHistoryModalVacancy(vac)}
+                                  className="px-2 py-0.5 rounded text-[10px] font-semibold bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 transition-colors shadow-2xs"
+                                  title="Lihat Histori Perpanjangan SLA"
+                                >
+                                  Histori ({vac.slaHistory.length})
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSlaExtendModalVacancy(vac);
+                                  setSlaExtendDays(14);
+                                  setSlaExtendReason('');
+                                }}
+                                className="px-2.5 py-0.5 rounded text-[10px] font-bold bg-blue-600 hover:bg-blue-700 text-white transition-colors shadow-2xs flex items-center gap-1"
+                              >
+                                <span>+ Perpanjang SLA</span>
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                     <div className="space-y-1.5 pt-1">
                       <span className="text-[11px] font-semibold text-slate-700 block">
@@ -22227,6 +22389,259 @@ PT Nusantara Multi Talenta Tbk`);
           </div>
         </div>
       )}
+      {/* ===================== MODAL 18: DIALOG PERPANJANG SLA LOWONGAN REKRUTMEN ===================== */}
+      {slaExtendModalVacancy && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
+          onClick={() => setSlaExtendModalVacancy(null)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl max-w-lg w-full border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-5 py-4 bg-slate-950 text-white flex items-center justify-between">
+              <h3 className="text-sm font-bold flex items-center gap-2">
+                <Clock className="w-4 h-4 text-amber-400" />
+                <span>Perpanjang Batas Waktu (SLA) Lowongan</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setSlaExtendModalVacancy(null)}
+                className="text-slate-400 hover:text-white cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 text-xs">
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Formasi Lowongan:</span>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                    slaExtendModalVacancy.status === 'Buka'
+                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                      : 'bg-rose-50 text-rose-700 border border-rose-200'
+                  }`}>
+                    {slaExtendModalVacancy.status === 'Buka' ? 'Aktif Tayang' : 'Tutup (SLA Berakhir)'}
+                  </span>
+                </div>
+                <p className="font-bold text-slate-900 text-sm">{slaExtendModalVacancy.title}</p>
+                <p className="text-slate-500 text-[11px]">{slaExtendModalVacancy.department} · {slaExtendModalVacancy.grade || 'Staff'} · {slaExtendModalVacancy.openings} Formasi</p>
+                <div className="text-[11px] text-slate-600 pt-1 flex items-center gap-1 font-mono">
+                  <span>Target SLA Saat Ini:</span>
+                  <strong className="text-slate-900">{slaExtendModalVacancy.targetCloseDate || 'Belum diatur'}</strong>
+                </div>
+              </div>
+
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1.5">Pilih Tambahan Durasi SLA *</label>
+                <div className="grid grid-cols-4 gap-2 mb-2">
+                  {[7, 14, 21, 30].map((d) => (
+                    <button
+                      key={d}
+                      type="button"
+                      onClick={() => setSlaExtendDays(d)}
+                      className={`py-2 text-xs font-bold rounded-lg border text-center transition-all ${
+                        slaExtendDays === d
+                          ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
+                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      +{d} Hari
+                    </button>
+                  ))}
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-500 text-[11px]">Atau masukkan hari manual:</span>
+                  <input
+                    type="number"
+                    min="1"
+                    max="90"
+                    value={slaExtendDays}
+                    onChange={(e) => setSlaExtendDays(Math.max(1, parseInt(e.target.value) || 1))}
+                    className="w-20 px-2 py-1 text-xs border border-slate-300 rounded font-bold text-center"
+                  />
+                  <span className="text-slate-500 text-[11px]">Hari</span>
+                </div>
+              </div>
+
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">
+                  Alasan Perpanjangan SLA (Wajib Dicatat ke Histori Audit) *
+                </label>
+                <textarea
+                  value={slaExtendReason}
+                  onChange={(e) => setSlaExtendReason(e.target.value)}
+                  rows={3}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white text-xs focus:ring-1 focus:ring-blue-500 outline-hidden resize-none"
+                  placeholder="Contoh: Kandidat tahap technical test belum memenuhi standar minimum kualifikasi spesifik, diputuskan memperpanjang penayangan iklan lowongan."
+                />
+              </div>
+
+              <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-xl text-[11px] text-amber-900 space-y-1">
+                <span className="font-bold flex items-center gap-1 text-amber-800">
+                  <AlertCircle className="w-3.5 h-3.5" /> Konsekuensi Sistem Otomatis:
+                </span>
+                <p>
+                  Status lowongan akan otomatis diset kembali ke <strong>Buka (Aktif Tayang)</strong>, dan batas waktu SLA dimajukan ke target baru. Histori perpanjangan akan tersimpan secara permanen untuk audit ISO / HR Governance.
+                </p>
+              </div>
+            </div>
+
+            <div className="px-5 py-3.5 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setSlaExtendModalVacancy(null)}
+                className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!slaExtendModalVacancy) return;
+                  if (!slaExtendReason.trim()) {
+                    alert('Mohon masukkan alasan perpanjangan SLA lowongan.');
+                    return;
+                  }
+                  const days = Number(slaExtendDays) || 14;
+                  const baseDate = new Date();
+                  const curTarget = slaExtendModalVacancy.targetCloseDate ? new Date(slaExtendModalVacancy.targetCloseDate) : new Date();
+                  const startDate = curTarget > baseDate ? curTarget : baseDate;
+                  const newTarget = new Date(startDate);
+                  newTarget.setDate(newTarget.getDate() + days);
+                  const newTargetStr = newTarget.toISOString().split('T')[0];
+
+                  const historyItem: JobVacancySlaHistory = {
+                    id: `slah-${Date.now()}`,
+                    extendedAt: new Date().toISOString(),
+                    extendedBy: (currentUser && (currentUser as any).name) || 'HR Recruitment Lead',
+                    addedDays: days,
+                    previousTargetDate: slaExtendModalVacancy.targetCloseDate || new Date().toISOString().split('T')[0],
+                    newTargetDate: newTargetStr,
+                    reason: slaExtendReason.trim(),
+                  };
+
+                  const updatedVacancies = vacancies.map((v) => {
+                    if (v.id === slaExtendModalVacancy.id) {
+                      return {
+                        ...v,
+                        targetCloseDate: newTargetStr,
+                        status: 'Buka' as const,
+                        isClosedBySla: false,
+                        slaHistory: [...(v.slaHistory || []), historyItem],
+                      };
+                    }
+                    return v;
+                  });
+
+                  setVacancies(updatedVacancies);
+                  setToastFeedback(`SLA Lowongan '${slaExtendModalVacancy.title}' berhasil diperpanjang +${days} hari (hingga ${newTargetStr}).`);
+                  setSlaExtendModalVacancy(null);
+                  setSlaExtendReason('');
+                }}
+                className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1.5 cursor-pointer"
+              >
+                <Check className="w-3.5 h-3.5" />
+                <span>Simpan & Perpanjang SLA</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===================== MODAL 19: DIALOG HISTORI PERPANJANGAN SLA ===================== */}
+      {slaHistoryModalVacancy && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
+          onClick={() => setSlaHistoryModalVacancy(null)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-5 py-4 bg-slate-950 text-white flex items-center justify-between">
+              <h3 className="text-sm font-bold flex items-center gap-2">
+                <History className="w-4 h-4 text-blue-400" />
+                <span>Log & Histori Perpanjangan SLA Lowongan</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setSlaHistoryModalVacancy(null)}
+                className="text-slate-400 hover:text-white cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 text-xs">
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Lowongan:</span>
+                <p className="font-bold text-slate-900 text-sm">{slaHistoryModalVacancy.title}</p>
+                <p className="text-slate-500 text-[11px]">{slaHistoryModalVacancy.department} · Target Batas Akhir Saat Ini: <strong className="text-slate-800 font-mono">{slaHistoryModalVacancy.targetCloseDate || '-'}</strong></p>
+              </div>
+
+              <div className="space-y-2">
+                <span className="font-bold text-slate-800 block text-xs">Daftar Rekam Jejak Perpanjangan:</span>
+                {!slaHistoryModalVacancy.slaHistory || slaHistoryModalVacancy.slaHistory.length === 0 ? (
+                  <p className="text-slate-400 italic py-4 text-center">Belum ada riwayat perpanjangan SLA untuk lowongan ini.</p>
+                ) : (
+                  <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
+                    {slaHistoryModalVacancy.slaHistory.map((item, idx) => (
+                      <div key={item.id || idx} className="p-3 bg-white border border-slate-200 rounded-xl space-y-1.5 shadow-2xs">
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                            Perpanjangan ke-{idx + 1}: +{item.addedDays} Hari
+                          </span>
+                          <span className="text-slate-400 font-mono">
+                            {new Date(item.extendedAt).toLocaleDateString('id-ID', {
+                              day: '2-digit',
+                              month: 'short',
+                              year: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-slate-600 grid grid-cols-2 gap-2 bg-slate-50 p-2 rounded-lg">
+                          <div>
+                            <span className="text-slate-400 block text-[10px]">Target Sebelumnya:</span>
+                            <span className="font-mono font-medium text-slate-700">{item.previousTargetDate}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 block text-[10px]">Target Baru:</span>
+                            <span className="font-mono font-bold text-emerald-700">{item.newTargetDate}</span>
+                          </div>
+                        </div>
+                        <div className="text-[11px] pt-1">
+                          <span className="text-slate-500 block text-[10px] font-semibold">Alasan Perpanjangan:</span>
+                          <p className="text-slate-800 italic">"{item.reason}"</p>
+                        </div>
+                        <div className="text-[10px] text-slate-400 pt-1 border-t border-slate-100 flex items-center justify-between">
+                          <span>Diproses oleh: <strong className="text-slate-600">{item.extendedBy}</strong></span>
+                          <span className="font-mono text-[9px]">ID: {item.id}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="px-5 py-3.5 bg-slate-50 border-t border-slate-200 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setSlaHistoryModalVacancy(null)}
+                className="px-4 py-1.5 bg-slate-900 text-white rounded-lg text-xs font-semibold hover:bg-slate-800 cursor-pointer"
+              >
+                Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+
+export default RecruitmentManagement;

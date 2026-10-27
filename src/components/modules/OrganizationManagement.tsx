@@ -464,6 +464,7 @@ export const OrganizationManagement: React.FC = () => {
     minSalary: 8000000,
     midSalary: 11000000,
     maxSalary: 14000000,
+    singleValueSalary: 11000000,
     effectiveDate: new Date().toISOString().split('T')[0],
     notes: '',
   });
@@ -474,6 +475,7 @@ export const OrganizationManagement: React.FC = () => {
   const [assignDivisionFilter, setAssignDivisionFilter] = useState('ALL');
   const [assigningPosition, setAssigningPosition] = useState<OrgStructureNode | null>(null);
   const [selectedAssignEmployeeId, setSelectedAssignEmployeeId] = useState('');
+  const [selectedAssignGrade, setSelectedAssignGrade] = useState('');
 
   // Form Restrukturisasi Resmi (Ber-SK)
   const [restructureForm, setRestructureForm] = useState({
@@ -1340,6 +1342,7 @@ export const OrganizationManagement: React.FC = () => {
       minSalary: 8000000,
       midSalary: 11000000,
       maxSalary: 14000000,
+      singleValueSalary: 11000000,
       effectiveDate: new Date().toISOString().split('T')[0],
       notes: '',
     });
@@ -1354,6 +1357,7 @@ export const OrganizationManagement: React.FC = () => {
       minSalary: grade.minSalary,
       midSalary: grade.midSalary,
       maxSalary: grade.maxSalary,
+      singleValueSalary: grade.singleValueSalary || grade.midSalary || grade.minSalary || 10000000,
       effectiveDate: grade.effectiveDate || new Date().toISOString().split('T')[0],
       notes: grade.notes || '',
     });
@@ -1367,40 +1371,79 @@ export const OrganizationManagement: React.FC = () => {
       showToast('Kode Grade dan Nama Level wajib diisi.');
       return;
     }
-    if (gradeFormData.minSalary <= 0 || gradeFormData.maxSalary <= 0) {
-      showToast('Gaji minimum dan maksimum harus lebih dari 0.');
-      return;
-    }
-    if (gradeFormData.minSalary > gradeFormData.maxSalary) {
-      showToast('Gaji minimum tidak boleh lebih besar dari gaji maksimum.');
-      return;
-    }
 
-    const calculatedMid = Number(gradeFormData.midSalary) || Math.round((Number(gradeFormData.minSalary) + Number(gradeFormData.maxSalary)) / 2);
+    if (jobGradingScheme === 'single') {
+      if (gradeFormData.minSalary <= 0 || gradeFormData.maxSalary <= 0) {
+        showToast('Gaji minimum dan maksimum harus lebih dari 0.');
+        return;
+      }
+      if (gradeFormData.minSalary > gradeFormData.maxSalary) {
+        showToast('Gaji minimum tidak boleh lebih besar dari gaji maksimum.');
+        return;
+      }
 
-    if (gradeFormData.id) {
-      updateGradeSalaryRange(gradeFormData.id, {
-        gradeCode: gradeFormData.gradeCode.trim(),
-        gradeName: gradeFormData.gradeName.trim(),
-        minSalary: Number(gradeFormData.minSalary),
-        midSalary: calculatedMid,
-        maxSalary: Number(gradeFormData.maxSalary),
-        effectiveDate: gradeFormData.effectiveDate,
-        notes: gradeFormData.notes.trim(),
-      });
-      showToast(`Master Grade ${gradeFormData.gradeCode} berhasil diperbarui.`);
+      const calculatedMid = Number(gradeFormData.midSalary) || Math.round((Number(gradeFormData.minSalary) + Number(gradeFormData.maxSalary)) / 2);
+
+      if (gradeFormData.id) {
+        updateGradeSalaryRange(gradeFormData.id, {
+          gradeCode: gradeFormData.gradeCode.trim(),
+          gradeName: gradeFormData.gradeName.trim(),
+          minSalary: Number(gradeFormData.minSalary),
+          midSalary: calculatedMid,
+          maxSalary: Number(gradeFormData.maxSalary),
+          singleValueSalary: calculatedMid,
+          effectiveDate: gradeFormData.effectiveDate,
+          notes: gradeFormData.notes.trim(),
+        });
+        showToast(`Master Grade ${gradeFormData.gradeCode} berhasil diperbarui (Skema: Single Grade).`);
+      } else {
+        addGradeSalaryRange({
+          gradeCode: gradeFormData.gradeCode.trim(),
+          gradeName: gradeFormData.gradeName.trim(),
+          minSalary: Number(gradeFormData.minSalary),
+          midSalary: calculatedMid,
+          maxSalary: Number(gradeFormData.maxSalary),
+          singleValueSalary: calculatedMid,
+          effectiveDate: gradeFormData.effectiveDate,
+          version: 1,
+          notes: gradeFormData.notes.trim(),
+        });
+        showToast(`Master Grade baru ${gradeFormData.gradeCode} berhasil ditambahkan (Skema: Single Grade).`);
+      }
     } else {
-      addGradeSalaryRange({
-        gradeCode: gradeFormData.gradeCode.trim(),
-        gradeName: gradeFormData.gradeName.trim(),
-        minSalary: Number(gradeFormData.minSalary),
-        midSalary: calculatedMid,
-        maxSalary: Number(gradeFormData.maxSalary),
-        effectiveDate: gradeFormData.effectiveDate,
-        version: 1,
-        notes: gradeFormData.notes.trim(),
-      });
-      showToast(`Master Grade baru ${gradeFormData.gradeCode} berhasil ditambahkan.`);
+      // Broadbanding: Hanya ada 1 nilai pasti remunerasi tunggal (tanpa rentang baku min/mid/max)
+      const val = Number(gradeFormData.singleValueSalary);
+      if (val <= 0) {
+        showToast('Nilai Remunerasi Baku Tunggal harus lebih dari 0.');
+        return;
+      }
+
+      if (gradeFormData.id) {
+        updateGradeSalaryRange(gradeFormData.id, {
+          gradeCode: gradeFormData.gradeCode.trim(),
+          gradeName: gradeFormData.gradeName.trim(),
+          minSalary: val,
+          midSalary: val,
+          maxSalary: val,
+          singleValueSalary: val,
+          effectiveDate: gradeFormData.effectiveDate,
+          notes: gradeFormData.notes.trim(),
+        });
+        showToast(`Master Grade ${gradeFormData.gradeCode} berhasil diperbarui (Skema: Broadbanding - 1 Nilai Tunggal).`);
+      } else {
+        addGradeSalaryRange({
+          gradeCode: gradeFormData.gradeCode.trim(),
+          gradeName: gradeFormData.gradeName.trim(),
+          minSalary: val,
+          midSalary: val,
+          maxSalary: val,
+          singleValueSalary: val,
+          effectiveDate: gradeFormData.effectiveDate,
+          version: 1,
+          notes: gradeFormData.notes.trim(),
+        });
+        showToast(`Master Grade baru ${gradeFormData.gradeCode} berhasil ditambahkan (Skema: Broadbanding - 1 Nilai Tunggal).`);
+      }
     }
     setIsGradeModalOpen(false);
   };
@@ -1418,13 +1461,16 @@ export const OrganizationManagement: React.FC = () => {
     if (!assigningPosition) return;
     assignEmployeeToPosition(assigningPosition.id, selectedAssignEmployeeId || null);
     const emp = employees.find((e) => e.id === selectedAssignEmployeeId);
-    showToast(
-      selectedAssignEmployeeId
-        ? `Karyawan ${emp?.fullName || ''} berhasil ditetapkan menduduki posisi ${assigningPosition.title}.`
-        : `Formasi posisi ${assigningPosition.title} telah dikosongkan (Vacant).`
-    );
+    
+    if (selectedAssignEmployeeId) {
+      const gradeNotice = selectedAssignGrade ? ` pada ${selectedAssignGrade}` : '';
+      showToast(`Karyawan ${emp?.fullName || ''} berhasil ditetapkan menduduki posisi ${assigningPosition.title}${gradeNotice}.`);
+    } else {
+      showToast(`Formasi posisi ${assigningPosition.title} telah dikosongkan (Vacant).`);
+    }
     setAssigningPosition(null);
     setSelectedAssignEmployeeId('');
+    setSelectedAssignGrade('');
   };
 
   // Handler Auto-fill formasi kursi dari Master Jabatan
@@ -3168,28 +3214,49 @@ export const OrganizationManagement: React.FC = () => {
                             <span className="font-mono text-xs font-bold px-2.5 py-0.5 bg-amber-50 text-amber-800 rounded border border-amber-200">
                               {grade.gradeCode}
                             </span>
-                            <span className="text-[10px] font-semibold px-2 py-0.5 bg-slate-100 text-slate-600 rounded">
-                              Spread +{spreadPercent}%
-                            </span>
+                            {jobGradingScheme === 'single' ? (
+                              <span className="text-[10px] font-semibold px-2 py-0.5 bg-slate-100 text-slate-600 rounded">
+                                Spread +{spreadPercent}%
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-bold px-2 py-0.5 bg-amber-100 text-amber-900 rounded border border-amber-300">
+                                1 Nilai Tunggal
+                              </span>
+                            )}
                           </div>
 
                           <h4 className="font-bold text-slate-900 text-sm group-hover:text-amber-700 transition-colors">
                             {grade.gradeName}
                           </h4>
 
-                          {/* Salary Range Summary */}
-                          <div className="mt-3 p-2.5 bg-slate-50 rounded-lg border border-slate-100 space-y-1.5">
-                            <div className="flex items-center justify-between text-[11px]">
-                              <span className="text-slate-500">Rentang Acuan:</span>
-                              <span className="font-mono font-bold text-slate-900">
-                                Rp {(grade.minSalary / 1000000).toFixed(1)}M – {(grade.maxSalary / 1000000).toFixed(1)}M
-                              </span>
+                          {/* Salary Range / Single Value Summary */}
+                          {jobGradingScheme === 'single' ? (
+                            <div className="mt-3 p-2.5 bg-slate-50 rounded-lg border border-slate-100 space-y-1.5">
+                              <div className="flex items-center justify-between text-[11px]">
+                                <span className="text-slate-500">Rentang Baku:</span>
+                                <span className="font-mono font-bold text-slate-900">
+                                  Rp {(grade.minSalary / 1000000).toFixed(1)}M – {(grade.maxSalary / 1000000).toFixed(1)}M
+                                </span>
+                              </div>
+                              <div className="flex items-center justify-between text-[10px] text-slate-400">
+                                <span>Midpoint: Rp {(grade.midSalary / 1000000).toFixed(1)}M</span>
+                                <span>SK Efektif: {grade.effectiveDate}</span>
+                              </div>
                             </div>
-                            <div className="flex items-center justify-between text-[10px] text-slate-400">
-                              <span>Midpoint: Rp {(grade.midSalary / 1000000).toFixed(1)}M</span>
-                              <span>SK Efektif: {grade.effectiveDate}</span>
+                          ) : (
+                            <div className="mt-3 p-2.5 bg-amber-50/70 rounded-lg border border-amber-200 space-y-1.5">
+                              <div className="flex items-center justify-between text-[11px]">
+                                <span className="text-amber-800 font-semibold">Remunerasi Baku Tunggal:</span>
+                                <span className="font-mono font-black text-amber-950 text-xs">
+                                  Rp {((grade.singleValueSalary || grade.midSalary || grade.minSalary) / 1000000).toFixed(1)} Juta
+                                </span>
+                              </div>
+                              <div className="flex items-center justify-between text-[10px] text-amber-700/80">
+                                <span>Pasti (Tanpa Min/Max)</span>
+                                <span>SK: {grade.effectiveDate}</span>
+                              </div>
                             </div>
-                          </div>
+                          )}
 
                           {grade.notes && (
                             <p className="text-[11px] text-slate-500 mt-2 line-clamp-2 leading-relaxed">
@@ -3485,7 +3552,23 @@ export const OrganizationManagement: React.FC = () => {
                                   </div>
                                 </div>
                               )}
-                              <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-indigo-600 group-hover:translate-x-1 transition-all shrink-0 ml-2" />
+                              
+                              <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setAssigningPosition(pos);
+                                    setSelectedAssignEmployeeId(pos.currentEmployeeId || '');
+                                    setSelectedAssignGrade('');
+                                  }}
+                                  className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-[11px] font-bold border border-indigo-200 transition-colors flex items-center gap-1"
+                                >
+                                  <UserCheck className="w-3 h-3" />
+                                  <span>{pos.isVacant || !pos.currentEmployeeId ? 'Assign' : 'Ganti'}</span>
+                                </button>
+                                <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-indigo-600 group-hover:translate-x-1 transition-all" />
+                              </div>
                             </div>
                           </div>
                         );
@@ -3583,19 +3666,47 @@ export const OrganizationManagement: React.FC = () => {
                                 <td className="py-3.5 px-4">
                                   {pos.isVacant || !pos.currentEmployeeId ? (
                                     <div className="flex items-center gap-2">
-                                      <span className="px-2.5 py-1 bg-rose-50 text-rose-700 rounded-md border border-rose-200 text-[11px] font-semibold shrink-0">
-                                        Posisi Kosong (Vacant)
+                                      <span className="px-2 py-0.5 bg-rose-50 text-rose-700 rounded-md border border-rose-200 text-[10px] font-semibold shrink-0">
+                                        Posisi Kosong
                                       </span>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setAssigningPosition(pos);
+                                          setSelectedAssignEmployeeId('');
+                                          setSelectedAssignGrade('');
+                                        }}
+                                        className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-colors shrink-0"
+                                      >
+                                        <UserCheck className="w-3 h-3" />
+                                        <span>Tetapkan</span>
+                                      </button>
                                     </div>
                                   ) : (
-                                    <div className="flex items-center gap-2.5">
-                                      <div className="w-7 h-7 rounded-full bg-indigo-600 text-white font-bold text-[10px] flex items-center justify-center shrink-0">
-                                        {occupant?.fullName.charAt(0) || 'K'}
+                                    <div className="flex items-center justify-between gap-2">
+                                      <div className="flex items-center gap-2 min-w-0">
+                                        <div className="w-7 h-7 rounded-full bg-indigo-600 text-white font-bold text-[10px] flex items-center justify-center shrink-0">
+                                          {occupant?.fullName.charAt(0) || 'K'}
+                                        </div>
+                                        <div className="min-w-0">
+                                          <div className="font-semibold text-slate-900 truncate max-w-[140px]">{occupant?.fullName || 'Karyawan Aktif'}</div>
+                                          <div className="text-[10px] text-slate-400 font-mono">{occupant?.nik || 'NIK-HRMS'}</div>
+                                        </div>
                                       </div>
-                                      <div>
-                                        <div className="font-semibold text-slate-900">{occupant?.fullName || 'Karyawan Aktif'}</div>
-                                        <div className="text-[10px] text-slate-400 font-mono">{occupant?.nik || 'NIK-HRMS'}</div>
-                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setAssigningPosition(pos);
+                                          setSelectedAssignEmployeeId(pos.currentEmployeeId || '');
+                                          setSelectedAssignGrade('');
+                                        }}
+                                        className="px-2 py-1 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg text-[11px] font-semibold shrink-0 transition-colors border border-transparent hover:border-indigo-200"
+                                        title="Ubah Pemangku Jabatan"
+                                      >
+                                        Ganti
+                                      </button>
                                     </div>
                                   )}
                                 </td>
@@ -4090,6 +4201,21 @@ export const OrganizationManagement: React.FC = () => {
                   </button>
 
                   <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const targetPos = previewPosition;
+                        setPreviewPosition(null);
+                        setAssigningPosition(targetPos);
+                        setSelectedAssignEmployeeId(targetPos.currentEmployeeId || '');
+                        setSelectedAssignGrade('');
+                      }}
+                      className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 border border-indigo-200"
+                    >
+                      <UserCheck className="w-3.5 h-3.5" />
+                      <span>{previewPosition.isVacant || !previewPosition.currentEmployeeId ? 'Tetapkan Pemangku' : 'Ganti Pemangku'}</span>
+                    </button>
+
                     <button
                       type="button"
                       onClick={() => {
@@ -5907,28 +6033,163 @@ export const OrganizationManagement: React.FC = () => {
               </button>
             </div>
 
-            <div className="p-4 sm:p-5 space-y-4 text-xs overflow-y-auto flex-1">
-              <div className="p-3 bg-indigo-50/70 border border-indigo-200 rounded-xl space-y-1">
-                <div className="text-[10px] text-indigo-600 font-bold uppercase tracking-wider">Formasi Kursi:</div>
-                <div className="text-sm font-bold text-slate-900">{assigningPosition.title}</div>
-                <div className="text-slate-600 text-[11px]">
-                  Divisi: <b>{assigningPosition.division || currentEntity.name}</b> • Level Tier: <b>L{assigningPosition.level}</b>
-                </div>
-              </div>
+            {(() => {
+              const matchedMjp = entityMasterPositions.find(
+                (m) => m.title.toLowerCase() === assigningPosition.title.toLowerCase()
+              );
 
-              <div>
-                <EmployeeDropdownSelect
-                  value={selectedAssignEmployeeId}
-                  onChange={(empId) => setSelectedAssignEmployeeId(empId)}
-                  employees={employees}
-                  label="Pilih Karyawan Aktif Perusahaan *"
-                  allowVacant={true}
-                />
-                <p className="text-[10px] text-slate-500 mt-1">
-                  Karyawan yang dipilih akan tercatat sebagai pemegang resmi kursi formasi ini di seluruh sistem HRMS.
-                </p>
-              </div>
-            </div>
+              // Tentukan apakah posisi ini berskema single atau broadbanding
+              const isBroadbandingScheme =
+                matchedMjp?.gradingScheme === 'broadbanding' ||
+                jobGradingScheme === 'broadbanding' ||
+                Boolean(matchedMjp?.jobGrade && matchedMjp.jobGrade.includes('-'));
+
+              // Parsing rentang grade jika broadbanding
+              let bandGrades: GradeSalaryRange[] = [];
+              if (isBroadbandingScheme) {
+                const minG = matchedMjp?.minGrade || (matchedMjp?.jobGrade?.split('-')[0]?.trim()) || 'Grade 07';
+                const maxG = matchedMjp?.maxGrade || (matchedMjp?.jobGrade?.split('-')[1]?.trim()) || 'Grade 09';
+                
+                // Cari index grade
+                const minIdx = gradeSalaryRanges.findIndex((g) => g.gradeCode === minG);
+                const maxIdx = gradeSalaryRanges.findIndex((g) => g.gradeCode === maxG);
+                
+                if (minIdx !== -1 && maxIdx !== -1) {
+                  const start = Math.min(minIdx, maxIdx);
+                  const end = Math.max(minIdx, maxIdx);
+                  bandGrades = gradeSalaryRanges.slice(start, end + 1);
+                } else {
+                  bandGrades = gradeSalaryRanges.filter((g) => g.gradeCode === minG || g.gradeCode === maxG);
+                }
+                if (bandGrades.length === 0) {
+                  bandGrades = gradeSalaryRanges.slice(0, 3);
+                }
+              }
+
+              // Jika single grade
+              const definitiveGradeCode = matchedMjp?.jobGrade || `Grade ${String(Math.min(12, Math.max(1, assigningPosition.level * 2 + 2))).padStart(2, '0')}`;
+              const definitiveGrade = gradeSalaryRanges.find((g) => g.gradeCode === definitiveGradeCode) || gradeSalaryRanges[0];
+
+              const currentSelectedGrade = isBroadbandingScheme
+                ? (selectedAssignGrade || bandGrades[0]?.gradeCode)
+                : definitiveGradeCode;
+
+              const activeGradeObj = gradeSalaryRanges.find((g) => g.gradeCode === currentSelectedGrade);
+
+              return (
+                <div className="p-4 sm:p-5 space-y-4 text-xs overflow-y-auto flex-1">
+                  <div className="p-3 bg-indigo-50/70 border border-indigo-200 rounded-xl space-y-1">
+                    <div className="text-[10px] text-indigo-600 font-bold uppercase tracking-wider">Formasi Kursi:</div>
+                    <div className="text-sm font-bold text-slate-900">{assigningPosition.title}</div>
+                    <div className="text-slate-600 text-[11px]">
+                      Divisi: <b>{assigningPosition.division || currentEntity.name}</b> • Level Tier: <b>L{assigningPosition.level}</b>
+                    </div>
+                  </div>
+
+                  <div>
+                    <EmployeeDropdownSelect
+                      value={selectedAssignEmployeeId}
+                      onChange={(empId) => setSelectedAssignEmployeeId(empId)}
+                      employees={employees}
+                      label="Pilih Karyawan Aktif Perusahaan *"
+                      allowVacant={true}
+                    />
+                    <p className="text-[10px] text-slate-500 mt-1">
+                      Karyawan yang dipilih akan tercatat sebagai pemegang resmi kursi formasi ini di seluruh sistem HRMS.
+                    </p>
+                  </div>
+
+                  {/* Penerapan Single Grade vs Broadbanding */}
+                  {!isBroadbandingScheme ? (
+                    /* SINGLE GRADE: 1 Jabatan 1 Grade pasti, didalam grade ditentukan rentang baku min/mid/max */
+                    <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                          <span>Skema: Single Grade</span>
+                        </span>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+                          Grade Definitif (Pasti)
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-600 leading-relaxed">
+                        Sesuai skema <b>Single Grade</b>, 1 Jabatan = 1 Grade definitif. Karyawan yang ditentukan menduduki jabatan <b>{assigningPosition.title}</b> sudah pasti gradenya:
+                      </p>
+                      <div className="p-2.5 bg-white rounded-lg border border-slate-200 flex items-center justify-between">
+                        <div>
+                          <div className="font-mono font-bold text-xs text-indigo-900">{definitiveGrade?.gradeCode || definitiveGradeCode}</div>
+                          <div className="text-[10px] text-slate-500">{definitiveGrade?.gradeName || 'Level Baku'}</div>
+                        </div>
+                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                          Grade Otomatis Pasti
+                        </span>
+                      </div>
+                      {definitiveGrade && (
+                        <div className="p-2.5 bg-indigo-50/60 rounded-lg border border-indigo-200 text-[11px] space-y-1">
+                          <div className="flex justify-between text-indigo-950">
+                            <span className="text-slate-600">Rentang Remunerasi Baku:</span>
+                            <span className="font-mono font-bold">
+                              Rp {(definitiveGrade.minSalary / 1000000).toFixed(1)}M – {(definitiveGrade.maxSalary / 1000000).toFixed(1)}M
+                            </span>
+                          </div>
+                          <div className="flex justify-between text-[10px] text-slate-500">
+                            <span>Midpoint Acuan:</span>
+                            <span className="font-mono font-semibold">Rp {(definitiveGrade.midSalary / 1000000).toFixed(1)}M</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    /* BROADBANDING: 1 Jabatan rentang grade, karyawan bisa di antara rentang grade, remunerasi 1 nilai */
+                    <div className="p-3.5 bg-amber-50/70 rounded-xl border border-amber-200 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-amber-950 text-xs flex items-center gap-1.5">
+                          <Scale className="w-4 h-4 text-amber-700" />
+                          <span>Skema: Broadbanding (Pita Lebar)</span>
+                        </span>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
+                          Pilihan Grade Fleksibel
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-amber-900 leading-relaxed">
+                        Sesuai ketentuan <b>Broadbanding</b>, 1 Jabatan terdapat rentang grade. Seseorang yang ditentukan jabatan ini <b>bisa jadi di antara rentang grade tersebut</b>. Di dalam gradenya tidak ada rentang baku remunerasi, hanya ada <b>1 nilai pasti</b>.
+                      </p>
+
+                      <div>
+                        <label className="font-bold text-slate-800 text-xs block mb-1">
+                          Pilih Grade Karyawan (Rentang Jabatan):
+                        </label>
+                        <select
+                          value={currentSelectedGrade}
+                          onChange={(e) => setSelectedAssignGrade(e.target.value)}
+                          className="w-full px-3 py-2 border border-amber-300 rounded-lg bg-white font-mono text-xs font-semibold focus:outline-amber-600"
+                        >
+                          {bandGrades.map((g) => (
+                            <option key={g.id} value={g.gradeCode}>
+                              {g.gradeCode} — {g.gradeName} (Remunerasi Tunggal: Rp {((g.singleValueSalary || g.midSalary || g.minSalary) / 1000000).toFixed(1)}M)
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {activeGradeObj && (
+                        <div className="p-3 bg-white rounded-lg border border-amber-200 text-xs space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span className="text-slate-600 font-medium">1 Nilai Remunerasi Pasti Grade Ini:</span>
+                            <span className="font-mono font-black text-amber-950 text-sm">
+                              Rp {((activeGradeObj.singleValueSalary || activeGradeObj.midSalary || activeGradeObj.minSalary) || 0).toLocaleString('id-ID')}
+                            </span>
+                          </div>
+                          <div className="text-[10px] text-amber-800">
+                            * Nominal tunggal baku tanpa rentang minimum/maksimum.
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Pinned Bottom Footer Actions */}
             <div className="p-3 sm:p-4 bg-slate-50 border-t border-slate-200 shrink-0 flex justify-end gap-2">
@@ -7436,76 +7697,134 @@ export const OrganizationManagement: React.FC = () => {
                   />
                 </div>
 
-                {/* Gaji Acuan Bracket */}
-                <div className="p-3.5 bg-amber-50/60 rounded-xl border border-amber-200 space-y-3">
-                  <div className="font-bold text-amber-950 text-xs flex items-center gap-1.5">
-                    <Scale className="w-3.5 h-3.5 text-amber-700" />
-                    <span>Rentang Bracket Remunerasi Acuan (Rupiah)</span>
-                  </div>
+                {/* Gaji Acuan Remunerasi: Single Grade vs Broadbanding */}
+                {jobGradingScheme === 'single' ? (
+                  <div className="p-3.5 bg-indigo-50/60 rounded-xl border border-indigo-200 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="font-bold text-indigo-950 text-xs flex items-center gap-1.5">
+                        <Scale className="w-3.5 h-3.5 text-indigo-700" />
+                        <span>Rentang Baku Remunerasi Acuan (Single Grade)</span>
+                      </div>
+                      <span className="text-[10px] font-bold text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded-full">
+                        Min / Mid / Max
+                      </span>
+                    </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    <p className="text-[10px] text-indigo-800 leading-relaxed">
+                      Pada skema Single Grade, grade menentukan rentang baku remunerasi (Minimum, Midpoint, Maksimum). Satu jabatan terikat pada 1 grade definitif.
+                    </p>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                      <div>
+                        <label className="text-[11px] font-semibold text-slate-700 block mb-1">Minimum (Rp) *</label>
+                        <input
+                          type="number"
+                          required
+                          min={0}
+                          step={500000}
+                          value={gradeFormData.minSalary}
+                          onChange={(e) => {
+                            const min = Number(e.target.value);
+                            const max = Number(gradeFormData.maxSalary) || min;
+                            setGradeFormData({
+                              ...gradeFormData,
+                              minSalary: min,
+                              midSalary: Math.round((min + max) / 2),
+                            });
+                          }}
+                          className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg font-mono text-xs focus:outline-indigo-600"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-[11px] font-semibold text-slate-700 block mb-1">Midpoint (Rp)</label>
+                        <input
+                          type="number"
+                          min={0}
+                          step={500000}
+                          value={gradeFormData.midSalary}
+                          onChange={(e) => setGradeFormData({ ...gradeFormData, midSalary: Number(e.target.value) })}
+                          className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg font-mono text-xs focus:outline-indigo-600"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-[11px] font-semibold text-slate-700 block mb-1">Maksimum (Rp) *</label>
+                        <input
+                          type="number"
+                          required
+                          min={0}
+                          step={500000}
+                          value={gradeFormData.maxSalary}
+                          onChange={(e) => {
+                            const max = Number(e.target.value);
+                            const min = Number(gradeFormData.minSalary) || 0;
+                            setGradeFormData({
+                              ...gradeFormData,
+                              maxSalary: max,
+                              midSalary: Math.round((min + max) / 2),
+                            });
+                          }}
+                          className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg font-mono text-xs focus:outline-indigo-600"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="text-[11px] text-indigo-900 bg-white/80 p-2 rounded-lg border border-indigo-200/80 flex items-center justify-between">
+                      <span>Rentang Baku Terbentuk:</span>
+                      <span className="font-mono font-bold text-indigo-950">
+                        Rp {Number(gradeFormData.minSalary).toLocaleString('id-ID')} — Rp {Number(gradeFormData.maxSalary).toLocaleString('id-ID')}
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-3.5 bg-amber-50/70 rounded-xl border border-amber-200 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="font-bold text-amber-950 text-xs flex items-center gap-1.5">
+                        <Scale className="w-3.5 h-3.5 text-amber-700" />
+                        <span>Nilai Remunerasi Baku Tunggal (Broadbanding)</span>
+                      </div>
+                      <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-300">
+                        1 Nilai Pasti
+                      </span>
+                    </div>
+
+                    <p className="text-[10px] text-amber-800 leading-relaxed">
+                      Sesuai prinsip Broadbanding: di dalam grade <b>tidak ada rentang baku remunerasi (tanpa min/mid/max)</b>, melainkan hanya ada <b>1 nilai pasti tunggal</b>. Rentang grade nantinya ditentukan pada master jabatan.
+                    </p>
+
                     <div>
-                      <label className="text-[11px] font-semibold text-slate-700 block mb-1">Minimum (Rp) *</label>
+                      <label className="text-[11px] font-semibold text-slate-700 block mb-1">
+                        Nominal Remunerasi Baku Tunggal (Rp) *
+                      </label>
                       <input
                         type="number"
                         required
                         min={0}
                         step={500000}
-                        value={gradeFormData.minSalary}
+                        value={gradeFormData.singleValueSalary}
                         onChange={(e) => {
-                          const min = Number(e.target.value);
-                          const max = Number(gradeFormData.maxSalary) || min;
+                          const val = Number(e.target.value);
                           setGradeFormData({
                             ...gradeFormData,
-                            minSalary: min,
-                            midSalary: Math.round((min + max) / 2),
+                            singleValueSalary: val,
+                            minSalary: val,
+                            midSalary: val,
+                            maxSalary: val,
                           });
                         }}
-                        className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg font-mono text-xs focus:outline-amber-600"
+                        className="w-full px-3 py-2 border border-amber-300 rounded-lg font-mono text-xs font-bold focus:outline-amber-600"
                       />
                     </div>
 
-                    <div>
-                      <label className="text-[11px] font-semibold text-slate-700 block mb-1">Midpoint (Rp)</label>
-                      <input
-                        type="number"
-                        min={0}
-                        step={500000}
-                        value={gradeFormData.midSalary}
-                        onChange={(e) => setGradeFormData({ ...gradeFormData, midSalary: Number(e.target.value) })}
-                        className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg font-mono text-xs focus:outline-amber-600"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-[11px] font-semibold text-slate-700 block mb-1">Maksimum (Rp) *</label>
-                      <input
-                        type="number"
-                        required
-                        min={0}
-                        step={500000}
-                        value={gradeFormData.maxSalary}
-                        onChange={(e) => {
-                          const max = Number(e.target.value);
-                          const min = Number(gradeFormData.minSalary) || 0;
-                          setGradeFormData({
-                            ...gradeFormData,
-                            maxSalary: max,
-                            midSalary: Math.round((min + max) / 2),
-                          });
-                        }}
-                        className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg font-mono text-xs focus:outline-amber-600"
-                      />
+                    <div className="text-[11px] text-amber-900 bg-white p-2.5 rounded-lg border border-amber-200 flex items-center justify-between">
+                      <span className="font-medium">Remunerasi Pasti Grade Ini:</span>
+                      <span className="font-mono font-black text-amber-950 text-sm">
+                        Rp {Number(gradeFormData.singleValueSalary || 0).toLocaleString('id-ID')}
+                      </span>
                     </div>
                   </div>
-
-                  <div className="text-[11px] text-amber-900 bg-white/80 p-2 rounded-lg border border-amber-200/80 flex items-center justify-between">
-                    <span>Rentang Acuan Terbentuk:</span>
-                    <span className="font-mono font-bold text-amber-950">
-                      Rp {Number(gradeFormData.minSalary).toLocaleString('id-ID')} — Rp {Number(gradeFormData.maxSalary).toLocaleString('id-ID')}
-                    </span>
-                  </div>
-                </div>
+                )}
 
                 <div>
                   <label className="font-semibold text-slate-700 block mb-1">Catatan Kualifikasi & Uraian Jenjang</label>
@@ -7582,9 +7901,15 @@ export const OrganizationManagement: React.FC = () => {
                   <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
                     SK Efektif: {previewGrade.effectiveDate}
                   </span>
-                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                    Spread Remunerasi: +{Math.round(((previewGrade.maxSalary - previewGrade.minSalary) / (previewGrade.minSalary || 1)) * 100)}%
-                  </span>
+                  {jobGradingScheme === 'single' ? (
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      Spread Remunerasi: +{Math.round(((previewGrade.maxSalary - previewGrade.minSalary) / (previewGrade.minSalary || 1)) * 100)}%
+                    </span>
+                  ) : (
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                      Broadbanding: 1 Nilai Remunerasi Tunggal
+                    </span>
+                  )}
                 </div>
                 <h4 className="text-base font-bold text-slate-900 mt-2">{previewGrade.gradeName}</h4>
                 {previewGrade.notes && (
@@ -7594,30 +7919,50 @@ export const OrganizationManagement: React.FC = () => {
                 )}
               </div>
 
-              {/* Bracket Cards */}
-              <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
-                <span className="text-[11px] font-bold text-slate-700 block">Rentang Remunerasi Baku:</span>
-                <div className="grid grid-cols-3 gap-2 text-center">
-                  <div className="p-2 bg-white rounded-lg border border-slate-200">
-                    <span className="text-[10px] text-slate-400 block">Minimum</span>
-                    <span className="font-mono font-bold text-slate-900 text-xs">
-                      Rp {(previewGrade.minSalary / 1000000).toFixed(1)} Juta
-                    </span>
-                  </div>
-                  <div className="p-2 bg-white rounded-lg border border-amber-200 bg-amber-50/30">
-                    <span className="text-[10px] text-amber-700 block font-semibold">Midpoint</span>
-                    <span className="font-mono font-bold text-amber-900 text-xs">
-                      Rp {(previewGrade.midSalary / 1000000).toFixed(1)} Juta
-                    </span>
-                  </div>
-                  <div className="p-2 bg-white rounded-lg border border-slate-200">
-                    <span className="text-[10px] text-slate-400 block">Maksimum</span>
-                    <span className="font-mono font-bold text-slate-900 text-xs">
-                      Rp {(previewGrade.maxSalary / 1000000).toFixed(1)} Juta
-                    </span>
+              {/* Remuneration Cards: Single Grade vs Broadbanding */}
+              {jobGradingScheme === 'single' ? (
+                <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                  <span className="text-[11px] font-bold text-slate-700 block">Rentang Remunerasi Baku:</span>
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div className="p-2 bg-white rounded-lg border border-slate-200">
+                      <span className="text-[10px] text-slate-400 block">Minimum</span>
+                      <span className="font-mono font-bold text-slate-900 text-xs">
+                        Rp {(previewGrade.minSalary / 1000000).toFixed(1)} Juta
+                      </span>
+                    </div>
+                    <div className="p-2 bg-white rounded-lg border border-amber-200 bg-amber-50/30">
+                      <span className="text-[10px] text-amber-700 block font-semibold">Midpoint</span>
+                      <span className="font-mono font-bold text-amber-900 text-xs">
+                        Rp {(previewGrade.midSalary / 1000000).toFixed(1)} Juta
+                      </span>
+                    </div>
+                    <div className="p-2 bg-white rounded-lg border border-slate-200">
+                      <span className="text-[10px] text-slate-400 block">Maksimum</span>
+                      <span className="font-mono font-bold text-slate-900 text-xs">
+                        Rp {(previewGrade.maxSalary / 1000000).toFixed(1)} Juta
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </div>
+              ) : (
+                <div className="p-4 bg-amber-50/70 rounded-xl border border-amber-200 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-amber-900">Nilai Remunerasi Baku Tunggal:</span>
+                    <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-300">
+                      Nominal Pasti
+                    </span>
+                  </div>
+                  <div className="p-3 bg-white rounded-lg border border-amber-200 text-center">
+                    <div className="text-[10px] text-slate-500 mb-0.5">Kompensasi Baku Grade Ini (Tanpa Rentang Min/Max)</div>
+                    <div className="font-mono font-black text-amber-950 text-lg">
+                      Rp {((previewGrade.singleValueSalary || previewGrade.midSalary || previewGrade.minSalary) || 0).toLocaleString('id-ID')}
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-amber-800 leading-snug">
+                    Sistem Broadbanding menerapkan satu nilai tunggal per grade. Fleksibilitas diperoleh dari rentang grade pada Master Jabatan.
+                  </p>
+                </div>
+              )}
 
               {/* Master Jabatan yang Terdaftar Menggunakan Grade ini */}
               <div className="space-y-2">
@@ -7730,3 +8075,5 @@ export const OrganizationManagement: React.FC = () => {
     </div>
   );
 };
+
+export default OrganizationManagement;

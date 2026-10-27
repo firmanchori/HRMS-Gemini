@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { Download, FileText, Printer, CheckCircle2, QrCode, ShieldCheck, Loader2, X } from 'lucide-react';
 import { QRCodeView } from './QRCodeView';
 import { WhatsAppIcon } from './WhatsAppIcon';
@@ -11,6 +11,94 @@ import {
   generateRealQrDataUrl,
 } from '../../utils/documentPdfExporter';
 import { openWhatsAppChat } from '../../utils/whatsappHelper';
+
+interface LiveEditableDocumentPageProps {
+  initialContent: string;
+  highlightTags?: boolean;
+  onContentChange?: (html: string) => void;
+  editorRef?: React.RefObject<HTMLDivElement | null>;
+  className?: string;
+}
+
+const LiveEditableDocumentPage: React.FC<LiveEditableDocumentPageProps> = ({
+  initialContent,
+  highlightTags,
+  onContentChange,
+  editorRef,
+  className,
+}) => {
+  const localRef = useRef<HTMLDivElement>(null);
+  const lastHtmlRef = useRef<string>('');
+
+  useEffect(() => {
+    if (editorRef) {
+      (editorRef as any).current = localRef.current;
+    }
+  }, [editorRef]);
+
+  // Hanya perbarui innerHTML saat initialContent berubah dari luar (misal ganti template atau undo)
+  useEffect(() => {
+    if (localRef.current) {
+      const parsed = parseDocumentContentToHtml(initialContent, highlightTags);
+      if (lastHtmlRef.current !== initialContent && localRef.current.innerHTML !== parsed) {
+        localRef.current.innerHTML = parsed;
+        lastHtmlRef.current = initialContent;
+      }
+    }
+  }, [initialContent, highlightTags]);
+
+  const handleInput = (e: React.FormEvent<HTMLDivElement>) => {
+    const html = e.currentTarget.innerHTML;
+    lastHtmlRef.current = html;
+    onContentChange?.(html);
+  };
+
+  return (
+    <div
+      ref={localRef}
+      contentEditable={true}
+      suppressContentEditableWarning={true}
+      onInput={handleInput}
+      onDragOver={(e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        const token = e.dataTransfer.getData('application/token') || e.dataTransfer.getData('text/plain');
+        if (token) {
+          const textToInsert = token.startsWith('{{') ? token : `{{${token}}}`;
+          if (document.caretRangeFromPoint) {
+            const range = document.caretRangeFromPoint(e.clientX, e.clientY);
+            if (range) {
+              const sel = window.getSelection();
+              sel?.removeAllRanges();
+              sel?.addRange(range);
+            }
+          } else if ((document as any).caretPositionFromPoint) {
+            const pos = (document as any).caretPositionFromPoint(e.clientX, e.clientY);
+            if (pos) {
+              const range = document.createRange();
+              range.setStart(pos.offsetNode, pos.offset);
+              range.collapse(true);
+              const sel = window.getSelection();
+              sel?.removeAllRanges();
+              sel?.addRange(range);
+            }
+          }
+          document.execCommand('insertText', false, textToInsert);
+          if (localRef.current) {
+            const html = localRef.current.innerHTML;
+            lastHtmlRef.current = html;
+            onContentChange?.(html);
+          }
+        }
+      }}
+      className={className}
+      style={{ wordBreak: 'break-word' }}
+    />
+  );
+};
 
 export interface DocumentSignatory {
   id?: string;
@@ -440,7 +528,7 @@ ${tenant?.name || 'Perusahaan'}`;
                               />
                             ) : (
                               <div className="w-14 h-14 rounded bg-indigo-700 text-white flex items-center justify-center font-bold text-2xl shadow-xs shrink-0">
-                                {tenant.logoText || 'N'}
+                                {tenant?.logoText || 'N'}
                               </div>
                             )
                           );
@@ -572,59 +660,20 @@ ${tenant?.name || 'Perusahaan'}`;
 
                   {/* Isi Naskah Halaman Ini (Mendukung Rich-Text Formatting HTML, Visual Table, & Token Drag-n-Drop) */}
                   {isEditable ? (
-                    <div
-                      ref={idx === 0 ? (editorRef as any) : undefined}
-                      contentEditable={true}
-                      suppressContentEditableWarning={true}
-                      onInput={(e) => {
+                    <LiveEditableDocumentPage
+                      initialContent={pageContent}
+                      highlightTags={highlightTags}
+                      editorRef={idx === 0 ? editorRef : undefined}
+                      onContentChange={(newHtml) => {
                         if (totalPages <= 1) {
-                          onContentChange?.(e.currentTarget.innerHTML);
+                          onContentChange?.(newHtml);
                         } else {
                           const updated = [...pages];
-                          updated[idx] = e.currentTarget.innerHTML;
+                          updated[idx] = newHtml;
                           onContentChange?.(updated.join('\n\n[PAGE_BREAK]\n\n'));
                         }
                       }}
-                      onDragOver={(e) => {
-                        e.preventDefault();
-                        e.dataTransfer.dropEffect = 'copy';
-                      }}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        const token = e.dataTransfer.getData('application/token') || e.dataTransfer.getData('text/plain');
-                        if (token) {
-                          const textToInsert = token.startsWith('{{') ? token : `{{${token}}}`;
-                          if (document.caretRangeFromPoint) {
-                            const range = document.caretRangeFromPoint(e.clientX, e.clientY);
-                            if (range) {
-                              const sel = window.getSelection();
-                              sel?.removeAllRanges();
-                              sel?.addRange(range);
-                            }
-                          } else if ((document as any).caretPositionFromPoint) {
-                            const pos = (document as any).caretPositionFromPoint(e.clientX, e.clientY);
-                            if (pos) {
-                              const range = document.createRange();
-                              range.setStart(pos.offsetNode, pos.offset);
-                              range.collapse(true);
-                              const sel = window.getSelection();
-                              sel?.removeAllRanges();
-                              sel?.addRange(range);
-                            }
-                          }
-                          document.execCommand('insertText', false, textToInsert);
-                          if (totalPages <= 1) {
-                            onContentChange?.(e.currentTarget.innerHTML);
-                          } else {
-                            const updated = [...pages];
-                            updated[idx] = e.currentTarget.innerHTML;
-                            onContentChange?.(updated.join('\n\n[PAGE_BREAK]\n\n'));
-                          }
-                        }
-                      }}
                       className="text-[11.5px] leading-relaxed text-slate-800 py-2 document-sheet-body outline-none focus:ring-2 focus:ring-indigo-400/40 p-2.5 min-h-[420px] cursor-text rounded-lg border border-dashed border-indigo-200 bg-white shadow-2xs hover:border-indigo-400 transition-colors"
-                      style={{ wordBreak: 'break-word' }}
-                      dangerouslySetInnerHTML={{ __html: parseDocumentContentToHtml(pageContent, highlightTags) }}
                     />
                   ) : (
                     <div
@@ -724,7 +773,7 @@ ${tenant?.name || 'Perusahaan'}`;
                               {signeeName}
                             </div>
                             <div className="text-[9px] text-slate-500 font-mono">
-                              ID: SIGN-MGT-{tenant.code || 'NTM'}
+                              ID: SIGN-MGT-{tenant?.code || 'NTM'}
                             </div>
                           </div>
 

@@ -592,6 +592,16 @@ export interface JobRequisition {
 // 2. Sourcing & Multi-Channel Job Posting
 export type JobPostingChannel = 'Jobstreet' | 'LinkedIn' | 'Glints' | 'Kalibrr' | 'Website Karir' | 'Website Karir Internal';
 
+export interface JobVacancySlaHistory {
+  id: string;
+  extendedAt: string;
+  extendedBy: string;
+  previousCloseDate: string;
+  newCloseDate: string;
+  addedDays: number;
+  reason: string;
+}
+
 export interface JobVacancy {
   id: string;
   tenantId: string;
@@ -603,6 +613,10 @@ export interface JobVacancy {
   salaryRange: string;
   status: 'Buka' | 'Ditutup';
   postedDate: string;
+  targetCloseDate?: string;
+  slaDays?: number;
+  isClosedBySla?: boolean;
+  slaHistory?: JobVacancySlaHistory[];
   grade?: string;
   requirements?: string;
   description?: string;
@@ -1605,9 +1619,28 @@ export interface GradeSalaryRange {
   minSalary: number;
   midSalary: number;
   maxSalary: number;
+  singleValueSalary?: number; // Nilai Remunerasi Tunggal Baku untuk Skema Broadbanding
   effectiveDate: string;
   version: number;
   notes?: string;
+}
+
+// 31b. General Affairs Asset Category SLA Configuration
+export interface GAAssetCategorySla {
+  id: string;
+  tenantId?: string;
+  category: string;
+  icon?: string;
+  responseSlaHours: number;
+  resolutionSlaHours: number;
+  replacementSlaHours: number;
+  procurementSlaDays: number;
+  picName: string;
+  picRole: string;
+  priorityLevel: 'Rendah' | 'Normal' | 'Tinggi' | 'Kritis';
+  autoEscalate: boolean;
+  notes?: string;
+  updatedAt?: string;
 }
 
 // 32. Salary Components Master & Assignments

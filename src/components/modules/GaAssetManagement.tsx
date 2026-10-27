@@ -33,6 +33,11 @@ import {
   Send,
   Loader2,
   FileDown,
+  Laptop,
+  Armchair,
+  ShieldCheck,
+  Edit2,
+  RotateCcw,
 } from 'lucide-react';
 import {
   GAAsset,
@@ -43,6 +48,7 @@ import {
   GAOfficeSupply,
   GAOfficeSupplyRequest,
   GATicket,
+  GAAssetCategorySla,
 } from '../../types/hrms';
 import { formatRupiah } from '../../utils/taxCalculator';
 import { QRCodeView } from '../common/QRCodeView';
@@ -81,7 +87,7 @@ export const GaAssetManagement: React.FC = () => {
     openFilePreview,
   } = useHrms();
 
-  const [activeTab, setActiveTab] = useState<'aset' | 'mutasi' | 'maintenance' | 'opname' | 'ruang_rapat' | 'kendaraan' | 'atk' | 'tiket_ga' | 'pengaturan'>('aset');
+  const [activeTab, setActiveTab] = useState<'aset' | 'mutasi' | 'maintenance' | 'opname' | 'ruang_rapat' | 'kendaraan' | 'atk' | 'tiket_ga' | 'pengaturan' | 'sla_kategori'>('aset');
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [selectedAssetForQR, setSelectedAssetForQR] = useState<GAAsset | null>(null);
@@ -89,6 +95,141 @@ export const GaAssetManagement: React.FC = () => {
   const [isPrintingQR, setIsPrintingQR] = useState(false);
   const [isExportingQR, setIsExportingQR] = useState(false);
   const [isDocModalOpen, setIsDocModalOpen] = useState(false);
+  const [slaToastMessage, setSlaToastMessage] = useState<string | null>(null);
+
+  // Initial SLA per Kategori Aset
+  const DEFAULT_ASSET_SLAS: GAAssetCategorySla[] = [
+    {
+      id: 'sla-cat-1',
+      category: 'Laptop & Komputer (IT Assets)',
+      icon: 'Laptop',
+      responseSlaHours: 1,
+      resolutionSlaHours: 8,
+      replacementSlaHours: 2,
+      procurementSlaDays: 7,
+      picName: 'Rian Pratama',
+      picRole: 'IT Hardware & Asset Specialist',
+      priorityLevel: 'Tinggi',
+      autoEscalate: true,
+      notes: 'Penyediaan unit cadangan ready-to-use wajib tersedia minimal 2 unit per site.',
+      updatedAt: '2026-10-25',
+    },
+    {
+      id: 'sla-cat-2',
+      category: 'Kendaraan & Mobil Operasional (Fleet)',
+      icon: 'Car',
+      responseSlaHours: 2,
+      resolutionSlaHours: 24,
+      replacementSlaHours: 4,
+      procurementSlaDays: 30,
+      picName: 'Bambang Sudiro',
+      picRole: 'Fleet & Pool Coordinator',
+      priorityLevel: 'Kritis',
+      autoEscalate: true,
+      notes: 'Service berkala wajib di bengkel resmi rekanan dengan garansi pengerjaan.',
+      updatedAt: '2026-10-25',
+    },
+    {
+      id: 'sla-cat-3',
+      category: 'Fasilitas & Gedung (Building & Facility)',
+      icon: 'Building',
+      responseSlaHours: 1,
+      resolutionSlaHours: 12,
+      replacementSlaHours: 4,
+      procurementSlaDays: 14,
+      picName: 'Dedi Kurniawan',
+      picRole: 'Facility & Civil Maintenance Lead',
+      priorityLevel: 'Kritis',
+      autoEscalate: true,
+      notes: 'AC, genset, dan kelistrikan darurat memiliki batas eskalasi 1 jam.',
+      updatedAt: '2026-10-26',
+    },
+    {
+      id: 'sla-cat-4',
+      category: 'Mesin & Peralatan Kantor (Office Equipment)',
+      icon: 'Printer',
+      responseSlaHours: 2,
+      resolutionSlaHours: 16,
+      replacementSlaHours: 8,
+      procurementSlaDays: 14,
+      picName: 'Hendra Gunawan',
+      picRole: 'Office Tech Support',
+      priorityLevel: 'Normal',
+      autoEscalate: false,
+      notes: 'Printer multifungsi & mesin absensi masuk dalam kontrak maintenance berkala.',
+      updatedAt: '2026-10-24',
+    },
+    {
+      id: 'sla-cat-5',
+      category: 'Furnitur & Meja-Kursi (Furniture)',
+      icon: 'Armchair',
+      responseSlaHours: 4,
+      resolutionSlaHours: 48,
+      replacementSlaHours: 24,
+      procurementSlaDays: 14,
+      picName: 'Siti Rahma',
+      picRole: 'General Affairs Officer',
+      priorityLevel: 'Normal',
+      autoEscalate: false,
+      notes: 'Penggantian kursi ergonomis dan workstation kerja departemen.',
+      updatedAt: '2026-10-22',
+    },
+    {
+      id: 'sla-cat-6',
+      category: 'ATK & Supplies (Consumables)',
+      icon: 'Package',
+      responseSlaHours: 1,
+      resolutionSlaHours: 4,
+      replacementSlaHours: 2,
+      procurementSlaDays: 3,
+      picName: 'Maya Anggraini',
+      picRole: 'Pantry & ATK Inventory Controller',
+      priorityLevel: 'Rendah',
+      autoEscalate: false,
+      notes: 'Distribusi reguler setiap hari Selasa & Kamis, permintaan darurat diproses 1 jam.',
+      updatedAt: '2026-10-25',
+    },
+  ];
+
+  const [assetCategorySlas, setAssetCategorySlas] = useState<GAAssetCategorySla[]>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('hrms_ga_asset_sla_settings');
+      if (saved) {
+        try {
+          return JSON.parse(saved);
+        } catch (e) {
+          // ignore
+        }
+      }
+    }
+    return DEFAULT_ASSET_SLAS;
+  });
+
+  const [editingSlaCat, setEditingSlaCat] = useState<GAAssetCategorySla | null>(null);
+
+  const handleSaveCategorySla = (slaToSave: GAAssetCategorySla) => {
+    const updated = assetCategorySlas.map((s) =>
+      s.id === slaToSave.id ? { ...slaToSave, updatedAt: new Date().toISOString().split('T')[0] } : s
+    );
+    setAssetCategorySlas(updated);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('hrms_ga_asset_sla_settings', JSON.stringify(updated));
+    }
+    setEditingSlaCat(null);
+    setSlaToastMessage(`SLA Kategori '${slaToSave.category}' berhasil diperbarui!`);
+    setTimeout(() => setSlaToastMessage(null), 4000);
+  };
+
+  const handleResetDefaultSla = () => {
+    if (confirm('Kembalikan konfigurasi SLA Kategori Aset ke standar default perusahaan?')) {
+      setAssetCategorySlas(DEFAULT_ASSET_SLAS);
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('hrms_ga_asset_sla_settings');
+      }
+      setSlaToastMessage('Konfigurasi SLA Kategori Aset berhasil dikembalikan ke standar default.');
+      setTimeout(() => setSlaToastMessage(null), 4000);
+    }
+  };
 
   const handlePrintQR = async () => {
     if (!qrLabelRef.current) return;
@@ -602,6 +743,18 @@ export const GaAssetManagement: React.FC = () => {
         >
           <Headphones className="w-3.5 h-3.5" />
           <span>GA Helpdesk</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('sla_kategori')}
+          className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
+            activeTab === 'sla_kategori'
+              ? 'border-slate-900 text-slate-950 font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+          }`}
+        >
+          <Clock className="w-3.5 h-3.5" />
+          <span>SLA Kategori Aset</span>
         </button>
 
         <button
@@ -1184,6 +1337,194 @@ export const GaAssetManagement: React.FC = () => {
             >
               Simpan Pengaturan GA
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* TAB SLA KATEGORI ASET */}
+      {activeTab === 'sla_kategori' && (
+        <div className="space-y-4">
+          {/* Header Banner */}
+          <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-5 rounded-2xl shadow-sm">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-indigo-800/80 text-indigo-200 border border-indigo-600 flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-indigo-300" />
+                    <span>General Affairs Service Level Agreement</span>
+                  </span>
+                  <span className="text-xs text-indigo-300 font-medium">Baku Standar Operasional</span>
+                </div>
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <ShieldCheck className="w-5 h-5 text-emerald-400" />
+                  <span>Pengaturan SLA Kategori Aset Perusahaan</span>
+                </h3>
+                <p className="text-xs text-slate-300 max-w-2xl leading-relaxed">
+                  Konfigurasi baku kecepatan waktu tanggap (Response Time), batas perbaikan / servis (Resolution Time), penyediaan unit cadangan sementara (Replacement SLA), dan siklus pengadaan per kategori inventaris General Affairs.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={handleResetDefaultSla}
+                  className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-slate-200 border border-white/15 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                  title="Kembalikan ke standar baku default"
+                >
+                  <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Reset Default</span>
+                </button>
+              </div>
+            </div>
+
+            {/* SLA Metrics Summary */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 pt-4 border-t border-white/10 text-xs">
+              <div className="bg-white/10 backdrop-blur-xs p-3 rounded-xl border border-white/10">
+                <span className="text-[10px] text-indigo-200 block">Kategori Inventaris</span>
+                <span className="text-xl font-black text-white">{assetCategorySlas.length} Kategori</span>
+                <span className="text-[10px] text-emerald-300 block mt-0.5">Semua aktif diawasi</span>
+              </div>
+              <div className="bg-white/10 backdrop-blur-xs p-3 rounded-xl border border-white/10">
+                <span className="text-[10px] text-indigo-200 block">Prioritas Kritis / Tinggi</span>
+                <span className="text-xl font-black text-amber-300">
+                  {assetCategorySlas.filter(s => s.priorityLevel === 'Kritis' || s.priorityLevel === 'Tinggi').length} Kategori
+                </span>
+                <span className="text-[10px] text-amber-200 block mt-0.5">Eskalasi otomatis aktif</span>
+              </div>
+              <div className="bg-white/10 backdrop-blur-xs p-3 rounded-xl border border-white/10">
+                <span className="text-[10px] text-indigo-200 block">Target Respon Rata-rata</span>
+                <span className="text-xl font-black text-indigo-200">1 - 2 Jam</span>
+                <span className="text-[10px] text-indigo-300 block mt-0.5">SLA tanggap tiket</span>
+              </div>
+              <div className="bg-white/10 backdrop-blur-xs p-3 rounded-xl border border-white/10">
+                <span className="text-[10px] text-indigo-200 block">SLA Unit Pengganti</span>
+                <span className="text-xl font-black text-emerald-300">2 - 4 Jam</span>
+                <span className="text-[10px] text-emerald-200 block mt-0.5">Kesiapan unit cadangan</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Cards Grid SLA per Kategori */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {assetCategorySlas.map((sla) => {
+              const isCritical = sla.priorityLevel === 'Kritis';
+              const isHigh = sla.priorityLevel === 'Tinggi';
+
+              return (
+                <div
+                  key={sla.id}
+                  className="bg-white rounded-xl border border-slate-200 p-4 shadow-xs hover:border-indigo-400 hover:shadow-md transition-all flex flex-col justify-between space-y-3.5 group"
+                >
+                  <div className="space-y-3">
+                    {/* Header Kategori */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-9 h-9 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-700 flex items-center justify-center shrink-0">
+                          {sla.icon === 'Laptop' && <Laptop className="w-5 h-5" />}
+                          {sla.icon === 'Car' && <Car className="w-5 h-5" />}
+                          {sla.icon === 'Building' && <Building className="w-5 h-5" />}
+                          {sla.icon === 'Printer' && <Printer className="w-5 h-5" />}
+                          {sla.icon === 'Armchair' && <Armchair className="w-5 h-5" />}
+                          {sla.icon === 'Package' && <Package className="w-5 h-5" />}
+                        </div>
+                        <div>
+                          <h4 className="font-bold text-slate-900 text-xs leading-tight group-hover:text-indigo-700 transition-colors">
+                            {sla.category}
+                          </h4>
+                          <span className="text-[10px] text-slate-500 font-mono">
+                            Update: {sla.updatedAt || '2026-10-25'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <span
+                        className={`text-[9px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
+                          isCritical
+                            ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                            : isHigh
+                            ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                            : 'bg-slate-100 text-slate-700 border border-slate-200'
+                        }`}
+                      >
+                        Prioritas {sla.priorityLevel}
+                      </span>
+                    </div>
+
+                    {/* Matrix Grid SLA Waktu */}
+                    <div className="grid grid-cols-2 gap-2 text-xs bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                      <div className="p-2 bg-white rounded-lg border border-slate-200">
+                        <span className="text-[10px] text-slate-500 block">SLA Respon Awal</span>
+                        <div className="flex items-baseline gap-1 mt-0.5">
+                          <span className="font-mono font-bold text-slate-900 text-sm">{sla.responseSlaHours}</span>
+                          <span className="text-[10px] text-slate-500">Jam Kerja</span>
+                        </div>
+                      </div>
+
+                      <div className="p-2 bg-white rounded-lg border border-slate-200">
+                        <span className="text-[10px] text-slate-500 block">SLA Resolusi / Servis</span>
+                        <div className="flex items-baseline gap-1 mt-0.5">
+                          <span className="font-mono font-bold text-indigo-700 text-sm">{sla.resolutionSlaHours}</span>
+                          <span className="text-[10px] text-slate-500">Jam ({Math.round(sla.resolutionSlaHours / 24 * 10) / 10} Hari)</span>
+                        </div>
+                      </div>
+
+                      <div className="p-2 bg-white rounded-lg border border-slate-200">
+                        <span className="text-[10px] text-slate-500 block">Unit Pengganti (Backup)</span>
+                        <div className="flex items-baseline gap-1 mt-0.5">
+                          <span className="font-mono font-bold text-emerald-700 text-sm">{sla.replacementSlaHours}</span>
+                          <span className="text-[10px] text-slate-500">Jam Maks.</span>
+                        </div>
+                      </div>
+
+                      <div className="p-2 bg-white rounded-lg border border-slate-200">
+                        <span className="text-[10px] text-slate-500 block">Siklus Pengadaan Baru</span>
+                        <div className="flex items-baseline gap-1 mt-0.5">
+                          <span className="font-mono font-bold text-slate-900 text-sm">{sla.procurementSlaDays}</span>
+                          <span className="text-[10px] text-slate-500">Hari Kerja</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* PIC & Escalation Info */}
+                    <div className="space-y-1.5 text-[11px] pt-1">
+                      <div className="flex items-center justify-between text-slate-600">
+                        <span className="text-slate-400">Lead PIC:</span>
+                        <span className="font-bold text-slate-800">{sla.picName}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-slate-500 text-[10px]">
+                        <span>Peran Tim:</span>
+                        <span className="italic">{sla.picRole}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-[10px] pt-1 border-t border-slate-100">
+                        <span className="text-slate-400">Eskalasi Breached:</span>
+                        <span className={`font-semibold ${sla.autoEscalate ? 'text-emerald-700' : 'text-slate-500'}`}>
+                          {sla.autoEscalate ? '● Otomatis ke Head GA' : '○ Manual'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Catatan Operasional */}
+                    {sla.notes && (
+                      <p className="text-[10px] text-slate-500 bg-amber-50/60 p-2 rounded-lg border border-amber-200/80 leading-relaxed">
+                        {sla.notes}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Action Button */}
+                  <div className="pt-2 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => setEditingSlaCat(sla)}
+                      className="w-full py-1.5 px-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                      <span>Ubah Pengaturan SLA</span>
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -2643,8 +2984,219 @@ export const GaAssetManagement: React.FC = () => {
         onClose={() => setIsDocModalOpen(false)}
         title="Pusat Dokumen Resmi General Affairs & Inventaris Aset (BAST)"
         categoryFilter="Pengadaan, Aset & Umum (GA)"
-        defaultTemplateId="tmpl-10"
+        defaultTemplateId="tmpl-15"
       />
+
+      {/* Modal Edit SLA Kategori Aset */}
+      {editingSlaCat && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="p-4 bg-gradient-to-r from-slate-900 to-indigo-950 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-indigo-500/20 rounded-lg border border-indigo-400/30">
+                  <Clock className="w-4 h-4 text-indigo-300" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm">Konfigurasi SLA Kategori Aset</h3>
+                  <p className="text-[11px] text-indigo-200">{editingSlaCat.category}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingSlaCat(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSaveCategorySla(editingSlaCat);
+              }}
+              className="p-5 overflow-y-auto space-y-4 text-xs"
+            >
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">
+                    SLA Respon Awal (Jam) *
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    required
+                    value={editingSlaCat.responseSlaHours}
+                    onChange={(e) =>
+                      setEditingSlaCat({ ...editingSlaCat, responseSlaHours: Number(e.target.value) })
+                    }
+                    className="w-full p-2 border border-slate-300 rounded-lg font-mono font-bold focus:outline-indigo-600"
+                  />
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">Target awal tanggapan tiket</span>
+                </div>
+
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">
+                    SLA Resolusi / Servis (Jam) *
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    required
+                    value={editingSlaCat.resolutionSlaHours}
+                    onChange={(e) =>
+                      setEditingSlaCat({ ...editingSlaCat, resolutionSlaHours: Number(e.target.value) })
+                    }
+                    className="w-full p-2 border border-slate-300 rounded-lg font-mono font-bold focus:outline-indigo-600"
+                  />
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">
+                    Batas perbaikan ({Math.round(editingSlaCat.resolutionSlaHours / 24 * 10) / 10} Hari)
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">
+                    SLA Unit Cadangan / Backup (Jam) *
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    required
+                    value={editingSlaCat.replacementSlaHours}
+                    onChange={(e) =>
+                      setEditingSlaCat({ ...editingSlaCat, replacementSlaHours: Number(e.target.value) })
+                    }
+                    className="w-full p-2 border border-slate-300 rounded-lg font-mono font-bold focus:outline-indigo-600"
+                  />
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">Batas penyediaan unit pinjaman</span>
+                </div>
+
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">
+                    SLA Pengadaan Baru (Hari Kerja) *
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    required
+                    value={editingSlaCat.procurementSlaDays}
+                    onChange={(e) =>
+                      setEditingSlaCat({ ...editingSlaCat, procurementSlaDays: Number(e.target.value) })
+                    }
+                    className="w-full p-2 border border-slate-300 rounded-lg font-mono font-bold focus:outline-indigo-600"
+                  />
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">Lead time pembelian baru</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Tingkat Prioritas Kategori</label>
+                  <select
+                    value={editingSlaCat.priorityLevel}
+                    onChange={(e) =>
+                      setEditingSlaCat({
+                        ...editingSlaCat,
+                        priorityLevel: e.target.value as 'Rendah' | 'Normal' | 'Tinggi' | 'Kritis',
+                      })
+                    }
+                    className="w-full p-2 border border-slate-300 rounded-lg bg-white font-semibold"
+                  >
+                    <option value="Rendah">Rendah</option>
+                    <option value="Normal">Normal</option>
+                    <option value="Tinggi">Tinggi</option>
+                    <option value="Kritis">Kritis</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-2 pt-6">
+                  <input
+                    type="checkbox"
+                    id="autoEscalateCheck"
+                    checked={editingSlaCat.autoEscalate}
+                    onChange={(e) =>
+                      setEditingSlaCat({ ...editingSlaCat, autoEscalate: e.target.checked })
+                    }
+                    className="w-4 h-4 text-indigo-600 rounded"
+                  />
+                  <label htmlFor="autoEscalateCheck" className="text-slate-700 font-semibold cursor-pointer">
+                    Eskalasi otomatis jika SLA breached
+                  </label>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Nama Lead PIC</label>
+                  <input
+                    type="text"
+                    required
+                    value={editingSlaCat.picName}
+                    onChange={(e) =>
+                      setEditingSlaCat({ ...editingSlaCat, picName: e.target.value })
+                    }
+                    className="w-full p-2 border border-slate-300 rounded-lg font-medium"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Peran / Jabatan Tim</label>
+                  <input
+                    type="text"
+                    required
+                    value={editingSlaCat.picRole}
+                    onChange={(e) =>
+                      setEditingSlaCat({ ...editingSlaCat, picRole: e.target.value })
+                    }
+                    className="w-full p-2 border border-slate-300 rounded-lg font-medium"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">Catatan Operasional / Prosedur</label>
+                <textarea
+                  rows={2}
+                  value={editingSlaCat.notes || ''}
+                  onChange={(e) =>
+                    setEditingSlaCat({ ...editingSlaCat, notes: e.target.value })
+                  }
+                  className="w-full p-2 border border-slate-300 rounded-lg"
+                  placeholder="Ketentuan unit cadangan, garansi resmi rekanan..."
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setEditingSlaCat(null)}
+                  className="px-3.5 py-1.5 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 font-medium"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold shadow-xs"
+                >
+                  Simpan Konfigurasi SLA
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Floating Toast Notification */}
+      {slaToastMessage && (
+        <div className="fixed bottom-5 right-5 z-50 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-2xl text-xs font-semibold flex items-center gap-2 border border-slate-700">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span>{slaToastMessage}</span>
+        </div>
+      )}
     </div>
   );
 };
+
+export default GaAssetManagement;

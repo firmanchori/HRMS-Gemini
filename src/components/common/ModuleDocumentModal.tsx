@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useHrms } from '../../context/HrmsContext';
 import {
   FileText,
@@ -44,7 +45,10 @@ export interface ModuleDocumentModalProps {
 
 export const ModuleDocumentModal: React.FC<ModuleDocumentModalProps> = (props) => {
   if (!props.isOpen) return null;
-  return <ModuleDocumentModalContent {...props} />;
+  if (typeof document === 'undefined' || !document.body || typeof (document.body as any).nodeType !== 'number') {
+    return <ModuleDocumentModalContent {...props} />;
+  }
+  return createPortal(<ModuleDocumentModalContent {...props} />, document.body);
 };
 
 const ModuleDocumentModalContent: React.FC<ModuleDocumentModalProps> = ({
@@ -106,7 +110,7 @@ const ModuleDocumentModalContent: React.FC<ModuleDocumentModalProps> = ({
 
   // Selected template state
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>(() => {
-    if (defaultTemplateId && documentTemplates.some((t) => t.id === defaultTemplateId)) {
+    if (defaultTemplateId && availableTemplates.some((t) => t.id === defaultTemplateId)) {
       return defaultTemplateId;
     }
     return availableTemplates[0]?.id || documentTemplates[0]?.id || '';
@@ -187,12 +191,10 @@ const ModuleDocumentModalContent: React.FC<ModuleDocumentModalProps> = ({
       issueDate,
     });
 
-    // Custom variable overrides
+    // Custom variable overrides (safe split-join to avoid regex syntax errors)
     Object.entries(customVariables).forEach(([key, val]) => {
-      if (val) {
-        const regex1 = new RegExp(`\\{\\{${key}\\}\\}`, 'gi');
-        const regex2 = new RegExp(`\\{${key}\\}`, 'gi');
-        body = body.replace(regex1, val).replace(regex2, val);
+      if (val !== undefined && val !== null && val !== '') {
+        body = body.split(`{{${key}}}`).join(val).split(`{${key}}`).join(val);
       }
     });
 
