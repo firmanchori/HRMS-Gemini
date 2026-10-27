@@ -14,11 +14,13 @@ import {
   ShieldCheck,
   Percent,
   Eye,
+  FileText,
 } from 'lucide-react';
 import { formatRupiah } from '../../utils/taxCalculator';
 import { EmployeeSelect } from '../common/EmployeeSelect';
 import { CurrencyInput } from '../common/CurrencyInput';
 import { EmployeeLoan } from '../../types/hrms';
+import { ModuleDocumentModal } from '../common/ModuleDocumentModal';
 
 export const LoanManagement: React.FC = () => {
   const {
@@ -64,6 +66,7 @@ export const LoanManagement: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<'daftar' | 'simulasi' | 'pengaturan'>('daftar');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isDocModalOpen, setIsDocModalOpen] = useState(false);
 
   // Form State
   const [employeeId, setEmployeeId] = useState(employees[0]?.id || '');
@@ -180,13 +183,22 @@ export const LoanManagement: React.FC = () => {
           </p>
         </div>
 
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="flex items-center justify-center gap-1.5 px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors shrink-0"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          <span>Ajukan Pinjaman Baru</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsDocModalOpen(true)}
+            className="flex items-center justify-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-semibold shadow-xs transition-colors shrink-0"
+          >
+            <FileText className="w-3.5 h-3.5 text-indigo-600" />
+            <span>Dokumen Perjanjian Pinjaman</span>
+          </button>
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="flex items-center justify-center gap-1.5 px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors shrink-0"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Ajukan Pinjaman Baru</span>
+          </button>
+        </div>
       </div>
 
       {/* Row 2: Enterprise Tab Navigation Bar (Not Parallel to Title) */}
@@ -879,6 +891,15 @@ export const LoanManagement: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Official Document Modal for Loan Agreement */}
+      <ModuleDocumentModal
+        isOpen={isDocModalOpen}
+        onClose={() => setIsDocModalOpen(false)}
+        categoryFilter="Payroll, Pajak & BPJS"
+        defaultTemplateId="tmpl-22"
+        title="Penerbitan Dokumen Resmi Pinjaman Karyawan"
+      />
     </div>
   );
 };

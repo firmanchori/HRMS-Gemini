@@ -46,6 +46,7 @@ import { CurrencyInput } from '../common/CurrencyInput';
 import { ValidatedDateInput } from '../common/ValidatedDateInput';
 import { formatRupiah } from '../../utils/taxCalculator';
 import { toRomanNumeral } from '../../utils/documentNumbering';
+import { ModuleDocumentModal } from '../common/ModuleDocumentModal';
 
 // Enterprise Grading & Salary Scales (Compensation Triggers)
 export interface GradeSalaryScale {
@@ -374,6 +375,7 @@ export const PersonaliaManagement: React.FC = () => {
   }, [orgNodes, employees]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isDocModalOpen, setIsDocModalOpen] = useState(false);
 
   // Form State
   const [targetEmpId, setTargetEmpId] = useState(employees[0]?.id || '');
@@ -1251,18 +1253,27 @@ export const PersonaliaManagement: React.FC = () => {
           </p>
         </div>
 
-        <button
-          onClick={() => {
-            syncFormDefaults(selectedTargetEmp, actionType);
-            setSignatories(initDefaultSignatories(selectedTargetEmp));
-            setSkDocNumber(generateSkNumber(actionType, effectiveDate));
-            setIsModalOpen(true);
-          }}
-          className="flex items-center justify-center gap-1.5 px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors shrink-0"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          <span>Buat Tindakan Personalia</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsDocModalOpen(true)}
+            className="flex items-center justify-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-semibold shadow-xs transition-colors shrink-0"
+          >
+            <FileText className="w-3.5 h-3.5 text-indigo-600" />
+            <span>Dokumen SK & Tindakan</span>
+          </button>
+          <button
+            onClick={() => {
+              syncFormDefaults(selectedTargetEmp, actionType);
+              setSignatories(initDefaultSignatories(selectedTargetEmp));
+              setSkDocNumber(generateSkNumber(actionType, effectiveDate));
+              setIsModalOpen(true);
+            }}
+            className="flex items-center justify-center gap-1.5 px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors shrink-0"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Buat Tindakan Personalia</span>
+          </button>
+        </div>
       </div>
 
       {/* Row 2: Enterprise Tab Navigation Bar */}
@@ -4030,6 +4041,15 @@ export const PersonaliaManagement: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Official Document Modal for Career & Discipline Actions */}
+      <ModuleDocumentModal
+        isOpen={isDocModalOpen}
+        onClose={() => setIsDocModalOpen(false)}
+        categoryFilter={['Karier & Organisasi', 'Disiplin, PHK & Paklaring']}
+        defaultTemplateId="tmpl-4"
+        title="Penerbitan Dokumen Resmi Karier & Personalia"
+      />
     </div>
   );
 };
