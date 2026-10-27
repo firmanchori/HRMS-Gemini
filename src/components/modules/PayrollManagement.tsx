@@ -42,6 +42,7 @@ import { ScrollableTabNav } from '../common/ScrollableTabNav';
 import { WhatsAppIcon } from '../common/WhatsAppIcon';
 import { printPagesDirectly, exportPagesToPdf } from '../../utils/documentPdfExporter';
 import { openWhatsAppChat, WhatsAppTemplates } from '../../utils/whatsappHelper';
+import { ModuleDocumentModal } from '../common/ModuleDocumentModal';
 
 interface ReimbursementClaim {
   id: string;
@@ -142,6 +143,7 @@ export const PayrollManagement: React.FC = () => {
   const [isPrintingPayslip, setIsPrintingPayslip] = useState(false);
   const [isPayslipWaModalOpen, setIsPayslipWaModalOpen] = useState(false);
   const [payslipWaNumber, setPayslipWaNumber] = useState('08129876543');
+  const [isDocModalOpen, setIsDocModalOpen] = useState(false);
 
   // Reimbursement State
   const [claims, setClaims] = useState<ReimbursementClaim[]>(INITIAL_REIMBURSEMENTS);
@@ -444,6 +446,16 @@ export const PayrollManagement: React.FC = () => {
               >
                 <Calculator className="w-3.5 h-3.5 text-indigo-600" />
                 <span>Hitung Ulang Presensi & Gaji</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsDocModalOpen(true)}
+                className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-semibold transition-colors shadow-2xs cursor-pointer"
+                title="Buka Pusat Dokumen Resmi Payroll, Pajak Coretax & BPJS"
+              >
+                <FileText className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Dokumen Resmi Payroll & Pajak</span>
               </button>
 
               {!isApproved && !isDisbursed && (
@@ -1701,6 +1713,15 @@ export const PayrollManagement: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Module Document Modal: Payroll, Pajak & BPJS */}
+      <ModuleDocumentModal
+        isOpen={isDocModalOpen}
+        onClose={() => setIsDocModalOpen(false)}
+        title="Pusat Dokumen Resmi Payroll, Pajak & BPJS"
+        categoryFilter="Payroll, Pajak & BPJS"
+        defaultTemplateId="tmpl-17"
+      />
     </div>
   );
 };

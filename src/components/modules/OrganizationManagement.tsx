@@ -63,6 +63,7 @@ import {
 } from '../../types/hrms';
 import { exportElementToPng, exportElementToPdf } from '../../utils/exportTreeHelper';
 import { ScrollableTabNav } from '../common/ScrollableTabNav';
+import { ModuleDocumentModal } from '../common/ModuleDocumentModal';
 import { useTabSwipe } from '../../utils/useTabSwipe';
 
 interface EmployeeDropdownSelectProps {
@@ -345,6 +346,7 @@ export const OrganizationManagement: React.FC = () => {
   const orgScrollContainerRef = useRef<HTMLDivElement>(null);
   const corpScrollContainerRef = useRef<HTMLDivElement>(null);
   const [isExporting, setIsExporting] = useState(false);
+  const [isDocModalOpen, setIsDocModalOpen] = useState(false);
 
   // Search filter
   const [searchQuery, setSearchQuery] = useState('');
@@ -1951,25 +1953,36 @@ export const OrganizationManagement: React.FC = () => {
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={() => {
-            toggleEntityGovernanceLock(currentEntityId);
-            showToast(
-              !currentEntityLocked
-                ? `Struktur ${currentEntity.name} berhasil dikunci. Tata kelola ber-SK resmi sekarang berlaku.`
-                : `Mode setup awal dibuka untuk entitas ${currentEntity.name}.`
-            );
-          }}
-          className={`px-3.5 py-2 rounded-lg text-xs font-semibold transition-all shrink-0 flex items-center justify-center gap-1.5 ${
-            currentEntityLocked
-              ? 'bg-white/10 hover:bg-white/20 text-white border border-white/20'
-              : 'bg-amber-600 hover:bg-amber-700 text-white shadow-xs'
-          }`}
-        >
-          {currentEntityLocked ? <Unlock className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />}
-          <span>{currentEntityLocked ? `Buka Kunci Setup (${currentEntity.code})` : `Kunci Baseline (${currentEntity.code})`}</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setIsDocModalOpen(true)}
+            className="px-3.5 py-2 rounded-lg text-xs font-semibold transition-all shrink-0 flex items-center justify-center gap-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 cursor-pointer shadow-xs"
+          >
+            <FileText className="w-3.5 h-3.5 text-indigo-600" />
+            <span>Dokumen SK Karier & Organisasi</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              toggleEntityGovernanceLock(currentEntityId);
+              showToast(
+                !currentEntityLocked
+                  ? `Struktur ${currentEntity.name} berhasil dikunci. Tata kelola ber-SK resmi sekarang berlaku.`
+                  : `Mode setup awal dibuka untuk entitas ${currentEntity.name}.`
+              );
+            }}
+            className={`px-3.5 py-2 rounded-lg text-xs font-semibold transition-all shrink-0 flex items-center justify-center gap-1.5 ${
+              currentEntityLocked
+                ? 'bg-white/10 hover:bg-white/20 text-white border border-white/20'
+                : 'bg-amber-600 hover:bg-amber-700 text-white shadow-xs'
+            }`}
+          >
+            {currentEntityLocked ? <Unlock className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />}
+            <span>{currentEntityLocked ? `Buka Kunci Setup (${currentEntity.code})` : `Kunci Baseline (${currentEntity.code})`}</span>
+          </button>
+        </div>
       </div>
 
       {/* Tabs Sub-Menu Navigation Bar (Consistent with Other HRMS Modules) */}
@@ -7705,6 +7718,15 @@ export const OrganizationManagement: React.FC = () => {
         </div>,
         document.body
       )}
+
+      {/* Module Document Modal: Karier & Organisasi */}
+      <ModuleDocumentModal
+        isOpen={isDocModalOpen}
+        onClose={() => setIsDocModalOpen(false)}
+        title="Pusat Dokumen Resmi SK Karier & Struktur Organisasi"
+        categoryFilter="Karier & Organisasi"
+        defaultTemplateId="tmpl-3"
+      />
     </div>
   );
 };

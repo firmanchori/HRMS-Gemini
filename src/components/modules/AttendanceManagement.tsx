@@ -42,6 +42,7 @@ import { validateDateRange, validateDateString } from '../../utils/dateValidator
 import { formatRupiah, calculateOvertimePay } from '../../utils/taxCalculator';
 import { CompanyCalendarManagement } from './CompanyCalendarManagement';
 import { ScrollableTabNav } from '../common/ScrollableTabNav';
+import { ModuleDocumentModal } from '../common/ModuleDocumentModal';
 
 export const AttendanceManagement: React.FC = () => {
   const {
@@ -183,6 +184,7 @@ export const AttendanceManagement: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'hr' | 'manager' | 'ess' | 'shifts' | 'koreksi' | 'calendar' | 'pengaturan'>('hr');
   const [selectedDate, setSelectedDate] = useState('2026-10-22');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [isDocModalOpen, setIsDocModalOpen] = useState(false);
 
   // Modals
   const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
@@ -577,6 +579,16 @@ export const AttendanceManagement: React.FC = () => {
               >
                 <Printer className="w-3.5 h-3.5 text-indigo-600" />
                 <span>Cetak Rekap Presensi Cut-Off (1 Bln)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsDocModalOpen(true)}
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold shadow-2xs transition-colors shrink-0 cursor-pointer"
+                title="Buka Pusat Dokumen Resmi Presensi, Cuti, Izin & Lembur"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>Dokumen Presensi & Cuti</span>
               </button>
             </div>
           </div>
@@ -1615,6 +1627,15 @@ export const AttendanceManagement: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Module Document Modal: Presensi, Cuti & Lembur */}
+      <ModuleDocumentModal
+        isOpen={isDocModalOpen}
+        onClose={() => setIsDocModalOpen(false)}
+        title="Dokumen Resmi Presensi, Cuti & Jam Kerja Lembur"
+        categoryFilter="Kehadiran, Cuti & Perjalanan Dinas"
+        defaultTemplateId="tmpl-26"
+      />
     </div>
   );
 };

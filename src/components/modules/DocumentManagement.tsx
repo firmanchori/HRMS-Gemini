@@ -64,6 +64,7 @@ import {
 import { OfficialDocument, DocumentType, DocumentTemplateConfig, Employee } from '../../types/hrms';
 import { QRCodeView } from '../common/QRCodeView';
 import { OfficialMultiPageDocumentSheet, DocumentSignatory } from '../common/OfficialMultiPageDocumentSheet';
+import { ModuleDocumentModal } from '../common/ModuleDocumentModal';
 import { EmployeeSelect } from '../common/EmployeeSelect';
 import {
   parseDocxFile,
@@ -289,7 +290,9 @@ export const DocumentManagement: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'arsip' | 'studio' | 'templates' | 'daftar_tag' | 'pengaturan'>('arsip');
   const [selectedDoc, setSelectedDoc] = useState<OfficialDocument | null>(null);
   const [searchDocQuery, setSearchDocQuery] = useState('');
+  const [docCategoryFilter, setDocCategoryFilter] = useState<string>('all');
   const [docTypeFilter, setDocTypeFilter] = useState<string>('all');
+  const [isArchivePublishModalOpen, setIsArchivePublishModalOpen] = useState(false);
 
   // Studio Side-by-Side State
   const [studioSelectedTemplateId, setStudioSelectedTemplateId] = useState<string>(documentTemplates[0]?.id || '');
@@ -1219,18 +1222,28 @@ export const DocumentManagement: React.FC = () => {
     }
   };
 
-  // Enhanced Filter Dokumen
+  // Enhanced Filter Dokumen dengan Kategori & Pencarian
   const filteredDocs = documents.filter((d) => {
     const emp = employees.find((e) => e.id === d.targetEmployeeId);
+    const tmpl = documentTemplates.find((t) => t.id === d.templateId);
+    const docCat = tmpl ? getTemplateCategory(tmpl) : getTemplateCategory({ type: d.type, name: d.title });
+
     const matchesSearch =
       d.documentNumber.toLowerCase().includes(searchDocQuery.toLowerCase()) ||
       d.title.toLowerCase().includes(searchDocQuery.toLowerCase()) ||
       d.type.toLowerCase().includes(searchDocQuery.toLowerCase()) ||
+      docCat.toLowerCase().includes(searchDocQuery.toLowerCase()) ||
       (emp && emp.fullName.toLowerCase().includes(searchDocQuery.toLowerCase())) ||
       (emp && emp.nik.toLowerCase().includes(searchDocQuery.toLowerCase()));
 
-    const matchesType = docTypeFilter === 'all' || d.type === docTypeFilter;
-    return matchesSearch && matchesType;
+    const matchesCategory = docCategoryFilter === 'all' || docCat === docCategoryFilter;
+    const matchesType =
+      docTypeFilter === 'all' ||
+      d.type === docTypeFilter ||
+      d.templateId === docTypeFilter ||
+      tmpl?.type === docTypeFilter;
+
+    return matchesSearch && matchesCategory && matchesType;
   });
 
   return (
@@ -1388,44 +1401,95 @@ export const DocumentManagement: React.FC = () => {
       {activeTab === 'arsip' && (
         <div className="space-y-4">
           {/* Filter Bar & Quick Actions */}
-          <div className="bg-white p-3.5 border border-slate-200 rounded-xl shadow-xs space-y-3 lg:space-y-0 lg:flex lg:items-center lg:justify-between lg:gap-3">
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 flex-1 max-w-2xl">
-              {/* Search Input */}
-              <div className="relative flex-1">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
-                <input
-                  type="text"
-                  placeholder="Cari nomor dokumen, judul surat, nama karyawan, NIK..."
-                  value={searchDocQuery}
-                  onChange={(e) => setSearchDocQuery(e.target.value)}
-                  className="w-full pl-9 pr-8 py-2 text-xs bg-slate-50/70 focus:bg-white border border-slate-300 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-indigo-500 transition-all font-medium text-slate-800 placeholder-slate-400"
-                />
-                {searchDocQuery && (
-                  <button
-                    type="button"
-                    onClick={() => setSearchDocQuery('')}
-                    className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600"
-                    title="Hapus pencarian"
+          <div className="bg-white p-3.5 border border-slate-200 rounded-xl shadow-xs space-y-3">
+            <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
+              {/* Left: Search & Filters */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 flex-1">
+                {/* Search Input */}
+                <div className="relative flex-1 min-w-[200px]">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
+                  <input
+                    type="text"
+                    placeholder="Cari nomor dokumen, judul surat, nama karyawan, NIK, kategori..."
+                    value={searchDocQuery}
+                    onChange={(e) => setSearchDocQuery(e.target.value)}
+                    className="w-full pl-9 pr-8 py-2 text-xs bg-slate-50/70 focus:bg-white border border-slate-300 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-indigo-500 transition-all font-medium text-slate-800 placeholder-slate-400"
+                  />
+                  {searchDocQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchDocQuery('')}
+                      className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600"
+                      title="Hapus pencarian"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Filter Kategori Dokumen Dropdown */}
+                <div className="sm:w-56 shrink-0">
+                  <select
+                    value={docCategoryFilter}
+                    onChange={(e) => {
+                      setDocCategoryFilter(e.target.value);
+                      setDocTypeFilter('all');
+                    }}
+                    className="w-full py-2 px-3 text-xs bg-slate-50/70 focus:bg-white border border-slate-300 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700"
                   >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
+                    <option value="all">Semua Kategori ({documentTemplates.length} Template)</option>
+                    {TEMPLATE_CATEGORIES.map((cat) => {
+                      const countInArsip = documents.filter((d) => {
+                        const tmpl = documentTemplates.find((t) => t.id === d.templateId);
+                        const docCat = tmpl ? getTemplateCategory(tmpl) : getTemplateCategory({ type: d.type, name: d.title });
+                        return docCat === cat.id;
+                      }).length;
+                      return (
+                        <option key={cat.id} value={cat.id}>
+                          {cat.label} ({countInArsip} arsip)
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+
+                {/* Filter Jenis Dokumen Dropdown (Dinamis dari 43 Template Dokumen) */}
+                <div className="sm:w-64 shrink-0">
+                  <select
+                    value={docTypeFilter}
+                    onChange={(e) => setDocTypeFilter(e.target.value)}
+                    className="w-full py-2 px-3 text-xs bg-slate-50/70 focus:bg-white border border-slate-300 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-indigo-500 font-semibold text-slate-700"
+                  >
+                    <option value="all">Semua Jenis / Template Dokumen ({documentTemplates.length})</option>
+                    {TEMPLATE_CATEGORIES.map((cat) => {
+                      const tmplsInCat = documentTemplates.filter((t) => getTemplateCategory(t) === cat.id);
+                      if (docCategoryFilter !== 'all' && docCategoryFilter !== cat.id) return null;
+                      if (tmplsInCat.length === 0) return null;
+
+                      return (
+                        <optgroup key={cat.id} label={`Kategori: ${cat.label}`}>
+                          {tmplsInCat.map((tmpl) => (
+                            <option key={tmpl.id} value={tmpl.id}>
+                              {tmpl.name} ({tmpl.type})
+                            </option>
+                          ))}
+                        </optgroup>
+                      );
+                    })}
+                  </select>
+                </div>
               </div>
 
-              {/* Filter Jenis Dokumen Dropdown */}
-              <div className="sm:w-56 shrink-0">
-                <select
-                  value={docTypeFilter}
-                  onChange={(e) => setDocTypeFilter(e.target.value)}
-                  className="w-full py-2 px-3 text-xs bg-slate-50/70 focus:bg-white border border-slate-300 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-indigo-500 font-semibold text-slate-700"
+              {/* Right: Publish Document Button */}
+              <div className="shrink-0 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsArchivePublishModalOpen(true)}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-lg shadow-sm transition-all cursor-pointer flex items-center justify-center gap-1.5"
                 >
-                  <option value="all">Semua Jenis Dokumen ({documents.length})</option>
-                  {ALL_DOCUMENT_TYPES.map((dt) => (
-                    <option key={dt.type} value={dt.type}>
-                      {dt.label}
-                    </option>
-                  ))}
-                </select>
+                  <Plus className="w-4 h-4" />
+                  <span>Terbitkan Dokumen Baru</span>
+                </button>
               </div>
             </div>
           </div>
@@ -1435,11 +1499,12 @@ export const DocumentManagement: React.FC = () => {
             <span>
               Menampilkan <strong className="text-slate-800">{filteredDocs.length}</strong> dari <strong className="text-slate-800">{documents.length}</strong> dokumen resmi diterbitkan.
             </span>
-            {(searchDocQuery || docTypeFilter !== 'all') && (
+            {(searchDocQuery || docCategoryFilter !== 'all' || docTypeFilter !== 'all') && (
               <button
                 type="button"
                 onClick={() => {
                   setSearchDocQuery('');
+                  setDocCategoryFilter('all');
                   setDocTypeFilter('all');
                 }}
                 className="text-indigo-600 hover:text-indigo-800 font-semibold underline text-[11px]"
@@ -1461,6 +1526,8 @@ export const DocumentManagement: React.FC = () => {
                 const emp = employees.find((e) => e.id === doc.targetEmployeeId);
                 const tmpl = documentTemplates.find((t) => t.id === doc.templateId);
                 const isDocx = doc.isFromDocxTemplate || tmpl?.sourceType === 'uploaded_docx';
+                const docCat = tmpl ? getTemplateCategory(tmpl) : getTemplateCategory({ type: doc.type, name: doc.title });
+                const catMeta = TEMPLATE_CATEGORIES.find((c) => c.id === docCat);
 
                 return (
                   <div
@@ -1486,6 +1553,12 @@ export const DocumentManagement: React.FC = () => {
                         <h4 className="font-bold text-slate-900 text-xs mt-1 leading-snug">
                           {doc.title}
                         </h4>
+                        <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9.5px] font-bold border ${catMeta?.badgeColor || 'bg-slate-100 text-slate-700 border-slate-200'}`}>
+                            {renderCategoryIcon(docCat, 'w-2.5 h-2.5')}
+                            <span>{docCat}</span>
+                          </span>
+                        </div>
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
                         <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
@@ -1553,6 +1626,8 @@ export const DocumentManagement: React.FC = () => {
                     filteredDocs.map((doc) => {
                       const tmpl = documentTemplates.find((t) => t.id === doc.templateId);
                       const isDocx = doc.isFromDocxTemplate || tmpl?.sourceType === 'uploaded_docx';
+                      const docCat = tmpl ? getTemplateCategory(tmpl) : getTemplateCategory({ type: doc.type, name: doc.title });
+                      const catMeta = TEMPLATE_CATEGORIES.find((c) => c.id === docCat);
 
                       return (
                         <tr
@@ -1590,8 +1665,12 @@ export const DocumentManagement: React.FC = () => {
                             <div className="font-bold text-slate-900 text-xs leading-snug group-hover:text-indigo-700 transition-colors">
                               {doc.title}
                             </div>
-                            <div className="flex items-center gap-1.5 mt-1">
-                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-100">
+                            <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold border ${catMeta?.badgeColor || 'bg-slate-100 text-slate-700 border-slate-200'}`}>
+                                {renderCategoryIcon(docCat, 'w-2.5 h-2.5')}
+                                <span>{docCat}</span>
+                              </span>
+                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
                                 {doc.type}
                               </span>
                               {isDocx ? (
@@ -5202,6 +5281,16 @@ PIHAK PERTAMA memberikan upah pokok sebesar {{gaji_pokok}} ({{gaji_terbilang}}) 
           </div>
         </div>
       )}
+
+      {/* MODAL 4: PUBLISH DOKUMEN BARU DARI KOLEKSI 43 TEMPLATE */}
+      <ModuleDocumentModal
+        isOpen={isArchivePublishModalOpen}
+        onClose={() => setIsArchivePublishModalOpen(false)}
+        title="Terbitkan Dokumen Resmi Baru (Koleksi 43 Template)"
+        onDocumentCreated={(newDoc) => {
+          setSelectedDoc(newDoc);
+        }}
+      />
     </div>
   );
 };

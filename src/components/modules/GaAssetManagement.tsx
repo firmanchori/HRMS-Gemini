@@ -50,6 +50,7 @@ import { printPagesDirectly, exportPagesToPdf } from '../../utils/documentPdfExp
 import { EmployeeSelect } from '../common/EmployeeSelect';
 import { ValidatedDateInput } from '../common/ValidatedDateInput';
 import { ScrollableTabNav } from '../common/ScrollableTabNav';
+import { ModuleDocumentModal } from '../common/ModuleDocumentModal';
 
 export const GaAssetManagement: React.FC = () => {
   const {
@@ -87,6 +88,7 @@ export const GaAssetManagement: React.FC = () => {
   const qrLabelRef = useRef<HTMLDivElement>(null);
   const [isPrintingQR, setIsPrintingQR] = useState(false);
   const [isExportingQR, setIsExportingQR] = useState(false);
+  const [isDocModalOpen, setIsDocModalOpen] = useState(false);
 
   const handlePrintQR = async () => {
     if (!qrLabelRef.current) return;
@@ -477,14 +479,24 @@ export const GaAssetManagement: React.FC = () => {
   return (
     <div className="space-y-5">
       {/* Row 1: Module Header */}
-      <div className="border-b border-slate-200 pb-3">
-        <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-          <QrCode className="w-5 h-5 text-indigo-600" />
-          <span>Manajemen General Affairs (GA), Aset QR & Pemeliharaan</span>
-        </h2>
-        <p className="text-xs text-slate-500 mt-0.5">
-          Pencatatan inventaris gedung, mutasi & serah terima BAST karyawan, tiket perbaikan & penggantian aset rusak, serta stock opname QR Code.
-        </p>
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
+        <div>
+          <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+            <QrCode className="w-5 h-5 text-indigo-600" />
+            <span>Manajemen General Affairs (GA), Aset QR & Pemeliharaan</span>
+          </h2>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Pencatatan inventaris gedung, mutasi & serah terima BAST karyawan, tiket perbaikan & penggantian aset rusak, serta stock opname QR Code.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setIsDocModalOpen(true)}
+          className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-semibold shadow-xs transition-colors shrink-0 cursor-pointer"
+        >
+          <FileText className="w-3.5 h-3.5 text-indigo-600" />
+          <span>Dokumen Resmi GA & Aset (BAST/Form)</span>
+        </button>
       </div>
 
       {/* Row 2: Enterprise Tab Navigation Bar (Not Parallel to Title) */}
@@ -2624,6 +2636,15 @@ export const GaAssetManagement: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Module Document Modal: GA & Aset */}
+      <ModuleDocumentModal
+        isOpen={isDocModalOpen}
+        onClose={() => setIsDocModalOpen(false)}
+        title="Pusat Dokumen Resmi General Affairs & Inventaris Aset (BAST)"
+        categoryFilter="Pengadaan, Aset & Umum (GA)"
+        defaultTemplateId="tmpl-10"
+      />
     </div>
   );
 };

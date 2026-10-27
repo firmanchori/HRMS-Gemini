@@ -19,6 +19,7 @@ import { EmployeeSelect } from '../common/EmployeeSelect';
 import { ValidatedDateInput } from '../common/ValidatedDateInput';
 import { CurrencyInput } from '../common/CurrencyInput';
 import { formatRupiah } from '../../utils/taxCalculator';
+import { ModuleDocumentModal } from '../common/ModuleDocumentModal';
 
 export const ContractRenewalManagement: React.FC = () => {
   const {
@@ -31,6 +32,7 @@ export const ContractRenewalManagement: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<'monitoring' | 'history'>('monitoring');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isDocModalOpen, setIsDocModalOpen] = useState(false);
   const [selectedEmpId, setSelectedEmpId] = useState('');
   const [recommendation, setRecommendation] = useState<'Perpanjang PKWT' | 'Alih Status PKWTT (Tetap)' | 'Tidak Diperpanjang'>('Perpanjang PKWT');
   const [newDurationMonths, setNewDurationMonths] = useState(12);
@@ -112,16 +114,26 @@ export const ContractRenewalManagement: React.FC = () => {
           </p>
         </div>
 
-        <button
-          onClick={() => {
-            setSelectedEmpId('');
-            setIsModalOpen(true);
-          }}
-          className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold transition-colors shadow-xs"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Buat Review Kontrak Baru</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setIsDocModalOpen(true)}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+          >
+            <FileText className="w-4 h-4 text-indigo-600" />
+            <span>Dokumen Resmi Kontrak & PKWT</span>
+          </button>
+          <button
+            onClick={() => {
+              setSelectedEmpId('');
+              setIsModalOpen(true);
+            }}
+            className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold transition-colors shadow-xs cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Buat Review Kontrak Baru</span>
+          </button>
+        </div>
       </div>
 
       {/* Tabs */}
@@ -455,6 +467,15 @@ export const ContractRenewalManagement: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Module Document Modal: Perjanjian Kerja & Kontrak */}
+      <ModuleDocumentModal
+        isOpen={isDocModalOpen}
+        onClose={() => setIsDocModalOpen(false)}
+        title="Pusat Dokumen Resmi Perjanjian Kerja & Kontrak (PKWT/PKWTT/Addendum)"
+        categoryFilter={['Perjanjian Kerja & Kontrak', 'Magang Industri']}
+        defaultTemplateId="tmpl-1"
+      />
     </div>
   );
 };

@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { formatRupiah, calculateSeverancePay } from '../../utils/taxCalculator';
 import { ValidatedDateInput } from '../common/ValidatedDateInput';
+import { ModuleDocumentModal } from '../common/ModuleDocumentModal';
 
 export const OffboardingManagement: React.FC = () => {
   const {
@@ -23,6 +24,7 @@ export const OffboardingManagement: React.FC = () => {
   } = useHrms();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isDocModalOpen, setIsDocModalOpen] = useState(false);
   const [employeeId, setEmployeeId] = useState(employees[0]?.id || '');
   const [separationType, setSeparationType] = useState<any>('Resign Sukarela');
   const [effectiveDate, setEffectiveDate] = useState('2026-11-30');
@@ -65,13 +67,23 @@ export const OffboardingManagement: React.FC = () => {
           </p>
         </div>
 
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-md text-xs font-semibold shadow-xs transition-colors"
-        >
-          <UserMinus className="w-3.5 h-3.5" />
-          <span>Inisiasi Offboarding Baru</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setIsDocModalOpen(true)}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-md text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+          >
+            <FileText className="w-3.5 h-3.5 text-indigo-600" />
+            <span>Dokumen Resmi PHK & Paklaring</span>
+          </button>
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-md text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+          >
+            <UserMinus className="w-3.5 h-3.5" />
+            <span>Inisiasi Offboarding Baru</span>
+          </button>
+        </div>
       </div>
 
       {/* Aggregate Cards */}
@@ -318,6 +330,15 @@ export const OffboardingManagement: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Module Document Modal: Disiplin, PHK & Paklaring */}
+      <ModuleDocumentModal
+        isOpen={isDocModalOpen}
+        onClose={() => setIsDocModalOpen(false)}
+        title="Dokumen Resmi Pemutusan Hubungan Kerja (PHK) & Paklaring"
+        categoryFilter="Disiplin, PHK & Paklaring"
+        defaultTemplateId="tmpl-8"
+      />
     </div>
   );
 };

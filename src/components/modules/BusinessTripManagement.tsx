@@ -34,6 +34,7 @@ import { ScrollableTabNav } from '../common/ScrollableTabNav';
 import { WhatsAppIcon } from '../common/WhatsAppIcon';
 import { printPagesDirectly, exportPagesToPdf } from '../../utils/documentPdfExporter';
 import { openWhatsAppChat } from '../../utils/whatsappHelper';
+import { ModuleDocumentModal } from '../common/ModuleDocumentModal';
 
 export const BusinessTripManagement: React.FC = () => {
   const {
@@ -57,6 +58,7 @@ export const BusinessTripManagement: React.FC = () => {
   const [isExportingSppd, setIsExportingSppd] = useState(false);
   const [isSppdWaModalOpen, setIsSppdWaModalOpen] = useState(false);
   const [sppdWaNumber, setSppdWaNumber] = useState('08129876543');
+  const [isDocModalOpen, setIsDocModalOpen] = useState(false);
 
   const handlePrintSppd = async () => {
     if (!sppdSheetRef.current) return;
@@ -228,13 +230,22 @@ export const BusinessTripManagement: React.FC = () => {
           </p>
         </div>
 
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="flex items-center justify-center gap-1.5 px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors shrink-0"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          <span>Ajukan Perjalanan Dinas</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsDocModalOpen(true)}
+            className="flex items-center justify-center gap-1.5 px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-semibold shadow-xs transition-colors shrink-0 cursor-pointer"
+          >
+            <FileText className="w-3.5 h-3.5 text-indigo-600" />
+            <span>Dokumen Resmi SPPD & Dinas</span>
+          </button>
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="flex items-center justify-center gap-1.5 px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors shrink-0 cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Ajukan Perjalanan Dinas</span>
+          </button>
+        </div>
       </div>
 
       {/* Row 2: Enterprise Tab Navigation Bar (Not Parallel to Title) */}
@@ -1346,6 +1357,15 @@ export const BusinessTripManagement: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Module Document Modal: SPPD & Perjalanan Dinas */}
+      <ModuleDocumentModal
+        isOpen={isDocModalOpen}
+        onClose={() => setIsDocModalOpen(false)}
+        title="Pusat Dokumen Resmi Perjalanan Dinas (SPPD)"
+        categoryFilter="Kehadiran, Cuti & Perjalanan Dinas"
+        defaultTemplateId="tmpl-14"
+      />
     </div>
   );
 };

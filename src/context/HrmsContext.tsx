@@ -703,7 +703,22 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const [documents, setDocuments] = useState<OfficialDocument[]>(() => {
     const saved = localStorage.getItem('nusahr_documents');
-    return saved ? JSON.parse(saved) : INITIAL_DOCUMENTS;
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved) as OfficialDocument[];
+        const existingIds = new Set(parsed.map((d) => d.id));
+        const merged = [...parsed];
+        for (const initDoc of INITIAL_DOCUMENTS) {
+          if (!existingIds.has(initDoc.id)) {
+            merged.push(initDoc);
+          }
+        }
+        return merged;
+      } catch (e) {
+        console.error('Failed to parse documents', e);
+      }
+    }
+    return INITIAL_DOCUMENTS;
   });
 
   const [onboardingProcesses, setOnboardingProcesses] = useState<OnboardingProcess[]>(() => {

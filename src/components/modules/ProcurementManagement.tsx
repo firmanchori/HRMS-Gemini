@@ -31,6 +31,7 @@ import { ScrollableTabNav } from '../common/ScrollableTabNav';
 import { WhatsAppIcon } from '../common/WhatsAppIcon';
 import { printPagesDirectly, exportPagesToPdf } from '../../utils/documentPdfExporter';
 import { openWhatsAppChat } from '../../utils/whatsappHelper';
+import { ModuleDocumentModal } from '../common/ModuleDocumentModal';
 
 interface ProjectContract {
   id: string;
@@ -179,6 +180,7 @@ export const ProcurementManagement: React.FC = () => {
   // Project Contracts State & Modal
   const [projectContracts, setProjectContracts] = useState<ProjectContract[]>(INITIAL_PROJECT_CONTRACTS);
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
+  const [isDocModalOpen, setIsDocModalOpen] = useState(false);
   const [projectForm, setProjectForm] = useState({
     contractNumber: 'KTRK/PRJ/2026/003',
     projectName: '',
@@ -326,14 +328,24 @@ export const ProcurementManagement: React.FC = () => {
   return (
     <div className="space-y-5">
       {/* Row 1: Module Header */}
-      <div className="border-b border-slate-200 pb-3">
-        <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-          <ShoppingCart className="w-5 h-5 text-indigo-600" />
-          <span>Manajemen Pengadaan Barang, Proyek & Vendor (Procurement)</span>
-        </h2>
-        <p className="text-xs text-slate-500 mt-0.5">
-          Alur Purchase Requisition (PR), perbandingan quotation vendor, Purchase Order (PO) bertanda tangan QR, serta kontrak proyek jangka panjang.
-        </p>
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
+        <div>
+          <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+            <ShoppingCart className="w-5 h-5 text-indigo-600" />
+            <span>Manajemen Pengadaan Barang, Proyek & Vendor (Procurement)</span>
+          </h2>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Alur Purchase Requisition (PR), perbandingan quotation vendor, Purchase Order (PO) bertanda tangan QR, serta kontrak proyek jangka panjang.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setIsDocModalOpen(true)}
+          className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-semibold shadow-xs transition-colors shrink-0 cursor-pointer"
+        >
+          <FileText className="w-3.5 h-3.5 text-indigo-600" />
+          <span>Dokumen Pengadaan Resmi (PO / Kontrak)</span>
+        </button>
       </div>
 
       {/* Row 2: Enterprise Tab Navigation Bar with Arrows */}
@@ -1758,6 +1770,15 @@ export const ProcurementManagement: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Module Document Modal: Pengadaan & Vendor */}
+      <ModuleDocumentModal
+        isOpen={isDocModalOpen}
+        onClose={() => setIsDocModalOpen(false)}
+        title="Pusat Dokumen Resmi Pengadaan, Purchase Order & Kontrak Vendor"
+        categoryFilter="Pengadaan, Aset & Umum (GA)"
+        defaultTemplateId="tmpl-39"
+      />
     </div>
   );
 };
