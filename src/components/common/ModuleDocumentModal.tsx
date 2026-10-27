@@ -23,7 +23,7 @@ import {
   TEMPLATE_CATEGORIES,
   getTemplateCategory,
   renderCategoryIcon,
-} from '../modules/DocumentManagement';
+} from '../../utils/documentCategoryHelper';
 import {
   interpolateDocxTemplate,
   evaluateNumberingFormula,
@@ -42,8 +42,13 @@ export interface ModuleDocumentModalProps {
   onDocumentCreated?: (doc: OfficialDocument) => void;
 }
 
-export const ModuleDocumentModal: React.FC<ModuleDocumentModalProps> = ({
-  isOpen,
+export const ModuleDocumentModal: React.FC<ModuleDocumentModalProps> = (props) => {
+  if (!props.isOpen) return null;
+  return <ModuleDocumentModalContent {...props} />;
+};
+
+const ModuleDocumentModalContent: React.FC<ModuleDocumentModalProps> = ({
+  isOpen: _isOpen,
   onClose,
   title = 'Pusat Penerbitan Dokumen Resmi Berbasis Template',
   categoryFilter,
@@ -60,11 +65,14 @@ export const ModuleDocumentModal: React.FC<ModuleDocumentModalProps> = ({
     documents,
   } = useHrms();
 
-  // Normalize allowed categories
+  const initialVarsRef = React.useRef(initialVariables);
+  initialVarsRef.current = initialVariables;
+
+  // Normalize allowed categories stably
   const allowedCategories = useMemo<TemplateCategory[]>(() => {
     if (!categoryFilter) return TEMPLATE_CATEGORIES.map((c) => c.id);
     return Array.isArray(categoryFilter) ? categoryFilter : [categoryFilter];
-  }, [categoryFilter]);
+  }, [JSON.stringify(categoryFilter)]);
 
   const [activeCategory, setActiveCategory] = useState<TemplateCategory | 'all'>(() => {
     if (allowedCategories.length === 1) return allowedCategories[0];
@@ -109,7 +117,7 @@ export const ModuleDocumentModal: React.FC<ModuleDocumentModalProps> = ({
     if (availableTemplates.length > 0 && !availableTemplates.some((t) => t.id === selectedTemplateId)) {
       setSelectedTemplateId(availableTemplates[0].id);
     }
-  }, [availableTemplates, selectedTemplateId]);
+  }, [availableTemplates.length, selectedTemplateId]);
 
   const activeTemplate = useMemo(() => {
     return documentTemplates.find((t) => t.id === selectedTemplateId) || availableTemplates[0] || documentTemplates[0];
@@ -145,7 +153,7 @@ export const ModuleDocumentModal: React.FC<ModuleDocumentModalProps> = ({
     const autoNumber = evaluateNumberingFormula(
       activeTemplate.numberingPattern || '{SEQ}/HRD/{TENANT_CODE}/{ROMAN_MONTH}/{YEAR}',
       seq,
-      currentTenant.code || 'NTM',
+      currentTenant?.code || 'NTM',
       activeTemplate.type
     );
     setDocumentNumber(autoNumber);
@@ -153,16 +161,16 @@ export const ModuleDocumentModal: React.FC<ModuleDocumentModalProps> = ({
     setSigneeRole(activeTemplate.signeeRole || 'Pihak Manajemen');
 
     // Populate initial variables
-    const initialMap: Record<string, string> = { ...initialVariables };
+    const initialMap: Record<string, string> = { ...initialVarsRef.current };
     if (activeTemplate.extractedPlaceholders) {
       activeTemplate.extractedPlaceholders.forEach((key) => {
-        if (!initialMap[key] && initialVariables[key]) {
-          initialMap[key] = initialVariables[key];
+        if (!initialMap[key] && initialVarsRef.current[key]) {
+          initialMap[key] = initialVarsRef.current[key];
         }
       });
     }
     setCustomVariables(initialMap);
-  }, [activeTemplate, currentTenant, documents.length, initialVariables]);
+  }, [activeTemplate?.id, currentTenant?.code, documents.length]);
 
   // Rendered document body
   const renderedContent = useMemo(() => {
@@ -234,8 +242,6 @@ export const ModuleDocumentModal: React.FC<ModuleDocumentModalProps> = ({
       setIsSubmitting(false);
     }
   };
-
-  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/70 backdrop-blur-xs animate-fadeIn overflow-y-auto">
