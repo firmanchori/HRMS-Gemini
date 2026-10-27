@@ -26,7 +26,6 @@ import {
   Clock,
   Gift,
   Sliders,
-  TrendingUp,
   MessageSquare,
   Loader2,
   FileDown,
@@ -51,7 +50,6 @@ import { QRCodeView } from '../common/QRCodeView';
 import { EmployeeSelect } from '../common/EmployeeSelect';
 import { CurrencyInput } from '../common/CurrencyInput';
 import { SalaryComponentManagement } from './SalaryComponentManagement';
-import { GradeSalaryManagement } from './GradeSalaryManagement';
 import { ScrollableTabNav } from '../common/ScrollableTabNav';
 import { WhatsAppIcon } from '../common/WhatsAppIcon';
 import { printPagesDirectly, exportPagesToPdf } from '../../utils/documentPdfExporter';
@@ -149,7 +147,7 @@ export const PayrollManagement: React.FC = () => {
     });
   };
 
-  const [activeTab, setActiveTab] = useState<'payroll' | 'reimburse' | 'thr_phk' | 'kalkulator_pajak' | 'komponen' | 'golongan' | 'pengaturan'>('payroll');
+  const [activeTab, setActiveTab] = useState<'payroll' | 'reimburse' | 'thr_phk' | 'kalkulator_pajak' | 'komponen' | 'pengaturan'>('payroll');
   const [period, setPeriod] = useState('Oktober 2026');
   const [selectedPayslip, setSelectedPayslip] = useState<PayrollRecord | null>(null);
   const payslipSheetRef = useRef<HTMLDivElement>(null);
@@ -445,18 +443,6 @@ export const PayrollManagement: React.FC = () => {
         >
           <Sliders className="w-3.5 h-3.5" />
           <span>Komponen Gaji & Tunjangan</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('golongan')}
-          className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
-            activeTab === 'golongan'
-              ? 'border-slate-900 text-slate-950 font-bold'
-              : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
-          }`}
-        >
-          <TrendingUp className="w-3.5 h-3.5" />
-          <span>Skala Upah & Golongan</span>
         </button>
 
         <button
@@ -2099,9 +2085,6 @@ export const PayrollManagement: React.FC = () => {
 
       {/* 07B: Master Komponen Tunjangan & Potongan */}
       {activeTab === 'komponen' && <SalaryComponentManagement />}
-
-      {/* 07C: Struktur & Skala Upah / Rentang Gaji per Grade */}
-      {activeTab === 'golongan' && <GradeSalaryManagement />}
 
       {/* MODAL: AJUKAN KLAIM REIMBURSEMENT */}
       {isClaimModalOpen && (
