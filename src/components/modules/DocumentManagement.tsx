@@ -50,6 +50,15 @@ import {
   ChevronDown,
   Scissors,
   Users,
+  Briefcase,
+  Award,
+  GraduationCap,
+  Clock,
+  Coins,
+  ShieldAlert,
+  Package,
+  FolderKanban,
+  LayoutGrid,
 } from 'lucide-react';
 import { OfficialDocument, DocumentType, DocumentTemplateConfig, Employee } from '../../types/hrms';
 import { QRCodeView } from '../common/QRCodeView';
@@ -93,6 +102,164 @@ export const ALL_DOCUMENT_TYPES: { type: DocumentType | string; label: string; c
   { type: 'Surat Pinjaman Karyawan', label: 'Surat Pinjaman / Kasbon Karyawan', category: 'Payroll & Remunerasi' },
   { type: 'Non-Disclosure Agreement (NDA)', label: 'Non-Disclosure Agreement (NDA Kerahasiaan)', category: 'Legal & Kepatuhan' },
 ];
+
+export type TemplateCategory =
+  | 'Perjanjian Kerja & Kontrak'
+  | 'Karier & Organisasi'
+  | 'Magang Industri'
+  | 'Kehadiran, Cuti & Perjalanan Dinas'
+  | 'Payroll, Pajak & BPJS'
+  | 'Disiplin, PHK & Paklaring'
+  | 'Pengadaan, Aset & Umum (GA)';
+
+export const TEMPLATE_CATEGORIES: {
+  id: TemplateCategory;
+  label: string;
+  badgeColor: string;
+  description: string;
+}[] = [
+  {
+    id: 'Perjanjian Kerja & Kontrak',
+    label: 'Perjanjian Kerja & Kontrak',
+    badgeColor: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+    description: 'PKWT, PKWTT, Addendum, Offering Letter, Non-Disclosure Agreement (NDA), dan SK Tenaga Ahli.',
+  },
+  {
+    id: 'Karier & Organisasi',
+    label: 'Karier & Organisasi',
+    badgeColor: 'bg-purple-50 text-purple-700 border-purple-200',
+    description: 'Promosi, Mutasi, Demosi, Penetapan Plt, dan Evaluasi Kinerja Karyawan (KPI & OKR).',
+  },
+  {
+    id: 'Magang Industri',
+    label: 'Magang Industri',
+    badgeColor: 'bg-amber-50 text-amber-700 border-amber-200',
+    description: 'Sertifikat Kelulusan Magang dan Surat Pernyataan Kesepakatan Program Magang Kerja.',
+  },
+  {
+    id: 'Kehadiran, Cuti & Perjalanan Dinas',
+    label: 'Kehadiran, Cuti & Dinas',
+    badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    description: 'SPPD, Rekap Presensi Cut-off, Formulir Izin/Cuti/Sakit, Koreksi Presensi, dan Surat Lembur (SPKL).',
+  },
+  {
+    id: 'Payroll, Pajak & BPJS',
+    label: 'Payroll, Pajak & BPJS',
+    badgeColor: 'bg-teal-50 text-teal-700 border-teal-200',
+    description: 'Slip Gaji (A4/A5), Pendaftaran BPJS e-Dabu & SIPP, Bukti Potong Pajak Coretax, Klaim Biaya, dan Pinjaman Karyawan.',
+  },
+  {
+    id: 'Disiplin, PHK & Paklaring',
+    label: 'Disiplin, PHK & Paklaring',
+    badgeColor: 'bg-rose-50 text-rose-700 border-rose-200',
+    description: 'Surat Peringatan (SP 1/2/3), Sanksi Disiplin Resmi, SK PHK, dan Surat Pengalaman Kerja (Parklaring).',
+  },
+  {
+    id: 'Pengadaan, Aset & Umum (GA)',
+    label: 'Pengadaan, Aset & GA',
+    badgeColor: 'bg-sky-50 text-sky-700 border-sky-200',
+    description: 'BAST Aset, Form Tiketing IT, Peminjaman Ruang & Mobil Dinas, ATK, Purchase Order (PO), Quotation, Kontrak Vendor, dan Hardware.',
+  },
+];
+
+export const getTemplateCategory = (tmpl: { type?: string; name?: string }): TemplateCategory => {
+  const norm = `${tmpl.type || ''} ${tmpl.name || ''}`.toLowerCase();
+
+  if (norm.includes('magang') || norm.includes('intern')) {
+    return 'Magang Industri';
+  }
+  if (
+    norm.includes('pkwt') ||
+    norm.includes('pkwtt') ||
+    norm.includes('kontrak kerja') ||
+    norm.includes('offering') ||
+    norm.includes('nda') ||
+    norm.includes('kerahasiaan') ||
+    norm.includes('tenaga ahli') ||
+    norm.includes('konsultan')
+  ) {
+    return 'Perjanjian Kerja & Kontrak';
+  }
+  if (
+    norm.includes('promosi') ||
+    norm.includes('mutasi') ||
+    norm.includes('demosi') ||
+    norm.includes('plt') ||
+    norm.includes('acting') ||
+    norm.includes('kpi') ||
+    norm.includes('okr') ||
+    norm.includes('kinerja')
+  ) {
+    return 'Karier & Organisasi';
+  }
+  if (
+    norm.includes('sppd') ||
+    norm.includes('perjalanan dinas') ||
+    norm.includes('presensi') ||
+    norm.includes('cuti') ||
+    norm.includes('lembur') ||
+    norm.includes('izin') ||
+    norm.includes('sakit') ||
+    norm.includes('kehadiran')
+  ) {
+    return 'Kehadiran, Cuti & Perjalanan Dinas';
+  }
+  if (
+    norm.includes('gaji') ||
+    norm.includes('payslip') ||
+    norm.includes('payroll') ||
+    norm.includes('bpjs') ||
+    norm.includes('edabu') ||
+    norm.includes('e-dabu') ||
+    norm.includes('sipp') ||
+    norm.includes('pajak') ||
+    norm.includes('coretax') ||
+    norm.includes('bupot') ||
+    norm.includes('klaim') ||
+    norm.includes('reimburse') ||
+    norm.includes('pinjaman') ||
+    norm.includes('kasbon') ||
+    norm.includes('angsuran')
+  ) {
+    return 'Payroll, Pajak & BPJS';
+  }
+  if (
+    norm.includes('peringatan') ||
+    norm.includes('sp-') ||
+    norm.includes('sp 1') ||
+    norm.includes('sp 2') ||
+    norm.includes('sp 3') ||
+    norm.includes('disiplin') ||
+    norm.includes('phk') ||
+    norm.includes('pengakhiran') ||
+    norm.includes('paklaring') ||
+    norm.includes('parklaring') ||
+    norm.includes('pengalaman kerja')
+  ) {
+    return 'Disiplin, PHK & Paklaring';
+  }
+  return 'Pengadaan, Aset & Umum (GA)';
+};
+
+export const renderCategoryIcon = (cat: TemplateCategory | string, className = 'w-4 h-4') => {
+  switch (cat) {
+    case 'Perjanjian Kerja & Kontrak':
+      return <Briefcase className={className} />;
+    case 'Karier & Organisasi':
+      return <Award className={className} />;
+    case 'Magang Industri':
+      return <GraduationCap className={className} />;
+    case 'Kehadiran, Cuti & Perjalanan Dinas':
+      return <Clock className={className} />;
+    case 'Payroll, Pajak & BPJS':
+      return <Coins className={className} />;
+    case 'Disiplin, PHK & Paklaring':
+      return <ShieldAlert className={className} />;
+    case 'Pengadaan, Aset & Umum (GA)':
+    default:
+      return <Package className={className} />;
+  }
+};
 
 export const extractPlaceholdersFromText = (text: string): string[] => {
   const matches = text.match(/\{\{([a-zA-Z0-9_-]+)\}\}/g);
@@ -316,6 +483,11 @@ export const DocumentManagement: React.FC = () => {
   const studioReplaceInputRef = useRef<HTMLInputElement>(null);
   const templateReplaceInputRef = useRef<HTMLInputElement>(null);
   const templateToReplaceIdRef = useRef<string>('');
+
+  // State Filter & Pengelompokan Tab Template Dokumen
+  const [templateSearchQuery, setTemplateSearchQuery] = useState('');
+  const [templateCategoryFilter, setTemplateCategoryFilter] = useState<string>('all');
+  const [templateViewMode, setTemplateViewMode] = useState<'grouped' | 'grid'>('grouped');
 
   // Close Underline Menu on Click Outside
   useEffect(() => {
@@ -2819,156 +2991,403 @@ export const DocumentManagement: React.FC = () => {
       )}
 
       {/* TAB 3: TEMPLATE DOKUMEN SISTEM */}
-      {activeTab === 'templates' && (
-        <div className="space-y-5">
-          {/* Top Banner Information */}
-          <div className="p-4 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
-            <div>
-              <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
-                <FileCheck2 className="w-4 h-4 text-indigo-600" />
-                <span>Koleksi 20 Template Dokumen Resmi Sistem</span>
-              </h3>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Seluruh template dokumen dinas dan korporat resmi telah terdaftar dan terintegrasi sistem. Pengeditan naskah template, kop surat, formula penomoran, dan simulasi penandatangan dilakukan eksklusif melalui Studio Side-by-Side.
-              </p>
-            </div>
-          </div>
+      {activeTab === 'templates' && (() => {
+        const filteredTemplates = documentTemplates.filter((tmpl) => {
+          const matchesQuery =
+            !templateSearchQuery ||
+            tmpl.name.toLowerCase().includes(templateSearchQuery.toLowerCase()) ||
+            tmpl.type.toLowerCase().includes(templateSearchQuery.toLowerCase()) ||
+            tmpl.numberingPattern.toLowerCase().includes(templateSearchQuery.toLowerCase());
+          const matchesCat =
+            templateCategoryFilter === 'all' || getTemplateCategory(tmpl) === templateCategoryFilter;
+          return matchesQuery && matchesCat;
+        });
 
-          {/* Grid 20 Template Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {documentTemplates.map((tmpl, idx) => {
-              const isDocx = tmpl.sourceType === 'uploaded_docx';
-              const placeholderCount = tmpl.extractedPlaceholders?.length || extractPlaceholdersFromText(tmpl.defaultBody || '').length;
+        const renderTemplateCard = (tmpl: DocumentTemplateConfig, displayIdx: number) => {
+          const isDocx = tmpl.sourceType === 'uploaded_docx';
+          const placeholderCount = tmpl.extractedPlaceholders?.length || extractPlaceholdersFromText(tmpl.defaultBody || '').length;
+          const catId = getTemplateCategory(tmpl);
+          const catObj = TEMPLATE_CATEGORIES.find((c) => c.id === catId);
 
-              return (
-                <div
-                  key={tmpl.id}
-                  className="bg-white border border-slate-200 hover:border-indigo-400 rounded-xl p-4 shadow-xs transition-all flex flex-col justify-between space-y-3 group"
-                >
-                  <div className="space-y-2">
-                    {/* Header: Number & Badges */}
-                    <div className="flex items-start justify-between gap-2">
-                      <span className="w-6 h-6 rounded-full bg-slate-100 group-hover:bg-indigo-100 text-slate-700 group-hover:text-indigo-800 text-[11px] font-bold flex items-center justify-center shrink-0">
-                        {idx + 1}
-                      </span>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
-                          {tmpl.type}
-                        </span>
-                        {isDocx ? (
-                          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-100 text-blue-800">
-                            DOCX
-                          </span>
-                        ) : (
-                          <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-slate-100 text-slate-600">
-                            Sistem
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Title */}
-                    <h4 className="font-bold text-slate-900 text-xs leading-snug line-clamp-2">
-                      {tmpl.name}
-                    </h4>
-
-                    {/* Numbering Formula */}
-                    <div className="p-2 bg-slate-50 rounded-lg border border-slate-100 text-[10px] font-mono text-slate-600 truncate">
-                      <span className="text-slate-400 block text-[9px]">Pola Penomoran:</span>
-                      <span className="font-bold text-indigo-700">{tmpl.numberingPattern}</span>
-                    </div>
-
-                    <div className="text-[10px] text-slate-400 flex items-center justify-between">
-                      <span>{placeholderCount} Tag Variabel Dinamis</span>
-                      <span>Kop: {tmpl.kopPosition !== 'none' ? 'Aktif' : 'Nonaktif'}</span>
-                    </div>
+          return (
+            <div
+              key={tmpl.id}
+              className="bg-white border border-slate-200 hover:border-indigo-400 rounded-xl p-4 shadow-xs transition-all flex flex-col justify-between space-y-3 group"
+            >
+              <div className="space-y-2.5">
+                {/* Header: Number & Badges */}
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-6 h-6 rounded-full bg-slate-100 group-hover:bg-indigo-100 text-slate-700 group-hover:text-indigo-800 text-[11px] font-bold flex items-center justify-center shrink-0">
+                      {displayIdx + 1}
+                    </span>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold border flex items-center gap-1 ${catObj?.badgeColor || 'bg-slate-100 text-slate-700 border-slate-200'}`}>
+                      {renderCategoryIcon(catId, 'w-2.5 h-2.5')}
+                      <span className="truncate max-w-[120px]">{catObj?.label || catId}</span>
+                    </span>
                   </div>
-
-                  {/* Card Action Buttons (Studio Side-by-Side Utama, Preview, Replace Docx) */}
-                  <div className="pt-2 border-t border-slate-100 flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => handleLoadTemplateIntoStudio(tmpl)}
-                      className="flex-1 py-1.5 px-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer"
-                      title="Buka dan edit template ini di Studio Side-by-Side (Editor Kiri & Live Preview Kanan)"
-                    >
-                      <Layout className="w-3.5 h-3.5" />
-                      <span>Buka di Studio</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const simulatedEmployee = employees[0];
-                        const simulatedDocNumber = evaluateNumberingFormula(
-                          tmpl.numberingPattern,
-                          documents.length + 1,
-                          currentTenant.code,
-                          new Date()
-                        );
-                        const resolvedContent = interpolateDocxTemplate(tmpl.defaultBody || '', {
-                          employee: simulatedEmployee,
-                          tenant: currentTenant,
-                          documentNumber: simulatedDocNumber,
-                          signeeName: currentUser.name,
-                          signeeRole: defaultSigneeRole,
-                        });
-
-                        setSelectedDoc({
-                          id: `preview-${tmpl.id}`,
-                          tenantId: currentTenant?.id || 'tenant-001',
-                          type: tmpl.type as DocumentType,
-                          title: tmpl.name,
-                          documentNumber: simulatedDocNumber,
-                          issueDate: new Date().toISOString().split('T')[0],
-                          targetEmployeeId: simulatedEmployee?.id || 'EMP-DEFAULT',
-                          signeeName: currentUser.name,
-                          signeeRole: defaultSigneeRole,
-                          status: 'Resmi Diterbitkan',
-                          contentPreview: resolvedContent,
-                          qrVerificationUrl: `https://nusantara.id/verify/${simulatedDocNumber}?status=valid`,
-                          templateId: tmpl.id,
-                        });
-                      }}
-                      className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[11px] font-semibold border border-slate-200 transition-colors"
-                      title="Pratinjau lembar surat"
-                    >
-                      <Eye className="w-3.5 h-3.5" />
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => handleTriggerReplaceExistingTemplate(tmpl.id)}
-                      className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[11px] font-semibold border border-slate-200 transition-colors"
-                      title="Replace isi template dengan file Word (.docx) baru"
-                    >
-                      <Upload className="w-3.5 h-3.5 text-slate-600" />
-                    </button>
-
-                    {isDocx && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          deleteDocumentTemplate(tmpl.id);
-                          setFeedbackMessage({
-                            type: 'info',
-                            title: 'Template Dihapus',
-                            description: `Template "${tmpl.name}" telah dihapus.`,
-                          });
-                        }}
-                        className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg border border-rose-200 transition-colors"
-                        title="Hapus template kustom ini"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                      {tmpl.paperSize || 'A4'}
+                    </span>
+                    {isDocx ? (
+                      <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-100 text-blue-800">
+                        DOCX
+                      </span>
+                    ) : (
+                      <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-slate-100 text-slate-600">
+                        Sistem
+                      </span>
                     )}
                   </div>
                 </div>
-              );
-            })}
+
+                {/* Title */}
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">
+                    {tmpl.type}
+                  </span>
+                  <h4 className="font-bold text-slate-900 text-xs leading-snug line-clamp-2">
+                    {tmpl.name}
+                  </h4>
+                </div>
+
+                {/* Numbering Formula */}
+                <div className="p-2 bg-slate-50 rounded-lg border border-slate-100 text-[10px] font-mono text-slate-600 truncate">
+                  <span className="text-slate-400 block text-[9px]">Pola Penomoran:</span>
+                  <span className="font-bold text-indigo-700">{tmpl.numberingPattern}</span>
+                </div>
+
+                <div className="text-[10px] text-slate-400 flex items-center justify-between pt-0.5">
+                  <span>{placeholderCount} Tag Variabel</span>
+                  <span>Kop: {tmpl.kopPosition !== 'none' ? 'Aktif' : 'Nonaktif'}</span>
+                </div>
+              </div>
+
+              {/* Card Action Buttons */}
+              <div className="pt-2 border-t border-slate-100 flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => handleLoadTemplateIntoStudio(tmpl)}
+                  className="flex-1 py-1.5 px-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer"
+                  title="Buka dan edit template ini di Studio Side-by-Side (Editor Kiri & Live Preview Kanan)"
+                >
+                  <Layout className="w-3.5 h-3.5" />
+                  <span>Buka di Studio</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const simulatedEmployee = employees[0];
+                    const simulatedDocNumber = evaluateNumberingFormula(
+                      tmpl.numberingPattern,
+                      documents.length + 1,
+                      currentTenant.code,
+                      new Date()
+                    );
+                    const resolvedContent = interpolateDocxTemplate(tmpl.defaultBody || '', {
+                      employee: simulatedEmployee,
+                      tenant: currentTenant,
+                      documentNumber: simulatedDocNumber,
+                      signeeName: currentUser.name,
+                      signeeRole: defaultSigneeRole,
+                    });
+
+                    setSelectedDoc({
+                      id: `preview-${tmpl.id}`,
+                      tenantId: currentTenant?.id || 'tenant-001',
+                      type: tmpl.type as DocumentType,
+                      title: tmpl.name,
+                      documentNumber: simulatedDocNumber,
+                      issueDate: new Date().toISOString().split('T')[0],
+                      targetEmployeeId: simulatedEmployee?.id || 'EMP-DEFAULT',
+                      signeeName: currentUser.name,
+                      signeeRole: defaultSigneeRole,
+                      status: 'Resmi Diterbitkan',
+                      contentPreview: resolvedContent,
+                      qrVerificationUrl: `https://nusantara.id/verify/${simulatedDocNumber}?status=valid`,
+                      templateId: tmpl.id,
+                    });
+                  }}
+                  className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[11px] font-semibold border border-slate-200 transition-colors cursor-pointer"
+                  title="Pratinjau lembar surat"
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleTriggerReplaceExistingTemplate(tmpl.id)}
+                  className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[11px] font-semibold border border-slate-200 transition-colors cursor-pointer"
+                  title="Replace isi template dengan file Word (.docx) baru"
+                >
+                  <Upload className="w-3.5 h-3.5 text-slate-600" />
+                </button>
+
+                {isDocx && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      deleteDocumentTemplate(tmpl.id);
+                      setFeedbackMessage({
+                        type: 'info',
+                        title: 'Template Dihapus',
+                        description: `Template "${tmpl.name}" telah dihapus.`,
+                      });
+                    }}
+                    className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg border border-rose-200 transition-colors cursor-pointer"
+                    title="Hapus template kustom ini"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        };
+
+        return (
+          <div className="space-y-5">
+            {/* Top Banner Information (Dynamic total based on data) */}
+            <div className="p-4 sm:p-5 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="p-1.5 bg-indigo-50 text-indigo-700 rounded-lg border border-indigo-200">
+                    <FileCheck2 className="w-4 h-4" />
+                  </span>
+                  <h3 className="font-bold text-slate-900 text-sm sm:text-base">
+                    Koleksi {documentTemplates.length} Template Dokumen Resmi Sistem
+                  </h3>
+                </div>
+                <p className="text-xs text-slate-500 mt-1 max-w-3xl leading-relaxed">
+                  Seluruh {documentTemplates.length} template dokumen dinas dan korporat resmi telah dikelompokkan berdasarkan kategori operasional HR, Legal, General Affairs, dan Payroll. Naskah, kop surat, formula penomoran, dan tanda tangan dapat disimulasikan dan disunting melalui Studio Side-by-Side.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 self-start sm:self-center shrink-0">
+                <span className="px-3 py-1.5 bg-indigo-50 text-indigo-800 rounded-lg text-xs font-bold border border-indigo-100 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                  {filteredTemplates.length} dari {documentTemplates.length} Template
+                </span>
+              </div>
+            </div>
+
+            {/* Filter & Search Bar */}
+            <div className="bg-white border border-slate-200 rounded-xl p-3 sm:p-4 shadow-xs space-y-3">
+              <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+                {/* Search Bar Input */}
+                <div className="relative flex-1">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={templateSearchQuery}
+                    onChange={(e) => setTemplateSearchQuery(e.target.value)}
+                    placeholder="Cari nama dokumen, tipe, atau pola penomoran (misal: PKWT, SPPD, Slip Gaji, BPJS, Magang)..."
+                    className="w-full pl-9 pr-8 py-2 border border-slate-300 rounded-lg text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 bg-slate-50/50 hover:bg-white focus:bg-white transition-all"
+                  />
+                  {templateSearchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setTemplateSearchQuery('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded cursor-pointer"
+                      title="Hapus pencarian"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Category Dropdown & View Mode Toggle */}
+                <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex items-center gap-1.5 bg-white border border-slate-300 rounded-lg px-2.5 py-1.5">
+                    <Filter className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                    <select
+                      value={templateCategoryFilter}
+                      onChange={(e) => setTemplateCategoryFilter(e.target.value)}
+                      className="text-xs font-semibold text-slate-800 bg-transparent border-none focus:outline-none cursor-pointer pr-1"
+                    >
+                      <option value="all">Semua Kategori ({documentTemplates.length})</option>
+                      {TEMPLATE_CATEGORIES.map((cat) => {
+                        const count = documentTemplates.filter((t) => getTemplateCategory(t) === cat.id).length;
+                        return (
+                          <option key={cat.id} value={cat.id}>
+                            {cat.label} ({count})
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+
+                  {/* Mode Tampilan: Per Kategori vs Grid */}
+                  <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg border border-slate-200 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setTemplateViewMode('grouped')}
+                      className={`px-2.5 py-1 rounded text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                        templateViewMode === 'grouped'
+                          ? 'bg-white text-indigo-700 shadow-2xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                      title="Kelompokkan naskah berdasarkan kategori dokumen"
+                    >
+                      <FolderKanban className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">Per Kategori</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTemplateViewMode('grid')}
+                      className={`px-2.5 py-1 rounded text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                        templateViewMode === 'grid'
+                          ? 'bg-white text-indigo-700 shadow-2xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                      title="Tampilkan seluruh kartu template dalam satu grid"
+                    >
+                      <LayoutGrid className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">Semua Grid</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Category Quick Pills */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 pt-1 text-[11px] scrollbar-thin">
+                <button
+                  type="button"
+                  onClick={() => setTemplateCategoryFilter('all')}
+                  className={`px-2.5 py-1 rounded-full font-bold transition-all shrink-0 cursor-pointer flex items-center gap-1.5 ${
+                    templateCategoryFilter === 'all'
+                      ? 'bg-slate-900 text-white shadow-2xs'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  <span>Semua</span>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+                    templateCategoryFilter === 'all' ? 'bg-slate-800 text-slate-200' : 'bg-slate-200 text-slate-700'
+                  }`}>
+                    {documentTemplates.length}
+                  </span>
+                </button>
+                {TEMPLATE_CATEGORIES.map((cat) => {
+                  const catCount = documentTemplates.filter((t) => getTemplateCategory(t) === cat.id).length;
+                  const isSelected = templateCategoryFilter === cat.id;
+                  return (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => setTemplateCategoryFilter(isSelected ? 'all' : cat.id)}
+                      className={`px-2.5 py-1 rounded-full font-semibold transition-all shrink-0 cursor-pointer flex items-center gap-1.5 border ${
+                        isSelected
+                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs'
+                          : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+                      }`}
+                    >
+                      {renderCategoryIcon(cat.id, 'w-3 h-3')}
+                      <span>{cat.label}</span>
+                      <span
+                        className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${
+                          isSelected ? 'bg-indigo-700 text-white' : 'bg-slate-200 text-slate-700'
+                        }`}
+                      >
+                        {catCount}
+                      </span>
+                    </button>
+                  );
+                })}
+                {(templateSearchQuery || templateCategoryFilter !== 'all') && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTemplateSearchQuery('');
+                      setTemplateCategoryFilter('all');
+                    }}
+                    className="px-2.5 py-1 text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded-full font-bold text-[10px] flex items-center gap-1 shrink-0 ml-auto cursor-pointer"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    <span>Reset Filter</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Empty State when 0 filtered */}
+            {filteredTemplates.length === 0 ? (
+              <div className="bg-white border border-slate-200 rounded-xl p-10 text-center space-y-3">
+                <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-400 mx-auto flex items-center justify-center">
+                  <Search className="w-6 h-6" />
+                </div>
+                <h4 className="font-bold text-slate-800 text-sm">Tidak ada template dokumen yang cocok</h4>
+                <p className="text-xs text-slate-500 max-w-md mx-auto">
+                  Tidak ditemukan template untuk kata kunci "{templateSearchQuery}" {templateCategoryFilter !== 'all' ? `pada kategori "${templateCategoryFilter}"` : ''}. Silakan coba kata kunci lain atau reset filter.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTemplateSearchQuery('');
+                    setTemplateCategoryFilter('all');
+                  }}
+                  className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                >
+                  Reset Filter
+                </button>
+              </div>
+            ) : templateViewMode === 'grouped' ? (
+              /* VIEW MODE 1: PENGELOMPOKAN BERDASARKAN KATEGORI */
+              <div className="space-y-8">
+                {TEMPLATE_CATEGORIES.map((cat) => {
+                  if (templateCategoryFilter !== 'all' && templateCategoryFilter !== cat.id) {
+                    return null;
+                  }
+                  const templatesInCat = filteredTemplates.filter(
+                    (t) => getTemplateCategory(t) === cat.id
+                  );
+                  if (templatesInCat.length === 0) return null;
+
+                  return (
+                    <div key={cat.id} className="space-y-3">
+                      {/* Category Header */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-2 border-b border-slate-200 gap-1.5">
+                        <div className="flex items-center gap-2">
+                          <span className={`p-1.5 rounded-lg border flex items-center justify-center ${cat.badgeColor}`}>
+                            {renderCategoryIcon(cat.id, 'w-4 h-4')}
+                          </span>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h3 className="font-bold text-slate-900 text-sm">
+                                {cat.label}
+                              </h3>
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                                {templatesInCat.length} Dokumen
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-slate-500 line-clamp-1">
+                              {cat.description}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Grid Kartu Template dalam Kategori Ini */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                        {templatesInCat.map((tmpl, idx) =>
+                          renderTemplateCard(tmpl, idx)
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              /* VIEW MODE 2: SEMUA GRID TERUNIFIKASI */
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                {filteredTemplates.map((tmpl, idx) =>
+                  renderTemplateCard(tmpl, idx)
+                )}
+              </div>
+            )}
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* TAB 4: DAFTAR TAG VARIABEL DINAMIS WORD (.DOCX) & TOKEN FORMULA */}
       {activeTab === 'daftar_tag' && (
