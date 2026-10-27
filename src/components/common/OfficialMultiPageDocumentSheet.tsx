@@ -49,6 +49,7 @@ interface OfficialMultiPageDocumentSheetProps {
   letterheadNpwp?: string;
   letterheadStyle?: 'double' | 'bold' | 'single' | 'none';
   letterheadAlign?: 'left' | 'center' | 'right';
+  letterheadLogoAlign?: 'left' | 'center' | 'right';
   letterheadMode?: 'structured' | 'freetext';
   letterheadFreeText?: string;
   letterheadCustomLogoUrl?: string;
@@ -115,6 +116,7 @@ export const OfficialMultiPageDocumentSheet: React.FC<OfficialMultiPageDocumentS
   letterheadNpwp,
   letterheadStyle = 'double',
   letterheadAlign = 'left',
+  letterheadLogoAlign = 'left',
   letterheadMode = 'structured',
   letterheadFreeText = '',
   letterheadCustomLogoUrl,
@@ -414,99 +416,33 @@ ${tenant.name}`;
                             : ''
                         }`}
                       >
-                        {/* MODE 1: FREE TEXT (Teks Kustom Bebas Tanpa Title Bawaan) */}
-                        {letterheadMode === 'freetext' && letterheadFreeText ? (
-                          letterheadAlign === 'center' ? (
-                            <div className="flex flex-col items-center text-center gap-2">
-                              {effectiveLogoUrl ? (
-                                <img
-                                  src={effectiveLogoUrl}
-                                  alt="Logo"
-                                  className="w-14 h-14 rounded object-contain border border-slate-200 p-0.5 bg-white shrink-0 shadow-2xs"
-                                />
-                              ) : (
-                                <div className="w-14 h-14 rounded bg-indigo-700 text-white flex items-center justify-center font-bold text-2xl shadow-xs shrink-0">
-                                  {tenant.logoText || 'N'}
-                                </div>
-                              )}
-                              <div className="text-[11px] text-slate-800 leading-snug whitespace-pre-line max-w-lg">
+                        {/* KOP SURAT BERBASIS PENGATURAN TERPISAH: PERATAAN TEKS (letterheadAlign) & POSISI LOGO (letterheadLogoAlign) */}
+                        {(() => {
+                          const logoNode = (
+                            effectiveLogoUrl ? (
+                              <img
+                                src={effectiveLogoUrl}
+                                alt={effectiveCompanyName || 'Logo'}
+                                className="w-14 h-14 rounded object-contain border border-slate-200 p-0.5 bg-white shrink-0 shadow-2xs"
+                              />
+                            ) : (
+                              <div className="w-14 h-14 rounded bg-indigo-700 text-white flex items-center justify-center font-bold text-2xl shadow-xs shrink-0">
+                                {tenant.logoText || 'N'}
+                              </div>
+                            )
+                          );
+
+                          const textNode = (
+                            letterheadMode === 'freetext' && letterheadFreeText ? (
+                              <div className={`text-[11px] text-slate-800 leading-snug whitespace-pre-line ${
+                                letterheadAlign === 'center' ? 'text-center' : letterheadAlign === 'right' ? 'text-right' : 'text-left'
+                              }`}>
                                 {letterheadFreeText}
                               </div>
-                            </div>
-                          ) : letterheadAlign === 'right' ? (
-                            <div className="flex items-center justify-end gap-3.5 text-right">
-                              <div className="text-[11px] text-slate-800 leading-snug whitespace-pre-line">
-                                {letterheadFreeText}
-                              </div>
-                              {effectiveLogoUrl ? (
-                                <img
-                                  src={effectiveLogoUrl}
-                                  alt="Logo"
-                                  className="w-14 h-14 rounded object-contain border border-slate-200 p-0.5 bg-white shrink-0 shadow-2xs order-last"
-                                />
-                              ) : (
-                                <div className="w-14 h-14 rounded bg-indigo-700 text-white flex items-center justify-center font-bold text-2xl shadow-xs shrink-0 order-last">
-                                  {tenant.logoText || 'N'}
-                                </div>
-                              )}
-                            </div>
-                          ) : (
-                            <div className="flex items-center justify-between gap-4 text-left">
-                              <div className="flex items-center gap-3.5">
-                                {effectiveLogoUrl ? (
-                                  <img
-                                    src={effectiveLogoUrl}
-                                    alt="Logo"
-                                    className="w-14 h-14 rounded object-contain border border-slate-200 p-0.5 bg-white shrink-0 shadow-2xs"
-                                  />
-                                ) : (
-                                  <div className="w-14 h-14 rounded bg-indigo-700 text-white flex items-center justify-center font-bold text-2xl shadow-xs shrink-0">
-                                    {tenant.logoText || 'N'}
-                                  </div>
-                                )}
-                                <div className="text-[11px] text-slate-800 leading-snug whitespace-pre-line">
-                                  {letterheadFreeText}
-                                </div>
-                              </div>
-                            </div>
-                          )
-                        ) : (
-                          /* MODE 2: FORM TERSTRUKTUR (Hanya tampilkan jika field diisi) */
-                          letterheadAlign === 'center' ? (
-                            <div className="flex flex-col items-center text-center gap-2">
-                              {effectiveLogoUrl ? (
-                                <img
-                                  src={effectiveLogoUrl}
-                                  alt={effectiveCompanyName}
-                                  className="w-14 h-14 rounded object-contain border border-slate-200 p-0.5 bg-white shrink-0 shadow-2xs"
-                                />
-                              ) : (
-                                <div className="w-14 h-14 rounded bg-indigo-700 text-white flex items-center justify-center font-bold text-2xl shadow-xs shrink-0">
-                                  {tenant.logoText || 'N'}
-                                </div>
-                              )}
-                              <div>
-                                {effectiveCompanyName && (
-                                  <h1 className="text-base font-extrabold text-slate-900 uppercase tracking-wider leading-tight">
-                                    {effectiveCompanyName}
-                                  </h1>
-                                )}
-                                {effectiveAddress && (
-                                  <p className="text-[10px] text-slate-600 mt-0.5 leading-snug max-w-lg">
-                                    {effectiveAddress}
-                                  </p>
-                                )}
-                                {effectiveContactLine && (
-                                  <p className="text-[9.5px] text-slate-500 font-mono mt-0.5">
-                                    {effectiveContactLine}
-                                  </p>
-                                )}
-                              </div>
-                            </div>
-                          ) : letterheadAlign === 'right' ? (
-                            /* KOP SURAT RATA KANAN (Logo di kanan, teks rata kanan) */
-                            <div className="flex items-center justify-end gap-3.5 text-right">
-                              <div>
+                            ) : (
+                              <div className={
+                                letterheadAlign === 'center' ? 'text-center' : letterheadAlign === 'right' ? 'text-right' : 'text-left'
+                              }>
                                 {effectiveCompanyName && (
                                   <h1 className="text-base font-extrabold text-slate-900 uppercase tracking-wider leading-tight">
                                     {effectiveCompanyName}
@@ -523,54 +459,78 @@ ${tenant.name}`;
                                   </p>
                                 )}
                               </div>
-                              {effectiveLogoUrl ? (
-                                <img
-                                  src={effectiveLogoUrl}
-                                  alt={effectiveCompanyName}
-                                  className="w-14 h-14 rounded object-contain border border-slate-200 p-0.5 bg-white shrink-0 shadow-2xs order-last"
-                                />
-                              ) : (
-                                <div className="w-14 h-14 rounded bg-indigo-700 text-white flex items-center justify-center font-bold text-2xl shadow-xs shrink-0 order-last">
-                                  {tenant.logoText || 'N'}
-                                </div>
-                              )}
-                            </div>
-                          ) : (
-                            /* KOP SURAT RATA KIRI (Logo di kiri, teks rata kiri) */
-                            <div className="flex items-center justify-between gap-4 text-left">
-                              <div className="flex items-center gap-3.5">
-                                {effectiveLogoUrl ? (
-                                  <img
-                                    src={effectiveLogoUrl}
-                                    alt={effectiveCompanyName}
-                                    className="w-14 h-14 rounded object-contain border border-slate-200 p-0.5 bg-white shrink-0 shadow-2xs"
-                                  />
-                                ) : (
-                                  <div className="w-14 h-14 rounded bg-indigo-700 text-white flex items-center justify-center font-bold text-2xl shadow-xs shrink-0">
-                                    {tenant.logoText || 'N'}
-                                  </div>
-                                )}
-                                <div>
-                                  {effectiveCompanyName && (
-                                    <h1 className="text-base font-extrabold text-slate-900 uppercase tracking-wider leading-tight">
-                                      {effectiveCompanyName}
-                                    </h1>
-                                  )}
-                                  {effectiveAddress && (
-                                    <p className="text-[10px] text-slate-600 mt-0.5 leading-snug">
-                                      {effectiveAddress}
-                                    </p>
-                                  )}
-                                  {effectiveContactLine && (
-                                    <p className="text-[9.5px] text-slate-500 font-mono mt-0.5">
-                                      {effectiveContactLine}
-                                    </p>
-                                  )}
+                            )
+                          );
+
+                          // KASUS 1: LOGO DI TENGAH (Logo di atas di tengah, teks di bawahnya)
+                          if (letterheadLogoAlign === 'center') {
+                            return (
+                              <div className="flex flex-col items-center text-center gap-2">
+                                {logoNode}
+                                <div className={`w-full ${
+                                  letterheadAlign === 'center' ? 'text-center' : letterheadAlign === 'right' ? 'text-right' : 'text-left'
+                                }`}>
+                                  {textNode}
                                 </div>
                               </div>
+                            );
+                          }
+
+                          // KASUS 2: LOGO DI KANAN
+                          if (letterheadLogoAlign === 'right') {
+                            if (letterheadAlign === 'center') {
+                              return (
+                                <div className="grid grid-cols-[56px_1fr_56px] items-center gap-4">
+                                  <div className="w-14 shrink-0" aria-hidden="true" />
+                                  <div className="text-center min-w-0">{textNode}</div>
+                                  <div className="flex justify-end shrink-0">{logoNode}</div>
+                                </div>
+                              );
+                            }
+                            if (letterheadAlign === 'left') {
+                              return (
+                                <div className="flex items-center justify-between gap-4 text-left">
+                                  <div className="flex-1 min-w-0 text-left">{textNode}</div>
+                                  <div className="shrink-0">{logoNode}</div>
+                                </div>
+                              );
+                            }
+                            // letterheadAlign === 'right'
+                            return (
+                              <div className="flex items-center justify-end gap-3.5 text-right">
+                                <div className="flex-1 min-w-0 text-right">{textNode}</div>
+                                <div className="shrink-0">{logoNode}</div>
+                              </div>
+                            );
+                          }
+
+                          // KASUS 3: LOGO DI KIRI (Default)
+                          if (letterheadAlign === 'center') {
+                            // Format resmi standar: Logo di tepi kiri, teks simetris di tengah
+                            return (
+                              <div className="grid grid-cols-[56px_1fr_56px] items-center gap-4">
+                                <div className="flex justify-start shrink-0">{logoNode}</div>
+                                <div className="text-center min-w-0">{textNode}</div>
+                                <div className="w-14 shrink-0" aria-hidden="true" />
+                              </div>
+                            );
+                          }
+                          if (letterheadAlign === 'right') {
+                            return (
+                              <div className="flex items-center justify-between gap-4 text-right">
+                                <div className="shrink-0">{logoNode}</div>
+                                <div className="flex-1 min-w-0 text-right">{textNode}</div>
+                              </div>
+                            );
+                          }
+                          // letterheadAlign === 'left'
+                          return (
+                            <div className="flex items-center gap-3.5 text-left">
+                              <div className="shrink-0">{logoNode}</div>
+                              <div className="flex-1 min-w-0 text-left">{textNode}</div>
                             </div>
-                          )
-                        )}
+                          );
+                        })()}
                       </div>
                     )
                   ) : (

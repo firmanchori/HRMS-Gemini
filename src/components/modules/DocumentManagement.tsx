@@ -59,6 +59,7 @@ import {
   Package,
   FolderKanban,
   LayoutGrid,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { OfficialDocument, DocumentType, DocumentTemplateConfig, Employee } from '../../types/hrms';
 import { QRCodeView } from '../common/QRCodeView';
@@ -321,6 +322,7 @@ export const DocumentManagement: React.FC = () => {
   // Pengaturan Kop Surat (Header) & Footer Studio Side-by-Side
   const [studioLetterheadStyle, setStudioLetterheadStyle] = useState<'double' | 'bold' | 'single' | 'none'>('double');
   const [studioLetterheadAlign, setStudioLetterheadAlign] = useState<'left' | 'center' | 'right'>('left');
+  const [studioLetterheadLogoAlign, setStudioLetterheadLogoAlign] = useState<'left' | 'center' | 'right'>('left');
   const [studioLetterheadMode, setStudioLetterheadMode] = useState<'structured' | 'freetext'>('structured');
   const [studioLetterheadFreeText, setStudioLetterheadFreeText] = useState<string>('');
   const [studioCustomLogoUrl, setStudioCustomLogoUrl] = useState<string>('');
@@ -2527,11 +2529,14 @@ export const DocumentManagement: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Pilihan Perataan Kop (Alignment) */}
+                    {/* Pilihan 1: Perataan Teks Kop (Text Alignment) */}
                     <div>
-                      <label className="text-[11px] font-semibold text-slate-700 block mb-1.5">
-                        Tata Letak & Perataan Kop Surat:
-                      </label>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="text-[11px] font-semibold text-slate-700 block">
+                          Perataan Teks Kop Surat:
+                        </label>
+                        <span className="text-[10px] text-slate-400">Khusus teks nama & kontak</span>
+                      </div>
                       <div className="grid grid-cols-3 gap-2">
                         <button
                           type="button"
@@ -2546,7 +2551,7 @@ export const DocumentManagement: React.FC = () => {
                             <AlignLeft className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
                             <span className="text-[10px] font-bold">Rata Kiri</span>
                           </div>
-                          <span className="text-slate-500 text-[9px] line-clamp-1">Logo di kiri, teks di samping</span>
+                          <span className="text-slate-500 text-[9px] line-clamp-1">Teks di kiri naskah</span>
                         </button>
                         <button
                           type="button"
@@ -2561,7 +2566,7 @@ export const DocumentManagement: React.FC = () => {
                             <AlignCenter className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
                             <span className="text-[10px] font-bold">Rata Tengah</span>
                           </div>
-                          <span className="text-slate-500 text-[9px] line-clamp-1">Logo di atas, teks di tengah</span>
+                          <span className="text-slate-500 text-[9px] line-clamp-1">Teks di tengah naskah</span>
                         </button>
                         <button
                           type="button"
@@ -2576,7 +2581,64 @@ export const DocumentManagement: React.FC = () => {
                             <AlignRight className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
                             <span className="text-[10px] font-bold">Rata Kanan</span>
                           </div>
-                          <span className="text-slate-500 text-[9px] line-clamp-1">Logo di kanan, teks ke kanan</span>
+                          <span className="text-slate-500 text-[9px] line-clamp-1">Teks di kanan naskah</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Pilihan 2: Posisi Logo Kop (Logo Alignment / Position) */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="text-[11px] font-semibold text-slate-700 block">
+                          Posisi Logo Kop Surat:
+                        </label>
+                        <span className="text-[10px] text-slate-400">Independen dari teks</span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setStudioLetterheadLogoAlign('left')}
+                          className={`p-2 rounded-lg border text-left transition-all cursor-pointer flex flex-col gap-1 ${
+                            studioLetterheadLogoAlign === 'left'
+                              ? 'bg-indigo-50/50 border-indigo-600 text-indigo-900 shadow-2xs ring-1 ring-indigo-600 font-bold'
+                              : 'bg-white border-slate-200 hover:border-slate-300 text-slate-700'
+                          }`}
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <ImageIcon className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                            <span className="text-[10px] font-bold">Logo di Kiri</span>
+                          </div>
+                          <span className="text-slate-500 text-[9px] line-clamp-1">Sisi kiri lembar</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setStudioLetterheadLogoAlign('center')}
+                          className={`p-2 rounded-lg border text-left transition-all cursor-pointer flex flex-col gap-1 ${
+                            studioLetterheadLogoAlign === 'center'
+                              ? 'bg-indigo-50/50 border-indigo-600 text-indigo-900 shadow-2xs ring-1 ring-indigo-600 font-bold'
+                              : 'bg-white border-slate-200 hover:border-slate-300 text-slate-700'
+                          }`}
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <ImageIcon className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                            <span className="text-[10px] font-bold">Logo di Tengah</span>
+                          </div>
+                          <span className="text-slate-500 text-[9px] line-clamp-1">Di atas naskah kop</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setStudioLetterheadLogoAlign('right')}
+                          className={`p-2 rounded-lg border text-left transition-all cursor-pointer flex flex-col gap-1 ${
+                            studioLetterheadLogoAlign === 'right'
+                              ? 'bg-indigo-50/50 border-indigo-600 text-indigo-900 shadow-2xs ring-1 ring-indigo-600 font-bold'
+                              : 'bg-white border-slate-200 hover:border-slate-300 text-slate-700'
+                          }`}
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <ImageIcon className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                            <span className="text-[10px] font-bold">Logo di Kanan</span>
+                          </div>
+                          <span className="text-slate-500 text-[9px] line-clamp-1">Sisi kanan lembar</span>
                         </button>
                       </div>
                     </div>
@@ -3161,6 +3223,7 @@ export const DocumentManagement: React.FC = () => {
                       letterheadNpwp={studioCompanyNpwp}
                       letterheadStyle={studioLetterheadStyle}
                       letterheadAlign={studioLetterheadAlign}
+                      letterheadLogoAlign={studioLetterheadLogoAlign}
                       letterheadMode={studioLetterheadMode}
                       letterheadFreeText={studioLetterheadFreeText}
                       letterheadCustomLogoUrl={studioCustomLogoUrl}
