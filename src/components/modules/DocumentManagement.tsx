@@ -4502,10 +4502,22 @@ export const DocumentManagement: React.FC = () => {
                       className="bg-white border border-slate-200 hover:border-indigo-300 rounded-xl p-3.5 shadow-2xs space-y-2.5 cursor-pointer active:scale-[0.99] transition-all"
                     >
                       <div className="flex items-start justify-between gap-2">
-                        <span className="font-mono font-bold text-xs text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
-                          {item.token}
-                        </span>
-                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700">
+                        <div className="flex flex-col gap-1">
+                          <span className="font-mono font-bold text-xs text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
+                            {item.token}
+                          </span>
+                          {item.isAlias && (
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-700 border border-amber-200 w-fit">
+                              ALIAS
+                            </span>
+                          )}
+                        </div>
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold whitespace-nowrap ${
+                          item.category === 'Waktu & Kalender' ? 'bg-blue-50 text-blue-700' :
+                          item.category === 'Nomor & Urutan' ? 'bg-violet-50 text-violet-700' :
+                          item.category === 'Organisasi & Entitas' ? 'bg-emerald-50 text-emerald-700' :
+                          'bg-slate-100 text-slate-700'
+                        }`}>
                           {item.category}
                         </span>
                       </div>
@@ -4578,17 +4590,31 @@ export const DocumentManagement: React.FC = () => {
                       return (
                         <tr key={item.token} className="hover:bg-slate-50/80 transition-colors">
                           <td className="py-2.5 px-3 font-mono font-bold text-indigo-700 whitespace-nowrap">
-                            <span className="bg-indigo-50 px-2 py-1 rounded border border-indigo-200">
-                              {item.token}
-                            </span>
+                            <div className="flex flex-col gap-1">
+                              <span className="bg-indigo-50 px-2 py-1 rounded border border-indigo-200">
+                                {item.token}
+                              </span>
+                              {item.isAlias && (
+                                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-700 border border-amber-200 w-fit">
+                                  ALIAS
+                                </span>
+                              )}
+                            </div>
                           </td>
                           <td className="py-2.5 px-3 whitespace-nowrap">
-                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700">
+                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                              item.category === 'Waktu & Kalender' ? 'bg-blue-50 text-blue-700' :
+                              item.category === 'Nomor & Urutan' ? 'bg-violet-50 text-violet-700' :
+                              item.category === 'Organisasi & Entitas' ? 'bg-emerald-50 text-emerald-700' :
+                              'bg-slate-100 text-slate-700'
+                            }`}>
                               {item.category}
                             </span>
                           </td>
                           <td className="py-2.5 px-3 font-semibold text-slate-900">
-                            {item.label}
+                            <div className="flex items-center gap-2">
+                              <span>{item.label}</span>
+                            </div>
                           </td>
                           <td className="py-2.5 px-3 font-mono font-bold text-slate-800 whitespace-nowrap">
                             <span className="bg-emerald-50 text-emerald-800 px-2 py-0.5 rounded border border-emerald-200">

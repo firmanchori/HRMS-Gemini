@@ -349,9 +349,11 @@ export interface NumberingTokenInfo {
   label: string;
   description: string;
   example: string;
+  isAlias?: boolean; // token alias / singkatan dari token lain
 }
 
 export const NUMBERING_TOKEN_REGISTRY: NumberingTokenInfo[] = [
+  // ── WAKTU & KALENDER ─────────────────────────────────────────────────────
   {
     token: '{ROMAN_MONTH}',
     category: 'Waktu & Kalender',
@@ -369,7 +371,7 @@ export const NUMBERING_TOKEN_REGISTRY: NumberingTokenInfo[] = [
   {
     token: '{MONTH_NAME}',
     category: 'Waktu & Kalender',
-    label: 'Nama Bulan',
+    label: 'Nama Bulan Indonesia',
     description: 'Nama bulan penuh dalam bahasa Indonesia (Januari - Desember)',
     example: 'Oktober',
   },
@@ -377,15 +379,23 @@ export const NUMBERING_TOKEN_REGISTRY: NumberingTokenInfo[] = [
     token: '{YEAR}',
     category: 'Waktu & Kalender',
     label: 'Tahun Penuh (4 Digit)',
-    description: 'Tahun kalender 4 digit penuh',
+    description: 'Tahun kalender 4 digit penuh dari tanggal penerbitan dokumen',
     example: '2026',
   },
   {
     token: '{YEAR_2}',
     category: 'Waktu & Kalender',
     label: 'Tahun 2 Digit (YY)',
-    description: 'Dua digit akhir dari tahun penerbitan',
+    description: 'Dua digit akhir dari tahun penerbitan (alias: {YY})',
     example: '26',
+  },
+  {
+    token: '{YY}',
+    category: 'Waktu & Kalender',
+    label: 'Tahun 2 Digit – Alias',
+    description: 'Singkatan dari {YEAR_2}. Sama-sama menampilkan 2 digit akhir tahun',
+    example: '26',
+    isAlias: true,
   },
   {
     token: '{DAY}',
@@ -398,50 +408,80 @@ export const NUMBERING_TOKEN_REGISTRY: NumberingTokenInfo[] = [
     token: '{QUARTER}',
     category: 'Waktu & Kalender',
     label: 'Kuartal Kalender',
-    description: 'Kuartal tahun berjalan (Q1, Q2, Q3, Q4)',
+    description: 'Kuartal tahun berjalan dalam format Q1, Q2, Q3, atau Q4',
     example: 'Q4',
   },
+
+  // ── NOMOR & URUTAN ───────────────────────────────────────────────────────
   {
     token: '{SEQ}',
     category: 'Nomor & Urutan',
     label: 'Nomor Urut 3 Digit (Sequence)',
-    description: 'Nomor urut otomatis 3 digit (001, 002, 042, dst)',
+    description: 'Nomor urut otomatis 3 digit dengan awalan nol (001, 042, 100, dst)',
     example: '001',
   },
   {
     token: '{SEQ:4}',
     category: 'Nomor & Urutan',
-    label: 'Nomor Urut 4 Digit (Sequence)',
-    description: 'Nomor urut otomatis 4 digit (0001, 0042, dst)',
+    label: 'Nomor Urut 4 Digit',
+    description: 'Nomor urut otomatis 4 digit dengan awalan nol (0001, 0042, dst)',
     example: '0001',
   },
+
+  // ── ORGANISASI & ENTITAS ─────────────────────────────────────────────────
   {
     token: '{TENANT_CODE}',
     category: 'Organisasi & Entitas',
-    label: 'Kode Singkatan Tenant / Perusahaan',
-    description: 'Kode entitas perusahaan dari konfigurasi multi-tenant',
+    label: 'Kode Tenant / Perusahaan',
+    description: 'Kode singkatan entitas perusahaan dari konfigurasi multi-tenant (alias: {TENANT})',
     example: 'NTM',
+  },
+  {
+    token: '{TENANT}',
+    category: 'Organisasi & Entitas',
+    label: 'Kode Tenant – Alias',
+    description: 'Singkatan dari {TENANT_CODE}. Menampilkan kode singkat perusahaan/tenant aktif',
+    example: 'NTM',
+    isAlias: true,
   },
   {
     token: '{COMPANY_NAME}',
     category: 'Organisasi & Entitas',
-    label: 'Nama Perusahaan',
-    description: 'Nama lengkap perusahaan / tenant aktif',
+    label: 'Nama Lengkap Perusahaan',
+    description: 'Nama perusahaan / tenant aktif secara penuh sesuai konfigurasi sistem',
     example: 'PT Nusantara Jaya',
   },
   {
     token: '{DEPT_CODE}',
     category: 'Organisasi & Entitas',
     label: 'Kode Departemen / Divisi',
-    description: 'Kode divisi penerbit (HRD, HC, GA, FIN, LEGAL)',
+    description: 'Kode divisi penerbit dokumen (HRD, HC, GA, FIN, LEGAL). Alias: {DEPT}',
     example: 'HRD',
   },
   {
+    token: '{DEPT}',
+    category: 'Organisasi & Entitas',
+    label: 'Kode Departemen – Alias',
+    description: 'Singkatan dari {DEPT_CODE}. Menampilkan kode departemen penerbit',
+    example: 'HRD',
+    isAlias: true,
+  },
+
+  // ── KLASIFIKASI DOKUMEN ──────────────────────────────────────────────────
+  {
     token: '{DOC_TYPE}',
     category: 'Klasifikasi Dokumen',
-    label: 'Kode Singkatan Jenis Dokumen',
-    description: 'Singkatan tipe surat resmi (PKWT, PKWTT, SP, SK, BAST)',
+    label: 'Kode Jenis Dokumen',
+    description: 'Singkatan tipe surat resmi (PKWT, PKWTT, SP, SK, BAST, KTJ, dll). Alias: {TYPE}',
     example: 'PKWT',
+  },
+  {
+    token: '{TYPE}',
+    category: 'Klasifikasi Dokumen',
+    label: 'Kode Jenis Dokumen – Alias',
+    description: 'Singkatan dari {DOC_TYPE}. Menampilkan kode jenis surat resmi',
+    example: 'SK',
+    isAlias: true,
   },
 ];
 
