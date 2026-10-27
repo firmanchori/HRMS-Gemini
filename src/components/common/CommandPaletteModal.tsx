@@ -67,10 +67,10 @@ const ALL_MODULES: ModuleDefinition[] = [
   },
   {
     id: 'reports',
-    name: 'Pusat Laporan & Analitik',
-    group: 'Laporan & Analitik',
+    name: 'Laporan & Analisis',
+    group: 'Laporan & Analisis',
     description: 'Kompilasi laporan terpadu: rekrutmen, rasio pelamar, alur onboarding, dan formasi struktur organisasi',
-    keywords: ['laporan', 'report', 'analitik', 'analytics', 'rekrutmen', 'onboarding', 'organisasi', 'fptk', 'pendaftar', 'pelamar', 'headcount'],
+    keywords: ['laporan', 'report', 'analisis', 'analitik', 'analytics', 'rekrutmen', 'onboarding', 'organisasi', 'fptk', 'pendaftar', 'pelamar', 'headcount'],
     icon: BarChart3,
   },
   {
@@ -187,10 +187,10 @@ const ALL_MODULES: ModuleDefinition[] = [
   },
   {
     id: 'rbac',
-    name: 'Manajemen User & Hak Akses (RBAC)',
+    name: 'Management User',
     group: 'Administrasi & SaaS Owner',
     description: 'Konfigurasi akun login, role matrix, permission per modul, dan audit log keamanan',
-    keywords: ['rbac', 'user', 'role', 'hak akses', 'admin', 'keamanan', 'permission', 'akun', 'password', 'audit'],
+    keywords: ['rbac', 'user', 'role', 'hak akses', 'admin', 'keamanan', 'permission', 'akun', 'password', 'audit', 'management user'],
     icon: KeyRound,
   },
   {
@@ -203,10 +203,10 @@ const ALL_MODULES: ModuleDefinition[] = [
   },
   {
     id: 'tenants',
-    name: 'Manajemen Multi-Tenant',
+    name: 'Manajemen Tenant',
     group: 'Administrasi & SaaS Owner',
     description: 'Pengaturan client tenant SaaS, hirarki entitas holding-anak-cucu, dan kuota subscription',
-    keywords: ['tenant', 'multi-tenant', 'saas', 'holding', 'anak perusahaan', 'klien', 'perusahaan', 'entitas'],
+    keywords: ['tenant', 'multi-tenant', 'saas', 'holding', 'anak perusahaan', 'klien', 'perusahaan', 'entitas', 'manajemen tenant'],
     icon: Building,
   },
 ];

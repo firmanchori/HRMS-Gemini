@@ -467,7 +467,7 @@ export const ReportsManagement: React.FC = () => {
             </div>
             <div>
               <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                <span>Pusat Laporan & Analitik</span>
+                <span>Laporan & Analisis</span>
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200">
                   Analytics Hub
                 </span>

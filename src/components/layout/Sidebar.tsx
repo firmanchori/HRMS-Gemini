@@ -74,9 +74,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
       ],
     },
     {
-      title: 'PUSAT LAPORAN & ANALITIK',
+      title: 'PUSAT LAPORAN & ANALISIS',
       items: [
-        { id: 'reports', label: 'Laporan & Analitik Terpadu', icon: BarChart3, badge: 'New' },
+        { id: 'reports', label: 'Laporan & Analisis', icon: BarChart3, badge: 'New' },
       ],
     },
     {
@@ -105,9 +105,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
     {
       title: 'ADMINISTRASI & SAAS OWNER',
       items: [
-        { id: 'rbac', label: 'Manajemen User & RBAC (Admin)', icon: KeyRound },
+        { id: 'rbac', label: 'Management User', icon: KeyRound },
         { id: 'audit', label: 'Audit Trail & Log Aktivitas', icon: History },
-        { id: 'tenants', label: 'Manajemen Tenant (Apps Owner)', icon: Building },
+        { id: 'tenants', label: 'Manajemen Tenant', icon: Building },
       ],
     },
   ];
