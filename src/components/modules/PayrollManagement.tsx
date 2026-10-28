@@ -2741,7 +2741,7 @@ export const PayrollManagement: React.FC = () => {
         onClose={() => setIsDocModalOpen(false)}
         title="Pusat Dokumen Resmi Payroll, Pajak & BPJS"
         categoryFilter="Payroll, Pajak & BPJS"
-        defaultTemplateId="tmpl-17"
+        defaultTemplateId="tmpl-16"
       />
     </div>
   );

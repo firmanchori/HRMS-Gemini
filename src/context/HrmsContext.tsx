@@ -23,6 +23,7 @@ import {
   OfficialDocument,
   MigrationRowPreview,
   WorkShift,
+  EmployeeSchedule,
   ShiftSwapRequest,
   AttendanceCorrectionRequest,
   BusinessTripRequest,
@@ -226,6 +227,7 @@ interface HrmsContextType {
   jobRequisitions: JobRequisition[];
   addJobRequisition: (req: Omit<JobRequisition, 'id' | 'tenantId' | 'createdAt'>) => void;
   updateJobRequisition: (id: string, updates: Partial<JobRequisition>) => void;
+  deleteJobRequisition: (id: string) => void;
   vacancies: JobVacancy[];
   candidates: Candidate[];
   addVacancy: (vacancy: Omit<JobVacancy, 'id' | 'tenantId' | 'postedDate'>) => void;
@@ -315,6 +317,12 @@ interface HrmsContextType {
 
   // 14. Shifts, Roaster & Swap Requests
   shifts: WorkShift[];
+  schedules: EmployeeSchedule[];
+  addShift: (shift: Omit<WorkShift, 'id' | 'tenantId'>) => void;
+  updateShift: (id: string, updates: Partial<WorkShift>) => void;
+  deleteShift: (id: string) => void;
+  upsertSchedules: (items: { employeeId: string; date: string; shiftId: string | null }[]) => void;
+  clearSchedules: (employeeIds: string[], dateFrom: string, dateTo: string) => void;
   shiftSwaps: ShiftSwapRequest[];
   addShiftSwapRequest: (swap: Omit<ShiftSwapRequest, 'id' | 'tenantId' | 'status'>) => void;
   reviewShiftSwapRequest: (id: string, approved: boolean) => void;
@@ -744,6 +752,25 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const saved = localStorage.getItem('nusahr_shiftswaps');
     return saved ? JSON.parse(saved) : INITIAL_SHIFT_SWAPS;
   });
+
+  const [schedules, setSchedules] = useState<EmployeeSchedule[]>(() => {
+    try {
+      const saved = localStorage.getItem('nusahr_schedules');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem('nusahr_shifts', JSON.stringify(shifts));
+  }, [shifts]);
+  useEffect(() => {
+    localStorage.setItem('nusahr_shiftswaps', JSON.stringify(shiftSwaps));
+  }, [shiftSwaps]);
+  useEffect(() => {
+    localStorage.setItem('nusahr_schedules', JSON.stringify(schedules));
+  }, [schedules]);
 
   const [attendanceCorrections, setAttendanceCorrections] = useState<AttendanceCorrectionRequest[]>(() => {
     const saved = localStorage.getItem('nusahr_corrections');
@@ -1646,6 +1673,10 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
   };
 
+  const deleteJobRequisition = (id: string) => {
+    setJobRequisitions((prev) => prev.filter((r) => r.id !== id));
+  };
+
   const addVacancy = (v: Omit<JobVacancy, 'id' | 'tenantId' | 'postedDate'>) => {
     const newVac: JobVacancy = {
       ...v,
@@ -2544,11 +2575,65 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const reviewShiftSwapRequest = (id: string, approved: boolean) => {
+    const swap = shiftSwaps.find((s) => s.id === id);
     setShiftSwaps((prev) =>
       prev.map((s) => (s.id === id ? { ...s, status: approved ? 'Disetujui' : 'Ditolak', approvedBy: currentUser.name } : s))
     );
     setApprovalItems((prev) =>
       prev.map((a) => (a.referenceId === id ? { ...a, status: approved ? 'Disetujui' : 'Ditolak' } : a))
+    );
+    // Tukar shift disetujui -> roster kedua karyawan ikut ditukar
+    if (approved && swap && swap.status === 'Menunggu') {
+      setSchedules((prev) => {
+        const findEntry = (empId: string, date: string) =>
+          prev.find((p) => p.tenantId === swap.tenantId && p.employeeId === empId && p.date === date);
+        const a = findEntry(swap.requesterId, swap.requestDate);
+        const b = findEntry(swap.targetEmployeeId, swap.targetDate);
+        if (!a && !b) return prev;
+        const withoutBoth = prev.filter((p) => p !== a && p !== b);
+        const next = [...withoutBoth];
+        if (b) next.push({ id: `sch-${swap.requesterId}-${swap.requestDate}`, tenantId: swap.tenantId, employeeId: swap.requesterId, date: swap.requestDate, shiftId: b.shiftId });
+        if (a) next.push({ id: `sch-${swap.targetEmployeeId}-${swap.targetDate}`, tenantId: swap.tenantId, employeeId: swap.targetEmployeeId, date: swap.targetDate, shiftId: a.shiftId });
+        return next;
+      });
+    }
+  };
+
+  // Master shift & roster
+  const addShift = (shift: Omit<WorkShift, 'id' | 'tenantId'>) => {
+    setShifts((prev) => [...prev, { ...shift, id: `shift-${Date.now()}`, tenantId: currentTenant.id }]);
+  };
+
+  const updateShift = (id: string, updates: Partial<WorkShift>) => {
+    setShifts((prev) => prev.map((s) => (s.id === id ? { ...s, ...updates } : s)));
+  };
+
+  const deleteShift = (id: string) => {
+    setShifts((prev) => prev.filter((s) => s.id !== id));
+    setSchedules((prev) => prev.filter((s) => s.shiftId !== id));
+  };
+
+  // shiftId null = hapus entri roster pada tanggal tersebut
+  const upsertSchedules = (items: { employeeId: string; date: string; shiftId: string | null }[]) => {
+    setSchedules((prev) => {
+      const map = new Map(prev.map((p) => [`${p.tenantId}|${p.employeeId}|${p.date}`, p]));
+      items.forEach((it) => {
+        const key = `${currentTenant.id}|${it.employeeId}|${it.date}`;
+        if (it.shiftId === null) {
+          map.delete(key);
+        } else {
+          map.set(key, { id: `sch-${it.employeeId}-${it.date}`, tenantId: currentTenant.id, employeeId: it.employeeId, date: it.date, shiftId: it.shiftId });
+        }
+      });
+      return Array.from(map.values());
+    });
+  };
+
+  const clearSchedules = (employeeIds: string[], dateFrom: string, dateTo: string) => {
+    setSchedules((prev) =>
+      prev.filter(
+        (p) => !(p.tenantId === currentTenant.id && employeeIds.includes(p.employeeId) && p.date >= dateFrom && p.date <= dateTo)
+      )
     );
   };
 
@@ -4037,6 +4122,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         jobRequisitions: jobRequisitions.filter((r) => r.tenantId === currentTenant.id),
         addJobRequisition,
         updateJobRequisition,
+        deleteJobRequisition,
         candidates: candidates.filter((c) => c.tenantId === currentTenant.id),
         addVacancy,
         updateVacancy,
@@ -4083,6 +4169,12 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         addChecklistTemplateItem,
         removeChecklistTemplateItem,
         shifts: shifts.filter((s) => s.tenantId === currentTenant.id),
+        schedules: schedules.filter((s) => s.tenantId === currentTenant.id),
+        addShift,
+        updateShift,
+        deleteShift,
+        upsertSchedules,
+        clearSchedules,
         shiftSwaps: shiftSwaps.filter((s) => s.tenantId === currentTenant.id),
         addShiftSwapRequest,
         reviewShiftSwapRequest,

@@ -343,6 +343,11 @@ export const DocumentManagement: React.FC = () => {
   });
   const [studioNewTagInput, setStudioNewTagInput] = useState('');
   const [studioSimulatedEmpId, setStudioSimulatedEmpId] = useState(employees[0]?.id || '');
+  // Hasil edit manual pada Mode Preview (Sample Asli); direset saat naskah/data sumber berubah.
+  const [studioPreviewOverride, setStudioPreviewOverride] = useState<string | null>(null);
+  useEffect(() => {
+    setStudioPreviewOverride(null);
+  }, [studioBodyText, studioSimulatedEmpId, studioNumberingPattern, studioSigneeName, studioSigneeRole]);
   const [studioHighlightTags, setStudioHighlightTags] = useState(false);
   const [isUnderlineMenuOpen, setIsUnderlineMenuOpen] = useState(false);
 
@@ -413,7 +418,53 @@ export const DocumentManagement: React.FC = () => {
     }
   };
 
+  // Simpan hasil edit WYSIWYG sesuai mode aktif (naskah template vs. editan pratinjau sampel)
+  const commitStudioEditorHtml = (html: string, immediate = false) => {
+    if (studioViewMode === 'token') {
+      setStudioBodyText(html);
+      pushToStudioHistory(html, immediate);
+    } else {
+      setStudioPreviewOverride(html);
+    }
+  };
+
+  // Posisi seleksi terakhir di dalam editor (agar dropdown/color picker tidak kehilangan seleksi)
+  const studioSavedRangeRef = useRef<Range | null>(null);
+  useEffect(() => {
+    const onSelChange = () => {
+      const sel = window.getSelection();
+      const ed = studioWysiwygEditorRef.current;
+      if (sel && sel.rangeCount > 0 && ed && ed.contains(sel.anchorNode)) {
+        studioSavedRangeRef.current = sel.getRangeAt(0).cloneRange();
+      }
+    };
+    document.addEventListener('selectionchange', onSelChange);
+    return () => document.removeEventListener('selectionchange', onSelChange);
+  }, []);
+
+  // Jalankan perintah gaya MS Word pada editor lembar dokumen (berlaku di kedua mode)
+  const runStudioEditorCommand = (command: string, value?: string) => {
+    const ed = studioWysiwygEditorRef.current;
+    if (!ed) return;
+    ed.focus();
+    const saved = studioSavedRangeRef.current;
+    if (saved) {
+      const sel = window.getSelection();
+      sel?.removeAllRanges();
+      sel?.addRange(saved);
+    }
+    try { document.execCommand('styleWithCSS', false, 'true'); } catch { /* noop */ }
+    document.execCommand(command, false, value);
+    commitStudioEditorHtml(ed.innerHTML, true);
+  };
+
   const handleStudioUndo = () => {
+    if (studioViewMode === 'preview' && studioWysiwygEditorRef.current) {
+      studioWysiwygEditorRef.current.focus();
+      document.execCommand('undo');
+      commitStudioEditorHtml(studioWysiwygEditorRef.current.innerHTML, true);
+      return;
+    }
     if (studioHistoryIndexRef.current > 0) {
       const nextIdx = studioHistoryIndexRef.current - 1;
       const prevText = studioHistoryRef.current[nextIdx];
@@ -423,6 +474,12 @@ export const DocumentManagement: React.FC = () => {
   };
 
   const handleStudioRedo = () => {
+    if (studioViewMode === 'preview' && studioWysiwygEditorRef.current) {
+      studioWysiwygEditorRef.current.focus();
+      document.execCommand('redo');
+      commitStudioEditorHtml(studioWysiwygEditorRef.current.innerHTML, true);
+      return;
+    }
     if (studioHistoryIndexRef.current < studioHistoryRef.current.length - 1) {
       const nextIdx = studioHistoryIndexRef.current + 1;
       const nextText = studioHistoryRef.current[nextIdx];
@@ -475,12 +532,10 @@ export const DocumentManagement: React.FC = () => {
 
   const handleStudioInsertTable = (rows: number, cols: number, withHeader = true) => {
     const tableMarkup = generateTableHtml(rows, cols, withHeader);
-    if (studioViewMode === 'token' && studioWysiwygEditorRef.current) {
+    if (studioWysiwygEditorRef.current) {
       studioWysiwygEditorRef.current.focus();
       document.execCommand('insertHTML', false, tableMarkup);
-      const newHtml = studioWysiwygEditorRef.current.innerHTML;
-      setStudioBodyText(newHtml);
-      pushToStudioHistory(newHtml, true);
+      commitStudioEditorHtml(studioWysiwygEditorRef.current.innerHTML, true);
     } else {
       const textarea = studioTextareaRef.current;
       if (!textarea) {
@@ -531,7 +586,7 @@ export const DocumentManagement: React.FC = () => {
     closeTag: string,
     defaultPlaceholder: string = 'teks'
   ) => {
-    if (studioViewMode === 'token' && studioWysiwygEditorRef.current) {
+    if (studioWysiwygEditorRef.current) {
       studioWysiwygEditorRef.current.focus();
       if (openTag === '<b>') {
         document.execCommand('bold', false);
@@ -558,9 +613,7 @@ export const DocumentManagement: React.FC = () => {
         const selectedText = sel?.toString() || defaultPlaceholder;
         document.execCommand('insertHTML', false, `${openTag}${selectedText}${closeTag}`);
       }
-      const newHtml = studioWysiwygEditorRef.current.innerHTML;
-      setStudioBodyText(newHtml);
-      pushToStudioHistory(newHtml, false);
+      commitStudioEditorHtml(studioWysiwygEditorRef.current.innerHTML, false);
       return;
     }
 
@@ -2030,7 +2083,7 @@ export const DocumentManagement: React.FC = () => {
                         <label className="text-[11px] font-semibold text-slate-700">
                           Formula Penomoran Otomatis
                         </label>
-                        <span className="text-[10px] text-slate-400">Gunakan {'{TOKEN}'}</span>
+                        <span className="text-[10px] text-slate-400">Gunakan {'{TOKEN}'} · {NUMBERING_TOKENS.length} token tersedia</span>
                       </div>
                       <input
                         type="text"
@@ -2038,8 +2091,8 @@ export const DocumentManagement: React.FC = () => {
                         onChange={(e) => setStudioNumberingPattern(e.target.value)}
                         className="w-full px-3 py-1.5 border border-slate-300 rounded font-mono font-bold text-xs text-indigo-700 bg-indigo-50/30"
                       />
-                      <div className="flex flex-wrap gap-1 mt-1.5">
-                        {NUMBERING_TOKENS.slice(0, 5).map(t => (
+                      <div className="flex flex-wrap gap-1 mt-1.5 max-h-28 overflow-y-auto">
+                        {NUMBERING_TOKENS.map(t => (
                           <button
                             key={t.token}
                             type="button"
@@ -2050,7 +2103,7 @@ export const DocumentManagement: React.FC = () => {
                               });
                             }}
                             className="px-1.5 py-0.5 rounded text-[9px] font-mono bg-slate-100 hover:bg-indigo-100 text-slate-700 border border-slate-200"
-                            title={t.description}
+                            title={`${t.label} — ${t.description} (contoh: ${t.example})`}
                           >
                             {t.token}
                           </button>
@@ -3510,22 +3563,31 @@ export const DocumentManagement: React.FC = () => {
               </div>
 
               {/* Mode Banner & MS Word Ribbon Bar */}
-              {studioViewMode === 'token' ? (
-                <div className="bg-white border border-indigo-200 rounded-xl p-2.5 shadow-xs space-y-2">
+              {(
+                <div className={`bg-white border ${studioViewMode === 'token' ? 'border-indigo-200' : 'border-emerald-300'} rounded-xl p-2.5 shadow-xs space-y-2`}>
                   <div className="flex flex-wrap items-center justify-between gap-2 text-xs px-1">
-                    <div className="flex items-center gap-1.5 text-indigo-900 font-semibold text-[11px]">
-                      <Sparkles className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                      <span>Ketik & edit langsung di lembar dokumen di bawah. Drag-and-drop token atau klik tabel visual layaknya MS Word.</span>
-                    </div>
-                    <label className="flex items-center gap-1.5 text-[10.5px] font-semibold text-slate-600 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={studioHighlightTags}
-                        onChange={(e) => setStudioHighlightTags(e.target.checked)}
-                        className="w-3.5 h-3.5 text-indigo-600 rounded"
-                      />
-                      <span>Sorot Token</span>
-                    </label>
+                    {studioViewMode === 'token' ? (
+                      <div className="flex items-center gap-1.5 text-indigo-900 font-semibold text-[11px]">
+                        <Sparkles className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                        <span>Ketik & edit langsung di lembar dokumen di bawah. Drag-and-drop token atau klik tabel visual layaknya MS Word.</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5 text-emerald-900 font-semibold text-[11px]">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                        <span>Mode Preview (Sample Asli: {employees[0]?.fullName || 'Ahmad Fauzi'}). Edit langsung di lembar dengan toolbar lengkap. Editan hanya untuk pratinjau ini dan direset bila naskah template diubah.</span>
+                      </div>
+                    )}
+                    {studioViewMode === 'token' && (
+                      <label className="flex items-center gap-1.5 text-[10.5px] font-semibold text-slate-600 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={studioHighlightTags}
+                          onChange={(e) => setStudioHighlightTags(e.target.checked)}
+                          className="w-3.5 h-3.5 text-indigo-600 rounded"
+                        />
+                        <span>Sorot Token</span>
+                      </label>
+                    )}
                   </div>
 
                   {/* Ribbon Toolbar */}
@@ -3535,7 +3597,7 @@ export const DocumentManagement: React.FC = () => {
                       <button
                         type="button"
                         onClick={handleStudioUndo}
-                        disabled={!canStudioUndo}
+                        disabled={studioViewMode === 'token' && !canStudioUndo}
                         className="p-1.5 hover:bg-slate-100 hover:text-indigo-600 rounded transition-colors cursor-pointer disabled:opacity-35 disabled:cursor-not-allowed"
                         title="Undo (Ctrl+Z)"
                       >
@@ -3544,11 +3606,102 @@ export const DocumentManagement: React.FC = () => {
                       <button
                         type="button"
                         onClick={handleStudioRedo}
-                        disabled={!canStudioRedo}
+                        disabled={studioViewMode === 'token' && !canStudioRedo}
                         className="p-1.5 hover:bg-slate-100 hover:text-indigo-600 rounded transition-colors cursor-pointer disabled:opacity-35 disabled:cursor-not-allowed"
                         title="Redo (Ctrl+Y)"
                       >
                         <Redo className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    {/* Gaya Paragraf, Font, Ukuran & Warna (MS Word) */}
+                    <div className="flex items-center gap-1 bg-white p-0.5 rounded border border-slate-200 shadow-2xs">
+                      <select
+                        defaultValue=""
+                        onChange={(e) => { if (e.target.value) { runStudioEditorCommand('formatBlock', e.target.value); e.target.value = ''; } }}
+                        className="text-[11px] px-1 py-1 bg-transparent border-0 outline-none cursor-pointer"
+                        title="Gaya Paragraf"
+                      >
+                        <option value="">Gaya</option>
+                        <option value="<p>">Normal</option>
+                        <option value="<h1>">Judul 1</option>
+                        <option value="<h2>">Judul 2</option>
+                        <option value="<h3>">Judul 3</option>
+                        <option value="<blockquote>">Kutipan</option>
+                      </select>
+                      <select
+                        defaultValue=""
+                        onChange={(e) => { if (e.target.value) { runStudioEditorCommand('fontName', e.target.value); e.target.value = ''; } }}
+                        className="text-[11px] px-1 py-1 bg-transparent border-0 outline-none cursor-pointer"
+                        title="Jenis Huruf"
+                      >
+                        <option value="">Font</option>
+                        <option value="Times New Roman">Times New Roman</option>
+                        <option value="Arial">Arial</option>
+                        <option value="Calibri">Calibri</option>
+                        <option value="Cambria">Cambria</option>
+                        <option value="Georgia">Georgia</option>
+                        <option value="Verdana">Verdana</option>
+                        <option value="Courier New">Courier New</option>
+                      </select>
+                      <select
+                        defaultValue=""
+                        onChange={(e) => { if (e.target.value) { runStudioEditorCommand('fontSize', e.target.value); e.target.value = ''; } }}
+                        className="text-[11px] px-1 py-1 bg-transparent border-0 outline-none cursor-pointer"
+                        title="Ukuran Huruf"
+                      >
+                        <option value="">Ukuran</option>
+                        <option value="1">8 pt</option>
+                        <option value="2">10 pt</option>
+                        <option value="3">12 pt</option>
+                        <option value="4">14 pt</option>
+                        <option value="5">18 pt</option>
+                        <option value="6">24 pt</option>
+                        <option value="7">36 pt</option>
+                      </select>
+                      <label className="flex items-center gap-1 px-1 text-[10px] text-slate-600 cursor-pointer" title="Warna Teks">
+                        A
+                        <input type="color" defaultValue="#0f172a" onChange={(e) => runStudioEditorCommand('foreColor', e.target.value)} className="w-5 h-5 p-0 border-0 bg-transparent cursor-pointer" />
+                      </label>
+                      <label className="flex items-center gap-1 px-1 text-[10px] text-slate-600 cursor-pointer" title="Sorot Teks (Highlight)">
+                        <span className="bg-yellow-200 px-0.5">ab</span>
+                        <input type="color" defaultValue="#fef08a" onChange={(e) => runStudioEditorCommand('hiliteColor', e.target.value)} className="w-5 h-5 p-0 border-0 bg-transparent cursor-pointer" />
+                      </label>
+                    </div>
+
+                    {/* Indentasi, Sub/Superscript, Garis, Link, Bersihkan Format */}
+                    <div className="flex items-center gap-0.5 bg-white p-0.5 rounded border border-slate-200 shadow-2xs text-[11px] font-bold">
+                      {([
+                        ['outdent', '\u2190\u2261', 'Kurangi Indentasi'],
+                        ['indent', '\u2261\u2192', 'Tambah Indentasi'],
+                        ['subscript', 'x\u2082', 'Subscript'],
+                        ['superscript', 'x\u00b2', 'Superscript'],
+                        ['insertHorizontalRule', '\u2014', 'Sisipkan Garis Pemisah'],
+                        ['removeFormat', 'Tx', 'Bersihkan Format'],
+                        ['selectAll', 'All', 'Pilih Semua'],
+                      ] as [string, string, string][]).map(([cmd, label, tip]) => (
+                        <button
+                          key={cmd}
+                          type="button"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => runStudioEditorCommand(cmd)}
+                          className="px-1.5 py-1 hover:bg-slate-100 hover:text-indigo-600 rounded transition-colors cursor-pointer"
+                          title={tip}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => {
+                          const url = window.prompt('Masukkan URL tautan (https://...)');
+                          if (url) runStudioEditorCommand('createLink', url);
+                        }}
+                        className="px-1.5 py-1 hover:bg-slate-100 hover:text-indigo-600 rounded transition-colors cursor-pointer"
+                        title="Sisipkan Tautan"
+                      >
+                        Link
                       </button>
                     </div>
 
@@ -3784,15 +3937,6 @@ export const DocumentManagement: React.FC = () => {
                     </div>
                   </div>
                 </div>
-              ) : (
-                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-2.5 shadow-xs flex items-center justify-between text-xs text-emerald-900">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <span className="font-medium text-[11.5px]">
-                      Mode Preview (Sample Asli): Seluruh token dinamis dan tabel terisi dengan data sampel pegawai ({employees[0]?.fullName || 'Ahmad Fauzi'}). Siap dicetak langsung atau diekspor ke PDF / DOCX.
-                    </span>
-                  </div>
-                </div>
               )}
 
               {/* Naskah Dinas Live Preview / Editable Sheet Render dengan Batasan Panjang & Scroll */}
@@ -3854,12 +3998,16 @@ export const DocumentManagement: React.FC = () => {
                     <OfficialMultiPageDocumentSheet
                       title={previewDocObj.title}
                       documentNumber={previewDocObj.documentNumber}
-                      content={studioViewMode === 'token' ? studioBodyText : previewDocObj.contentPreview}
-                      isEditable={studioViewMode === 'token'}
+                      content={studioViewMode === 'token' ? studioBodyText : (studioPreviewOverride ?? previewDocObj.contentPreview)}
+                      isEditable
                       editorRef={studioWysiwygEditorRef}
                       onContentChange={(newHtml) => {
-                        setStudioBodyText(newHtml);
-                        pushToStudioHistory(newHtml, false);
+                        if (studioViewMode === 'token') {
+                          setStudioBodyText(newHtml);
+                          pushToStudioHistory(newHtml, false);
+                        } else {
+                          setStudioPreviewOverride(newHtml);
+                        }
                       }}
                       employee={simulatedEmployee}
                       tenant={currentTenant}
@@ -5337,7 +5485,7 @@ PIHAK PERTAMA memberikan upah pokok sebesar {{gaji_pokok}} ({{gaji_terbilang}}) 
                     Formula Pola Penomoran Dokumen *
                   </label>
                   <span className="text-[10px] text-slate-500 font-mono">
-                    Token otomatis: {'{SEQ}'}, {'{TENANT_CODE}'}, {'{ROMAN_MONTH}'}, {'{YEAR}'}
+                    {NUMBERING_TOKENS.length} token tersedia — klik di bawah
                   </span>
                 </div>
                 <input

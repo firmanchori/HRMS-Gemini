@@ -4722,6 +4722,78 @@ Permohonan ini direkomendasikan untuk diproses pembeliannya melalui Divisi Penga
     signeeRole: 'Otorisasi Infrastruktur Teknologi',
     extractedPlaceholders: ['nomor_surat', 'nama', 'nik', 'departemen', 'jabatan', 'kategori_pengadaan', 'justifikasi_kebutuhan', 'model_laptop', 'processor_spec', 'ram_spec', 'storage_spec', 'estimasi_harga', 'kuartal_anggaran'],
   },
+  {
+    id: 'tmpl-44',
+    tenantId: 'tenant-ntm',
+    type: 'Formulir FPTK',
+    name: 'Formulir Permintaan Tenaga Kerja (FPTK / Manpower Request)',
+    numberingPattern: '{SEQ}/FPTK-HRD/{TENANT}/{ROMAN_MONTH}/{YEAR}',
+    paperSize: 'A4',
+    letterHeadTitle: 'PT NUSANTARA TEKNOLOGI MANDIRI',
+    letterHeadAddress: 'Menara Palma Lantai 18, Jl. HR Rasuna Said Blok X-2 Kav. 6, Jakarta Selatan 12950',
+    defaultBody: `FORMULIR PERMINTAAN TENAGA KERJA (FPTK)
+Nomor: {{nomor_surat}}
+
+A. DATA PEMOHON:
+Nama Pemohon: {{nama}}
+NIK: {{nik}}
+Departemen / Jabatan: {{departemen}} - {{jabatan}}
+
+B. KEBUTUHAN POSISI:
+- Posisi yang Dibutuhkan: {{posisi_dibutuhkan}}
+- Jumlah Formasi: {{jumlah_formasi}} orang
+- Status Kepegawaian: {{status_kepegawaian}}
+- Alasan Permintaan: {{alasan_permintaan}}
+- Target Mulai Bekerja: {{tanggal_mulai}}
+
+C. KUALIFIKASI & JUSTIFIKASI:
+{{kualifikasi_posisi}}
+
+D. PERSETUJUAN:
+Permintaan ini diajukan untuk diproses oleh Tim Talent Acquisition {{nama_perusahaan}} setelah memperoleh persetujuan pimpinan dan Human Capital.`,
+    showQrSignature: true,
+    signeeTitle: 'Head of Human Capital',
+    signeeRole: 'Persetujuan Formasi Tenaga Kerja',
+    extractedPlaceholders: ['nomor_surat', 'nama', 'nik', 'departemen', 'jabatan', 'posisi_dibutuhkan', 'jumlah_formasi', 'status_kepegawaian', 'alasan_permintaan', 'tanggal_mulai', 'kualifikasi_posisi', 'nama_perusahaan'],
+  },
+  {
+    id: 'tmpl-45',
+    tenantId: 'tenant-ntm',
+    type: 'Surat Pengantar MCU',
+    name: 'Surat Pengantar Medical Check-Up (MCU) Pra-Kerja Calon Karyawan',
+    numberingPattern: '{SEQ}/MCU-HRD/{TENANT}/{ROMAN_MONTH}/{YEAR}',
+    paperSize: 'A4',
+    letterHeadTitle: 'PT NUSANTARA TEKNOLOGI MANDIRI',
+    letterHeadAddress: 'Menara Palma Lantai 18, Jl. HR Rasuna Said Blok X-2 Kav. 6, Jakarta Selatan 12950',
+    defaultBody: `SURAT PENGANTAR MEDICAL CHECK-UP (MCU) PRA-KERJA
+Nomor: {{nomor_surat}}
+
+Kepada Yth.
+Kepala Bagian Laboratorium & Medical Check-Up
+{{nama_klinik}}
+di Tempat
+
+Dengan hormat,
+Mohon dilakukan pemeriksaan kesehatan pra-kerja terhadap calon karyawan {{nama_perusahaan}} berikut:
+- Nama Lengkap: {{nama}}
+- Posisi Lowongan: {{jabatan}}
+- Departemen: {{departemen}}
+
+JADWAL & PAKET PEMERIKSAAN:
+- Hari / Tanggal: {{tanggal_mcu}}
+- Waktu: {{waktu_mcu}}
+- Paket Pemeriksaan: {{paket_mcu}}
+- Penagihan: Corporate Billing {{nama_perusahaan}}
+
+PETUNJUK PERSIAPAN:
+{{petunjuk_persiapan}}
+
+Demikian surat pengantar ini diterbitkan untuk dipergunakan sebagaimana mestinya.`,
+    showQrSignature: true,
+    signeeTitle: 'Head of Talent Acquisition',
+    signeeRole: 'Human Capital Recruitment',
+    extractedPlaceholders: ['nomor_surat', 'nama', 'jabatan', 'departemen', 'nama_perusahaan', 'nama_klinik', 'tanggal_mcu', 'waktu_mcu', 'paket_mcu', 'petunjuk_persiapan'],
+  },
 ];
 
 export const INITIAL_MODULE_SETTINGS: ModuleSettingsConfig = {

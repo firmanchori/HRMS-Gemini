@@ -897,7 +897,7 @@ export const LoanManagement: React.FC = () => {
         isOpen={isDocModalOpen}
         onClose={() => setIsDocModalOpen(false)}
         categoryFilter="Payroll, Pajak & BPJS"
-        defaultTemplateId="tmpl-22"
+        defaultTemplateId="tmpl-19"
         title="Penerbitan Dokumen Resmi Pinjaman Karyawan"
       />
     </div>

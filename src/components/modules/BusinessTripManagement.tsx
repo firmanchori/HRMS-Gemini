@@ -1364,7 +1364,7 @@ export const BusinessTripManagement: React.FC = () => {
         onClose={() => setIsDocModalOpen(false)}
         title="Pusat Dokumen Resmi Perjalanan Dinas (SPPD)"
         categoryFilter="Kehadiran, Cuti & Perjalanan Dinas"
-        defaultTemplateId="tmpl-14"
+        defaultTemplateId="tmpl-12"
       />
     </div>
   );

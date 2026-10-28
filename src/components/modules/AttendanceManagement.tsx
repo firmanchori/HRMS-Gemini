@@ -43,6 +43,7 @@ import { formatRupiah, calculateOvertimePay } from '../../utils/taxCalculator';
 import { CompanyCalendarManagement } from './CompanyCalendarManagement';
 import { ScrollableTabNav } from '../common/ScrollableTabNav';
 import { ModuleDocumentModal } from '../common/ModuleDocumentModal';
+import { ShiftRosterManagement } from './ShiftRosterManagement';
 
 export const AttendanceManagement: React.FC = () => {
   const {
@@ -916,23 +917,7 @@ export const AttendanceManagement: React.FC = () => {
             </button>
           </div>
 
-          {/* Master Shifts Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-            {shifts.map((shift) => (
-              <div key={shift.id} className="p-3.5 bg-white border border-slate-200 rounded-lg shadow-xs space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-slate-900 text-xs">{shift.name}</span>
-                  <span className="text-[10px] font-mono text-indigo-700 font-semibold bg-slate-100 px-1.5 py-0.2 rounded">
-                    {shift.code}
-                  </span>
-                </div>
-                <div className="text-base font-bold font-mono text-slate-800">
-                  {shift.startTime} - {shift.endTime}
-                </div>
-                <div className="text-[10px] text-slate-400">Toleransi telat: {shift.lateToleranceMins} menit</div>
-              </div>
-            ))}
-          </div>
+          <ShiftRosterManagement />
 
           {/* Shift Swaps Ledger */}
           <div className="bg-white border border-slate-200 rounded-lg overflow-hidden shadow-xs">

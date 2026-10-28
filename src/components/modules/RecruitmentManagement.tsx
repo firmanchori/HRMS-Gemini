@@ -115,8 +115,26 @@ import {
   OnboardingActionType,
   AssignedInterviewer,
   InterviewerChangeHistory,
+  ScreeningKnockoutCriterion,
+  ScreeningScoredCriterion,
 } from '../../types/hrms';
+import {
+  runAutoScreening,
+  parseKeywordInput,
+  newCriterionId,
+  KNOCKOUT_CATEGORY_PRESETS,
+} from '../../utils/autoScreening';
 import { DEFAULT_ONBOARDING_CHECKLIST_TEMPLATES } from '../../data/initialData';
+
+// Bentuk kriteria saat diedit di form FPTK (kata kunci diketik sebagai teks dipisah koma)
+interface FptkCriterionDraft {
+  id: string;
+  category: string;
+  label: string;
+  keywordsText: string;
+  matchMode: 'any' | 'all';
+  weight: number;
+}
 import { formatRupiah, calculatePPh21TER, calculateBPJS } from '../../utils/taxCalculator';
 import { printPagesDirectly, exportPagesToPdf } from '../../utils/documentPdfExporter';
 import { WhatsAppIcon } from '../common/WhatsAppIcon';
@@ -918,6 +936,7 @@ export const RecruitmentManagement: React.FC = () => {
     jobRequisitions = [],
     addJobRequisition,
     updateJobRequisition,
+    deleteJobRequisition,
     vacancies = [],
     candidates = [],
     addVacancy,
@@ -1860,6 +1879,10 @@ export const RecruitmentManagement: React.FC = () => {
   const [fptkSkills, setFptkSkills] = useState('TypeScript, React, Node.js, PostgreSQL, Docker, CI/CD');
   const [fptkOtherRequirements, setFptkOtherRequirements] = useState('Komunikasi proaktif, problem-solving analitis, mampu bekerja mandiri & tim.');
   const [fptkRequirements, setFptkRequirements] = useState('');
+  // Kriteria screening otomatis (V): Gugur & Skor (fleksibel, bisa ditambah/dikurangi)
+  const [fptkKnockoutDrafts, setFptkKnockoutDrafts] = useState<FptkCriterionDraft[]>([]);
+  const [fptkScoredDrafts, setFptkScoredDrafts] = useState<FptkCriterionDraft[]>([]);
+  const [fptkEditingDraftId, setFptkEditingDraftId] = useState<string | null>(null);
 
   // Yang Mengajukan: Readonly pembuat form
   const requesterDisplay = currentUser?.name
@@ -1916,9 +1939,118 @@ export const RecruitmentManagement: React.FC = () => {
     setFptkSignatories((prev) => prev.filter((s) => s.id !== id));
   };
 
+  // ===================== KRITERIA SCREENING OTOMATIS (FPTK) =====================
+  const toKnockoutCriteria = (drafts: FptkCriterionDraft[]): ScreeningKnockoutCriterion[] =>
+    drafts
+      .map((d) => ({
+        id: d.id,
+        category: d.category,
+        label: d.label.trim() || d.category,
+        keywords: parseKeywordInput(d.keywordsText),
+        matchMode: d.matchMode,
+      }))
+      .filter((c) => c.keywords.length > 0);
+
+  const toScoredCriteria = (drafts: FptkCriterionDraft[]): ScreeningScoredCriterion[] =>
+    drafts
+      .map((d) => ({
+        id: d.id,
+        label: d.label.trim() || 'Kriteria skor',
+        keywords: parseKeywordInput(d.keywordsText),
+        matchMode: d.matchMode,
+        weight: Math.max(0, Number(d.weight) || 0),
+      }))
+      .filter((c) => c.keywords.length > 0);
+
+  const fromKnockoutCriteria = (list?: ScreeningKnockoutCriterion[]): FptkCriterionDraft[] =>
+    (list || []).map((c) => ({ id: c.id, category: c.category, label: c.label, keywordsText: c.keywords.join(', '), matchMode: c.matchMode, weight: 0 }));
+
+  const fromScoredCriteria = (list?: ScreeningScoredCriterion[]): FptkCriterionDraft[] =>
+    (list || []).map((c) => ({ id: c.id, category: 'Skor', label: c.label, keywordsText: c.keywords.join(', '), matchMode: c.matchMode, weight: c.weight }));
+
+  const handleAddKnockoutCriterion = (presetIndex: number) => {
+    const preset = KNOCKOUT_CATEGORY_PRESETS[presetIndex] || KNOCKOUT_CATEGORY_PRESETS[KNOCKOUT_CATEGORY_PRESETS.length - 1];
+    setFptkKnockoutDrafts((prev) => [
+      ...prev,
+      { id: newCriterionId('ko'), category: preset.category, label: preset.label, keywordsText: preset.keywords, matchMode: preset.matchMode, weight: 0 },
+    ]);
+  };
+
+  const handleAddScoredCriterion = () => {
+    setFptkScoredDrafts((prev) => [
+      ...prev,
+      { id: newCriterionId('sc'), category: 'Skor', label: '', keywordsText: '', matchMode: 'any', weight: 0 },
+    ]);
+  };
+
+  const resetFptkFormExtras = () => {
+    setFptkEditingDraftId(null);
+    setFptkKnockoutDrafts([]);
+    setFptkScoredDrafts([]);
+  };
+
+  const openNewFptkForm = () => {
+    resetFptkFormExtras();
+    setIsRequisitionModalOpen(true);
+  };
+
+  const handleEditFptkDraft = (req: JobRequisition) => {
+    setFptkEditingDraftId(req.id);
+    setFptkPosition(req.position || '');
+    setFptkGradeMin(req.gradeMin || fptkGradeMin);
+    setFptkGradeMax(req.gradeMax || fptkGradeMax);
+    setFptkDept(req.department || fptkDept);
+    setFptkHeadcount(req.headcount || 1);
+    setFptkReason(req.reason || 'Posisi Baru (New Position)');
+    setFptkReplacementFor(req.replacementFor || '');
+    setFptkIsBudgeted(req.isBudgeted !== false);
+    setFptkJustification(req.justification || '');
+    setFptkTargetDate(req.targetJoinDate || fptkTargetDate);
+    setFptkReportingDept(req.reportingToDepartment || fptkReportingDept);
+    setFptkReportingTitle(req.reportingToTitle || fptkReportingTitle);
+    setFptkSupervisedStaff(req.supervisedStaffCount || 0);
+    setFptkMainResponsibilities(req.mainResponsibilities || '');
+    setFptkEduLevel(req.educationLevel || fptkEduLevel);
+    setFptkEduMajor(req.educationMajor || fptkEduMajor);
+    setFptkMinExp(req.minExperience || fptkMinExp);
+    setFptkSkills(req.skills || '');
+    setFptkOtherRequirements(req.otherRequirements || '');
+    setFptkRequirements('');
+    if (req.signatories && req.signatories.length > 0) setFptkSignatories(req.signatories);
+    setFptkKnockoutDrafts(fromKnockoutCriteria(req.knockoutCriteria));
+    setFptkScoredDrafts(fromScoredCriteria(req.scoredCriteria));
+    setIsRequisitionModalOpen(true);
+  };
+
+  const handleDeleteFptkDraft = (id: string) => {
+    const target = jobRequisitions.find((r) => r.id === id);
+    if (!target || target.status !== 'Draft') return;
+    if (!window.confirm(`Hapus draft FPTK "${target.position || target.reqNumber}"? Tindakan ini tidak dapat dibatalkan.`)) return;
+    deleteJobRequisition(id);
+    if (fptkEditingDraftId === id) {
+      setIsRequisitionModalOpen(false);
+      resetFptkFormExtras();
+    }
+    setToastFeedback('Draft FPTK berhasil dihapus.');
+  };
+
+  // Screening otomatis: kriteria diambil dari FPTK yang terhubung dengan lowongan kandidat
+  const getAutoScreeningFor = (candidate: Candidate) => {
+    const vac = vacancies.find((v) => v.id === candidate.jobVacancyId);
+    const req = vac?.jobRequisitionId ? jobRequisitions.find((r) => r.id === vac.jobRequisitionId) : undefined;
+    return runAutoScreening(candidate, req?.knockoutCriteria || [], req?.scoredCriteria || []);
+  };
+
+  const handleSaveCandidateCvText = (candidate: Candidate, text: string) => {
+    const updated: Candidate = { ...candidate, cvText: text };
+    updateCandidateStage(candidate.id, candidate.stage, updated);
+    setActiveCandidate(updated);
+    setToastFeedback('Teks CV tersimpan. Screening otomatis dihitung ulang.');
+  };
+
   // Filter & Detail Preview FPTK
   const [fptkSearch, setFptkSearch] = useState('');
-  const [fptkStatusFilter, setFptkStatusFilter] = useState<'Semua' | 'Menunggu Approval' | 'Disetujui' | 'Dicabut (Retracted)' | 'Ditolak' | 'Dibatalkan'>('Semua');
+  const [fptkStatusFilter, setFptkStatusFilter] = useState<'Semua' | 'Draft' | 'Menunggu Approval' | 'Disetujui' | 'Dicabut (Retracted)' | 'Ditolak' | 'Dibatalkan'>('Semua');
   const [fptkBudgetFilter, setFptkBudgetFilter] = useState<'Semua' | 'Budgeted' | 'Unbudgeted'>('Semua');
   const [previewFptk, setPreviewFptk] = useState<JobRequisition | null>(null);
   const [trackingFptk, setTrackingFptk] = useState<JobRequisition | null>(null);
@@ -2875,30 +3007,35 @@ export const RecruitmentManagement: React.FC = () => {
   const bpjsEmployeeDeduction = calculatedOffering.bpjsEmployee.total;
 
   // ===================== ACTION HANDLERS =====================
-  const handleCreateFptk = (e: React.FormEvent, directApprove: boolean = false) => {
-    e.preventDefault();
+  const saveFptk = (mode: 'submit' | 'draft', directApprove: boolean = false) => {
+    if (mode === 'draft' && !fptkPosition.trim()) {
+      setToastFeedback('Isi minimal nama posisi sebelum menyimpan sebagai draft.');
+      return;
+    }
+    const editingDraft = fptkEditingDraftId ? jobRequisitions.find((r) => r.id === fptkEditingDraftId) : undefined;
     const count = jobRequisitions.length + 1;
     const deptPrefix = fptkDept.trim().substring(0, 3).toUpperCase() || 'GEN';
-    const reqNum = `FPTK/${deptPrefix}/2026/${String(count).padStart(3, '0')}`;
+    const reqNum = editingDraft?.reqNumber || `FPTK/${deptPrefix}/2026/${String(count).padStart(3, '0')}`;
     const gradeLabel =
       fptkGradeMin === fptkGradeMax
         ? fptkGradeMin
         : `${fptkGradeMin.split(' - ')[0]} s/d ${fptkGradeMax.split(' - ')[0]}`;
-    
+
     const combinedEducation = `${fptkEduLevel} - ${fptkEduMajor}`;
     const fullRequirements =
       fptkRequirements ||
       `Pendidikan: ${combinedEducation}. Pengalaman: ${fptkMinExp}. Keterampilan: ${fptkSkills}. ${fptkOtherRequirements}`;
 
+    const isApproveNow = mode === 'submit' && directApprove;
     const finalSignatories = fptkSignatories.map((s) => ({
       ...s,
-      status: directApprove ? ('Disetujui' as const) : ('Menunggu Approval' as const),
-      date: directApprove ? new Date().toISOString().split('T')[0] : undefined,
+      status: isApproveNow ? ('Disetujui' as const) : ('Menunggu Approval' as const),
+      date: isApproveNow ? new Date().toISOString().split('T')[0] : undefined,
     }));
 
     const primaryApprover = finalSignatories[finalSignatories.length - 1];
 
-    addJobRequisition({
+    const payload = {
       reqNumber: reqNum,
       position: fptkPosition,
       grade: gradeLabel,
@@ -2923,26 +3060,44 @@ export const RecruitmentManagement: React.FC = () => {
       skills: fptkSkills,
       otherRequirements: fptkOtherRequirements,
       requirements: fullRequirements,
+      knockoutCriteria: toKnockoutCriteria(fptkKnockoutDrafts),
+      scoredCriteria: toScoredCriteria(fptkScoredDrafts),
       requesterName: requesterDisplay,
       signatories: finalSignatories,
-      approvedBy: directApprove ? primaryApprover?.name || 'Direksi' : undefined,
-      approverTitle: directApprove ? primaryApprover?.title || 'Approver' : undefined,
-      approvalDate: directApprove ? new Date().toISOString().split('T')[0] : undefined,
-      approvalNotes: directApprove ? 'Disetujui langsung saat pengajuan formasi.' : undefined,
-      status: directApprove ? 'Disetujui' : 'Menunggu Approval',
-    });
+      approvedBy: isApproveNow ? primaryApprover?.name || 'Direksi' : undefined,
+      approverTitle: isApproveNow ? primaryApprover?.title || 'Approver' : undefined,
+      approvalDate: isApproveNow ? new Date().toISOString().split('T')[0] : undefined,
+      approvalNotes: isApproveNow ? 'Disetujui langsung saat pengajuan formasi.' : undefined,
+      status: mode === 'draft' ? ('Draft' as const) : isApproveNow ? ('Disetujui' as const) : ('Menunggu Approval' as const),
+    };
+
+    if (fptkEditingDraftId && editingDraft) {
+      updateJobRequisition(fptkEditingDraftId, payload);
+    } else {
+      addJobRequisition(payload);
+    }
 
     setIsRequisitionModalOpen(false);
+    resetFptkFormExtras();
     setFptkPosition('');
     setFptkJustification('');
     setFptkMainResponsibilities('');
     setFptkReplacementFor('');
     setFptkRequirements('');
-    alert(
-      directApprove
-        ? `Permintaan Karyawan Baru (${reqNum}) berhasil disetujui & tercatat di sistem.`
-        : `Permintaan Karyawan Baru (${reqNum}) berhasil diajukan dan sedang Menunggu Approval.`
-    );
+    if (mode === 'draft') {
+      setToastFeedback(`Draft FPTK (${reqNum}) tersimpan. Anda dapat melanjutkannya kapan saja dari daftar FPTK.`);
+    } else {
+      alert(
+        isApproveNow
+          ? `Permintaan Karyawan Baru (${reqNum}) berhasil disetujui & tercatat di sistem.`
+          : `Permintaan Karyawan Baru (${reqNum}) berhasil diajukan dan sedang Menunggu Approval.`
+      );
+    }
+  };
+
+  const handleCreateFptk = (e: React.FormEvent, directApprove: boolean = false) => {
+    e.preventDefault();
+    saveFptk('submit', directApprove);
   };
 
   const handleApproveFptk = (id: string) => {
@@ -5965,7 +6120,7 @@ PT Nusantara Multi Talenta Tbk`);
 
         <div className="flex items-center gap-2 shrink-0 flex-wrap">
           <button
-            onClick={() => setIsRequisitionModalOpen(true)}
+            onClick={openNewFptkForm}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-700 hover:bg-blue-800 text-white rounded-lg text-xs font-semibold shadow-2xs transition-colors shrink-0"
           >
             <Plus className="w-3.5 h-3.5 shrink-0" />
@@ -6307,7 +6462,7 @@ PT Nusantara Multi Talenta Tbk`);
               </p>
             </div>
             <button
-              onClick={() => setIsRequisitionModalOpen(true)}
+              onClick={openNewFptkForm}
               className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-700 hover:bg-blue-800 text-white rounded-lg text-xs font-semibold shadow-2xs transition-colors shrink-0"
             >
               <Plus className="w-3.5 h-3.5" />
@@ -6339,7 +6494,7 @@ PT Nusantara Multi Talenta Tbk`);
             <div className="flex items-center gap-2 flex-wrap text-xs">
               {/* Status Filter Chips */}
               <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg border border-slate-200">
-                {(['Semua', 'Menunggu Approval', 'Disetujui', 'Dicabut (Retracted)', 'Ditolak', 'Dibatalkan'] as const).map((st) => {
+                {(['Semua', 'Draft', 'Menunggu Approval', 'Disetujui', 'Dicabut (Retracted)', 'Ditolak', 'Dibatalkan'] as const).map((st) => {
                   const count =
                     st === 'Semua'
                       ? jobRequisitions.length
@@ -6439,7 +6594,7 @@ PT Nusantara Multi Talenta Tbk`);
                                 ? 'bg-amber-50 text-amber-800 border border-amber-200'
                                 : req.status === 'Dicabut (Retracted)'
                                 ? 'bg-amber-100 text-amber-900 border border-amber-300'
-                                : req.status === 'Dibatalkan'
+                                : req.status === 'Draft' || req.status === 'Dibatalkan'
                                 ? 'bg-slate-100 text-slate-700 border border-slate-300'
                                 : 'bg-rose-50 text-rose-800 border border-rose-200'
                             }`}
@@ -6452,6 +6607,8 @@ PT Nusantara Multi Talenta Tbk`);
                                   ? 'bg-amber-500 animate-pulse'
                                   : req.status === 'Dicabut (Retracted)'
                                   ? 'bg-amber-600'
+                                  : req.status === 'Draft'
+                                  ? 'bg-slate-400'
                                   : 'bg-rose-500'
                               }`}
                             />
@@ -6564,6 +6721,27 @@ PT Nusantara Multi Talenta Tbk`);
                               <Undo2 className="w-3 h-3 text-amber-600" />
                               <span>Dicabut (Retracted)</span>
                             </span>
+                          )}
+
+                          {req.status === 'Draft' && (
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteFptkDraft(req.id)}
+                                className="px-2 py-1 bg-white hover:bg-rose-50 text-rose-700 rounded-lg text-xs font-semibold border border-rose-200 flex items-center gap-1"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                                <span>Hapus</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleEditFptkDraft(req)}
+                                className="px-2.5 py-1 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-semibold flex items-center gap-1"
+                              >
+                                <Pencil className="w-3 h-3" />
+                                <span>Lanjutkan Draft</span>
+                              </button>
+                            </div>
                           )}
 
                           {req.status === 'Dibatalkan' && (
@@ -6685,7 +6863,7 @@ PT Nusantara Multi Talenta Tbk`);
                                       ? 'bg-amber-50 text-amber-800 border border-amber-200'
                                       : req.status === 'Dicabut (Retracted)'
                                       ? 'bg-amber-100 text-amber-900 border border-amber-300'
-                                      : req.status === 'Dibatalkan'
+                                      : req.status === 'Draft' || req.status === 'Dibatalkan'
                                       ? 'bg-slate-100 text-slate-700 border border-slate-300'
                                       : 'bg-rose-50 text-rose-800 border border-rose-200'
                                   }`}
@@ -6698,7 +6876,7 @@ PT Nusantara Multi Talenta Tbk`);
                                         ? 'bg-amber-500 animate-pulse'
                                         : req.status === 'Dicabut (Retracted)'
                                         ? 'bg-amber-600'
-                                        : req.status === 'Dibatalkan'
+                                        : req.status === 'Draft' || req.status === 'Dibatalkan'
                                         ? 'bg-slate-400'
                                         : 'bg-rose-500'
                                     }`}
@@ -6818,6 +6996,27 @@ PT Nusantara Multi Talenta Tbk`);
                                           <Undo2 className="w-3.5 h-3.5 text-amber-600" />
                                           <span>Pengajuan Dicabut (Retracted)</span>
                                         </span>
+                                      </div>
+                                    )}
+
+                                    {req.status === 'Draft' && (
+                                      <div className="flex items-center gap-2">
+                                        <button
+                                          type="button"
+                                          onClick={() => handleDeleteFptkDraft(req.id)}
+                                          className="px-3 py-1.5 bg-white hover:bg-rose-50 text-rose-700 rounded-lg text-xs font-semibold border border-rose-200 flex items-center gap-1.5 transition-colors"
+                                        >
+                                          <Trash2 className="w-3.5 h-3.5" />
+                                          <span>Hapus Draft</span>
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleEditFptkDraft(req)}
+                                          className="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                                        >
+                                          <Pencil className="w-3.5 h-3.5" />
+                                          <span>Lanjutkan Draft</span>
+                                        </button>
                                       </div>
                                     )}
 
@@ -7727,6 +7926,28 @@ PT Nusantara Multi Talenta Tbk`);
                                         </button>
                                       </div>
                                     </div>
+
+                                    {/* 1b. Badge Screening Otomatis (Kriteria FPTK) */}
+                                    {(() => {
+                                      const auto = getAutoScreeningFor(candidate);
+                                      if (!auto.hasCriteria) return null;
+                                      return (
+                                        <div className={`p-2 rounded-lg border text-[10px] flex items-center justify-between gap-1.5 flex-wrap ${auto.status === 'Gugur' ? 'bg-rose-50 border-rose-300 text-rose-900' : 'bg-emerald-50 border-emerald-200 text-emerald-900'}`}>
+                                          <span className="font-bold flex items-center gap-1">
+                                            <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
+                                            <span>{auto.status === 'Gugur' ? 'GUGUR (Otomatis)' : 'Lolos Kriteria Gugur'}</span>
+                                          </span>
+                                          {auto.scoredResults.length > 0 && (
+                                            <span className="font-mono font-bold">Skor {auto.totalScore}/100</span>
+                                          )}
+                                          {auto.status === 'Gugur' && (
+                                            <span className="w-full text-[9.5px] text-rose-700">
+                                              Tidak memenuhi: {auto.failedKnockouts.map((f) => f.label).join(', ')}
+                                            </span>
+                                          )}
+                                        </div>
+                                      );
+                                    })()}
 
                                     {/* 2. Box Hasil Screening Kualifikasi & Keyword Match */}
                                     {isParsingDoubtful ? (
@@ -10445,11 +10666,212 @@ PT Nusantara Multi Talenta Tbk`);
                 </div>
               </div>
 
-              {/* SECTION 5: PENGAJU & PENYETUJU (FLEKSIBEL APPROVAL) */}
+              {/* SECTION 5: KRITERIA SCREENING OTOMATIS (GUGUR & SKOR) */}
+              <div className="bg-slate-50/80 p-4 rounded-xl border border-slate-200/80 space-y-4">
+                <div className="flex items-center justify-between gap-2 border-b border-slate-200 pb-2 flex-wrap">
+                  <div className="flex items-center gap-2 text-slate-900 font-bold">
+                    <ShieldAlert className="w-4 h-4 text-blue-700" />
+                    <span className="text-xs uppercase tracking-wider">V. Kriteria Seleksi & Screening Otomatis</span>
+                  </div>
+                  <span className="text-[10px] text-slate-500">
+                    Opsional & fleksibel — dasar screening otomatis oleh sistem pada tahap Applied
+                  </span>
+                </div>
+
+                {/* A. Kriteria Gugur */}
+                <div className="space-y-2.5">
+                  <div className="flex items-start justify-between gap-2 flex-wrap">
+                    <div>
+                      <label className="font-bold text-rose-800 text-xs block">A. Kriteria Gugur (Knock-out)</label>
+                      <p className="text-[11px] text-slate-500">
+                        Pelamar yang tidak mengandung kata kunci wajib akan otomatis gugur. Boleh hanya satu kategori, boleh semua.
+                      </p>
+                    </div>
+                    <select
+                      value=""
+                      onChange={(e) => { if (e.target.value !== '') handleAddKnockoutCriterion(Number(e.target.value)); }}
+                      className="px-2.5 py-1 border border-rose-200 rounded-lg text-xs font-semibold text-rose-800 bg-rose-50 focus:outline-none"
+                    >
+                      <option value="">+ Tambah Kriteria Gugur…</option>
+                      {KNOCKOUT_CATEGORY_PRESETS.map((p, i) => (
+                        <option key={p.category} value={i}>{p.category}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {fptkKnockoutDrafts.length === 0 && (
+                    <div className="text-[11px] text-slate-400 italic bg-white border border-dashed border-slate-300 rounded-lg p-3">
+                      Belum ada kriteria gugur — semua pelamar lolos tahap ini. Contoh: Perawat wajib "STR", Driver wajib "SIM B1/B2", Management Trainee wajib "S1, Sarjana, D4, S2".
+                    </div>
+                  )}
+
+                  {fptkKnockoutDrafts.map((k) => {
+                    const preset = KNOCKOUT_CATEGORY_PRESETS.find((p) => p.category === k.category);
+                    return (
+                      <div key={k.id} className="bg-white border border-rose-200 rounded-xl p-3 space-y-2">
+                        <div className="grid grid-cols-1 md:grid-cols-12 gap-2 items-end">
+                          <div className="md:col-span-4">
+                            <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block mb-0.5">Kategori</label>
+                            <input
+                              type="text"
+                              list="fptk-knockout-categories"
+                              value={k.category}
+                              onChange={(e) => setFptkKnockoutDrafts((prev) => prev.map((x) => (x.id === k.id ? { ...x, category: e.target.value } : x)))}
+                              className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white focus:ring-1 focus:ring-rose-500 focus:outline-none"
+                            />
+                          </div>
+                          <div className="md:col-span-4">
+                            <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block mb-0.5">Nama Kriteria</label>
+                            <input
+                              type="text"
+                              value={k.label}
+                              onChange={(e) => setFptkKnockoutDrafts((prev) => prev.map((x) => (x.id === k.id ? { ...x, label: e.target.value } : x)))}
+                              className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white focus:ring-1 focus:ring-rose-500 focus:outline-none"
+                            />
+                          </div>
+                          <div className="md:col-span-3">
+                            <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block mb-0.5">Syarat Kecocokan</label>
+                            <select
+                              value={k.matchMode}
+                              onChange={(e) => setFptkKnockoutDrafts((prev) => prev.map((x) => (x.id === k.id ? { ...x, matchMode: e.target.value as 'any' | 'all' } : x)))}
+                              className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white focus:outline-none"
+                            >
+                              <option value="any">Salah satu kata kunci</option>
+                              <option value="all">Semua kata kunci</option>
+                            </select>
+                          </div>
+                          <div className="md:col-span-1 flex justify-end">
+                            <button
+                              type="button"
+                              onClick={() => setFptkKnockoutDrafts((prev) => prev.filter((x) => x.id !== k.id))}
+                              title="Hapus kriteria gugur ini"
+                              className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block mb-0.5">Kata Kunci (pisahkan dengan koma)</label>
+                          <input
+                            type="text"
+                            value={k.keywordsText}
+                            onChange={(e) => setFptkKnockoutDrafts((prev) => prev.map((x) => (x.id === k.id ? { ...x, keywordsText: e.target.value } : x)))}
+                            placeholder="Contoh: STR, Surat Tanda Registrasi"
+                            className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-mono bg-white focus:ring-1 focus:ring-rose-500 focus:outline-none"
+                          />
+                          {preset && <p className="text-[10px] text-slate-400 mt-0.5">{preset.hint}</p>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  <datalist id="fptk-knockout-categories">
+                    {KNOCKOUT_CATEGORY_PRESETS.map((p) => (
+                      <option key={p.category} value={p.category} />
+                    ))}
+                  </datalist>
+                </div>
+
+                {/* B. Kriteria Skor */}
+                <div className="space-y-2.5 pt-3 border-t border-slate-200">
+                  <div className="flex items-start justify-between gap-2 flex-wrap">
+                    <div>
+                      <label className="font-bold text-emerald-800 text-xs block">B. Kriteria Skor (Scored / Weighted)</label>
+                      <p className="text-[11px] text-slate-500">
+                        Setiap kecocokan kata kunci menambah poin sesuai bobot. Skor akhir dinormalisasi ke 0–100.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleAddScoredCriterion}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 rounded-lg border border-emerald-200"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Tambah Kriteria Skor</span>
+                    </button>
+                  </div>
+
+                  {fptkScoredDrafts.length === 0 && (
+                    <div className="text-[11px] text-slate-400 italic bg-white border border-dashed border-slate-300 rounded-lg p-3">
+                      Belum ada kriteria skor. Contoh: Skill "Laravel" bobot 30, pengalaman "3 tahun" bobot 40, skill "Git" bobot 30; atau pengalaman di "Shopee, Tokopedia, Lazada, TikTok Shop" bobot 100.
+                    </div>
+                  )}
+
+                  {fptkScoredDrafts.map((s) => (
+                    <div key={s.id} className="bg-white border border-emerald-200 rounded-xl p-3 space-y-2">
+                      <div className="grid grid-cols-1 md:grid-cols-12 gap-2 items-end">
+                        <div className="md:col-span-4">
+                          <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block mb-0.5">Nama Kriteria</label>
+                          <input
+                            type="text"
+                            value={s.label}
+                            onChange={(e) => setFptkScoredDrafts((prev) => prev.map((x) => (x.id === s.id ? { ...x, label: e.target.value } : x)))}
+                            placeholder="Skill Laravel"
+                            className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+                          />
+                        </div>
+                        <div className="md:col-span-4">
+                          <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block mb-0.5">Syarat Kecocokan</label>
+                          <select
+                            value={s.matchMode}
+                            onChange={(e) => setFptkScoredDrafts((prev) => prev.map((x) => (x.id === s.id ? { ...x, matchMode: e.target.value as 'any' | 'all' } : x)))}
+                            className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white focus:outline-none"
+                          >
+                            <option value="any">Salah satu kata kunci</option>
+                            <option value="all">Semua kata kunci</option>
+                          </select>
+                        </div>
+                        <div className="md:col-span-3">
+                          <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block mb-0.5">Bobot (%)</label>
+                          <input
+                            type="number"
+                            min={0}
+                            max={100}
+                            value={s.weight}
+                            onChange={(e) => setFptkScoredDrafts((prev) => prev.map((x) => (x.id === s.id ? { ...x, weight: Number(e.target.value) } : x)))}
+                            className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-mono bg-white focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+                          />
+                        </div>
+                        <div className="md:col-span-1 flex justify-end">
+                          <button
+                            type="button"
+                            onClick={() => setFptkScoredDrafts((prev) => prev.filter((x) => x.id !== s.id))}
+                            title="Hapus kriteria skor ini"
+                            className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block mb-0.5">Kata Kunci (pisahkan dengan koma)</label>
+                        <input
+                          type="text"
+                          value={s.keywordsText}
+                          onChange={(e) => setFptkScoredDrafts((prev) => prev.map((x) => (x.id === s.id ? { ...x, keywordsText: e.target.value } : x)))}
+                          placeholder="Contoh: Laravel"
+                          className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-mono bg-white focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+                  ))}
+
+                  {fptkScoredDrafts.length > 0 && (() => {
+                    const total = fptkScoredDrafts.reduce((a, x) => a + (Number(x.weight) || 0), 0);
+                    return (
+                      <div className={`text-[11px] font-semibold px-3 py-1.5 rounded-lg border ${total === 100 ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-amber-50 text-amber-800 border-amber-200'}`}>
+                        Total bobot: {total}% {total === 100 ? '✓' : '— disarankan 100% (skor tetap dinormalisasi otomatis)'}
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+
+              {/* SECTION 6: PENGAJU & PENYETUJU (FLEKSIBEL APPROVAL) */}
               <div className="bg-slate-50/80 p-4 rounded-xl border border-slate-200/80 space-y-4">
                 <div className="flex items-center gap-2 text-slate-900 font-bold border-b border-slate-200 pb-2">
                   <UserCheck className="w-4 h-4 text-blue-700" />
-                  <span className="text-xs uppercase tracking-wider">V. Pihak Pengaju & Otorisasi Persetujuan</span>
+                  <span className="text-xs uppercase tracking-wider">VI. Pihak Pengaju & Otorisasi Persetujuan</span>
                 </div>
 
                 {/* Yang Mengajukan: Readonly Pembuat Dokumen */}
@@ -10582,21 +11004,43 @@ PT Nusantara Multi Talenta Tbk`);
 
               {/* Footer Actions: Hanya Batal dan Kirim & Menunggu Approval */}
               <div className="pt-4 border-t border-slate-200 flex items-center justify-between gap-3 flex-wrap">
-                <button
-                  type="button"
-                  onClick={() => setIsRequisitionModalOpen(false)}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold transition-colors"
-                >
-                  Batal
-                </button>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => { setIsRequisitionModalOpen(false); resetFptkFormExtras(); }}
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold transition-colors"
+                  >
+                    Batal
+                  </button>
+                  {fptkEditingDraftId && (
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteFptkDraft(fptkEditingDraftId)}
+                      className="px-4 py-2 bg-white hover:bg-rose-50 text-rose-700 border border-rose-200 rounded-xl font-semibold transition-colors flex items-center gap-1.5"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      <span>Hapus Draft</span>
+                    </button>
+                  )}
+                </div>
 
-                <button
-                  type="submit"
-                  className="px-5 py-2.5 bg-blue-700 hover:bg-blue-800 text-white rounded-xl font-bold shadow-xs transition-colors flex items-center gap-2 text-xs"
-                >
-                  <Send className="w-4 h-4" />
-                  <span>Kirim & Menunggu Approval</span>
-                </button>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => saveFptk('draft')}
+                    className="px-4 py-2.5 bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 rounded-xl font-bold transition-colors flex items-center gap-2 text-xs"
+                  >
+                    <Save className="w-4 h-4" />
+                    <span>Simpan sebagai Draft</span>
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2.5 bg-blue-700 hover:bg-blue-800 text-white rounded-xl font-bold shadow-xs transition-colors flex items-center gap-2 text-xs"
+                  >
+                    <Send className="w-4 h-4" />
+                    <span>Kirim &amp; Menunggu Approval</span>
+                  </button>
+                </div>
               </div>
             </form>
           </div>
@@ -12216,6 +12660,106 @@ PT Nusantara Multi Talenta Tbk`);
                 ) : (
                   // KONDISI 2: TAMPILAN TINJAUAN GABUNGAN (SCREENING KUALIFIKASI + PROFILING CV)
                   <div className="space-y-4">
+                    {/* SECTION 0: HASIL SCREENING OTOMATIS (KRITERIA FPTK: GUGUR & SKOR) */}
+                    {(() => {
+                      const auto = getAutoScreeningFor(activeCandidate);
+                      if (!auto.hasCriteria) {
+                        return (
+                          <div className="p-3 bg-slate-50 border border-dashed border-slate-300 rounded-xl text-[11px] text-slate-500">
+                            Lowongan ini belum memiliki kriteria screening otomatis (Bagian V pada FPTK). Screening dilakukan manual.
+                          </div>
+                        );
+                      }
+                      return (
+                        <div className={`p-4 border rounded-xl space-y-3 ${auto.status === 'Gugur' ? 'bg-rose-50/70 border-rose-200' : 'bg-emerald-50/60 border-emerald-200'}`}>
+                          <div className="flex items-center justify-between gap-2 flex-wrap pb-2 border-b border-slate-200/70">
+                            <h4 className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
+                              <ShieldAlert className={`w-4 h-4 ${auto.status === 'Gugur' ? 'text-rose-600' : 'text-emerald-600'}`} />
+                              <span>Hasil Screening Otomatis (Kriteria FPTK)</span>
+                            </h4>
+                            <div className="flex items-center gap-2">
+                              <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${auto.status === 'Gugur' ? 'bg-rose-100 text-rose-800 border-rose-300' : 'bg-emerald-100 text-emerald-800 border-emerald-300'}`}>
+                                {auto.status === 'Gugur' ? 'GUGUR' : 'LOLOS KRITERIA GUGUR'}
+                              </span>
+                              {auto.scoredResults.length > 0 && (
+                                <span className="px-2.5 py-0.5 rounded bg-white border border-slate-300 font-mono font-bold text-xs text-slate-900">
+                                  Skor {auto.totalScore}/100
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {auto.knockoutResults.length > 0 && (
+                            <div className="space-y-1.5">
+                              <span className="font-semibold text-slate-700 block text-[11px]">Kriteria Gugur</span>
+                              {auto.knockoutResults.map((k) => (
+                                <div key={k.id} className={`p-2 rounded-lg border text-[11px] ${k.passed ? 'bg-white border-emerald-200' : 'bg-rose-100/60 border-rose-300'}`}>
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="font-semibold text-slate-900">{k.label} <span className="font-normal text-slate-400">· {k.category}</span></span>
+                                    <span className={`font-bold ${k.passed ? 'text-emerald-700' : 'text-rose-700'}`}>{k.passed ? 'Terpenuhi' : 'Tidak terpenuhi'}</span>
+                                  </div>
+                                  <div className="text-slate-500 mt-0.5">
+                                    Dicari ({k.matchMode === 'all' ? 'semua' : 'salah satu'}): <span className="font-mono">{k.requiredKeywords.join(', ')}</span>
+                                    {k.matchedKeywords.length > 0 && <> · Ditemukan: <span className="font-mono text-emerald-700">{k.matchedKeywords.join(', ')}</span></>}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {auto.scoredResults.length > 0 && (
+                            <div className="space-y-1.5">
+                              <span className="font-semibold text-slate-700 block text-[11px]">Kriteria Skor (Bobot)</span>
+                              <div className="overflow-x-auto bg-white border border-slate-200 rounded-lg">
+                                <table className="w-full text-[11px] text-left">
+                                  <thead className="bg-slate-50 text-slate-600">
+                                    <tr>
+                                      <th className="px-2.5 py-1.5 font-semibold">Kriteria</th>
+                                      <th className="px-2.5 py-1.5 font-semibold">Kata Kunci Ditemukan</th>
+                                      <th className="px-2.5 py-1.5 font-semibold text-right">Bobot</th>
+                                      <th className="px-2.5 py-1.5 font-semibold text-right">Poin</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {auto.scoredResults.map((s) => (
+                                      <tr key={s.id} className="border-t border-slate-100">
+                                        <td className="px-2.5 py-1.5 font-semibold text-slate-900">{s.label}</td>
+                                        <td className="px-2.5 py-1.5 font-mono text-slate-600">{s.matchedKeywords.length > 0 ? s.matchedKeywords.join(', ') : '-'}</td>
+                                        <td className="px-2.5 py-1.5 text-right font-mono">{s.weight}%</td>
+                                        <td className={`px-2.5 py-1.5 text-right font-mono font-bold ${s.matched ? 'text-emerald-700' : 'text-slate-400'}`}>{s.points}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="space-y-1">
+                            <label className="font-semibold text-slate-700 block text-[11px]">Teks Isi CV / Surat Lamaran (dasar pencocokan kata kunci)</label>
+                            <textarea
+                              id="auto-screening-cvtext"
+                              key={activeCandidate.id}
+                              rows={3}
+                              defaultValue={activeCandidate.cvText || ''}
+                              placeholder="Tempel isi CV di sini (lokasi, sertifikasi, notice period, skill, perusahaan sebelumnya, dst.) lalu simpan untuk menghitung ulang."
+                              className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-blue-600"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const el = document.getElementById('auto-screening-cvtext') as HTMLTextAreaElement | null;
+                                handleSaveCandidateCvText(activeCandidate, el?.value || '');
+                              }}
+                              className="px-3 py-1 bg-blue-700 hover:bg-blue-800 text-white rounded-lg text-[11px] font-semibold"
+                            >
+                              Simpan & Hitung Ulang
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
                     {/* SECTION A: HASIL SCREENING KUALIFIKASI & KEYWORD MATCH */}
                     <div className="p-4 bg-sky-50/70 border border-sky-200 rounded-xl space-y-3">
                       <div className="flex items-center justify-between pb-2 border-b border-sky-200/60">

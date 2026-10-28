@@ -153,12 +153,12 @@ const ModuleDocumentModalContent: React.FC<ModuleDocumentModalProps> = ({
   // Update document number and variables when template or employee changes
   useEffect(() => {
     if (!activeTemplate) return;
-    const seq = (documents.length + 1).toString().padStart(3, '0');
     const autoNumber = evaluateNumberingFormula(
       activeTemplate.numberingPattern || '{SEQ}/HRD/{TENANT_CODE}/{ROMAN_MONTH}/{YEAR}',
-      seq,
+      documents.length + 1,
       currentTenant?.code || 'NTM',
-      activeTemplate.type
+      new Date(),
+      { docType: activeTemplate.type, companyName: currentTenant?.name }
     );
     setDocumentNumber(autoNumber);
     setSigneeName(activeTemplate.signeeTitle || 'Aditya Pratama, S.Psi');

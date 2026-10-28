@@ -82,7 +82,9 @@ export const getTemplateCategory = (tmpl: { type?: string; name?: string }): Tem
     norm.includes('nda') ||
     norm.includes('kerahasiaan') ||
     norm.includes('tenaga ahli') ||
-    norm.includes('konsultan')
+    norm.includes('konsultan') ||
+    norm.includes('medical check') ||
+    norm.includes('mcu')
   ) {
     return 'Perjanjian Kerja & Kontrak';
   }
@@ -94,7 +96,9 @@ export const getTemplateCategory = (tmpl: { type?: string; name?: string }): Tem
     norm.includes('acting') ||
     norm.includes('kpi') ||
     norm.includes('okr') ||
-    norm.includes('kinerja')
+    norm.includes('kinerja') ||
+    norm.includes('fptk') ||
+    norm.includes('tenaga kerja')
   ) {
     return 'Karier & Organisasi';
   }

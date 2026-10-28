@@ -142,6 +142,7 @@ export interface EmployeeNonFormalEducationItem {
 export interface Employee {
   id: string;
   tenantId: string;
+  isShiftWorker?: boolean; // Karyawan shift (masuk roster P/S/M/L)
   entityId?: string;
   nik: string;
   fullName: string;
@@ -311,8 +312,11 @@ export interface WorkShift {
   color: string;
   isNightShift: boolean;
   lateToleranceMins: number;
+  breakMins?: number; // Durasi istirahat (menit)
+  isActive?: boolean; // Nonaktif = tidak muncul pada pilihan roster baru
 }
 
+// Entri roster: satu karyawan pada satu tanggal. shiftId = id shift, atau 'OFF' untuk hari libur.
 export interface EmployeeSchedule {
   id: string;
   tenantId: string;
@@ -320,6 +324,8 @@ export interface EmployeeSchedule {
   date: string;
   shiftId: string;
 }
+
+export const ROSTER_OFF_ID = 'OFF';
 
 export interface ShiftSwapRequest {
   id: string;
@@ -540,6 +546,56 @@ export interface FptkSignatory {
   notes?: string;
 }
 
+// Kriteria Screening Otomatis (ditentukan saat pengajuan FPTK)
+export type ScreeningMatchMode = 'any' | 'all';
+
+// Kriteria Gugur: bila tidak terpenuhi, pelamar otomatis gugur
+export interface ScreeningKnockoutCriterion {
+  id: string;
+  category: string; // e.g. 'Sertifikasi / Lisensi', 'Lokasi & Mobilitas', 'Pendidikan Minimal', 'Waktu Kerja', 'Lainnya'
+  label: string;
+  keywords: string[]; // kata kunci / frasa
+  matchMode: ScreeningMatchMode; // 'any' = salah satu cukup, 'all' = semua wajib ada
+}
+
+// Kriteria Skor: setiap kecocokan menambah poin sesuai bobot (%)
+export interface ScreeningScoredCriterion {
+  id: string;
+  label: string;
+  keywords: string[];
+  matchMode: ScreeningMatchMode;
+  weight: number; // bobot dalam persen
+}
+
+export interface AutoScreeningKnockoutResult {
+  id: string;
+  category: string;
+  label: string;
+  passed: boolean;
+  matchedKeywords: string[];
+  requiredKeywords: string[];
+  matchMode: ScreeningMatchMode;
+}
+
+export interface AutoScreeningScoredResult {
+  id: string;
+  label: string;
+  weight: number;
+  matched: boolean;
+  matchedKeywords: string[];
+  points: number; // kontribusi poin terhadap skor total (0 - weight)
+}
+
+export interface AutoScreeningResult {
+  hasCriteria: boolean;
+  status: 'Lolos' | 'Gugur' | 'Tanpa Kriteria';
+  knockoutResults: AutoScreeningKnockoutResult[];
+  failedKnockouts: AutoScreeningKnockoutResult[];
+  scoredResults: AutoScreeningScoredResult[];
+  totalScore: number; // 0 - 100 (dinormalisasi terhadap total bobot)
+  totalWeight: number;
+}
+
 export interface JobRequisition {
   id: string;
   tenantId: string;
@@ -571,6 +627,10 @@ export interface JobRequisition {
   skills?: string; // Keterampilan / Keahlian teknis & soft skills
   otherRequirements?: string; // Kualifikasi lainnya / sertifikasi
   requirements: string; // Ringkasan requirement lengkap
+
+  // Kriteria Screening Otomatis (dasar screening sistem)
+  knockoutCriteria?: ScreeningKnockoutCriterion[];
+  scoredCriteria?: ScreeningScoredCriterion[];
 
   // Pengajuan & Persetujuan (Fleksibel)
   requesterName: string; // Yang mengajukan (Nama & Jabatan Pembuat Form)
@@ -803,6 +863,7 @@ export interface Candidate {
   parsedData?: CandidateParsedData;
   cvFileName?: string;
   cvFileSize?: string;
+  cvText?: string; // Teks isi CV / surat lamaran (dasar pencocokan kata kunci screening otomatis)
 
   // 4. Screening & AI Match
   aiMatchScore?: number; // 0 - 100

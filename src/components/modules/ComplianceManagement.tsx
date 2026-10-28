@@ -21,6 +21,7 @@ import {
 import { DisciplinaryLevel, ComplianceRecord, Employee } from '../../types/hrms';
 import { EmployeeSelect } from '../common/EmployeeSelect';
 import { ValidatedDateInput } from '../common/ValidatedDateInput';
+import { ModuleDocumentModal } from '../common/ModuleDocumentModal';
 
 export const ComplianceManagement: React.FC = () => {
   const {
@@ -37,6 +38,7 @@ export const ComplianceManagement: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [isDocModalOpen, setIsDocModalOpen] = useState(false);
 
   // Form State
   const [employeeId, setEmployeeId] = useState(employees[0]?.id || '');
@@ -174,13 +176,31 @@ export const ComplianceManagement: React.FC = () => {
           </p>
         </div>
 
-        <button
-          onClick={handleOpenModal}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-md text-xs font-semibold shadow-xs transition-colors"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          <span>Terbitkan Surat Peringatan (SP)</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setIsDocModalOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-rose-50 text-rose-700 border border-rose-300 rounded-md text-xs font-semibold shadow-xs transition-colors"
+          >
+            <FileText className="w-3.5 h-3.5" />
+            <span>Cetak Surat dari Template</span>
+          </button>
+          <button
+            onClick={handleOpenModal}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-md text-xs font-semibold shadow-xs transition-colors"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Terbitkan Surat Peringatan (SP)</span>
+          </button>
+        </div>
+        <ModuleDocumentModal
+          isOpen={isDocModalOpen}
+          onClose={() => setIsDocModalOpen(false)}
+          categoryFilter="Disiplin, PHK & Paklaring"
+          defaultTemplateId="tmpl-8"
+          defaultEmployeeId={employeeId}
+          title="Penerbitan Dokumen Disiplin Resmi (SP / Sanksi)"
+        />
       </div>
 
       {/* Aggregate Metrics Cards */}
