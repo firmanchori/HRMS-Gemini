@@ -5,6 +5,7 @@ import { Sidebar } from './components/layout/Sidebar';
 import { MigrationWizardModal } from './components/modules/MigrationWizardModal';
 import { DashboardOverview } from './components/modules/DashboardOverview';
 import { OrganizationManagement } from './components/modules/OrganizationManagement';
+import { OfficeLocationManagement } from './components/modules/OfficeLocationManagement';
 import { EmployeeManagement } from './components/modules/EmployeeManagement';
 import { AttendanceManagement } from './components/modules/AttendanceManagement';
 import { PayrollManagement } from './components/modules/PayrollManagement';
@@ -120,6 +121,8 @@ const MainLayout: React.FC = () => {
         );
       case 'organization':
         return <OrganizationManagement />;
+      case 'office_locations':
+        return <OfficeLocationManagement />;
       case 'employees':
         return <EmployeeManagement />;
       case 'personalia':

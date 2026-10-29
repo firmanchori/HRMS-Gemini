@@ -40,6 +40,7 @@ import {
   Trash2,
   Info,
   Lock,
+  MapPin,
 } from 'lucide-react';
 import {
   EmploymentType,
@@ -103,6 +104,7 @@ export const EmployeeManagement: React.FC = () => {
     updateModuleSettings,
     openFilePreview,
     personaliaLogs,
+    officeLocations,
   } = useHrms();
 
   const [activeTab, setActiveTab] = useState<'karyawan' | 'probation' | 'contracts' | 'nikformat' | 'pengaturan'>('karyawan');
@@ -231,6 +233,7 @@ export const EmployeeManagement: React.FC = () => {
   const [newGrade, setNewGrade] = useState('L3');
   const [newDirectSupervisor, setNewDirectSupervisor] = useState('Ir. Budi Santoso (President Director)');
   const [newBranchLocation, setNewBranchLocation] = useState('Kantor Pusat Jakarta (Menara Palma)');
+  const [newOfficeLocationIds, setNewOfficeLocationIds] = useState<string[]>(['loc-1']);
   const [newJoinDate, setNewJoinDate] = useState(new Date().toISOString().split('T')[0]);
   const [newProbationStatus, setNewProbationStatus] = useState<'Lolos' | 'Sedang Berjalan' | 'Tanpa Percobaan'>('Sedang Berjalan');
   const [newPermanentDate, setNewPermanentDate] = useState(new Date().toISOString().split('T')[0]);
@@ -894,6 +897,7 @@ export const EmployeeManagement: React.FC = () => {
       grade: newGrade || 'L3',
       directSupervisor: newDirectSupervisor || 'Ir. Budi Santoso (President Director)',
       branchLocation: newBranchLocation || `Kantor Pusat ${currentTenant.city || 'Jakarta'}`,
+      officeLocationIds: newOfficeLocationIds.length > 0 ? newOfficeLocationIds : ['loc-1'],
       joinDate: newJoinDate,
       status: 'Aktif',
       remainingLeaveDays: 12,
@@ -1293,6 +1297,18 @@ export const EmployeeManagement: React.FC = () => {
                       <span>{emp.department}</span>
                       <span className="font-mono font-semibold text-slate-700">Grade {emp.grade || 'L3'}</span>
                     </div>
+                    <div className="flex items-center gap-1 pt-0.5 text-[10px] text-indigo-700 font-medium">
+                      <MapPin className="w-3 h-3 shrink-0" />
+                      <span className="truncate">
+                        {(() => {
+                          const assigned = officeLocations.filter((l) => emp.officeLocationIds?.includes(l.id));
+                          if (assigned.length > 0) {
+                            return `${assigned.map((l) => l.name).join(', ')} (${assigned.length} Lokasi)`;
+                          }
+                          return emp.branchLocation || officeLocations[0]?.name || 'Kantor Pusat';
+                        })()}
+                      </span>
+                    </div>
                   </div>
 
                   {/* Metadata Row: KTP, PTKP, Gaji */}
@@ -1418,6 +1434,22 @@ export const EmployeeManagement: React.FC = () => {
                       <td className="py-2.5 px-3 text-slate-700">
                         <div className="font-semibold text-slate-800">{emp.position}</div>
                         <div className="text-[10px] text-slate-500">{emp.department} (Grade {emp.grade})</div>
+                        <div className="flex flex-wrap items-center gap-1 mt-1">
+                          {(() => {
+                            const assigned = officeLocations.filter((l) => emp.officeLocationIds?.includes(l.id));
+                            const list = assigned.length > 0 ? assigned : officeLocations.slice(0, 1);
+                            return list.map((loc) => (
+                              <span
+                                key={loc.id}
+                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 text-[9px] font-semibold"
+                                title={`${loc.name} · Radius ${loc.radiusMeters}m`}
+                              >
+                                <MapPin className="w-2.5 h-2.5" />
+                                <span className="truncate max-w-[130px]">{loc.name}</span>
+                              </span>
+                            ));
+                          })()}
+                        </div>
                       </td>
                       <td className="py-2.5 px-3 font-mono text-[11px] hidden xl:table-cell">
                         <div className="text-slate-800">KTP: {emp.nikKtp}</div>
@@ -2190,13 +2222,51 @@ export const EmployeeManagement: React.FC = () => {
                         </div>
 
                         <div>
-                          <label className="font-medium text-slate-700 block mb-1">Lokasi Kerja / Cabang</label>
-                          <input
-                            type="text"
-                            value={newBranchLocation}
-                            onChange={(e) => setNewBranchLocation(e.target.value)}
-                            className="w-full px-3 py-2 border border-slate-300 rounded"
-                          />
+                          <label className="font-medium text-slate-700 block mb-1">
+                            Penugasan Lokasi Kantor (Bisa Pilih 1 atau Lebih)
+                          </label>
+                          <div className="space-y-1.5 max-h-36 overflow-y-auto p-2 bg-slate-50 border border-slate-300 rounded">
+                            {officeLocations.map((loc) => {
+                              const isChecked = newOfficeLocationIds.includes(loc.id);
+                              return (
+                                <label
+                                  key={loc.id}
+                                  className={`flex items-center justify-between gap-2 p-1.5 rounded cursor-pointer border text-[11px] transition-colors ${
+                                    isChecked
+                                      ? 'bg-indigo-50 border-indigo-300 text-indigo-900 font-semibold'
+                                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <input
+                                      type="checkbox"
+                                      checked={isChecked}
+                                      onChange={() => {
+                                        const nextIds = isChecked
+                                          ? newOfficeLocationIds.filter((id) => id !== loc.id)
+                                          : [...newOfficeLocationIds, loc.id];
+                                        setNewOfficeLocationIds(nextIds);
+                                        const selectedNames = officeLocations
+                                          .filter((l) => nextIds.includes(l.id))
+                                          .map((l) => l.name);
+                                        if (selectedNames.length > 0) {
+                                          setNewBranchLocation(selectedNames.join(', '));
+                                        }
+                                      }}
+                                      className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                                    />
+                                    <span>{loc.name}</span>
+                                  </div>
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-white border border-slate-200 text-slate-600 font-mono">
+                                    {loc.type} · {loc.radiusMeters}m
+                                  </span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                          <div className="mt-1 text-[10px] text-slate-500">
+                            Label Lokasi: <strong className="text-slate-700">{newBranchLocation}</strong>
+                          </div>
                         </div>
                       </div>
 
@@ -3677,11 +3747,82 @@ export const EmployeeManagement: React.FC = () => {
                           {selectedEmployee.directSupervisor || 'Ir. Budi Santoso (President Director)'}
                         </strong>
                       </div>
-                      <div>
-                        <span className="text-slate-500 block text-[11px]">Lokasi Kerja / Cabang</span>
-                        <strong className="text-slate-900 text-xs">
-                          {selectedEmployee.branchLocation || 'Kantor Pusat Jakarta (Menara Palma)'}
-                        </strong>
+                      <div className="sm:col-span-2 bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <span className="text-slate-700 font-bold block text-xs">
+                              Penugasan Lokasi Kantor & Radius Presensi (Bisa 1 atau Lebih Lokasi)
+                            </span>
+                            <span className="text-slate-500 text-[10px]">
+                              Klik lokasi di bawah untuk menambah/mengurangi penugasan lokasi absensi karyawan ini.
+                            </span>
+                          </div>
+                          <span className="px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded font-bold text-[10px]">
+                            {(selectedEmployee.officeLocationIds || []).length || 1} Lokasi Ditugaskan
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                          {officeLocations.map((loc) => {
+                            const currentIds =
+                              selectedEmployee.officeLocationIds && selectedEmployee.officeLocationIds.length > 0
+                                ? selectedEmployee.officeLocationIds
+                                : officeLocations[0]
+                                  ? [officeLocations[0].id]
+                                  : [];
+                            const isAssigned = currentIds.includes(loc.id);
+                            return (
+                              <button
+                                key={loc.id}
+                                type="button"
+                                onClick={() => {
+                                  const nextIds = isAssigned
+                                    ? currentIds.filter((id) => id !== loc.id)
+                                    : [...currentIds, loc.id];
+                                  const nextNames = officeLocations
+                                    .filter((l) => nextIds.includes(l.id))
+                                    .map((l) => l.name)
+                                    .join(', ');
+                                  const updatedFields = {
+                                    officeLocationIds: nextIds,
+                                    branchLocation: nextNames || selectedEmployee.branchLocation,
+                                  };
+                                  updateEmployee(selectedEmployee.id, updatedFields);
+                                  setSelectedEmployee({
+                                    ...selectedEmployee,
+                                    ...updatedFields,
+                                  });
+                                }}
+                                className={`flex items-center justify-between p-2 rounded-lg border text-left transition-all ${
+                                  isAssigned
+                                    ? 'bg-indigo-50 border-indigo-400 text-indigo-950 shadow-2xs'
+                                    : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+                                }`}
+                              >
+                                <div className="min-w-0 pr-2">
+                                  <div className="text-xs font-bold truncate flex items-center gap-1.5">
+                                    <input
+                                      type="checkbox"
+                                      readOnly
+                                      checked={isAssigned}
+                                      className="rounded border-slate-300 text-indigo-600 pointer-events-none"
+                                    />
+                                    <span className="truncate">{loc.name}</span>
+                                  </div>
+                                  <div className="text-[10px] text-slate-500 pl-5 truncate">
+                                    {loc.companyName} · {loc.type}
+                                  </div>
+                                </div>
+                                <span
+                                  className={`shrink-0 px-1.5 py-0.5 rounded font-mono text-[10px] font-bold ${
+                                    isAssigned ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'
+                                  }`}
+                                >
+                                  Radius {loc.radiusMeters}m
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
                       </div>
                       <div>
                         <span className="text-slate-500 block text-[11px]">Status Ketenagakerjaan</span>

@@ -15,12 +15,86 @@ import {
   Percent,
   Eye,
   FileText,
+  Edit3,
+  Trash2,
 } from 'lucide-react';
 import { formatRupiah } from '../../utils/taxCalculator';
 import { EmployeeSelect } from '../common/EmployeeSelect';
 import { CurrencyInput } from '../common/CurrencyInput';
-import { EmployeeLoan } from '../../types/hrms';
+import { EmployeeLoan, LoanSchemeConfig } from '../../types/hrms';
 import { ModuleDocumentModal } from '../common/ModuleDocumentModal';
+
+const DEFAULT_LOAN_SCHEMES: LoanSchemeConfig[] = [
+  {
+    id: 'scheme-1',
+    code: 'KSB-DRT',
+    name: 'Kasbon Darurat',
+    description: 'Fasilitas kasbon mendesak (medis/keluarga) tanpa bunga dengan pencairan cepat.',
+    isZeroInterest: true,
+    interestMethod: 'Tanpa Bunga (0%)',
+    interestRatePercentPerYear: 0,
+    minEligibleSalary: 3500000,
+    minLoanAmount: 500000,
+    maxLoanAmount: 10000000,
+    maxSalaryMultiple: 1,
+    maxDsrPercent: 30,
+    maxTenorMonths: 6,
+    minTenureMonths: 3,
+    eligibleEmploymentTypes: ['Tetap', 'Kontrak'],
+    existingLoanRule: 'Diizinkan Pinjaman Ganda Khusus Darurat',
+    adminFeeType: 'Nominal Tetap (IDR)',
+    adminFeeValue: 25000,
+    earlySettlementPenaltyPercent: 0,
+    requireGuarantorOrCollateral: false,
+    isActive: true,
+  },
+  {
+    id: 'scheme-2',
+    code: 'PNJ-FLX',
+    name: 'Pinjaman Fleksibel',
+    description: 'Pinjaman multiguna karyawan dengan skema bunga flat ringan per tahun.',
+    isZeroInterest: false,
+    interestMethod: 'Bunga Flat',
+    interestRatePercentPerYear: 6,
+    minEligibleSalary: 5000000,
+    minLoanAmount: 2000000,
+    maxLoanAmount: 35000000,
+    maxSalaryMultiple: 3,
+    maxDsrPercent: 30,
+    maxTenorMonths: 12,
+    minTenureMonths: 12,
+    eligibleEmploymentTypes: ['Tetap'],
+    existingLoanRule: 'Diizinkan Jika Sisa Cicilan ≤ 30% & DSR Aman',
+    adminFeeType: 'Nominal Tetap (IDR)',
+    adminFeeValue: 75000,
+    earlySettlementPenaltyPercent: 1,
+    requireGuarantorOrCollateral: false,
+    isActive: true,
+  },
+  {
+    id: 'scheme-3',
+    code: 'PNJ-PND',
+    name: 'Pendidikan',
+    description: 'Bantuan pembiayaan pendidikan anak/studi lanjut karyawan dengan subsidi bunga 0%.',
+    isZeroInterest: true,
+    interestMethod: 'Tanpa Bunga (0%)',
+    interestRatePercentPerYear: 0,
+    minEligibleSalary: 4500000,
+    minLoanAmount: 2000000,
+    maxLoanAmount: 30000000,
+    maxSalaryMultiple: 2.5,
+    maxDsrPercent: 35,
+    maxTenorMonths: 18,
+    minTenureMonths: 12,
+    eligibleEmploymentTypes: ['Tetap', 'Kontrak'],
+    existingLoanRule: 'Diizinkan Top-Up (Potong Pelunasan Pinjaman Lama)',
+    adminFeeType: 'Nominal Tetap (IDR)',
+    adminFeeValue: 50000,
+    earlySettlementPenaltyPercent: 0,
+    requireGuarantorOrCollateral: false,
+    isActive: true,
+  },
+];
 
 export const LoanManagement: React.FC = () => {
   const {
@@ -47,7 +121,7 @@ export const LoanManagement: React.FC = () => {
         variant: loan.status === 'Lunas' ? 'success' : loan.status === 'Aktif' ? 'info' : 'warning',
       },
       detailsGrid: [
-        { label: 'Jenis Fasilitas', value: loan.loanType },
+        { label: 'Jenis Pinjaman', value: loan.loanType },
         { label: 'Plafon Pinjaman', value: formatRupiah(loan.totalAmount) },
         { label: 'Tenor Cicilan', value: `${loan.tenorMonths} Bulan` },
         { label: 'Potongan per Bulan', value: formatRupiah(loan.monthlyInstallment) },
@@ -68,13 +142,104 @@ export const LoanManagement: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDocModalOpen, setIsDocModalOpen] = useState(false);
 
+  // Master Skema / Jenis Pinjaman (Configurable in Sub Menu Pengaturan Plafon Pinjaman)
+  const [loanSchemes, setLoanSchemes] = useState<LoanSchemeConfig[]>(() => {
+    try {
+      const saved = localStorage.getItem('nusahr_loan_schemes');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const filtered = parsed.filter((s: LoanSchemeConfig) => s.name !== 'Kepemilikan Aset');
+          if (filtered.length > 0) return filtered;
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return DEFAULT_LOAN_SCHEMES;
+  });
+
+  const saveLoanSchemes = (nextSchemes: LoanSchemeConfig[]) => {
+    setLoanSchemes(nextSchemes);
+    try {
+      localStorage.setItem('nusahr_loan_schemes', JSON.stringify(nextSchemes));
+    } catch {
+      // ignore
+    }
+  };
+
+  // Modal Tambah / Edit Skema Pinjaman
+  const [isSchemeModalOpen, setIsSchemeModalOpen] = useState(false);
+  const [editingSchemeId, setEditingSchemeId] = useState<string | null>(null);
+  const [schemeForm, setSchemeForm] = useState<Omit<LoanSchemeConfig, 'id'>>({
+    code: 'PNJ-BARU',
+    name: '',
+    description: '',
+    isZeroInterest: true,
+    interestMethod: 'Tanpa Bunga (0%)',
+    interestRatePercentPerYear: 0,
+    minEligibleSalary: 4000000,
+    minLoanAmount: 1000000,
+    maxLoanAmount: 25000000,
+    maxSalaryMultiple: 3,
+    maxDsrPercent: 30,
+    maxTenorMonths: 12,
+    minTenureMonths: 6,
+    eligibleEmploymentTypes: ['Tetap', 'Kontrak'],
+    existingLoanRule: 'Tidak Diizinkan (Wajib Lunas 100%)',
+    adminFeeType: 'Nominal Tetap (IDR)',
+    adminFeeValue: 50000,
+    earlySettlementPenaltyPercent: 0,
+    requireGuarantorOrCollateral: false,
+    isActive: true,
+  });
+
   // Form State
   const [employeeId, setEmployeeId] = useState(employees[0]?.id || '');
-  const [loanType, setLoanType] = useState<any>('Kasbon Darurat');
+  const [loanType, setLoanType] = useState<string>(loanSchemes[0]?.name || 'Kasbon Darurat');
   const [totalAmount, setTotalAmount] = useState<number>(3000000);
   const [tenorMonths, setTenorMonths] = useState<number>(6);
   const [loanReason, setLoanReason] = useState('');
   const [loanFormError, setLoanFormError] = useState<string | null>(null);
+
+  const selectedScheme =
+    loanSchemes.find((s) => s.name === loanType) || loanSchemes[0] || DEFAULT_LOAN_SCHEMES[0];
+  const selectedApplicant = employees.find((e) => e.id === employeeId);
+  const applicantExistingActiveLoans = loans.filter(
+    (l) => l.employeeId === employeeId && l.status === 'Aktif'
+  );
+
+  // Calculate tenure in months for applicant
+  const applicantTenureMonths = (() => {
+    if (!selectedApplicant?.joinDate) return 12;
+    const join = new Date(selectedApplicant.joinDate);
+    const now = new Date();
+    return Math.max(
+      0,
+      (now.getFullYear() - join.getFullYear()) * 12 + (now.getMonth() - join.getMonth())
+    );
+  })();
+
+  // Calculate monthly interest, installment & admin fee based on selected scheme
+  const schemeAdminFeeNominal =
+    selectedScheme.adminFeeType === 'Persentase Plafon (%)'
+      ? Math.round(totalAmount * (selectedScheme.adminFeeValue / 100))
+      : selectedScheme.adminFeeValue;
+
+  const schemeMonthlyInterest = (() => {
+    if (selectedScheme.isZeroInterest || selectedScheme.interestMethod === 'Tanpa Bunga (0%)') {
+      return 0;
+    }
+    const annualRate = selectedScheme.interestRatePercentPerYear / 100;
+    if (selectedScheme.interestMethod === 'Bunga Efektif / Anuitas') {
+      // Effective average monthly interest approximation
+      return Math.round(((totalAmount * annualRate) / 12) * 0.6);
+    }
+    return Math.round((totalAmount * annualRate) / 12);
+  })();
+
+  const schemeMonthlyInstallment =
+    Math.round(totalAmount / Math.max(1, tenorMonths)) + schemeMonthlyInterest;
 
   // Simulation State
   const [simEmployeeId, setSimEmployeeId] = useState(employees[0]?.id || '');
@@ -120,25 +285,57 @@ export const LoanManagement: React.FC = () => {
       setLoanFormError('Pilih nama karyawan yang mengajukan pinjaman');
       return;
     }
-    if (!totalAmount || totalAmount < 500000) {
-      setLoanFormError('Nominal pinjaman minimal Rp 500.000');
+    if (!totalAmount || totalAmount < selectedScheme.minLoanAmount) {
+      setLoanFormError(
+        `Nominal pinjaman minimal untuk skema ${selectedScheme.name} adalah ${formatRupiah(selectedScheme.minLoanAmount)}`
+      );
+      return;
+    }
+    if (totalAmount > selectedScheme.maxLoanAmount) {
+      setLoanFormError(
+        `Plafon melebihi batas maksimal skema ${selectedScheme.name} (${formatRupiah(selectedScheme.maxLoanAmount)})`
+      );
+      return;
+    }
+    if (selectedApplicant && selectedApplicant.basicSalary < selectedScheme.minEligibleSalary) {
+      setLoanFormError(
+        `Gaji pokok karyawan (${formatRupiah(selectedApplicant.basicSalary)}) belum memenuhi syarat minimum gaji skema ${selectedScheme.name} (${formatRupiah(selectedScheme.minEligibleSalary)})`
+      );
+      return;
+    }
+    if (applicantTenureMonths < selectedScheme.minTenureMonths) {
+      setLoanFormError(
+        `Masa kerja karyawan (${applicantTenureMonths} bulan) belum memenuhi syarat minimal masa kerja skema ${selectedScheme.name} (${selectedScheme.minTenureMonths} bulan)`
+      );
+      return;
+    }
+    if (
+      applicantExistingActiveLoans.length > 0 &&
+      selectedScheme.existingLoanRule === 'Tidak Diizinkan (Wajib Lunas 100%)'
+    ) {
+      setLoanFormError(
+        `Karyawan masih memiliki pinjaman aktif. Aturan skema "${selectedScheme.name}" mengharuskan pinjaman sebelumnya lunas 100%.`
+      );
       return;
     }
 
     setLoanFormError(null);
-    const monthlyInstallment = Math.round(totalAmount / (tenorMonths || 1));
     addLoan({
       employeeId,
       loanType,
       totalAmount,
       tenorMonths,
-      monthlyInstallment,
+      monthlyInstallment: schemeMonthlyInstallment,
       startDate: new Date().toISOString().split('T')[0],
-      reason: loanReason || 'Kebutuhan mendesak karyawan',
+      reason:
+        loanReason ||
+        `Pengajuan ${selectedScheme.name} (${selectedScheme.interestMethod}, Biaya Admin: ${formatRupiah(schemeAdminFeeNominal)})`,
     });
 
     setIsModalOpen(false);
     setLoanReason('');
+    setLoanNotice(`Pengajuan "${loanType}" berhasil disimpan sesuai aturan plafon & skema!`);
+    setTimeout(() => setLoanNotice(null), 4000);
   };
 
   const [loanNotice, setLoanNotice] = useState<string | null>(null);
@@ -245,7 +442,7 @@ export const LoanManagement: React.FC = () => {
           }`}
         >
           <Settings className="w-3.5 h-3.5" />
-          <span>Aturan Bunga & Plafon Pinjaman</span>
+          <span>Pengaturan Plafon Pinjaman</span>
         </button>
       </div>
 
@@ -692,81 +889,607 @@ export const LoanManagement: React.FC = () => {
         </div>
       )}
 
-      {/* Settings Tab */}
+      {/* ===================== SUB MENU: PENGATURAN PLAFON PINJAMAN & SKEMA JENIS PINJAMAN ===================== */}
       {activeTab === 'pengaturan' && (
-        <div className="bg-white border border-slate-200 rounded-lg p-5 shadow-xs space-y-6 max-w-2xl">
-          <div>
-            <h3 className="text-sm font-bold text-slate-900 mb-1">
-              Pengaturan Kebijakan Fasilitas Pinjaman Karyawan
-            </h3>
-            <p className="text-xs text-slate-500">
-              Konfigurasi batas maksimal cicilan terhadap gaji pokok, tenor terpanjang, dan izin pinjaman ganda.
-            </p>
+        <div className="space-y-6">
+          {/* Header & Action Tambah Skema / Jenis Pinjaman */}
+          <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <Settings className="w-4 h-4 text-indigo-600" />
+                <span>Pengaturan Plafon Pinjaman & Master Skema / Jenis Pinjaman</span>
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Atur skema bunga (0% / Flat / Efektif / Margin Syariah), minimum gaji peminjam, syarat masa kerja minimal, aturan pinjaman ganda/sebelumnya, biaya admin per transaksi, dan plafon maksimal per jenis pinjaman.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setEditingSchemeId(null);
+                setSchemeForm({
+                  code: `PNJ-0${loanSchemes.length + 1}`,
+                  name: '',
+                  description: '',
+                  isZeroInterest: true,
+                  interestMethod: 'Tanpa Bunga (0%)',
+                  interestRatePercentPerYear: 0,
+                  minEligibleSalary: 4000000,
+                  minLoanAmount: 1000000,
+                  maxLoanAmount: 25000000,
+                  maxSalaryMultiple: 3,
+                  maxDsrPercent: 30,
+                  maxTenorMonths: 12,
+                  minTenureMonths: 6,
+                  eligibleEmploymentTypes: ['Tetap', 'Kontrak'],
+                  existingLoanRule: 'Tidak Diizinkan (Wajib Lunas 100%)',
+                  adminFeeType: 'Nominal Tetap (IDR)',
+                  adminFeeValue: 50000,
+                  earlySettlementPenaltyPercent: 0,
+                  requireGuarantorOrCollateral: false,
+                  isActive: true,
+                });
+                setIsSchemeModalOpen(true);
+              }}
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold shadow-xs flex items-center gap-1.5 shrink-0"
+            >
+              <Plus className="w-4 h-4" />
+              <span>+ Tambah Skema / Jenis Pinjaman</span>
+            </button>
           </div>
 
-          <div className="space-y-4 text-xs">
-            <div className="p-4 bg-slate-50 rounded-lg border border-slate-200 space-y-3">
-              <label className="font-semibold text-slate-800 block">
-                Batas Maksimal Potongan terhadap Gaji Pokok (Debt Service Ratio / DSR %)
-              </label>
-              <div className="flex items-center gap-3">
+          {/* Daftar Kartu Skema / Jenis Pinjaman */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {loanSchemes.map((scheme) => (
+              <div
+                key={scheme.id}
+                className="bg-white border border-slate-200 hover:border-indigo-300 rounded-xl p-4 shadow-xs flex flex-col justify-between space-y-4 transition-all"
+              >
+                <div className="space-y-3">
+                  {/* Top Header */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-mono text-[10px] font-bold px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded border border-indigo-200">
+                          {scheme.code}
+                        </span>
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                            scheme.isZeroInterest
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              : 'bg-amber-50 text-amber-800 border border-amber-200'
+                          }`}
+                        >
+                          {scheme.isZeroInterest
+                            ? 'Bunga 0% (Tanpa Bunga)'
+                            : `${scheme.interestMethod} · ${scheme.interestRatePercentPerYear}% / Thn`}
+                        </span>
+                      </div>
+                      <h4 className="font-bold text-slate-900 text-sm mt-1.5">{scheme.name}</h4>
+                      <p className="text-[11px] text-slate-500 mt-0.5">{scheme.description}</p>
+                    </div>
+
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingSchemeId(scheme.id);
+                          const { id: _id, ...rest } = scheme;
+                          setSchemeForm(rest);
+                          setIsSchemeModalOpen(true);
+                        }}
+                        className="p-1.5 text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg border border-slate-200"
+                        title="Ubah Pengaturan Skema Pinjaman"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                      </button>
+                      {loanSchemes.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const next = loanSchemes.filter((s) => s.id !== scheme.id);
+                            saveLoanSchemes(next);
+                            setLoanNotice(`Skema pinjaman "${scheme.name}" berhasil dihapus.`);
+                            setTimeout(() => setLoanNotice(null), 3500);
+                          }}
+                          className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg border border-slate-200"
+                          title="Hapus Skema Pinjaman"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Grid Parameter Plafon, Gaji, Masa Kerja & Admin */}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs bg-slate-50 p-3 rounded-xl border border-slate-100">
+                    <div>
+                      <span className="text-[10px] text-slate-400 block">Min. Gaji Pokok</span>
+                      <strong className="font-mono text-slate-900">{formatRupiah(scheme.minEligibleSalary)}</strong>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-400 block">Plafon Maksimal</span>
+                      <strong className="font-mono text-indigo-700">{formatRupiah(scheme.maxLoanAmount)}</strong>
+                      <span className="text-[9px] text-slate-400 block">Maks. {scheme.maxSalaryMultiple}x Gaji</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-400 block">Tenor & Batas DSR</span>
+                      <strong className="font-mono text-slate-900">
+                        Maks. {scheme.maxTenorMonths} Bln ({scheme.maxDsrPercent}% DSR)
+                      </strong>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-400 block">Min. Masa Kerja</span>
+                      <strong className="font-mono text-slate-900">≥ {scheme.minTenureMonths} Bulan</strong>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-400 block">Biaya Admin / Transaksi</span>
+                      <strong className="font-mono text-emerald-700">
+                        {scheme.adminFeeType === 'Nominal Tetap (IDR)'
+                          ? formatRupiah(scheme.adminFeeValue)
+                          : `${scheme.adminFeeValue}% Plafon`}
+                      </strong>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-400 block">Penalti Pelunasan Awal</span>
+                      <strong className="font-mono text-slate-800">{scheme.earlySettlementPenaltyPercent}%</strong>
+                    </div>
+                  </div>
+
+                  {/* Aturan Pinjaman Sebelumnya & Status Karyawan */}
+                  <div className="space-y-1.5 text-[11px] bg-indigo-50/50 border border-indigo-100 p-2.5 rounded-lg">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-slate-600 font-medium">Jika Ada Pinjaman Sebelumnya:</span>
+                      <span className="font-bold text-indigo-900 text-right">{scheme.existingLoanRule}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-slate-600 font-medium">Status Karyawan Berhak:</span>
+                      <span className="font-semibold text-slate-800">
+                        {scheme.eligibleEmploymentTypes.join(', ')}
+                        {scheme.requireGuarantorOrCollateral ? ' · Wajib Agunan/Penjamin' : ''}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Pengaturan Global Plafon & DSR Default */}
+          <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs space-y-4 max-w-3xl">
+            <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+              Parameter Global Kalkulator DSR & Kebijakan Umum Payroll
+            </h4>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">Batas Default DSR Gaji (%)</label>
                 <input
                   type="number"
                   min={10}
-                  max={50}
+                  max={60}
                   value={maxPlafonPercent}
                   onChange={(e) => setMaxPlafonPercent(Number(e.target.value))}
-                  className="w-24 px-3 py-1.5 border border-slate-300 rounded font-mono text-slate-900 font-bold"
+                  className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono font-bold"
                 />
-                <span className="text-slate-500">% dari Gaji Pokok (Standar umum perusahaan: 30%)</span>
               </div>
-            </div>
-
-            <div className="p-4 bg-slate-50 rounded-lg border border-slate-200 space-y-3">
-              <label className="font-semibold text-slate-800 block">
-                Batas Tenor Pinjaman Terpanjang (Bulan)
-              </label>
-              <div className="flex items-center gap-3">
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">Tenor Maksimal Simulasi (Bulan)</label>
                 <input
                   type="number"
                   min={1}
-                  max={36}
+                  max={60}
                   value={maxTenor}
                   onChange={(e) => setMaxTenor(Number(e.target.value))}
-                  className="w-24 px-3 py-1.5 border border-slate-300 rounded font-mono text-slate-900 font-bold"
+                  className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono font-bold"
                 />
-                <span className="text-slate-500">Bulan masa pelunasan</span>
               </div>
-            </div>
-
-            <div className="p-4 bg-slate-50 rounded-lg border border-slate-200 space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <span className="font-semibold text-slate-800 block">
-                    Izinkan Fasilitas Pinjaman Ganda (Multiple Active Loans)
-                  </span>
-                  <span className="text-[11px] text-slate-500">
-                    Karyawan dapat memiliki kasbon darurat dan pinjaman reguler sekaligus asalkan DSR tidak terlampaui
-                  </span>
-                </div>
+              <div className="flex items-center gap-2 pt-5">
                 <input
                   type="checkbox"
+                  id="globalMultiLoan"
                   checked={allowMultiple}
                   onChange={(e) => setAllowMultiple(e.target.checked)}
                   className="w-4 h-4 text-indigo-600 rounded"
                 />
+                <label htmlFor="globalMultiLoan" className="font-semibold text-slate-700 cursor-pointer">
+                  Aktifkan Pengecekan Multi-Pinjaman
+                </label>
               </div>
             </div>
-
-            <div className="pt-3 border-t border-slate-200 flex justify-end">
+            <div className="flex justify-end pt-2 border-t border-slate-100">
               <button
                 type="button"
                 onClick={handleSaveSettings}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-semibold text-xs"
+                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-semibold text-xs"
               >
-                Simpan Kebijakan Pinjaman
+                Simpan Parameter Global
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL TAMBAH / EDIT SKEMA JENIS PINJAMAN */}
+      {isSchemeModalOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsSchemeModalOpen(false);
+          }}
+        >
+          <div
+            className="bg-white rounded-xl shadow-2xl max-w-2xl w-full border border-slate-200 overflow-hidden my-8"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-5 py-4 bg-slate-900 text-white flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold">
+                  {editingSchemeId ? 'Ubah Skema / Jenis Pinjaman' : 'Tambah Skema / Jenis Pinjaman Baru'}
+                </h3>
+                <span className="text-[11px] text-slate-400">
+                  Konfigurasi bunga, minimum gaji, masa kerja, aturan pinjaman berjalan, dan biaya admin per transaksi
+                </span>
+              </div>
+              <button type="button" onClick={() => setIsSchemeModalOpen(false)}>
+                <X className="w-4 h-4 text-slate-400 hover:text-white" />
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!schemeForm.name.trim()) return;
+                if (editingSchemeId) {
+                  const updated = loanSchemes.map((s) =>
+                    s.id === editingSchemeId ? { ...schemeForm, id: editingSchemeId } : s
+                  );
+                  saveLoanSchemes(updated);
+                  setLoanNotice(`Skema "${schemeForm.name}" berhasil diperbarui!`);
+                } else {
+                  const created: LoanSchemeConfig = {
+                    ...schemeForm,
+                    id: `scheme-${Date.now()}`,
+                  };
+                  saveLoanSchemes([...loanSchemes, created]);
+                  setLoanNotice(`Skema jenis pinjaman baru "${schemeForm.name}" berhasil ditambahkan!`);
+                }
+                setIsSchemeModalOpen(false);
+                setTimeout(() => setLoanNotice(null), 4000);
+              }}
+              className="p-5 space-y-4 text-xs max-h-[80vh] overflow-y-auto"
+            >
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Kode Skema *</label>
+                  <input
+                    type="text"
+                    required
+                    value={schemeForm.code}
+                    onChange={(e) => setSchemeForm({ ...schemeForm, code: e.target.value.toUpperCase() })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="font-semibold text-slate-700 block mb-1">Nama Jenis Pinjaman *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Contoh: Pinjaman Darurat Medis / Pinjaman KPR Internal"
+                    value={schemeForm.name}
+                    onChange={(e) => setSchemeForm({ ...schemeForm, name: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-semibold"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">Deskripsi Singkat Skema</label>
+                <input
+                  type="text"
+                  value={schemeForm.description}
+                  onChange={(e) => setSchemeForm({ ...schemeForm, description: e.target.value })}
+                  placeholder="Penjelasan peruntukan pinjaman..."
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                />
+              </div>
+
+              {/* Pengaturan Skema Bunga */}
+              <div className="p-3.5 bg-indigo-50/60 border border-indigo-200 rounded-xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-indigo-950">1. Skema Suku Bunga (0% / Flat / Efektif / Margin)</span>
+                  <label className="flex items-center gap-1.5 cursor-pointer font-semibold text-indigo-800">
+                    <input
+                      type="checkbox"
+                      checked={schemeForm.isZeroInterest}
+                      onChange={(e) => {
+                        const zero = e.target.checked;
+                        setSchemeForm({
+                          ...schemeForm,
+                          isZeroInterest: zero,
+                          interestMethod: zero ? 'Tanpa Bunga (0%)' : 'Bunga Flat',
+                          interestRatePercentPerYear: zero ? 0 : 6,
+                        });
+                      }}
+                      className="rounded text-indigo-600"
+                    />
+                    <span>Skema Bunga 0% (Tanpa Bunga)</span>
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="font-semibold text-slate-700 block mb-1">Metode Perhitungan Bunga *</label>
+                    <select
+                      value={schemeForm.interestMethod}
+                      onChange={(e) => {
+                        const method = e.target.value as LoanSchemeConfig['interestMethod'];
+                        const isZero = method === 'Tanpa Bunga (0%)';
+                        setSchemeForm({
+                          ...schemeForm,
+                          interestMethod: method,
+                          isZeroInterest: isZero,
+                          interestRatePercentPerYear: isZero ? 0 : schemeForm.interestRatePercentPerYear || 6,
+                        });
+                      }}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white font-medium"
+                    >
+                      <option value="Tanpa Bunga (0%)">Tanpa Bunga (0%)</option>
+                      <option value="Bunga Flat">Bunga Flat (Tetap per Bulan)</option>
+                      <option value="Bunga Efektif / Anuitas">Bunga Efektif / Anuitas (Saldo Menurun)</option>
+                      <option value="Margin Syariah (Tetap)">Margin Syariah (Akad Murabahah Tetap)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="font-semibold text-slate-700 block mb-1">Suku Bunga (% per Tahun)</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      min={0}
+                      max={36}
+                      disabled={schemeForm.isZeroInterest}
+                      value={schemeForm.interestRatePercentPerYear}
+                      onChange={(e) =>
+                        setSchemeForm({ ...schemeForm, interestRatePercentPerYear: Number(e.target.value) })
+                      }
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold disabled:bg-slate-100"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Pengaturan Plafon, Minimum Gaji & Masa Kerja */}
+              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+                <span className="font-bold text-slate-900 block">
+                  2. Syarat Minimum Gaji, Masa Kerja & Batas Plafon Pinjaman
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="font-semibold text-slate-700 block mb-1">Minimum Gaji Bisa Meminjam (Rp) *</label>
+                    <input
+                      type="number"
+                      min={0}
+                      step={100000}
+                      value={schemeForm.minEligibleSalary}
+                      onChange={(e) =>
+                        setSchemeForm({ ...schemeForm, minEligibleSalary: Number(e.target.value) })
+                      }
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-semibold text-slate-700 block mb-1">Plafon Minimal (Rp) *</label>
+                    <input
+                      type="number"
+                      min={100000}
+                      step={100000}
+                      value={schemeForm.minLoanAmount}
+                      onChange={(e) => setSchemeForm({ ...schemeForm, minLoanAmount: Number(e.target.value) })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-semibold text-slate-700 block mb-1">Plafon Maksimal (Rp) *</label>
+                    <input
+                      type="number"
+                      min={500000}
+                      step={500000}
+                      value={schemeForm.maxLoanAmount}
+                      onChange={(e) => setSchemeForm({ ...schemeForm, maxLoanAmount: Number(e.target.value) })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold text-indigo-700"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div>
+                    <label className="font-semibold text-slate-700 block mb-1">Min. Masa Kerja (Bln) *</label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={120}
+                      value={schemeForm.minTenureMonths}
+                      onChange={(e) => setSchemeForm({ ...schemeForm, minTenureMonths: Number(e.target.value) })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-semibold text-slate-700 block mb-1">Maks. Tenor (Bulan) *</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={60}
+                      value={schemeForm.maxTenorMonths}
+                      onChange={(e) => setSchemeForm({ ...schemeForm, maxTenorMonths: Number(e.target.value) })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-semibold text-slate-700 block mb-1">Maks. Kelipatan Gaji (x)</label>
+                    <input
+                      type="number"
+                      step="0.5"
+                      min={0.5}
+                      max={24}
+                      value={schemeForm.maxSalaryMultiple}
+                      onChange={(e) =>
+                        setSchemeForm({ ...schemeForm, maxSalaryMultiple: Number(e.target.value) })
+                      }
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-semibold text-slate-700 block mb-1">Batas DSR Gaji (%)</label>
+                    <input
+                      type="number"
+                      min={10}
+                      max={60}
+                      value={schemeForm.maxDsrPercent}
+                      onChange={(e) => setSchemeForm({ ...schemeForm, maxDsrPercent: Number(e.target.value) })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Aturan Jika Sudah Ada Pinjaman Sebelumnya & Biaya Admin Per Transaksi */}
+              <div className="p-3.5 bg-amber-50/50 border border-amber-200 rounded-xl space-y-3">
+                <span className="font-bold text-slate-900 block">
+                  3. Aturan Pinjaman Berjalan & Biaya Administrasi per Transaksi
+                </span>
+
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">
+                    Aturan Jika Karyawan Sudah Memiliki Pinjaman Sebelumnya *
+                  </label>
+                  <select
+                    value={schemeForm.existingLoanRule}
+                    onChange={(e) =>
+                      setSchemeForm({
+                        ...schemeForm,
+                        existingLoanRule: e.target.value as LoanSchemeConfig['existingLoanRule'],
+                      })
+                    }
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white font-medium"
+                  >
+                    <option value="Tidak Diizinkan (Wajib Lunas 100%)">
+                      Tidak Diizinkan (Wajib Lunas 100% Pinjaman Sebelumnya)
+                    </option>
+                    <option value="Diizinkan Jika Sisa Cicilan ≤ 30% & DSR Aman">
+                      Diizinkan Jika Sisa Saldo Pinjaman Lama ≤ 30% & Total DSR Gabungan Aman
+                    </option>
+                    <option value="Diizinkan Top-Up (Potong Pelunasan Pinjaman Lama)">
+                      Diizinkan Top-Up / Refinancing (Pencairan Baru Memotong Sisa Saldo Pinjaman Lama)
+                    </option>
+                    <option value="Diizinkan Pinjaman Ganda Khusus Darurat">
+                      Diizinkan Pinjaman Ganda Khusus Darurat (Selama Total Potongan Gaji Aman)
+                    </option>
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="font-semibold text-slate-700 block mb-1">Tipe Biaya Admin / Transaksi *</label>
+                    <select
+                      value={schemeForm.adminFeeType}
+                      onChange={(e) =>
+                        setSchemeForm({
+                          ...schemeForm,
+                          adminFeeType: e.target.value as LoanSchemeConfig['adminFeeType'],
+                        })
+                      }
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white font-medium"
+                    >
+                      <option value="Nominal Tetap (IDR)">Nominal Tetap (IDR)</option>
+                      <option value="Persentase Plafon (%)">Persentase Plafon (%)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="font-semibold text-slate-700 block mb-1">
+                      Nilai Biaya Admin ({schemeForm.adminFeeType === 'Nominal Tetap (IDR)' ? 'Rp' : '%'}) *
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      step="any"
+                      value={schemeForm.adminFeeValue}
+                      onChange={(e) => setSchemeForm({ ...schemeForm, adminFeeValue: Number(e.target.value) })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-semibold text-slate-700 block mb-1">Penalti Pelunasan Dipercepat (%)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={10}
+                      step="0.5"
+                      value={schemeForm.earlySettlementPenaltyPercent}
+                      onChange={(e) =>
+                        setSchemeForm({ ...schemeForm, earlySettlementPenaltyPercent: Number(e.target.value) })
+                      }
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+                  <div className="flex items-center gap-3">
+                    <span className="font-semibold text-slate-700">Status Karyawan Berhak:</span>
+                    {['Tetap', 'Kontrak', 'Outsource'].map((empType) => {
+                      const checked = schemeForm.eligibleEmploymentTypes.includes(empType);
+                      return (
+                        <label key={empType} className="inline-flex items-center gap-1 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => {
+                              const next = checked
+                                ? schemeForm.eligibleEmploymentTypes.filter((t) => t !== empType)
+                                : [...schemeForm.eligibleEmploymentTypes, empType];
+                              setSchemeForm({
+                                ...schemeForm,
+                                eligibleEmploymentTypes: next.length > 0 ? next : ['Tetap'],
+                              });
+                            }}
+                            className="rounded text-indigo-600"
+                          />
+                          <span>{empType}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+
+                  <label className="inline-flex items-center gap-1.5 cursor-pointer font-semibold text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={schemeForm.requireGuarantorOrCollateral}
+                      onChange={(e) =>
+                        setSchemeForm({ ...schemeForm, requireGuarantorOrCollateral: e.target.checked })
+                      }
+                      className="rounded text-indigo-600"
+                    />
+                    <span>Wajib Penjamin Atasan / Jaminan Dokumen</span>
+                  </label>
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-slate-200 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsSchemeModalOpen(false)}
+                  className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg font-semibold"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold shadow-xs"
+                >
+                  Simpan Skema Pinjaman
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
@@ -780,13 +1503,13 @@ export const LoanManagement: React.FC = () => {
           }}
         >
           <div
-            className="bg-white rounded-xl shadow-xl max-w-md w-full border border-slate-200 overflow-hidden"
+            className="bg-white rounded-xl shadow-xl max-w-lg w-full border border-slate-200 overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="px-5 py-4 bg-slate-900 text-white flex items-center justify-between">
               <div>
                 <h3 className="text-sm font-bold">Form Permohonan Pinjaman Karyawan</h3>
-                <span className="text-[11px] text-slate-400">Verifikasi plafon dan jadwal autodebet payroll</span>
+                <span className="text-[11px] text-slate-400">Verifikasi plafon, syarat masa kerja, dan jadwal autodebet payroll</span>
               </div>
               <button onClick={() => setIsModalOpen(false)}>
                 <X className="w-4 h-4 text-slate-400 hover:text-white" />
@@ -815,29 +1538,59 @@ export const LoanManagement: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="font-medium text-slate-700 block mb-1">Jenis Fasilitas *</label>
+                  <label className="font-medium text-slate-700 block mb-1">Jenis Pinjaman *</label>
                   <select
                     value={loanType}
-                    onChange={(e) => setLoanType(e.target.value as any)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setLoanType(val);
+                      const found = loanSchemes.find((s) => s.name === val);
+                      if (found && tenorMonths > found.maxTenorMonths) {
+                        setTenorMonths(found.maxTenorMonths);
+                      }
+                      if (loanFormError) setLoanFormError(null);
+                    }}
                     className="w-full px-3 py-2 border border-slate-300 rounded bg-white font-medium"
                   >
-                    <option value="Kasbon Darurat">Kasbon Darurat (Mendesak)</option>
-                    <option value="Pinjaman Fleksibel">Pinjaman Fleksibel</option>
-                    <option value="Pendidikan">Bantuan Pendidikan</option>
-                    <option value="Kepemilikan Aset">Kepemilikan Aset (COP)</option>
+                    {loanSchemes.map((s) => (
+                      <option key={s.id} value={s.name}>
+                        {s.name} ({s.isZeroInterest ? 'Bunga 0%' : `${s.interestMethod} ${s.interestRatePercentPerYear}%`})
+                      </option>
+                    ))}
                   </select>
                 </div>
 
                 <div>
-                  <label className="font-medium text-slate-700 block mb-1">Tenor (Bulan) *</label>
+                  <label className="font-medium text-slate-700 block mb-1">
+                    Tenor (Maks. {selectedScheme.maxTenorMonths} Bulan) *
+                  </label>
                   <input
                     type="number"
                     min={1}
-                    max={maxTenor}
+                    max={selectedScheme.maxTenorMonths}
                     value={tenorMonths}
                     onChange={(e) => setTenorMonths(Number(e.target.value))}
                     className="w-full px-3 py-2 border border-slate-300 rounded font-mono"
                   />
+                </div>
+              </div>
+
+              {/* Ringkasan Aturan Skema Pinjaman Terpilih */}
+              <div className="p-3 bg-indigo-50/70 border border-indigo-200 rounded-lg space-y-1 text-[11px]">
+                <div className="font-bold text-indigo-950 flex items-center justify-between">
+                  <span>Ketentuan Skema: {selectedScheme.name}</span>
+                  <span className="font-mono text-[10px] bg-white px-2 py-0.5 rounded border border-indigo-200 text-indigo-700">
+                    {selectedScheme.interestMethod}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-slate-600 pt-1">
+                  <div>• Min. Gaji: <strong>{formatRupiah(selectedScheme.minEligibleSalary)}</strong></div>
+                  <div>• Min. Masa Kerja: <strong>{selectedScheme.minTenureMonths} Bulan</strong></div>
+                  <div>• Plafon Maks: <strong>{formatRupiah(selectedScheme.maxLoanAmount)}</strong></div>
+                  <div>• Biaya Admin: <strong>{formatRupiah(schemeAdminFeeNominal)}</strong></div>
+                </div>
+                <div className="text-[10px] text-indigo-800 pt-0.5">
+                  • Aturan Pinjaman Berjalan: <strong>{selectedScheme.existingLoanRule}</strong>
                 </div>
               </div>
 
@@ -850,15 +1603,21 @@ export const LoanManagement: React.FC = () => {
                   if (loanFormError) setLoanFormError(null);
                 }}
                 required
-                min={500000}
-                helperText="Minimal nominal kasbon/pinjaman Rp 500.000"
+                min={selectedScheme.minLoanAmount}
+                helperText={`Rentang plafon skema ini: ${formatRupiah(selectedScheme.minLoanAmount)} s/d ${formatRupiah(selectedScheme.maxLoanAmount)}`}
               />
 
-              <div className="p-3 bg-slate-50 border border-slate-200 rounded flex justify-between items-center text-xs">
-                <span className="text-slate-600">Estimasi Cicilan per Bulan:</span>
-                <span className="font-mono font-bold text-indigo-700">
-                  {formatRupiah(Math.round(totalAmount / (tenorMonths || 1)))}
-                </span>
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded space-y-1 text-xs">
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-600">Estimasi Cicilan per Bulan (Pokok + Bunga):</span>
+                  <span className="font-mono font-bold text-indigo-700">
+                    {formatRupiah(schemeMonthlyInstallment)}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center text-[11px] text-slate-500">
+                  <span>Biaya Admin per Transaksi:</span>
+                  <span className="font-mono font-semibold text-slate-800">{formatRupiah(schemeAdminFeeNominal)}</span>
+                </div>
               </div>
 
               <div>

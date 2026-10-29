@@ -72,6 +72,7 @@ import {
   InterviewTypeSetting,
   InterviewScorecardCriterion,
   CandidateInterviewEvaluation,
+  OfficeLocation,
 } from '../types/hrms';
 import {
   INITIAL_TENANTS,
@@ -93,6 +94,7 @@ import {
   INITIAL_PROCUREMENT,
   INITIAL_DOCUMENTS,
   INITIAL_SHIFTS,
+  INITIAL_SCHEDULES,
   INITIAL_SHIFT_SWAPS,
   INITIAL_ATTENDANCE_CORRECTIONS,
   INITIAL_BUSINESS_TRIPS,
@@ -128,6 +130,7 @@ import {
   INITIAL_ROLE_PERMISSIONS,
   INITIAL_DIVISIONS,
   INITIAL_DEPARTMENTS,
+  INITIAL_OFFICE_LOCATIONS,
 } from '../data/initialData';
 import { calculatePPh21TER, calculateBPJS, calculateOvertimePay, calculateSeverancePay } from '../utils/taxCalculator';
 import { generateDocumentNumber } from '../utils/documentNumbering';
@@ -508,6 +511,12 @@ interface HrmsContextType {
 
   // 39. Sample Business Flow Reset
   resetToSampleFlowData: () => void;
+
+  // 40. Master Lokasi Kantor & Geofencing
+  officeLocations: OfficeLocation[];
+  addOfficeLocation: (loc: Omit<OfficeLocation, 'id' | 'tenantId'>) => void;
+  updateOfficeLocation: (id: string, updates: Partial<OfficeLocation>) => void;
+  deleteOfficeLocation: (id: string) => void;
 }
 
 const HrmsContext = createContext<HrmsContextType | null>(null);
@@ -623,7 +632,22 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Master Data Stores
   const [employees, setEmployees] = useState<Employee[]>(() => {
     const saved = localStorage.getItem('nusahr_employees');
-    return saved ? JSON.parse(saved) : INITIAL_EMPLOYEES;
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved) as Employee[];
+        const existingIds = new Set(parsed.map((e) => e.id));
+        const merged = [...parsed];
+        for (const initEmp of INITIAL_EMPLOYEES) {
+          if (!existingIds.has(initEmp.id)) {
+            merged.push(initEmp);
+          }
+        }
+        return merged;
+      } catch {
+        // fallback
+      }
+    }
+    return INITIAL_EMPLOYEES;
   });
 
   const [personaliaLogs, setPersonaliaLogs] = useState<PersonaliaLog[]>(() => {
@@ -701,7 +725,22 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const [assets, setAssets] = useState<GAAsset[]>(() => {
     const saved = localStorage.getItem('nusahr_assets');
-    return saved ? JSON.parse(saved) : INITIAL_ASSETS;
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved) as GAAsset[];
+        const existingIds = new Set(parsed.map((a) => a.id));
+        const merged = [...parsed];
+        for (const initAsset of INITIAL_ASSETS) {
+          if (!existingIds.has(initAsset.id)) {
+            merged.push(initAsset);
+          }
+        }
+        return merged;
+      } catch {
+        return INITIAL_ASSETS;
+      }
+    }
+    return INITIAL_ASSETS;
   });
 
   const [procurementOrders, setProcurementOrders] = useState<ProcurementOrder[]>(() => {
@@ -756,9 +795,22 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [schedules, setSchedules] = useState<EmployeeSchedule[]>(() => {
     try {
       const saved = localStorage.getItem('nusahr_schedules');
-      return saved ? JSON.parse(saved) : [];
+      if (saved) {
+        const parsed = JSON.parse(saved) as EmployeeSchedule[];
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const existingKeys = new Set(parsed.map((s) => `${s.employeeId}|${s.date}`));
+          const merged = [...parsed];
+          for (const initSch of INITIAL_SCHEDULES) {
+            if (!existingKeys.has(`${initSch.employeeId}|${initSch.date}`)) {
+              merged.push(initSch);
+            }
+          }
+          return merged;
+        }
+      }
+      return INITIAL_SCHEDULES;
     } catch {
-      return [];
+      return INITIAL_SCHEDULES;
     }
   });
 
@@ -1029,6 +1081,41 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const saved = localStorage.getItem('nusahr_ga_tickets');
     return saved ? JSON.parse(saved) : INITIAL_GA_TICKETS;
   });
+
+  // 40. Master Lokasi Kantor
+  const [officeLocations, setOfficeLocations] = useState<OfficeLocation[]>(() => {
+    const saved = localStorage.getItem('nusahr_office_locations');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved) as OfficeLocation[];
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch {
+        // fallback
+      }
+    }
+    return INITIAL_OFFICE_LOCATIONS;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('nusahr_office_locations', JSON.stringify(officeLocations));
+  }, [officeLocations]);
+
+  const addOfficeLocation = (loc: Omit<OfficeLocation, 'id' | 'tenantId'>) => {
+    const newLoc: OfficeLocation = {
+      ...loc,
+      id: `loc-${Date.now().toString().slice(-5)}`,
+      tenantId: currentTenant.id,
+    };
+    setOfficeLocations((prev) => [...prev, newLoc]);
+  };
+
+  const updateOfficeLocation = (id: string, updates: Partial<OfficeLocation>) => {
+    setOfficeLocations((prev) => prev.map((l) => (l.id === id ? { ...l, ...updates } : l)));
+  };
+
+  const deleteOfficeLocation = (id: string) => {
+    setOfficeLocations((prev) => prev.filter((l) => l.id !== id));
+  };
 
   // 34. Vendor Invoices (AP)
   const [vendorInvoices, setVendorInvoices] = useState<VendorInvoice[]>(() => {
@@ -4302,6 +4389,10 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         openFilePreview,
         closeFilePreview,
         resetToSampleFlowData,
+        officeLocations: officeLocations.filter((l) => l.tenantId === currentTenant.id),
+        addOfficeLocation,
+        updateOfficeLocation,
+        deleteOfficeLocation,
       }}
     >
       {children}

@@ -28,6 +28,7 @@ import {
   History,
   Network,
   BarChart3,
+  MapPin,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -45,7 +46,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isDesktopCollapsed = false,
   onToggleDesktopCollapse,
 }) => {
-  const { activeModule, setActiveModule, currentTenant, employees } = useHrms();
+  const { activeModule, setActiveModule, currentTenant, employees, officeLocations } = useHrms();
 
   const navigationGroups = [
     {
@@ -60,6 +61,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
       items: [
         { id: 'dashboard', label: 'Ringkasan Dashboard', icon: LayoutDashboard },
         { id: 'organization', label: 'Struktur Organisasi', icon: Network },
+        {
+          id: 'office_locations',
+          label: 'Lokasi Kantor',
+          icon: MapPin,
+          badge: officeLocations.length,
+        },
         { id: 'recruitment', label: 'Rekrutmen & Onboarding', icon: UserPlus },
         {
           id: 'employees',

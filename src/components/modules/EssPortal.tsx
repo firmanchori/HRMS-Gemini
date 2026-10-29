@@ -21,10 +21,12 @@ import {
   Award,
   Layers,
   Info,
+  MapPin,
 } from 'lucide-react';
 import { ScrollableTabNav } from '../common/ScrollableTabNav';
 import { formatRupiah } from '../../utils/taxCalculator';
 import { CurrencyInput } from '../common/CurrencyInput';
+import { EmployeeSelect } from '../common/EmployeeSelect';
 
 export const EssPortal: React.FC = () => {
   const {
@@ -35,6 +37,10 @@ export const EssPortal: React.FC = () => {
     submitLeaveRequest,
     loans,
     addLoan,
+    clockIn,
+    clockOut,
+    moduleSettings,
+    officeLocations,
   } = useHrms();
 
   // Find the logged-in employee profile (fallback to first employee)
@@ -58,10 +64,36 @@ export const EssPortal: React.FC = () => {
   >('cuti');
 
   const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
+  const [clockEmpId, setClockEmpId] = useState(currentEmp.id || employees[0]?.id || '');
+  const [selectedClockLocationId, setSelectedClockLocationId] = useState<string>('');
+  const [simulatedDistanceMeters, setSimulatedDistanceMeters] = useState<number>(18);
+  const gpsRadius = moduleSettings?.attendance?.gpsRadiusMeters || 100;
+
+  const selectedClockEmployee = employees.find((e) => e.id === clockEmpId) || currentEmp;
+  const assignedClockLocations = (() => {
+    const matched = officeLocations.filter(
+      (loc) => loc.isActive && selectedClockEmployee?.officeLocationIds?.includes(loc.id)
+    );
+    if (matched.length > 0) return matched;
+    return officeLocations.filter((loc) => loc.isActive).slice(0, 1);
+  })();
+
+  const activeClockLocation =
+    assignedClockLocations.find((loc) => loc.id === selectedClockLocationId) ||
+    assignedClockLocations[0] ||
+    officeLocations[0];
+  const activeLocationRadius = activeClockLocation?.radiusMeters || gpsRadius;
+  const isWithinRadius = simulatedDistanceMeters <= activeLocationRadius;
 
   // Forms State
   const [leaveForm, setLeaveForm] = useState({
-    leaveType: 'Cuti Tahunan' as 'Cuti Tahunan' | 'Cuti Sakit' | 'Cuti Menikah' | 'Cuti Melahirkan' | 'Izin Urusan Pribadi',
+    leaveType: 'Cuti Tahunan' as
+      | 'Cuti Tahunan'
+      | 'Sakit Tanpa Surat Dokter'
+      | 'Sakit dengan Surat Dokter'
+      | 'Cuti Menikah'
+      | 'Cuti Melahirkan'
+      | 'Izin Urusan Pribadi',
     startDate: new Date().toISOString().split('T')[0],
     endDate: new Date().toISOString().split('T')[0],
     totalDays: 1,
@@ -427,7 +459,7 @@ export const EssPortal: React.FC = () => {
           }`}
         >
           <Camera className="w-4 h-4" />
-          <span>Presensi & Kehadiran Mandiri</span>
+          <span>ESS Clock-In (GPS)</span>
         </button>
       </ScrollableTabNav>
 
@@ -471,14 +503,15 @@ export const EssPortal: React.FC = () => {
               <form onSubmit={handleSubmitLeave} className="space-y-4 text-xs">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="font-semibold text-slate-700 block mb-1">Jenis Cuti *</label>
+                    <label className="font-semibold text-slate-700 block mb-1">Jenis Cuti / Izin Sakit *</label>
                     <select
                       value={leaveForm.leaveType}
                       onChange={(e) => setLeaveForm({ ...leaveForm, leaveType: e.target.value as any })}
                       className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white"
                     >
                       <option value="Cuti Tahunan">Cuti Tahunan (Sisa: {remainingLeave} hari)</option>
-                      <option value="Cuti Sakit">Cuti Sakit (Wajib Surat Dokter)</option>
+                      <option value="Sakit Tanpa Surat Dokter">Sakit Tanpa Surat Dokter</option>
+                      <option value="Sakit dengan Surat Dokter">Sakit dengan Surat Dokter</option>
                       <option value="Cuti Menikah">Cuti Menikah (3 Hari)</option>
                       <option value="Cuti Melahirkan">Cuti Melahirkan (3 Bulan)</option>
                       <option value="Izin Urusan Pribadi">Izin Urusan Pribadi</option>
@@ -1071,42 +1104,174 @@ export const EssPortal: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 4: PRESENSI & KEHADIRAN MANDIRI */}
+      {/* TAB 4: ESS CLOCK-IN (GPS) */}
       {activeTab === 'presensi' && (
-        <div className="space-y-4">
-          <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-xs text-center max-w-xl mx-auto space-y-4">
-            <div className="w-16 h-16 rounded-full bg-indigo-50 border-2 border-indigo-200 text-indigo-600 mx-auto flex items-center justify-center">
-              <Camera className="w-8 h-8" />
+        <div className="max-w-xl mx-auto bg-white border border-slate-200 rounded-xl p-6 shadow-xs space-y-5">
+          <div className="text-center space-y-1">
+            <h3 className="text-base font-bold text-slate-900">Employee Self-Service (ESS) Clock-In (GPS)</h3>
+            <p className="text-xs text-slate-500">
+              Validasi Geofencing GPS mengikuti penugasan <strong>Lokasi Kantor</strong> karyawan (Radius Maks.{' '}
+              <strong>{activeLocationRadius}m</strong>) & swafoto biometrik kamera.
+            </p>
+          </div>
+
+          <EmployeeSelect
+            label="Karyawan yang Melakukan Presensi"
+            required
+            employees={employees}
+            value={clockEmpId}
+            onChange={(id) => {
+              setClockEmpId(id);
+              setSelectedClockLocationId('');
+              setSimulatedDistanceMeters(18);
+            }}
+          />
+
+          {/* Lokasi Kantor Penugasan Karyawan */}
+          <div className="p-3.5 bg-indigo-50/70 border border-indigo-200 rounded-xl space-y-2.5">
+            <div className="flex items-center justify-between">
+              <div className="text-xs font-bold text-indigo-950 flex items-center gap-1.5">
+                <MapPin className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Lokasi Kantor Penugasan ({assignedClockLocations.length} Lokasi Aktif)</span>
+              </div>
+              <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-indigo-600 text-white">
+                Radius Maks: {activeLocationRadius} Meter
+              </span>
             </div>
 
-            <div>
-              <h3 className="font-bold text-base text-slate-900">Clock-In & Clock-Out Mandiri (ESS Mobile)</h3>
-              <p className="text-xs text-slate-500 mt-1">
-                Catat presensi harian dengan verifikasi Geofencing GPS dan Face Recognition langsung dari perangkat Anda.
-              </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {assignedClockLocations.map((loc) => {
+                const isSelected = activeClockLocation?.id === loc.id;
+                return (
+                  <button
+                    key={loc.id}
+                    type="button"
+                    onClick={() => setSelectedClockLocationId(loc.id)}
+                    className={`p-2.5 rounded-lg border text-left transition-all ${
+                      isSelected
+                        ? 'bg-white border-indigo-600 ring-2 ring-indigo-500/20 shadow-2xs'
+                        : 'bg-white/70 border-slate-200 hover:border-indigo-300'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="text-xs font-bold text-slate-900 truncate">{loc.name}</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 font-mono font-bold shrink-0">
+                        {loc.radiusMeters}m
+                      </span>
+                    </div>
+                    <div className="text-[10px] text-slate-500 truncate mt-0.5">
+                      {loc.companyName} · {loc.type}
+                    </div>
+                    <div className="text-[10px] text-slate-400 font-mono mt-0.5">
+                      Lat/Long: {loc.latitude.toFixed(5)}, {loc.longitude.toFixed(5)}
+                    </div>
+                  </button>
+                );
+              })}
             </div>
 
-            <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono text-slate-700 flex items-center justify-between">
-              <span>Status Jam Hari Ini:</span>
-              <span className="text-emerald-700 font-bold">Hadir 08:24:12 WIB (Tepat Waktu)</span>
+            {/* Simulasi Jarak GPS Karyawan terhadap Titik Lokasi Kantor */}
+            <div className="pt-2 border-t border-indigo-200/70 space-y-1">
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="text-slate-600 font-medium">
+                  Jarak GPS Anda ke <strong>{activeClockLocation?.name}</strong>:
+                </span>
+                <span
+                  className={`font-mono font-bold ${
+                    isWithinRadius ? 'text-emerald-700' : 'text-rose-600'
+                  }`}
+                >
+                  {simulatedDistanceMeters}m / Maks. {activeLocationRadius}m
+                </span>
+              </div>
+              <input
+                type="range"
+                min={5}
+                max={Math.max(activeLocationRadius * 2, 300)}
+                value={simulatedDistanceMeters}
+                onChange={(e) => setSimulatedDistanceMeters(Number(e.target.value))}
+                className="w-full accent-indigo-600 cursor-pointer h-1.5"
+              />
+            </div>
+          </div>
+
+          <div className="p-4 bg-slate-900 text-white rounded-xl text-center space-y-3">
+            <div className="relative w-48 h-36 mx-auto rounded-lg overflow-hidden border-2 border-indigo-500 bg-slate-800 flex items-center justify-center">
+              <Camera className="w-8 h-8 text-indigo-400" />
+              <div className="absolute bottom-2 left-2 right-2 text-[10px] bg-slate-900/80 py-0.5 rounded text-indigo-300 font-mono">
+                ✓ Face Recognition OK
+              </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => alert('Clock-in berhasil tercatat pada 08:24:12 WIB!')}
-                className="py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold shadow-xs transition-colors"
-              >
-                Clock-In Masuk
-              </button>
-              <button
-                type="button"
-                onClick={() => alert('Clock-out berhasil tercatat! Selamat beristirahat.')}
-                className="py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold shadow-xs transition-colors"
-              >
-                Clock-Out Pulang
-              </button>
+            <div
+              className={`text-xs font-mono flex items-center justify-center gap-1 ${
+                isWithinRadius ? 'text-emerald-400' : 'text-rose-400'
+              }`}
+            >
+              <MapPin className="w-3.5 h-3.5 shrink-0" />
+              <span>
+                {isWithinRadius
+                  ? `Lokasi Valid: ${activeClockLocation?.name} (Jarak ${simulatedDistanceMeters}m ≤ Radius ${activeLocationRadius}m)`
+                  : `Di Luar Radius: ${activeClockLocation?.name} (Jarak ${simulatedDistanceMeters}m > Radius ${activeLocationRadius}m)`}
+              </span>
             </div>
+          </div>
+
+          <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono text-slate-700 flex items-center justify-between">
+            <span>Titik Lokasi Presensi:</span>
+            <span className="text-indigo-700 font-bold">
+              {activeClockLocation?.name} ({activeClockLocation?.type})
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              disabled={!isWithinRadius}
+              onClick={() => {
+                if (clockEmpId && isWithinRadius) {
+                  clockIn(
+                    clockEmpId,
+                    `Presensi ESS di ${activeClockLocation?.name} (Jarak ${simulatedDistanceMeters}m / Radius ${activeLocationRadius}m)`
+                  );
+                  setNoticeMessage(
+                    `Clock-in Masuk Kerja di ${activeClockLocation?.name} (Radius ${activeLocationRadius}m) berhasil tercatat!`
+                  );
+                }
+              }}
+              className={`py-3 rounded-lg font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-1.5 ${
+                isWithinRadius
+                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                  : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+              }`}
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              <span>Clock-In Masuk Kerja</span>
+            </button>
+
+            <button
+              type="button"
+              disabled={!isWithinRadius}
+              onClick={() => {
+                if (clockEmpId && isWithinRadius) {
+                  clockOut(
+                    clockEmpId,
+                    `Clock-out ESS di ${activeClockLocation?.name} (Jarak ${simulatedDistanceMeters}m / Radius ${activeLocationRadius}m)`
+                  );
+                  setNoticeMessage(
+                    `Clock-out Pulang Kerja di ${activeClockLocation?.name} (Radius ${activeLocationRadius}m) berhasil tercatat!`
+                  );
+                }
+              }}
+              className={`py-3 rounded-lg font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-1.5 ${
+                isWithinRadius
+                  ? 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                  : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+              }`}
+            >
+              <Clock className="w-4 h-4" />
+              <span>Clock-Out Pulang Kerja</span>
+            </button>
           </div>
         </div>
       )}

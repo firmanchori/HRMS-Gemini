@@ -171,6 +171,7 @@ export interface Employee {
   managerId?: string;
   directSupervisor?: string;
   branchLocation?: string;
+  officeLocationIds?: string[]; // Penugasan lokasi kantor (bisa 1 atau lebih)
   joinDate: string;
   status: 'Aktif' | 'Cuti Panjang' | 'Resign' | 'PHK';
   remainingLeaveDays: number;
@@ -334,6 +335,8 @@ export interface ShiftSwapRequest {
   targetEmployeeId: string;
   requestDate: string;
   targetDate: string;
+  requestShiftId?: string;
+  targetShiftId?: string;
   reason: string;
   status: 'Menunggu' | 'Disetujui' | 'Ditolak';
   approvedBy?: string;
@@ -359,7 +362,15 @@ export interface AttendanceCorrectionRequest {
   tenantId: string;
   employeeId: string;
   date: string;
-  type: 'Lupa Absen Masuk' | 'Lupa Absen Pulang' | 'Koreksi Jam' | 'Izin Datang Terlambat' | 'Izin Pulang Cepat' | 'Izin Sakit Tanpa Rawat';
+  type:
+    | 'Lupa Absen Masuk'
+    | 'Lupa Absen Pulang'
+    | 'Koreksi Jam'
+    | 'Izin Datang Terlambat'
+    | 'Izin Pulang Cepat'
+    | 'Izin Sakit Tanpa Rawat'
+    | 'Sakit Tanpa Surat Dokter'
+    | 'Sakit dengan Surat Dokter';
   proposedClockIn?: string;
   proposedClockOut?: string;
   reason: string;
@@ -390,7 +401,13 @@ export interface LeaveRequest {
   id: string;
   tenantId: string;
   employeeId: string;
-  leaveType: 'Cuti Tahunan' | 'Cuti Sakit' | 'Cuti Menikah' | 'Cuti Melahirkan' | 'Izin Urusan Pribadi';
+  leaveType:
+    | 'Cuti Tahunan'
+    | 'Sakit Tanpa Surat Dokter'
+    | 'Sakit dengan Surat Dokter'
+    | 'Cuti Menikah'
+    | 'Cuti Melahirkan'
+    | 'Izin Urusan Pribadi';
   startDate: string;
   endDate: string;
   totalDays: number;
@@ -469,11 +486,39 @@ export interface PayrollRecord {
   paidDate?: string;
 }
 
+export interface LoanSchemeConfig {
+  id: string;
+  code: string;
+  name: string;
+  description: string;
+  isZeroInterest: boolean;
+  interestMethod: 'Tanpa Bunga (0%)' | 'Bunga Flat' | 'Bunga Efektif / Anuitas' | 'Margin Syariah (Tetap)';
+  interestRatePercentPerYear: number;
+  minEligibleSalary: number;
+  minLoanAmount: number;
+  maxLoanAmount: number;
+  maxSalaryMultiple: number;
+  maxDsrPercent: number;
+  maxTenorMonths: number;
+  minTenureMonths: number;
+  eligibleEmploymentTypes: string[];
+  existingLoanRule:
+    | 'Tidak Diizinkan (Wajib Lunas 100%)'
+    | 'Diizinkan Jika Sisa Cicilan ≤ 30% & DSR Aman'
+    | 'Diizinkan Top-Up (Potong Pelunasan Pinjaman Lama)'
+    | 'Diizinkan Pinjaman Ganda Khusus Darurat';
+  adminFeeType: 'Nominal Tetap (IDR)' | 'Persentase Plafon (%)';
+  adminFeeValue: number;
+  earlySettlementPenaltyPercent: number;
+  requireGuarantorOrCollateral: boolean;
+  isActive: boolean;
+}
+
 export interface EmployeeLoan {
   id: string;
   tenantId: string;
   employeeId: string;
-  loanType: 'Kasbon Darurat' | 'Pinjaman Fleksibel' | 'Pendidikan' | 'Kepemilikan Aset';
+  loanType: 'Kasbon Darurat' | 'Pinjaman Fleksibel' | 'Pendidikan' | string;
   totalAmount: number;
   tenorMonths: number;
   monthlyInstallment: number;
@@ -481,6 +526,9 @@ export interface EmployeeLoan {
   startDate: string;
   reason: string;
   status: 'Aktif' | 'Lunas' | 'Menunggu Approval';
+  adminFee?: number;
+  interestMethod?: string;
+  interestRatePercent?: number;
 }
 
 // KPI Performance
@@ -1369,6 +1417,13 @@ export interface ModuleSettingsConfig {
     overtimeMultiplierPP35: boolean;
     gpsRadiusMeters: number;
     cameraSelfieRequired: boolean;
+    // Batas Toleransi per 1 Periode Payroll / 1 Bulan
+    maxLateOccurrencesMonthly?: number;
+    maxPermissionDaysMonthly?: number;
+    maxSickWithoutDoctorNoteDaysMonthly?: number;
+    maxSickWithDoctorNoteDaysMonthly?: number;
+    maxForgotClockInMonthly?: number;
+    maxForgotClockOutMonthly?: number;
   };
   payroll: {
     cutoffDate: number;
@@ -1665,7 +1720,7 @@ export interface CompanyCalendarEvent {
   entityId?: string;
   title: string;
   date: string;
-  type: 'Libur Nasional' | 'Cuti Bersama Perusahaan';
+  type: 'Cuti Bersama' | 'Libur Nasional' | 'Event' | 'Libur Perusahaan' | 'Cuti Bersama Perusahaan';
   deductsLeaveBucket: boolean;
   description?: string;
 }
@@ -1894,4 +1949,25 @@ export interface UniversalPreviewItem {
   systemicImpactGrid?: { category: string; before: string; after: string; impact: string }[];
   attachments?: { fileName: string; fileSize?: string; fileType?: string }[];
 }
+
+// 38. Master Lokasi Kantor & Geofencing Absensi
+export type OfficeLocationType = 'Kantor Pusat' | 'Kantor Cabang' | 'Gudang' | 'Workshop' | 'Site Operasional';
+
+export interface OfficeLocation {
+  id: string;
+  tenantId: string;
+  entityId?: string;
+  code: string;
+  name: string;
+  type: OfficeLocationType;
+  companyName: string;
+  address: string;
+  city: string;
+  latitude: number;
+  longitude: number;
+  radiusMeters: number;
+  isActive: boolean;
+  notes?: string;
+}
+
 

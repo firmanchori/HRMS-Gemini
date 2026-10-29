@@ -24,20 +24,72 @@ import {
 } from 'lucide-react';
 import { ScrollableTabNav } from '../common/ScrollableTabNav';
 import { formatRupiah } from '../../utils/taxCalculator';
-import { ApprovalWorkflowItem } from '../../types/hrms';
+import { ApprovalWorkflowItem, AttendanceRecord, Employee } from '../../types/hrms';
 
 export const MssPortal: React.FC = () => {
   const {
     employees,
+    attendance,
+    currentTenant,
     currentUser,
     approvalItems,
     reviewApprovalItem,
     approvalDelegations,
     setApprovalDelegation,
     calendarEvents,
+    openFilePreview,
   } = useHrms();
 
   const [activeTab, setActiveTab] = useState<'inbox' | 'monitoring' | 'cuti_tim' | 'delegasi'>('inbox');
+  const [selectedMonitoringDate, setSelectedMonitoringDate] = useState('2026-10-22');
+
+  const handlePreviewMonthlyAttendanceCutoff = (rec?: AttendanceRecord, employeeOverride?: Employee) => {
+    const emp = employeeOverride || (rec ? employees.find((e) => e.id === rec.employeeId) : employees[0]);
+    const empName = emp?.fullName || 'Karyawan';
+    const empNik = emp?.nik || 'KR-2026-001';
+    const empDept = emp?.department || 'Operasional';
+    const empPosition = emp?.position || 'Staff';
+
+    const empAttendance = attendance.filter((a) => a.employeeId === emp?.id);
+    const presentCount = empAttendance.filter((a) => a.status === 'Hadir').length || 19;
+    const lateCount = empAttendance.filter((a) => a.lateMinutes > 0 || a.status === 'Terlambat').length || 2;
+    const totalLateMinutes = empAttendance.reduce((sum, a) => sum + (a.lateMinutes || 0), 0) || 25;
+    const totalOvertime = empAttendance.reduce((sum, a) => sum + (a.overtimeHours || 0), 0) || 4.5;
+    const leaveCount = empAttendance.filter((a) => ['Cuti', 'Sakit', 'Izin'].includes(a.status)).length || 1;
+    const alphaCount = empAttendance.filter((a) => a.status === 'Alpa').length || 0;
+    const effectiveWorkDays = 22;
+    const totalPresentDays = Math.min(effectiveWorkDays, presentCount + lateCount);
+    const attendanceRate = Math.round((totalPresentDays / effectiveWorkDays) * 100);
+
+    openFilePreview({
+      title: 'LEMBAR REKAPITULASI PRESENSI BULANAN (PERIODE CUT-OFF)',
+      documentNumber: `REKAP-ATT/2026-10/${empNik}`,
+      typeBadge: 'Rekap Presensi Bulanan (Cut-Off)',
+      date: '21 Oktober 2026',
+      partyName: empName,
+      partyRole: `${empPosition} · Divisi ${empDept} (NIK: ${empNik})`,
+      statusBadge: {
+        label: 'Terverifikasi Atasan & Tim HR',
+        variant: 'success',
+      },
+      detailsGrid: [
+        { label: 'Periode Cut-Off Presensi', value: '21 Sep 2026 – 20 Okt 2026' },
+        { label: 'Siklus Pembukuan Gaji', value: 'Payroll Bulan Oktober 2026' },
+        { label: 'Hari Kerja Efektif Perusahaan', value: `${effectiveWorkDays} Hari Kerja` },
+        { label: 'Total Kehadiran Karyawan', value: `${totalPresentDays} Hari (${attendanceRate}%)` },
+        { label: 'Akumulasi Keterlambatan', value: `${lateCount} Kali (${totalLateMinutes} Menit)` },
+        { label: 'Akumulasi Lembur (Overtime)', value: `${totalOvertime} Jam (SPL Disetujui)` },
+        { label: 'Cuti / Sakit / Izin Resmi', value: `${leaveCount} Hari Kerja` },
+        { label: 'Alpa / Tanpa Keterangan', value: `${alphaCount} Hari Kerja` },
+      ],
+      contentParagraphs: [
+        `Rekapitulasi catatan presensi selama 1 (satu) bulan penuh periode cut-off (21 September 2026 s/d 20 Oktober 2026) ini diterbitkan secara otomatis oleh sistem NusaHR Enterprise untuk unit kerja ${currentTenant?.name || 'Perusahaan'} atas nama ${empName} (NIK: ${empNik}).`,
+        `Seluruh data catatan kedatangan (clock-in) dan kepulangan (clock-out) bersumber dari mesin presensi biometrik kantor serta validasi GPS Mobile Geofencing NusaHR yang telah diverifikasi dan disahkan oleh atasan langsung bersangkutan.`,
+      ],
+      signeeName: currentUser.name || 'H. Budi Santoso, S.E., M.M.',
+      signeeRole: 'Atasan Langsung & Head of Operations',
+    });
+  };
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
@@ -220,8 +272,8 @@ export const MssPortal: React.FC = () => {
               : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
           }`}
         >
-          <Users className="w-4 h-4" />
-          <span>Monitoring Kehadiran & Shift Tim</span>
+          <UserCheck className="w-4 h-4" />
+          <span>Monitoring Tim Atasan</span>
         </button>
 
         <button
@@ -419,60 +471,93 @@ export const MssPortal: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 2: MONITORING KEHADIRAN & SHIFT TIM */}
+      {/* TAB 2: MONITORING TIM ATASAN */}
       {activeTab === 'monitoring' && (
         <div className="space-y-4">
-          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
-            <div className="p-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
-              <div>
-                <span className="font-bold text-xs text-slate-900 block">
-                  Status Kehadiran Tim Hari Ini (Real-Time)
-                </span>
-                <span className="text-[11px] text-slate-500">
-                  Data sinkron otomatis dari GPS & Face Attendance anggota tim
-                </span>
-              </div>
-              <span className="text-xs font-mono font-bold text-slate-700">
-                {new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-              </span>
+          <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-emerald-950">
+            <div>
+              <strong>Monitoring Tim Atasan:</strong> Pantau langsung status kehadiran bawahan langsung pada tanggal terpilih ({selectedMonitoringDate}), berikan dispensasi keterlambatan, atau klik kartu karyawan untuk melihat lembar rekapitulasi presensi cut-off.
             </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="font-semibold text-emerald-800">Tanggal:</span>
+              <input
+                type="date"
+                value={selectedMonitoringDate}
+                onChange={(e) => setSelectedMonitoringDate(e.target.value)}
+                className="px-2.5 py-1.5 border border-emerald-300 rounded-lg bg-white font-mono text-xs font-bold text-slate-800"
+              />
+            </div>
+          </div>
 
-            <div className="divide-y divide-slate-100">
-              {teamMembers.map((emp, idx) => (
-                <div key={emp.id} className="p-3.5 hover:bg-slate-50 transition-colors flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-full bg-slate-100 border border-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center">
-                      {emp.fullName.slice(0, 2).toUpperCase()}
-                    </div>
-                    <div>
-                      <div className="font-bold text-slate-900">{emp.fullName}</div>
-                      <div className="text-[11px] text-slate-500 font-mono">
-                        {emp.nik} · {emp.position}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {employees.map((emp) => {
+              const todayRec = attendance.find((a) => a.employeeId === emp.id && a.date === selectedMonitoringDate);
+              return (
+                <div
+                  key={emp.id}
+                  onClick={() => {
+                    const rec = todayRec || {
+                      id: `temp-${emp.id}`,
+                      tenantId: currentTenant.id,
+                      employeeId: emp.id,
+                      date: selectedMonitoringDate,
+                      clockIn: '--:--',
+                      clockOut: '--:--',
+                      status: 'Hadir' as const,
+                      lateMinutes: 0,
+                      overtimeHours: 0,
+                    };
+                    handlePreviewMonthlyAttendanceCutoff(rec, emp);
+                  }}
+                  className="p-3.5 bg-white border border-slate-200 hover:border-emerald-400 rounded-lg shadow-xs space-y-2 cursor-pointer hover:shadow-sm transition-all group"
+                  title="Klik untuk melihat Lembar Catatan Presensi Periode Cut-Off"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      {emp.avatar ? (
+                        <img src={emp.avatar} alt={emp.fullName} className="w-8 h-8 rounded-full object-cover" />
+                      ) : (
+                        <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-700 font-bold text-xs flex items-center justify-center">
+                          {emp.fullName[0]}
+                        </div>
+                      )}
+                      <div>
+                        <div className="font-bold text-slate-900 group-hover:text-emerald-600 transition-colors text-xs">{emp.fullName}</div>
+                        <div className="text-[10px] text-slate-500">
+                          {emp.position} {emp.employmentType === 'Outsource' ? '· (Outsourcing)' : ''}
+                        </div>
                       </div>
                     </div>
+
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className={`text-[10px] px-2 py-0.5 rounded font-bold ${
+                          todayRec?.status === 'Hadir'
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : todayRec?.status === 'Terlambat'
+                            ? 'bg-amber-100 text-amber-800'
+                            : 'bg-slate-100 text-slate-700'
+                        }`}
+                      >
+                        {todayRec?.status || 'Belum Presensi'}
+                      </span>
+                      <ChevronRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-emerald-600 transition-colors" />
+                    </div>
                   </div>
 
-                  <div className="flex items-center gap-4">
-                    <div className="text-right text-[11px] font-mono">
-                      <span className="text-slate-400 block text-[10px]">Shift: Pagi (08:30 - 17:30)</span>
-                      <span className="text-slate-700 font-semibold">
-                        Clock-in: {idx === 0 ? '08:24 WIB' : idx === 1 ? '08:42 WIB (Telat)' : '08:29 WIB'}
-                      </span>
+                  <div className="grid grid-cols-2 gap-2 text-[11px] p-2 bg-slate-50 rounded border border-slate-100 font-mono">
+                    <div>
+                      <span className="text-slate-400 block text-[9px]">JAM MASUK</span>
+                      <strong className="text-slate-800">{todayRec?.clockIn || '--:--'}</strong>
                     </div>
-
-                    <span
-                      className={`px-2.5 py-1 rounded-full text-[10px] font-bold border ${
-                        idx === 1
-                          ? 'bg-amber-50 text-amber-700 border-amber-200'
-                          : 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                      }`}
-                    >
-                      {idx === 1 ? 'Terlambat 12m' : 'Hadir Tepat Waktu'}
-                    </span>
+                    <div>
+                      <span className="text-slate-400 block text-[9px]">JAM PULANG</span>
+                      <strong className="text-slate-800">{todayRec?.clockOut || '--:--'}</strong>
+                    </div>
                   </div>
                 </div>
-              ))}
-            </div>
+              );
+            })}
           </div>
         </div>
       )}

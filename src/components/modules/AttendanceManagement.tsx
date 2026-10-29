@@ -65,6 +65,7 @@ export const AttendanceManagement: React.FC = () => {
     moduleSettings,
     updateModuleSettings,
     openFilePreview,
+    officeLocations,
   } = useHrms();
 
   const handlePreviewMonthlyAttendanceCutoff = (rec?: AttendanceRecord, employeeOverride?: Employee) => {
@@ -182,7 +183,7 @@ export const AttendanceManagement: React.FC = () => {
     });
   };
 
-  const [activeTab, setActiveTab] = useState<'hr' | 'manager' | 'ess' | 'shifts' | 'koreksi' | 'calendar' | 'pengaturan'>('hr');
+  const [activeTab, setActiveTab] = useState<'hr' | 'shifts' | 'koreksi' | 'calendar' | 'pengaturan'>('hr');
   const [selectedDate, setSelectedDate] = useState('2026-10-22');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [isDocModalOpen, setIsDocModalOpen] = useState(false);
@@ -192,12 +193,18 @@ export const AttendanceManagement: React.FC = () => {
   const [isClockModalOpen, setIsClockModalOpen] = useState(false);
   const [isShiftSwapModalOpen, setIsShiftSwapModalOpen] = useState(false);
   const [isCorrectionModalOpen, setIsCorrectionModalOpen] = useState(false);
+  const [confirmCorrectionAction, setConfirmCorrectionAction] = useState<{
+    item: AttendanceCorrectionRequest;
+    approve: boolean;
+  } | null>(null);
+  const [confirmActionNotes, setConfirmActionNotes] = useState('');
 
   // Close any active modal on Escape key press
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (isLeaveModalOpen) setIsLeaveModalOpen(false);
+        if (confirmCorrectionAction) setConfirmCorrectionAction(null);
+        else if (isLeaveModalOpen) setIsLeaveModalOpen(false);
         else if (isShiftSwapModalOpen) setIsShiftSwapModalOpen(false);
         else if (isCorrectionModalOpen) setIsCorrectionModalOpen(false);
         else if (isClockModalOpen) setIsClockModalOpen(false);
@@ -205,7 +212,7 @@ export const AttendanceManagement: React.FC = () => {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isLeaveModalOpen, isShiftSwapModalOpen, isCorrectionModalOpen, isClockModalOpen]);
+  }, [confirmCorrectionAction, isLeaveModalOpen, isShiftSwapModalOpen, isCorrectionModalOpen, isClockModalOpen]);
 
   // ESS Clock State
   const [clockEmpId, setClockEmpId] = useState(employees[0]?.id || '');
@@ -245,6 +252,18 @@ export const AttendanceManagement: React.FC = () => {
   const [latePenaltyPerHour, setLatePenaltyPerHour] = useState(moduleSettings.attendance.latePenaltyPerHour || 50000);
   const [gpsRadius, setGpsRadius] = useState(moduleSettings.attendance.gpsRadiusMeters || 100);
   const [requireCamera, setRequireCamera] = useState(moduleSettings.attendance.cameraSelfieRequired ?? true);
+
+  // Kuota & Batas Toleransi per 1 Periode Payroll / 1 Bulan
+  const [maxLateMonthly, setMaxLateMonthly] = useState(moduleSettings.attendance.maxLateOccurrencesMonthly ?? 3);
+  const [maxPermissionMonthly, setMaxPermissionMonthly] = useState(moduleSettings.attendance.maxPermissionDaysMonthly ?? 2);
+  const [maxSickNoNoteMonthly, setMaxSickNoNoteMonthly] = useState(
+    moduleSettings.attendance.maxSickWithoutDoctorNoteDaysMonthly ?? 2
+  );
+  const [maxSickWithNoteMonthly, setMaxSickWithNoteMonthly] = useState(
+    moduleSettings.attendance.maxSickWithDoctorNoteDaysMonthly ?? 14
+  );
+  const [maxForgotInMonthly, setMaxForgotInMonthly] = useState(moduleSettings.attendance.maxForgotClockInMonthly ?? 2);
+  const [maxForgotOutMonthly, setMaxForgotOutMonthly] = useState(moduleSettings.attendance.maxForgotClockOutMonthly ?? 2);
 
   // Filtered attendance for HR view
   const filteredAttendance = attendance.filter((a) => {
@@ -366,8 +385,14 @@ export const AttendanceManagement: React.FC = () => {
       latePenaltyPerHour: Number(latePenaltyPerHour),
       gpsRadiusMeters: Number(gpsRadius),
       cameraSelfieRequired: requireCamera,
+      maxLateOccurrencesMonthly: Number(maxLateMonthly),
+      maxPermissionDaysMonthly: Number(maxPermissionMonthly),
+      maxSickWithoutDoctorNoteDaysMonthly: Number(maxSickNoNoteMonthly),
+      maxSickWithDoctorNoteDaysMonthly: Number(maxSickWithNoteMonthly),
+      maxForgotClockInMonthly: Number(maxForgotInMonthly),
+      maxForgotClockOutMonthly: Number(maxForgotOutMonthly),
     });
-    setSettingsNotice('Pengaturan Presensi & Shift berhasil diperbarui!');
+    setSettingsNotice('Pengaturan Presensi, Toleransi Bulanan & Shift berhasil diperbarui!');
     setTimeout(() => setSettingsNotice(null), 4000);
   };
 
@@ -409,30 +434,6 @@ export const AttendanceManagement: React.FC = () => {
         </button>
 
         <button
-          onClick={() => setActiveTab('manager')}
-          className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
-            activeTab === 'manager'
-              ? 'border-slate-900 text-slate-950 font-bold'
-              : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
-          }`}
-        >
-          <UserCheck className="w-3.5 h-3.5" />
-          <span>Monitoring Tim Atasan</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('ess')}
-          className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
-            activeTab === 'ess'
-              ? 'border-slate-900 text-slate-950 font-bold'
-              : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
-          }`}
-        >
-          <Camera className="w-3.5 h-3.5" />
-          <span>ESS Clock-In (GPS)</span>
-        </button>
-
-        <button
           onClick={() => setActiveTab('shifts')}
           className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
             activeTab === 'shifts'
@@ -441,7 +442,7 @@ export const AttendanceManagement: React.FC = () => {
           }`}
         >
           <Layers className="w-3.5 h-3.5" />
-          <span>Shift & Roaster</span>
+          <span>Jadwal Shift & Roaster</span>
         </button>
 
         <button
@@ -695,7 +696,7 @@ export const AttendanceManagement: React.FC = () => {
                     <th className="py-2.5 px-3 font-semibold font-mono">Pulang (Out)</th>
                     <th className="py-2.5 px-3 font-semibold text-center font-mono hidden lg:table-cell">Terlambat</th>
                     <th className="py-2.5 px-3 font-semibold text-center font-mono hidden lg:table-cell">Lembur</th>
-                    <th className="py-2.5 px-3 font-semibold hidden xl:table-cell">Catatan / Geotag GPS</th>
+                    <th className="py-2.5 px-3 font-semibold hidden xl:table-cell">Lokasi Presensi & Radius</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -752,7 +753,29 @@ export const AttendanceManagement: React.FC = () => {
                             <span className="text-slate-400">-</span>
                           )}
                         </td>
-                        <td className="py-2.5 px-3 text-slate-600 text-[11px] max-w-xs truncate hidden xl:table-cell">{rec.notes || '-'}</td>
+                        <td className="py-2.5 px-3 text-slate-600 text-[11px] max-w-xs hidden xl:table-cell">
+                          {(() => {
+                            const assignedLocs = officeLocations.filter((l) => emp?.officeLocationIds?.includes(l.id));
+                            const primaryLoc = assignedLocs[0] || officeLocations[0];
+                            return (
+                              <div className="space-y-0.5">
+                                {primaryLoc && (
+                                  <div className="inline-flex items-center gap-1 text-[10px] font-semibold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200">
+                                    <MapPin className="w-2.5 h-2.5 shrink-0" />
+                                    <span className="truncate max-w-[160px]">{primaryLoc.name}</span>
+                                    <span className="font-mono text-[9px] text-indigo-900">({primaryLoc.radiusMeters}m)</span>
+                                    {assignedLocs.length > 1 && (
+                                      <span className="text-[9px] bg-indigo-600 text-white px-1 rounded">
+                                        +{assignedLocs.length - 1}
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+                                <div className="text-[10px] text-slate-500 truncate">{rec.notes || '-'}</div>
+                              </div>
+                            );
+                          })()}
+                        </td>
                       </tr>
                     );
                   })}
@@ -763,158 +786,47 @@ export const AttendanceManagement: React.FC = () => {
         </div>
       )}
 
-      {/* ===================== TAB 2: MONITORING TIM ATASAN ===================== */}
-      {activeTab === 'manager' && (
-        <div className="space-y-4">
-          <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-lg text-xs text-indigo-900">
-            <strong>Tampilan Monitoring Manajer Tim:</strong> Pantau langsung status kehadiran bawahan langsung hari ini ({selectedDate}), berikan dispensasi keterlambatan, atau setujui lembur secara instan.
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            {employees.map((emp) => {
-              const todayRec = attendance.find((a) => a.employeeId === emp.id && a.date === selectedDate);
-              return (
-                <div
-                  key={emp.id}
-                  onClick={() => {
-                    const rec = todayRec || {
-                      id: `temp-${emp.id}`,
-                      employeeId: emp.id,
-                      date: selectedDate,
-                      clockIn: '--:--',
-                      clockOut: '--:--',
-                      status: 'Belum Presensi' as const,
-                      lateMinutes: 0,
-                      overtimeHours: 0,
-                    };
-                    handlePreviewMonthlyAttendanceCutoff(rec);
-                  }}
-                  className="p-3.5 bg-white border border-slate-200 hover:border-indigo-300 rounded-lg shadow-xs space-y-2 cursor-pointer hover:shadow-sm transition-all group"
-                  title="Klik untuk melihat Lembar Catatan Presensi Periode Cut-Off"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      {emp.avatar ? (
-                        <img src={emp.avatar} alt={emp.fullName} className="w-8 h-8 rounded-full object-cover" />
-                      ) : (
-                        <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 font-bold text-xs flex items-center justify-center">
-                          {emp.fullName[0]}
-                        </div>
-                      )}
-                      <div>
-                        <div className="font-bold text-slate-900 group-hover:text-indigo-600 transition-colors text-xs">{emp.fullName}</div>
-                        <div className="text-[10px] text-slate-500">{emp.position}</div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-1.5">
-                      <span
-                        className={`text-[10px] px-2 py-0.5 rounded font-bold ${
-                          todayRec?.status === 'Hadir'
-                            ? 'bg-emerald-100 text-emerald-800'
-                            : todayRec?.status === 'Terlambat'
-                            ? 'bg-amber-100 text-amber-800'
-                            : 'bg-slate-100 text-slate-700'
-                        }`}
-                      >
-                        {todayRec?.status || 'Belum Presensi'}
-                      </span>
-                      <ChevronRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-indigo-600 transition-colors" />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2 text-[11px] p-2 bg-slate-50 rounded border border-slate-100 font-mono">
-                    <div>
-                      <span className="text-slate-400 block text-[9px]">JAM MASUK</span>
-                      <strong className="text-slate-800">{todayRec?.clockIn || '--:--'}</strong>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 block text-[9px]">JAM PULANG</span>
-                      <strong className="text-slate-800">{todayRec?.clockOut || '--:--'}</strong>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* ===================== TAB 3: ESS CLOCK-IN WITH CAMERA & GPS ===================== */}
-      {activeTab === 'ess' && (
-        <div className="max-w-xl mx-auto bg-white border border-slate-200 rounded-xl p-6 shadow-xs space-y-5">
-          <div className="text-center space-y-1">
-            <h3 className="text-base font-bold text-slate-900">Employee Self-Service (ESS) Presensi Online</h3>
-            <p className="text-xs text-slate-500">
-              Validasi Geofencing GPS radius kantor (Maks. {gpsRadius}m) & swafoto biometrik kamera.
-            </p>
-          </div>
-
-          <EmployeeSelect
-            label="Karyawan yang Melakukan Presensi"
-            required
-            employees={employees}
-            value={clockEmpId}
-            onChange={setClockEmpId}
-          />
-
-          <div className="p-4 bg-slate-900 text-white rounded-xl text-center space-y-3">
-            <div className="relative w-48 h-36 mx-auto rounded-lg overflow-hidden border-2 border-indigo-500 bg-slate-800 flex items-center justify-center">
-              <Camera className="w-8 h-8 text-indigo-400" />
-              <div className="absolute bottom-2 left-2 right-2 text-[10px] bg-slate-900/80 py-0.5 rounded text-indigo-300 font-mono">
-                ✓ Face Recognition OK
-              </div>
-            </div>
-
-            <div className="text-xs text-emerald-400 font-mono flex items-center justify-center gap-1">
-              <MapPin className="w-3.5 h-3.5" />
-              <span>Lokasi Valid: Kantor Pusat (Jarak 14 meter dari titik koordinat)</span>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <button
-              type="button"
-              onClick={() => {
-                setClockType('in');
-                handlePunchClock();
-              }}
-              className="py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-1.5"
-            >
-              <CheckCircle2 className="w-4 h-4" />
-              <span>Clock-In Masuk Kerja</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setClockType('out');
-                handlePunchClock();
-              }}
-              className="py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-1.5"
-            >
-              <Clock className="w-4 h-4" />
-              <span>Clock-Out Pulang Kerja</span>
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ===================== TAB 4: SHIFTS & ROASTER ===================== */}
+      {/* ===================== TAB: JADWAL SHIFT & ROASTER ===================== */}
       {activeTab === 'shifts' && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div>
-              <h3 className="text-sm font-bold text-slate-900">Master Jam Shift & Roster Penjadwalan</h3>
-              <p className="text-xs text-slate-500">Konfigurasi rotasi jam kerja operasional & fasilitas tukar shift antar karyawan.</p>
+              <h3 className="text-sm font-bold text-slate-900">Master Jam Shift & Contoh Jadwal Roaster (Satpam Outsourcing)</h3>
+              <p className="text-xs text-slate-500">
+                Konfigurasi rotasi jam kerja 3 regu (Pagi, Siang, Malam, Libur) untuk 6 personil Satpam Outsourcing & fasilitas tukar shift.
+              </p>
             </div>
             <button
               onClick={() => setIsShiftSwapModalOpen(true)}
-              className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-xs font-semibold shadow-xs flex items-center gap-1"
+              className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-xs font-semibold shadow-xs flex items-center gap-1 shrink-0"
             >
               <Repeat className="w-3.5 h-3.5" />
               <span>Ajukan Tukar Shift</span>
             </button>
+          </div>
+
+          {/* Info Box Contoh Pola Jadwal Shift 6 Karyawan Outsourcing Satpam */}
+          <div className="p-3.5 bg-indigo-50/70 border border-indigo-200 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
+            <div className="space-y-1">
+              <div className="font-bold text-indigo-950 flex items-center gap-1.5">
+                <ShieldCheck className="w-4 h-4 text-indigo-600" />
+                <span>Contoh Jadwal Shift & Roaster Aktif: 6 Personil Satpam (Outsourcing - PT Garda Keamanan Pratama)</span>
+              </div>
+              <p className="text-indigo-800 text-[11px]">
+                Pola rotasi otomatis 8 hari (2 Pagi → 2 Siang → 2 Malam → 2 Libur) terbagi dalam 3 regu sehingga pos keamanan terjaga 24 jam penuh setiap hari.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5 shrink-0 text-[11px] font-semibold">
+              <span className="px-2.5 py-1 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-300">
+                Regu A: Slamet & Bambang
+              </span>
+              <span className="px-2.5 py-1 rounded-md bg-amber-100 text-amber-800 border border-amber-300">
+                Regu B: Dedi & Hendra
+              </span>
+              <span className="px-2.5 py-1 rounded-md bg-violet-100 text-violet-800 border border-violet-300">
+                Regu C: Agus & Maman
+              </span>
+            </div>
           </div>
 
           <ShiftRosterManagement />
@@ -1085,7 +997,8 @@ export const AttendanceManagement: React.FC = () => {
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            reviewAttendanceCorrection(corr.id, false);
+                            setConfirmCorrectionAction({ item: corr, approve: false });
+                            setConfirmActionNotes('');
                           }}
                           className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded text-xs font-semibold transition-colors"
                         >
@@ -1095,7 +1008,8 @@ export const AttendanceManagement: React.FC = () => {
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            reviewAttendanceCorrection(corr.id, true);
+                            setConfirmCorrectionAction({ item: corr, approve: true });
+                            setConfirmActionNotes('');
                           }}
                           className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-semibold shadow-xs transition-colors"
                         >
@@ -1152,7 +1066,8 @@ export const AttendanceManagement: React.FC = () => {
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            reviewAttendanceCorrection(corr.id, false);
+                            setConfirmCorrectionAction({ item: corr, approve: false });
+                            setConfirmActionNotes('');
                           }}
                           className="px-2.5 py-1 text-rose-700 hover:bg-rose-100 bg-rose-50 border border-rose-200 rounded text-xs font-semibold"
                         >
@@ -1162,7 +1077,8 @@ export const AttendanceManagement: React.FC = () => {
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            reviewAttendanceCorrection(corr.id, true);
+                            setConfirmCorrectionAction({ item: corr, approve: true });
+                            setConfirmActionNotes('');
                           }}
                           className="px-2.5 py-1 text-white hover:bg-emerald-700 bg-emerald-600 rounded text-xs font-semibold shadow-xs"
                         >
@@ -1172,7 +1088,11 @@ export const AttendanceManagement: React.FC = () => {
                     ) : (
                       <span
                         className={`text-[10px] px-2 py-0.5 rounded font-bold ${
-                          corr.status === 'Disetujui' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                          corr.status === 'Disetujui'
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : corr.status === 'Ditolak'
+                            ? 'bg-rose-100 text-rose-800'
+                            : 'bg-amber-100 text-amber-800'
                         }`}
                       >
                         {corr.status}
@@ -1189,25 +1109,29 @@ export const AttendanceManagement: React.FC = () => {
 
       {/* ===================== TAB 6: PENGATURAN PRESENSI ===================== */}
       {activeTab === 'pengaturan' && (
-        <div className="bg-white border border-slate-200 rounded-lg p-5 shadow-xs space-y-6 max-w-2xl">
+        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs space-y-6 max-w-3xl">
           <div>
-            <h3 className="text-sm font-bold text-slate-900 mb-1">Pengaturan Toleransi & Denda Presensi</h3>
-            <p className="text-xs text-slate-500">Konfigurasi batas toleransi keterlambatan, nominal potongan, dan radius geofence GPS kantor.</p>
+            <h3 className="text-sm font-bold text-slate-900 mb-1">
+              Pengaturan Toleransi, Kuota Bulanan (1 Periode Payroll) & Denda Presensi
+            </h3>
+            <p className="text-xs text-slate-500">
+              Konfigurasi batas toleransi keterlambatan, izin, sakit tanpa/dengan surat dokter, lupa absen datang/pulang dalam 1 periode payroll (1 bulan), serta denda presensi.
+            </p>
           </div>
 
-          <div className="space-y-4 text-xs">
-            <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-5 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="font-semibold text-slate-700 block mb-1">
-                  Toleransi Keterlambatan Bebas Denda (Menit)
+                  Toleransi Keterlambatan Bebas Denda per Hari (Menit)
                 </label>
                 <input
                   type="number"
                   value={lateGracePeriod}
                   onChange={(e) => setLateGracePeriod(Number(e.target.value))}
-                  className="w-full px-3 py-1.5 border border-slate-300 rounded font-mono"
+                  className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono"
                 />
-                <span className="text-[10px] text-slate-400 mt-0.5 block">Keterlambatan di bawah ini tidak dipotong denda</span>
+                <span className="text-[10px] text-slate-400 mt-0.5 block">Keterlambatan di bawah menit ini tidak dipotong denda</span>
               </div>
 
               <div>
@@ -1218,27 +1142,131 @@ export const AttendanceManagement: React.FC = () => {
                   type="number"
                   value={latePenaltyPerHour}
                   onChange={(e) => setLatePenaltyPerHour(Number(e.target.value))}
-                  className="w-full px-3 py-1.5 border border-slate-300 rounded font-mono font-bold"
+                  className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono font-bold"
                 />
-                <span className="text-[10px] text-slate-400 mt-0.5 block">Dipotong otomatis di payroll bulanan</span>
+                <span className="text-[10px] text-slate-400 mt-0.5 block">Dipotong otomatis di payroll bulanan jika melebihi batas</span>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">
-                  Radius Geofencing GPS Kantor (Meter)
-                </label>
-                <input
-                  type="number"
-                  value={gpsRadius}
-                  onChange={(e) => setGpsRadius(Number(e.target.value))}
-                  className="w-full px-3 py-1.5 border border-slate-300 rounded font-mono"
-                />
-                <span className="text-[10px] text-slate-400 mt-0.5 block">Jarak maksimal presensi dari koordinat gedung</span>
+            {/* Section: Batas Toleransi Dalam 1 Periode Payroll / 1 Bulan */}
+            <div className="p-4 bg-indigo-50/50 border border-indigo-200 rounded-xl space-y-4">
+              <div className="border-b border-indigo-100 pb-2">
+                <h4 className="font-bold text-indigo-950 text-xs flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4 text-indigo-600" />
+                  <span>Batas Toleransi Maksimal dalam 1 Periode Payroll (1 Bulan)</span>
+                </h4>
+                <p className="text-[11px] text-indigo-800 mt-0.5">
+                  Semua parameter di bawah berlaku akumulatif dalam 1 siklus cut-off payroll bulanan.
+                </p>
               </div>
 
-              <div className="flex items-center gap-2 pt-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5">
+                <div className="bg-white p-3 rounded-lg border border-slate-200">
+                  <label className="font-semibold text-slate-800 block mb-1">
+                    Batas Toleransi Terlambat
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min={0}
+                      value={maxLateMonthly}
+                      onChange={(e) => setMaxLateMonthly(Number(e.target.value))}
+                      className="w-full px-2.5 py-1.5 border border-slate-300 rounded font-mono font-bold text-slate-900"
+                    />
+                    <span className="text-[11px] text-slate-500 font-semibold shrink-0">Kali / Bln</span>
+                  </div>
+                  <span className="text-[10px] text-slate-400 mt-1 block">Maks. frekuensi terlambat per periode payroll</span>
+                </div>
+
+                <div className="bg-white p-3 rounded-lg border border-slate-200">
+                  <label className="font-semibold text-slate-800 block mb-1">
+                    Batas Toleransi Izin Pribadi
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min={0}
+                      value={maxPermissionMonthly}
+                      onChange={(e) => setMaxPermissionMonthly(Number(e.target.value))}
+                      className="w-full px-2.5 py-1.5 border border-slate-300 rounded font-mono font-bold text-slate-900"
+                    />
+                    <span className="text-[11px] text-slate-500 font-semibold shrink-0">Hari / Bln</span>
+                  </div>
+                  <span className="text-[10px] text-slate-400 mt-1 block">Maks. hari izin dalam 1 periode payroll</span>
+                </div>
+
+                <div className="bg-white p-3 rounded-lg border border-slate-200">
+                  <label className="font-semibold text-slate-800 block mb-1">
+                    Sakit Tanpa Surat Dokter
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min={0}
+                      value={maxSickNoNoteMonthly}
+                      onChange={(e) => setMaxSickNoNoteMonthly(Number(e.target.value))}
+                      className="w-full px-2.5 py-1.5 border border-slate-300 rounded font-mono font-bold text-amber-700"
+                    />
+                    <span className="text-[11px] text-slate-500 font-semibold shrink-0">Hari / Bln</span>
+                  </div>
+                  <span className="text-[10px] text-slate-400 mt-1 block">Maks. sakit tanpa surat dokter per bulan</span>
+                </div>
+
+                <div className="bg-white p-3 rounded-lg border border-slate-200">
+                  <label className="font-semibold text-slate-800 block mb-1">
+                    Sakit dengan Surat Dokter
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min={0}
+                      value={maxSickWithNoteMonthly}
+                      onChange={(e) => setMaxSickWithNoteMonthly(Number(e.target.value))}
+                      className="w-full px-2.5 py-1.5 border border-slate-300 rounded font-mono font-bold text-emerald-700"
+                    />
+                    <span className="text-[11px] text-slate-500 font-semibold shrink-0">Hari / Bln</span>
+                  </div>
+                  <span className="text-[10px] text-slate-400 mt-1 block">Batas verifikasi HR per periode payroll</span>
+                </div>
+
+                <div className="bg-white p-3 rounded-lg border border-slate-200">
+                  <label className="font-semibold text-slate-800 block mb-1">
+                    Lupa Absen Datang (Clock-In)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min={0}
+                      value={maxForgotInMonthly}
+                      onChange={(e) => setMaxForgotInMonthly(Number(e.target.value))}
+                      className="w-full px-2.5 py-1.5 border border-slate-300 rounded font-mono font-bold text-indigo-700"
+                    />
+                    <span className="text-[11px] text-slate-500 font-semibold shrink-0">Kali / Bln</span>
+                  </div>
+                  <span className="text-[10px] text-slate-400 mt-1 block">Maks. kuota koreksi lupa absen masuk</span>
+                </div>
+
+                <div className="bg-white p-3 rounded-lg border border-slate-200">
+                  <label className="font-semibold text-slate-800 block mb-1">
+                    Lupa Absen Pulang (Clock-Out)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min={0}
+                      value={maxForgotOutMonthly}
+                      onChange={(e) => setMaxForgotOutMonthly(Number(e.target.value))}
+                      className="w-full px-2.5 py-1.5 border border-slate-300 rounded font-mono font-bold text-indigo-700"
+                    />
+                    <span className="text-[11px] text-slate-500 font-semibold shrink-0">Kali / Bln</span>
+                  </div>
+                  <span className="text-[10px] text-slate-400 mt-1 block">Maks. kuota koreksi lupa absen pulang</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
                 <input
                   type="checkbox"
                   id="reqCam"
@@ -1246,17 +1274,20 @@ export const AttendanceManagement: React.FC = () => {
                   onChange={(e) => setRequireCamera(e.target.checked)}
                   className="rounded text-indigo-600 w-4 h-4"
                 />
-                <label htmlFor="reqCam" className="font-medium text-slate-800 cursor-pointer">
-                  Wajib Swafoto Kamera (Selfie Face Check)
+                <label htmlFor="reqCam" className="font-semibold text-slate-800 cursor-pointer">
+                  Wajib Swafoto Kamera (Selfie Face Check) saat Clock-In & Clock-Out
                 </label>
               </div>
+              <span className="text-[11px] text-slate-500">
+                📍 Pengaturan titik koordinat & radius geofencing GPS diatur di menu <strong>Lokasi Kantor</strong>.
+              </span>
             </div>
 
             <div className="pt-3 border-t border-slate-200 flex justify-end">
               <button
                 type="button"
                 onClick={handleSaveSettings}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-semibold text-xs"
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold text-xs shadow-xs"
               >
                 Simpan Konfigurasi Presensi
               </button>
@@ -1308,14 +1339,15 @@ export const AttendanceManagement: React.FC = () => {
               />
 
               <div>
-                <label className="font-medium text-slate-700 block mb-1">Jenis Cuti *</label>
+                <label className="font-medium text-slate-700 block mb-1">Jenis Cuti / Izin Sakit *</label>
                 <select
                   value={leaveType}
                   onChange={(e) => setLeaveType(e.target.value as any)}
                   className="w-full px-3 py-2 border border-slate-300 rounded bg-white font-medium"
                 >
                   <option value="Cuti Tahunan">Cuti Tahunan (Saldo 12 Hari)</option>
-                  <option value="Cuti Sakit">Cuti Sakit (Disertai Surat Dokter)</option>
+                  <option value="Sakit Tanpa Surat Dokter">Sakit Tanpa Surat Dokter</option>
+                  <option value="Sakit dengan Surat Dokter">Sakit dengan Surat Dokter</option>
                   <option value="Cuti Menikah">Cuti Menikah (3 Hari Kerja)</option>
                   <option value="Cuti Melahirkan">Cuti Melahirkan (3 Bulan)</option>
                   <option value="Izin Urusan Pribadi">Izin Urusan Pribadi</option>
@@ -1541,7 +1573,8 @@ export const AttendanceManagement: React.FC = () => {
                     <option value="Lupa Absen Pulang">Lupa Absen Pulang</option>
                     <option value="Izin Datang Terlambat">Izin Datang Terlambat</option>
                     <option value="Izin Pulang Cepat">Izin Pulang Cepat</option>
-                    <option value="Izin Sakit Tanpa Rawat">Izin Sakit Tanpa Rawat</option>
+                    <option value="Sakit Tanpa Surat Dokter">Sakit Tanpa Surat Dokter</option>
+                    <option value="Sakit dengan Surat Dokter">Sakit dengan Surat Dokter</option>
                   </select>
                 </div>
                 <div>
@@ -1609,6 +1642,148 @@ export const AttendanceManagement: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Konfirmasi Approval / Reject Pengajuan & Koreksi */}
+      {confirmCorrectionAction && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setConfirmCorrectionAction(null);
+          }}
+        >
+          <div
+            className="bg-white rounded-xl shadow-xl max-w-md w-full border border-slate-200 overflow-hidden animate-fadeIn"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              className={`px-5 py-4 text-white flex items-center justify-between ${
+                confirmCorrectionAction.approve ? 'bg-emerald-600' : 'bg-rose-600'
+              }`}
+            >
+              <h3 className="text-sm font-bold flex items-center gap-2">
+                {confirmCorrectionAction.approve ? (
+                  <CheckCircle2 className="w-4 h-4" />
+                ) : (
+                  <AlertTriangle className="w-4 h-4" />
+                )}
+                <span>
+                  {confirmCorrectionAction.approve
+                    ? 'Konfirmasi Persetujuan (Approval)'
+                    : 'Konfirmasi Penolakan (Reject)'}
+                </span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setConfirmCorrectionAction(null)}
+                className="text-white/80 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 text-xs">
+              {(() => {
+                const emp = employees.find((e) => e.id === confirmCorrectionAction.item.employeeId);
+                return (
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-slate-900">{emp?.fullName || 'Karyawan'}</span>
+                      <span className="text-[10px] font-mono text-slate-500">{emp?.nik}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-slate-500">Jenis Pengajuan:</span>
+                      <span className="font-semibold text-indigo-700">{confirmCorrectionAction.item.type}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-slate-500">Tanggal Kejadian:</span>
+                      <span className="font-mono font-semibold text-slate-800">{confirmCorrectionAction.item.date}</span>
+                    </div>
+                    {confirmCorrectionAction.item.proposedClockIn && (
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-slate-500">Usulan Jam:</span>
+                        <span className="font-mono font-bold text-slate-800">
+                          {confirmCorrectionAction.item.proposedClockIn} -{' '}
+                          {confirmCorrectionAction.item.proposedClockOut || '--:--'}
+                        </span>
+                      </div>
+                    )}
+                    <div className="text-[11px] text-slate-600 pt-1 border-t border-slate-200">
+                      <span className="text-slate-400">Alasan: </span>
+                      {confirmCorrectionAction.item.reason}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              <p className="text-slate-600 leading-relaxed">
+                Apakah Anda yakin ingin{' '}
+                <strong className={confirmCorrectionAction.approve ? 'text-emerald-700' : 'text-rose-700'}>
+                  {confirmCorrectionAction.approve ? 'MENYETUJUI (Approve)' : 'MENOLAK (Reject)'}
+                </strong>{' '}
+                pengajuan koreksi presensi & izin di atas? Tindakan ini akan langsung tercatat pada log presensi karyawan.
+              </p>
+
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">
+                  Catatan Konfirmasi {confirmCorrectionAction.approve ? '(Opsional)' : '*'}
+                </label>
+                <textarea
+                  rows={2}
+                  value={confirmActionNotes}
+                  onChange={(e) => setConfirmActionNotes(e.target.value)}
+                  placeholder={
+                    confirmCorrectionAction.approve
+                      ? 'Tambahkan catatan persetujuan jika diperlukan...'
+                      : 'Tuliskan alasan penolakan pengajuan...'
+                  }
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-slate-200 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setConfirmCorrectionAction(null)}
+                  className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-semibold transition-colors"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    reviewAttendanceCorrection(confirmCorrectionAction.item.id, confirmCorrectionAction.approve);
+                    setSettingsNotice(
+                      `Pengajuan "${confirmCorrectionAction.item.type}" berhasil ${
+                        confirmCorrectionAction.approve ? 'disetujui' : 'ditolak'
+                      }.`
+                    );
+                    setTimeout(() => setSettingsNotice(null), 4000);
+                    setConfirmCorrectionAction(null);
+                    setConfirmActionNotes('');
+                  }}
+                  className={`px-4 py-1.5 text-white rounded-lg font-semibold shadow-xs transition-colors flex items-center gap-1.5 ${
+                    confirmCorrectionAction.approve
+                      ? 'bg-emerald-600 hover:bg-emerald-700'
+                      : 'bg-rose-600 hover:bg-rose-700'
+                  }`}
+                >
+                  {confirmCorrectionAction.approve ? (
+                    <>
+                      <Check className="w-3.5 h-3.5" />
+                      <span>Ya, Setujui Pengajuan</span>
+                    </>
+                  ) : (
+                    <>
+                      <X className="w-3.5 h-3.5" />
+                      <span>Ya, Tolak Pengajuan</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

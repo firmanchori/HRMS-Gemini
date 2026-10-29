@@ -273,11 +273,262 @@ export const GaAssetManagement: React.FC = () => {
   const [purchasePrice, setPurchasePrice] = useState<number>(18500000);
   const [assignedEmployeeId, setAssignedEmployeeId] = useState('');
 
-  // Mutasi / Perpindahan Aset State
-  const [mutasiAssetId, setMutasiAssetId] = useState(assets[0]?.id || '');
+  // Mutasi / Perpindahan & BAST Serah Terima Multi-Aset State
+  type BastHandoverCategory =
+    | 'Aset Karyawan (Personal)'
+    | 'Aset Menetap di Ruangan'
+    | 'Fasilitas Kendaraan Karyawan (Melekat ke 1 Karyawan)'
+    | 'Penukaran Aset Antar Karyawan (Melalui GA)';
+
+  interface BastHandoverItem {
+    assetId: string;
+    assetCode: string;
+    assetName: string;
+    category: string;
+    condition: string;
+  }
+
+  interface BastHandoverRecord {
+    id: string;
+    bastNumber: string;
+    handoverDate: string;
+    handoverCategory: BastHandoverCategory;
+    gaOfficerName: string;
+    gaOfficerRole: string;
+    recipientEmployeeId: string;
+    recipientName: string;
+    recipientRole: string;
+    isRoomLeaderResponsible?: boolean;
+    swapPartyAEmployeeId?: string;
+    swapPartyAName?: string;
+    swapPartyARole?: string;
+    swapPartyAItems?: BastHandoverItem[];
+    swapPartyBItems?: BastHandoverItem[];
+    building: string;
+    roomOrArea: string;
+    items: BastHandoverItem[];
+    additionalAccessories?: string;
+    vehiclePlateNumber?: string;
+    vehicleStartOdometerKm?: number;
+    vehicleDocumentsIncluded?: string;
+    facilitySkNumber?: string;
+    notes: string;
+    status: 'Aktif / Diserahterimakan' | 'Ditukar Melalui GA' | 'Dikembalikan ke GA';
+  }
+
+  const DEFAULT_BAST_HANDOVERS: BastHandoverRecord[] = [
+    {
+      id: 'bast-1',
+      bastNumber: 'BAST/GA-EMP/2026/10/001',
+      handoverDate: '2026-10-10',
+      handoverCategory: 'Aset Karyawan (Personal)',
+      gaOfficerName: 'Bambang Sudiro',
+      gaOfficerRole: 'General Affairs & Asset Custodian',
+      recipientEmployeeId: employees[0]?.id || 'emp-1',
+      recipientName: employees[0]?.fullName || 'Budi Santoso',
+      recipientRole: `${employees[0]?.position || 'Senior Software Engineer'} (${employees[0]?.department || 'Engineering'})`,
+      building: 'Menara Palma Kuningan',
+      roomOrArea: 'Lantai 18 - Dev Wing',
+      items: [
+        {
+          assetId: assets[0]?.id || 'ast-1',
+          assetCode: assets[0]?.assetCode || 'AST-LTP-001',
+          assetName: assets[0]?.name || 'MacBook Pro 16" M3 Max 36GB',
+          category: 'Laptop & Komputer',
+          condition: 'Baik',
+        },
+        {
+          assetId: 'ast-acc-mouse-01',
+          assetCode: 'AST-ACC-014',
+          assetName: 'Logitech MX Master 3S Wireless Mouse',
+          category: 'Laptop & Komputer',
+          condition: 'Baik',
+        },
+        {
+          assetId: 'ast-acc-mon-01',
+          assetCode: 'AST-ELK-022',
+          assetName: 'Monitor Dell UltraSharp 27" 4K USB-C Hub',
+          category: 'Elektronik & Server',
+          condition: 'Baik',
+        },
+      ],
+      additionalAccessories: 'Adaptor MagSafe 140W, Kabel USB-C DisplayPort, Tas Laptop Ransel',
+      notes: 'Serah terima 3 perangkat kerja personal karyawan sekaligus dalam 1 BAST antara GA dan Karyawan Penerima.',
+      status: 'Aktif / Diserahterimakan',
+    },
+    {
+      id: 'bast-2',
+      bastNumber: 'BAST/GA-ROOM/2026/10/002',
+      handoverDate: '2026-10-12',
+      handoverCategory: 'Aset Menetap di Ruangan',
+      gaOfficerName: 'Siti Rahma',
+      gaOfficerRole: 'General Affairs Officer',
+      recipientEmployeeId: employees[1]?.id || 'emp-2',
+      recipientName: employees[1]?.fullName || 'Siti Aminah',
+      recipientRole: `Pimpinan Ruangan / Head of ${employees[1]?.department || 'HR & GA'}`,
+      isRoomLeaderResponsible: true,
+      building: 'Menara Palma Kuningan',
+      roomOrArea: 'Ruang Meeting Utama & Area Kerja Lantai 18',
+      items: [
+        {
+          assetId: 'ast-room-tv',
+          assetCode: 'AST-RM-101',
+          assetName: 'Smart TV Interactive 75 Inch 4K Conference',
+          category: 'Elektronik & Server',
+          condition: 'Baik',
+        },
+        {
+          assetId: 'ast-room-prj',
+          assetCode: 'AST-RM-102',
+          assetName: 'Proyektor Laser Epson EB-L200F + Layar Elektrik',
+          category: 'Elektronik & Server',
+          condition: 'Baik',
+        },
+        {
+          assetId: 'ast-room-ac',
+          assetCode: 'AST-RM-103',
+          assetName: 'AC Split Ducting Daikin 3 PK (2 Unit) & Meja Konferensi 16 Kursi',
+          category: 'Furniture & Kantor',
+          condition: 'Baik',
+        },
+      ],
+      additionalAccessories: '2 Remote AC, 1 Remote TV, 1 Kabel HDMI 10 Meter, Speakerphone Poly Sync',
+      notes: 'Aset menetap di ruangan menjadi tanggung jawab Pimpinan di ruangan tersebut (serah terima GA dengan Pimpinan Ruangan).',
+      status: 'Aktif / Diserahterimakan',
+    },
+    {
+      id: 'bast-3',
+      bastNumber: 'BAST/GA-FAC-VEH/2026/10/003',
+      handoverDate: '2026-10-15',
+      handoverCategory: 'Fasilitas Kendaraan Karyawan (Melekat ke 1 Karyawan)',
+      gaOfficerName: 'Bambang Sudiro',
+      gaOfficerRole: 'Fleet & GA Manager',
+      recipientEmployeeId: employees[2]?.id || employees[0]?.id || 'emp-3',
+      recipientName: employees[2]?.fullName || employees[0]?.fullName || 'Rizky Pratama',
+      recipientRole: `${employees[2]?.position || 'Operations Manager'} (Penerima Fasilitas Kendaraan Perusahaan)`,
+      building: 'Menara Palma Kuningan',
+      roomOrArea: 'Fasilitas Jabatan Melekat (Parkir Khusus B2 - Lot M-04)',
+      items: [
+        {
+          assetId: assets.find((a) => a.category === 'Kendaraan Operasional')?.id || 'ast-veh-1',
+          assetCode: assets.find((a) => a.category === 'Kendaraan Operasional')?.assetCode || 'AST-VEH-001',
+          assetName:
+            assets.find((a) => a.category === 'Kendaraan Operasional')?.name ||
+            'Toyota Kijang Innova Zenix 2.0 G HV CVT',
+          category: 'Kendaraan Operasional',
+          condition: 'Baik',
+        },
+      ],
+      vehiclePlateNumber: 'B 1234 NTM',
+      vehicleStartOdometerKm: 12450,
+      vehicleDocumentsIncluded: 'STNK Asli, Kartu Asuransi All-Risk, Kunci Utama & Cadangan, Buku Servis Berkala, Tool Kit',
+      facilitySkNumber: 'SK-HRD/FAC-CAR/2026/019 (Fasilitas Kendaraan Jabatan Manager)',
+      notes: 'Serah terima kendaraan sebagai fasilitas perusahaan yang diberikan khusus dan melekat ke 1 karyawan tersebut selama menjabat.',
+      status: 'Aktif / Diserahterimakan',
+    },
+    {
+      id: 'bast-4',
+      bastNumber: 'BAST/GA-SWAP/2026/10/004',
+      handoverDate: '2026-10-20',
+      handoverCategory: 'Penukaran Aset Antar Karyawan (Melalui GA)',
+      gaOfficerName: 'Bambang Sudiro',
+      gaOfficerRole: 'General Affairs & Asset Custodian (Verifikator Penukaran)',
+      swapPartyAEmployeeId: employees[3]?.id || 'emp-4',
+      swapPartyAName: employees[3]?.fullName || 'Dimas Wicaksono',
+      swapPartyARole: `${employees[3]?.position || 'Senior Software Engineer'} (${employees[3]?.department || 'Engineering'})`,
+      recipientEmployeeId: employees[1]?.id || 'emp-2',
+      recipientName: employees[1]?.fullName || 'Siti Aminah',
+      recipientRole: `${employees[1]?.position || 'HR & Finance Manager'} (${employees[1]?.department || 'HR & Finance'})`,
+      swapPartyAItems: [
+        {
+          assetId: 'ast-1',
+          assetCode: 'AST-LTP-001',
+          assetName: 'MacBook Pro 16" M3 Max 36GB / 1TB',
+          category: 'Laptop & Komputer',
+          condition: 'Baik',
+        },
+      ],
+      swapPartyBItems: [
+        {
+          assetId: 'ast-2',
+          assetCode: 'AST-LTP-002',
+          assetName: 'ThinkPad X1 Carbon Gen 11 16GB / 512GB',
+          category: 'Laptop & Komputer',
+          condition: 'Baik',
+        },
+      ],
+      building: 'Menara Palma Kuningan',
+      roomOrArea: 'Lantai 18 - Engineering & HR Wing (Melalui Meja Verifikasi GA)',
+      items: [
+        {
+          assetId: 'ast-1',
+          assetCode: 'AST-LTP-001',
+          assetName: 'MacBook Pro 16" M3 Max 36GB / 1TB (Dari Pihak I → Pihak II)',
+          category: 'Laptop & Komputer',
+          condition: 'Baik',
+        },
+        {
+          assetId: 'ast-2',
+          assetCode: 'AST-LTP-002',
+          assetName: 'ThinkPad X1 Carbon Gen 11 16GB / 512GB (Dari Pihak II → Pihak I)',
+          category: 'Laptop & Komputer',
+          condition: 'Baik',
+        },
+      ],
+      additionalAccessories: 'Masing-masing beserta Charger Original & Tas Laptop',
+      notes: 'Penukaran aset kerja antar karyawan yang telah diperiksa kondisi fisiknya dan disahkan melalui General Affairs (GA).',
+      status: 'Ditukar Melalui GA',
+    },
+  ];
+
+  const [bastHandovers, setBastHandovers] = useState<BastHandoverRecord[]>(() => {
+    try {
+      const saved = localStorage.getItem('nusahr_ga_bast_handovers_v3');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {
+      // ignore
+    }
+    return DEFAULT_BAST_HANDOVERS;
+  });
+
+  const saveBastHandovers = (nextList: BastHandoverRecord[]) => {
+    setBastHandovers(nextList);
+    try {
+      localStorage.setItem('nusahr_ga_bast_handovers_v3', JSON.stringify(nextList));
+    } catch {
+      // ignore
+    }
+  };
+
+  const unassignedAssets = assets.filter((a) => !a.assignedToEmployeeId);
+
+  const [mutasiSubFilter, setMutasiSubFilter] = useState<
+    'all' | BastHandoverCategory | 'PENGGUNAAN_OPERASIONAL_SEWAKTU'
+  >('all');
+  const [mutasiCategory, setMutasiCategory] = useState<BastHandoverCategory>('Aset Karyawan (Personal)');
+  const [mutasiAssetId, setMutasiAssetId] = useState(unassignedAssets[0]?.id || '');
+  const [selectedMutasiAssetIds, setSelectedMutasiAssetIds] = useState<string[]>(
+    unassignedAssets[0]?.id ? [unassignedAssets[0].id] : []
+  );
+  // State untuk Penukaran Aset Antar Karyawan (Melalui GA)
+  const [swapEmpAId, setSwapEmpAId] = useState<string>(employees[3]?.id || employees[0]?.id || 'emp-4');
+  const [swapEmpBId, setSwapEmpBId] = useState<string>(employees[1]?.id || employees[0]?.id || 'emp-2');
+  const [selectedSwapAssetAIds, setSelectedSwapAssetAIds] = useState<string[]>([]);
+  const [selectedSwapAssetBIds, setSelectedSwapAssetBIds] = useState<string[]>([]);
+  const [extraBatchItemsText, setExtraBatchItemsText] = useState('Mouse Wireless Logitech, Tas Laptop & Adaptor Charger');
+  const [gaHandoverOfficerName, setGaHandoverOfficerName] = useState('Bambang Sudiro (GA Asset Custodian)');
   const [newTargetEmpId, setNewTargetEmpId] = useState(employees[0]?.id || '');
   const [newTargetBuilding, setNewTargetBuilding] = useState('Menara Palma Kuningan');
-  const [newTargetRoom, setNewTargetRoom] = useState('Lantai 20 - Executive Suite');
+  const [newTargetRoom, setNewTargetRoom] = useState('Lantai 18 - Dev Wing');
+  const [vehiclePlateInput, setVehiclePlateInput] = useState('B 1234 NTM');
+  const [vehicleOdometerInput, setVehicleOdometerInput] = useState<number>(15200);
+  const [vehicleDocsInput, setVehicleDocsInput] = useState(
+    'STNK Asli, Kunci Utama & Cadangan, Polis Asuransi All-Risk, Buku Servis & Tool Kit'
+  );
+  const [facilitySkInput, setFacilitySkInput] = useState('SK-HRD/FAC-CAR/2026/024 (Fasilitas Kendaraan Karyawan)');
   const [mutasiNotes, setMutasiNotes] = useState('');
 
   // Maintenance Ticket Form State
@@ -305,14 +556,19 @@ export const GaAssetManagement: React.FC = () => {
   });
   const [meetingMinutesText, setMeetingMinutesText] = useState('');
 
-  // Vehicle Booking State
+  // Vehicle Booking State (Penggunaan Kendaraan Operasional Sewaktu-waktu — konsep sama seperti Penggunaan Ruangan Sewaktu-waktu)
   const [isVehicleModalOpen, setIsVehicleModalOpen] = useState(false);
   const [vehicleForm, setVehicleForm] = useState({
-    vehicleName: 'Toyota Innova Zenix (B 1234 NTM)',
-    driverName: 'Pak Supriadi (Driver Internal)',
+    vehicleName: 'Toyota Avanza Veloz (B 5678 NTM) — Armada Pool Operasional',
+    borrowerId: employees[0]?.id || '',
+    driverType: 'Sopir Kantor' as 'Sopir Kantor' | 'Bawa Sendiri',
+    driverName: 'Pak Supriadi (Driver Internal GA)',
     purpose: '',
+    destination: 'Kunjungan Klien Sudirman & Site Project',
     startDate: new Date().toISOString().split('T')[0],
     endDate: new Date().toISOString().split('T')[0],
+    startTime: '09:00',
+    endTime: '14:00',
     startMileageKm: 12450,
   });
   const [selectedVehicleForReturn, setSelectedVehicleForReturn] = useState<GAVehicleBooking | null>(null);
@@ -441,14 +697,20 @@ export const GaAssetManagement: React.FC = () => {
   const handleCreateVehicleBooking = (e: React.FormEvent) => {
     e.preventDefault();
     if (!vehicleForm.purpose) return;
+    const purposeWithTime = `[${vehicleForm.startTime} - ${vehicleForm.endTime} WIB] ${vehicleForm.purpose}${
+      vehicleForm.destination ? ` (Tujuan: ${vehicleForm.destination})` : ''
+    }`;
     addVehicleBooking({
       vehicleName: vehicleForm.vehicleName,
-      plateNumber: vehicleForm.vehicleName.match(/\(([^)]+)\)/)?.[1] || 'B 1234 NTM',
-      driverType: vehicleForm.driverName ? 'Sopir Kantor' : 'Bawa Sendiri',
-      driverName: vehicleForm.driverName || 'Lepas Kunci',
-      borrowerId: employees[0]?.id || 'emp-001',
-      purpose: vehicleForm.purpose,
-      destination: 'Jabodetabek & Site Project',
+      plateNumber: vehicleForm.vehicleName.match(/\(([^)]+)\)/)?.[1] || 'B 5678 NTM',
+      driverType: vehicleForm.driverType,
+      driverName:
+        vehicleForm.driverType === 'Sopir Kantor'
+          ? vehicleForm.driverName || 'Sopir Kantor GA'
+          : 'Bawa Sendiri (Lepas Kunci Operasional)',
+      borrowerId: vehicleForm.borrowerId || employees[0]?.id || 'emp-001',
+      purpose: purposeWithTime,
+      destination: vehicleForm.destination || 'Jabodetabek & Site Project',
       startDate: vehicleForm.startDate,
       endDate: vehicleForm.endDate,
       startOdometer: Number(vehicleForm.startMileageKm),
@@ -457,6 +719,10 @@ export const GaAssetManagement: React.FC = () => {
     });
     setIsVehicleModalOpen(false);
     setVehicleForm({ ...vehicleForm, purpose: '' });
+    setSlaToastMessage(
+      `Reservasi penggunaan kendaraan operasional sewaktu-waktu (${vehicleForm.vehicleName} · ${vehicleForm.startTime}-${vehicleForm.endTime} WIB) berhasil dicatat!`
+    );
+    setTimeout(() => setSlaToastMessage(null), 4000);
   };
 
   const handleCreateSupplyRequest = (e: React.FormEvent) => {
@@ -559,17 +825,275 @@ export const GaAssetManagement: React.FC = () => {
     setAssetCode('');
   };
 
+  const handlePreviewBastHandover = (bast: BastHandoverRecord) => {
+    const isSwap = bast.handoverCategory === 'Penukaran Aset Antar Karyawan (Melalui GA)';
+    const itemLines = bast.items
+      .map((it, idx) => `${idx + 1}. [${it.assetCode}] ${it.assetName} (${it.category} — Kondisi: ${it.condition})`)
+      .join(' | ');
+
+    openFilePreview({
+      title:
+        bast.handoverCategory === 'Aset Menetap di Ruangan'
+          ? 'BERITA ACARA SERAH TERIMA INVENTARIS ASET MENETAP DI RUANGAN (TANGGUNG JAWAB PIMPINAN RUANGAN)'
+          : bast.handoverCategory === 'Fasilitas Kendaraan Karyawan (Melekat ke 1 Karyawan)'
+          ? 'BERITA ACARA SERAH TERIMA FASILITAS KENDARAAN PERUSAHAAN YANG MELEKAT KE KARYAWAN'
+          : isSwap
+          ? 'BERITA ACARA PENUKARAN ASET ANTAR KARYAWAN MELALUI VERIFIKASI GENERAL AFFAIRS (GA)'
+          : 'BERITA ACARA SERAH TERIMA ASET KERJA KARYAWAN DENGAN GENERAL AFFAIRS (MULTI-ASET)',
+      documentNumber: bast.bastNumber,
+      typeBadge: bast.handoverCategory,
+      date: bast.handoverDate,
+      partyName: isSwap ? `${bast.swapPartyAName || '-'} ⇄ ${bast.recipientName}` : bast.recipientName,
+      partyRole: isSwap ? `Difasilitasi & Disahkan oleh GA: ${bast.gaOfficerName}` : bast.recipientRole,
+      statusBadge: {
+        label: bast.status,
+        variant: bast.status === 'Dikembalikan ke GA' ? 'info' : 'success',
+      },
+      detailsGrid: [
+        { label: 'Nomor Dokumen BAST', value: bast.bastNumber },
+        { label: 'Kategori Dokumen', value: bast.handoverCategory },
+        {
+          label: isSwap ? 'Verifikator & Pengesah (GA)' : 'Pihak Penyerah (GA)',
+          value: `${bast.gaOfficerName} (${bast.gaOfficerRole})`,
+        },
+        ...(isSwap
+          ? [
+              {
+                label: 'Karyawan Pihak I',
+                value: `${bast.swapPartyAName || '-'} — ${bast.swapPartyARole || ''}`,
+              },
+              {
+                label: 'Karyawan Pihak II',
+                value: `${bast.recipientName} — ${bast.recipientRole}`,
+              },
+            ]
+          : [
+              {
+                label:
+                  bast.handoverCategory === 'Aset Menetap di Ruangan'
+                    ? 'Pimpinan Penanggung Jawab Ruangan'
+                    : bast.handoverCategory === 'Fasilitas Kendaraan Karyawan (Melekat ke 1 Karyawan)'
+                    ? 'Karyawan Penerima Fasilitas Kendaraan'
+                    : 'Karyawan Penerima Aset',
+                value: `${bast.recipientName} — ${bast.recipientRole}`,
+              },
+            ]),
+        { label: 'Lokasi Gedung & Ruangan', value: `${bast.roomOrArea} (${bast.building})` },
+        { label: 'Jumlah Aset Tercatat', value: `${bast.items.length} Unit Aset` },
+        ...(bast.vehiclePlateNumber
+          ? [
+              { label: 'Nomor Polisi Kendaraan', value: bast.vehiclePlateNumber },
+              { label: 'KM Saat Serah Terima', value: `${(bast.vehicleStartOdometerKm || 0).toLocaleString()} KM` },
+              {
+                label: 'Dasar SK / Fasilitas Jabatan',
+                value: bast.facilitySkNumber || 'Fasilitas Kendaraan Perusahaan Melekat ke Karyawan',
+              },
+            ]
+          : []),
+      ],
+      contentParagraphs: [
+        isSwap
+          ? `Pada tanggal ${bast.handoverDate}, telah dilakukan penukaran aset kerja antar karyawan antara Pihak I (${bast.swapPartyAName}) dan Pihak II (${bast.recipientName}) yang diperiksa, diverifikasi kondisi fisiknya, dan disahkan secara resmi melalui Departemen General Affairs (${bast.gaOfficerName}).`
+          : `Pada tanggal ${bast.handoverDate}, telah dilakukan serah terima resmi antara Departemen General Affairs (${bast.gaOfficerName}) dengan ${
+              bast.handoverCategory === 'Aset Menetap di Ruangan'
+                ? `Pimpinan Penanggung Jawab Ruangan (${bast.recipientName})`
+                : bast.handoverCategory === 'Fasilitas Kendaraan Karyawan (Melekat ke 1 Karyawan)'
+                ? `Karyawan Penerima Fasilitas Kendaraan Perusahaan (${bast.recipientName})`
+                : `Karyawan Penerima (${bast.recipientName})`
+            }.`,
+        `Daftar Aset yang Diserahterimakan / Ditukarkan (${bast.items.length} Item): ${itemLines}.`,
+        bast.additionalAccessories
+          ? `Perlengkapan / Aksesoris Tambahan: ${bast.additionalAccessories}.`
+          : bast.vehicleDocumentsIncluded
+          ? `Kendaraan tersebut merupakan fasilitas perusahaan yang diberikan khusus dan melekat kepada 1 karyawan tersebut (${bast.recipientName}). Kelengkapan Dokumen & Kunci Kendaraan: ${bast.vehicleDocumentsIncluded}.`
+          : 'Seluruh unit telah diperiksa fungsi fisiknya bersama-sama oleh GA dalam keadaan baik dan layak operasional.',
+        `Catatan: ${bast.notes}`,
+      ],
+      signeeName: isSwap
+        ? `${bast.swapPartyAName} · ${bast.recipientName} · Mengetahui GA: ${bast.gaOfficerName}`
+        : `${bast.gaOfficerName} & ${bast.recipientName}`,
+      signeeRole: isSwap
+        ? 'Karyawan Pihak I, Karyawan Pihak II & Petugas Verifikator General Affairs (GA)'
+        : bast.handoverCategory === 'Aset Menetap di Ruangan'
+        ? 'Petugas General Affairs & Pimpinan Penanggung Jawab Ruangan'
+        : bast.handoverCategory === 'Fasilitas Kendaraan Karyawan (Melekat ke 1 Karyawan)'
+        ? 'Petugas General Affairs & Karyawan Penerima Fasilitas Kendaraan'
+        : 'Petugas General Affairs (Penyerah) & Karyawan Penerima Aset',
+    });
+  };
+
   const handleExecuteMutasi = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!mutasiAssetId) return;
 
-    updateAsset(mutasiAssetId, {
-      assignedToEmployeeId: newTargetEmpId || undefined,
-      building: newTargetBuilding,
-      room: newTargetRoom,
+    // Cabang Khusus: Penukaran Aset Antar Karyawan (Melalui GA)
+    if (mutasiCategory === 'Penukaran Aset Antar Karyawan (Melalui GA)') {
+      if (!swapEmpAId || !swapEmpBId || swapEmpAId === swapEmpBId) return;
+      const empA = employees.find((emp) => emp.id === swapEmpAId);
+      const empB = employees.find((emp) => emp.id === swapEmpBId);
+      const assetsA = assets.filter(
+        (a) => a.assignedToEmployeeId === swapEmpAId && selectedSwapAssetAIds.includes(a.id)
+      );
+      const assetsB = assets.filter(
+        (a) => a.assignedToEmployeeId === swapEmpBId && selectedSwapAssetBIds.includes(a.id)
+      );
+      if (assetsA.length === 0 && assetsB.length === 0) return;
+
+      // Tukar kepemilikan/penanggung jawab aset di master inventaris melalui GA
+      assetsA.forEach((a) => {
+        updateAsset(a.id, {
+          assignedToEmployeeId: swapEmpBId,
+          building: newTargetBuilding,
+          room: newTargetRoom,
+        });
+      });
+      assetsB.forEach((b) => {
+        updateAsset(b.id, {
+          assignedToEmployeeId: swapEmpAId,
+          building: newTargetBuilding,
+          room: newTargetRoom,
+        });
+      });
+
+      const partyAItems: BastHandoverItem[] = assetsA.map((a) => ({
+        assetId: a.id,
+        assetCode: a.assetCode,
+        assetName: `${a.name} (Diserahkan dari ${empA?.fullName || 'Pihak I'} → ke ${empB?.fullName || 'Pihak II'})`,
+        category: a.category,
+        condition: a.condition,
+      }));
+      const partyBItems: BastHandoverItem[] = assetsB.map((b) => ({
+        assetId: b.id,
+        assetCode: b.assetCode,
+        assetName: `${b.name} (Diserahkan dari ${empB?.fullName || 'Pihak II'} → ke ${empA?.fullName || 'Pihak I'})`,
+        category: b.category,
+        condition: b.condition,
+      }));
+
+      const combinedItems = [...partyAItems, ...partyBItems];
+
+      const swapRecord: BastHandoverRecord = {
+        id: `bast-${Date.now()}`,
+        bastNumber: `BAST/GA-SWAP/2026/10/${String(bastHandovers.length + 1).padStart(3, '0')}`,
+        handoverDate: new Date().toISOString().split('T')[0],
+        handoverCategory: 'Penukaran Aset Antar Karyawan (Melalui GA)',
+        gaOfficerName: gaHandoverOfficerName.split('(')[0].trim() || 'Bambang Sudiro',
+        gaOfficerRole: 'General Affairs & Asset Custodian (Verifikator Penukaran)',
+        swapPartyAEmployeeId: empA?.id || swapEmpAId,
+        swapPartyAName: empA?.fullName || 'Karyawan Pihak I',
+        swapPartyARole: `${empA?.position || 'Staff'} (${empA?.department || 'Operasional'})`,
+        recipientEmployeeId: empB?.id || swapEmpBId,
+        recipientName: empB?.fullName || 'Karyawan Pihak II',
+        recipientRole: `${empB?.position || 'Staff'} (${empB?.department || 'Operasional'})`,
+        swapPartyAItems: partyAItems,
+        swapPartyBItems: partyBItems,
+        building: newTargetBuilding,
+        roomOrArea: newTargetRoom,
+        items: combinedItems,
+        additionalAccessories: extraBatchItemsText || undefined,
+        notes:
+          mutasiNotes ||
+          `Penukaran aset antar karyawan (${empA?.fullName} ⇄ ${empB?.fullName}) yang telah diperiksa dan disahkan melalui General Affairs (GA).`,
+        status: 'Ditukar Melalui GA',
+      };
+
+      saveBastHandovers([swapRecord, ...bastHandovers]);
+      setSlaToastMessage(
+        `Berhasil menerbitkan BAST Penukaran Aset Antar Karyawan melalui GA (${swapRecord.bastNumber}: ${empA?.fullName} ⇄ ${empB?.fullName})!`
+      );
+      setTimeout(() => setSlaToastMessage(null), 4000);
+      setIsMutasiModalOpen(false);
+      setSelectedSwapAssetAIds([]);
+      setSelectedSwapAssetBIds([]);
+      setMutasiNotes('');
+      return;
+    }
+
+    const validUnassignedIds = selectedMutasiAssetIds.filter((id) =>
+      unassignedAssets.some((u) => u.id === id)
+    );
+    if (validUnassignedIds.length === 0) return;
+
+    const targetEmp = employees.find((emp) => emp.id === newTargetEmpId) || employees[0];
+    const selectedAssetObjs = unassignedAssets.filter((a) => validUnassignedIds.includes(a.id));
+
+    // Update each selected asset in master inventory
+    validUnassignedIds.forEach((id) => {
+      updateAsset(id, {
+        assignedToEmployeeId: newTargetEmpId || undefined,
+        building: newTargetBuilding,
+        room: newTargetRoom,
+      });
     });
 
-    alert('Perpindahan / Mutasi aset berhasil dieksekusi dan riwayat penanggung jawab telah diperbarui!');
+    const itemsPayload: BastHandoverItem[] = selectedAssetObjs.map((a) => ({
+      assetId: a.id,
+      assetCode: a.assetCode,
+      assetName: a.name,
+      category: a.category,
+      condition: a.condition,
+    }));
+
+    const prefix =
+      mutasiCategory === 'Aset Menetap di Ruangan'
+        ? 'BAST/GA-ROOM'
+        : mutasiCategory === 'Fasilitas Kendaraan Karyawan (Melekat ke 1 Karyawan)'
+        ? 'BAST/GA-FAC-VEH'
+        : 'BAST/GA-EMP';
+
+    const newRecord: BastHandoverRecord = {
+      id: `bast-${Date.now()}`,
+      bastNumber: `${prefix}/2026/10/${String(bastHandovers.length + 1).padStart(3, '0')}`,
+      handoverDate: new Date().toISOString().split('T')[0],
+      handoverCategory: mutasiCategory,
+      gaOfficerName: gaHandoverOfficerName.split('(')[0].trim() || 'Bambang Sudiro',
+      gaOfficerRole: 'General Affairs & Asset Custodian',
+      recipientEmployeeId: targetEmp?.id || 'emp-1',
+      recipientName: targetEmp?.fullName || 'Karyawan Penerima',
+      recipientRole:
+        mutasiCategory === 'Aset Menetap di Ruangan'
+          ? `Pimpinan Penanggung Jawab Ruangan (${targetEmp?.position || 'Manager'} · ${targetEmp?.department || ''})`
+          : mutasiCategory === 'Fasilitas Kendaraan Karyawan (Melekat ke 1 Karyawan)'
+          ? `${targetEmp?.position || 'Manager'} (Penerima Fasilitas Kendaraan Perusahaan)`
+          : `${targetEmp?.position || 'Staff'} (${targetEmp?.department || 'Operasional'})`,
+      isRoomLeaderResponsible: mutasiCategory === 'Aset Menetap di Ruangan',
+      building: newTargetBuilding,
+      roomOrArea: newTargetRoom,
+      items: itemsPayload,
+      additionalAccessories:
+        mutasiCategory === 'Aset Karyawan (Personal)' || mutasiCategory === 'Aset Menetap di Ruangan'
+          ? extraBatchItemsText
+          : undefined,
+      vehiclePlateNumber:
+        mutasiCategory === 'Fasilitas Kendaraan Karyawan (Melekat ke 1 Karyawan)'
+          ? vehiclePlateInput
+          : undefined,
+      vehicleStartOdometerKm:
+        mutasiCategory === 'Fasilitas Kendaraan Karyawan (Melekat ke 1 Karyawan)'
+          ? Number(vehicleOdometerInput)
+          : undefined,
+      vehicleDocumentsIncluded:
+        mutasiCategory === 'Fasilitas Kendaraan Karyawan (Melekat ke 1 Karyawan)'
+          ? vehicleDocsInput
+          : undefined,
+      facilitySkNumber:
+        mutasiCategory === 'Fasilitas Kendaraan Karyawan (Melekat ke 1 Karyawan)'
+          ? facilitySkInput
+          : undefined,
+      notes:
+        mutasiNotes ||
+        (mutasiCategory === 'Aset Menetap di Ruangan'
+          ? 'Serah terima inventaris aset menetap di ruangan kepada Pimpinan Ruangan.'
+          : mutasiCategory === 'Fasilitas Kendaraan Karyawan (Melekat ke 1 Karyawan)'
+          ? 'Serah terima kendaraan sebagai fasilitas perusahaan yang diberikan dan melekat khusus ke 1 karyawan tersebut.'
+          : `Serah terima ${itemsPayload.length} unit aset kerja karyawan dengan General Affairs.`),
+      status: 'Aktif / Diserahterimakan',
+    };
+
+    saveBastHandovers([newRecord, ...bastHandovers]);
+    setSlaToastMessage(
+      `Berhasil membuat dokumen ${newRecord.bastNumber} (${itemsPayload.length} aset) untuk ${newRecord.recipientName}!`
+    );
+    setTimeout(() => setSlaToastMessage(null), 4000);
     setIsMutasiModalOpen(false);
     setMutasiNotes('');
   };
@@ -826,7 +1350,11 @@ export const GaAssetManagement: React.FC = () => {
 
               <div className="col-span-1 sm:col-span-2 lg:col-span-1 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                 <button
-                  onClick={() => setIsMutasiModalOpen(true)}
+                  onClick={() => {
+                    const freeIds = assets.filter((a) => !a.assignedToEmployeeId).slice(0, 1).map((a) => a.id);
+                    setSelectedMutasiAssetIds(freeIds);
+                    setIsMutasiModalOpen(true);
+                  }}
                   className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg text-xs font-semibold transition-colors"
                 >
                   <ArrowRightLeft className="w-3.5 h-3.5 text-indigo-600" />
@@ -1019,73 +1547,502 @@ export const GaAssetManagement: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 2: MUTASI & PENGGUNAAN ASET */}
+      {/* TAB 2: MUTASI & PENGGUNAAN ASET (BAST SERAH TERIMA MELEKAT vs PENGGUNAAN OPERASIONAL SEWAKTU-WAKTU) */}
       {activeTab === 'mutasi' && (
-        <div className="space-y-4">
-          <div className="bg-white p-4 border border-slate-200 rounded-lg flex items-center justify-between">
+        <div className="space-y-5">
+          {/* Header & Action Buttons */}
+          <div className="bg-white p-4 sm:p-5 border border-slate-200 rounded-xl shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             <div>
               <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                 <ArrowRightLeft className="w-4 h-4 text-indigo-600" />
-                <span>Riwayat Perpindahan & Serah Terima Aset (BAST)</span>
+                <span>Mutasi, Serah Terima Fasilitas (BAST), Penukaran Aset Antar Karyawan &amp; Penggunaan Operasional</span>
               </h3>
-              <p className="text-xs text-slate-500">
-                Pencatatan alokasi perangkat kerja kepada personil baru atau mutasi antar gedung dan departemen.
+              <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
+                Membedakan secara tegas antara <strong>Serah Terima Aset / Fasilitas (BAST)</strong> (meliputi:{' '}
+                <strong>Aset Kerja Karyawan</strong> bisa &gt;1 aset/BAST,{' '}
+                <strong>Aset Menetap di Ruangan</strong> tanggung jawab Pimpinan Ruangan,{' '}
+                <strong>Serah Terima Kendaraan yang Melekat ke 1 Karyawan sebagai Fasilitas Perusahaan</strong>, serta{' '}
+                <strong>Penukaran Aset Antar Karyawan yang Wajib Melalui Verifikasi GA</strong>) dengan{' '}
+                <strong>Penggunaan Kendaraan Operasional (Sewaktu-waktu)</strong> yang konsepnya sama seperti{' '}
+                <strong>Penggunaan Ruangan Sewaktu-waktu</strong>.
               </p>
             </div>
-            <button
-              onClick={() => setIsMutasiModalOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md text-xs font-semibold shadow-xs"
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  const freeIds = assets.filter((a) => !a.assignedToEmployeeId).slice(0, 1).map((a) => a.id);
+                  setSelectedMutasiAssetIds(freeIds);
+                  setIsMutasiModalOpen(true);
+                }}
+                className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold shadow-xs"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>+ Buat BAST Serah Terima / Penukaran Aset</span>
+              </button>
+            </div>
+          </div>
+
+          {/* 5 Klasifikasi Kartu Ringkasan: 4 BAST (Termasuk Penukaran Antar Karyawan via GA) vs 1 Penggunaan Operasional */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            <div
+              onClick={() => setMutasiSubFilter('Aset Karyawan (Personal)')}
+              className={`p-3.5 rounded-xl border cursor-pointer transition-all ${
+                mutasiSubFilter === 'Aset Karyawan (Personal)'
+                  ? 'bg-indigo-50/70 border-indigo-400 shadow-xs'
+                  : 'bg-white border-slate-200 hover:border-indigo-300'
+              }`}
             >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Buat Mutasi Baru</span>
-            </button>
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-indigo-700">1. BAST Aset Kerja Karyawan</span>
+                <Laptop className="w-4 h-4 text-indigo-600" />
+              </div>
+              <div className="text-xl font-bold font-mono text-slate-900 mt-1">
+                {bastHandovers.filter((b) => b.handoverCategory === 'Aset Karyawan (Personal)').length} BAST
+              </div>
+              <div className="text-[10px] text-slate-500 mt-1">
+                Laptop, Mouse, Monitor · Serah terima GA &amp; Karyawan (&gt;1 aset)
+              </div>
+            </div>
+
+            <div
+              onClick={() => setMutasiSubFilter('Aset Menetap di Ruangan')}
+              className={`p-3.5 rounded-xl border cursor-pointer transition-all ${
+                mutasiSubFilter === 'Aset Menetap di Ruangan'
+                  ? 'bg-amber-50/70 border-amber-400 shadow-xs'
+                  : 'bg-white border-slate-200 hover:border-amber-300'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-amber-800">2. BAST Aset Menetap di Ruangan</span>
+                <Building className="w-4 h-4 text-amber-600" />
+              </div>
+              <div className="text-xl font-bold font-mono text-slate-900 mt-1">
+                {bastHandovers.filter((b) => b.handoverCategory === 'Aset Menetap di Ruangan').length} BAST
+              </div>
+              <div className="text-[10px] text-slate-500 mt-1">
+                AC, TV, Proyektor · Tanggung jawab Pimpinan Ruangan
+              </div>
+            </div>
+
+            <div
+              onClick={() => setMutasiSubFilter('Fasilitas Kendaraan Karyawan (Melekat ke 1 Karyawan)')}
+              className={`p-3.5 rounded-xl border cursor-pointer transition-all ${
+                mutasiSubFilter === 'Fasilitas Kendaraan Karyawan (Melekat ke 1 Karyawan)'
+                  ? 'bg-emerald-50/70 border-emerald-400 shadow-xs'
+                  : 'bg-white border-slate-200 hover:border-emerald-300'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-emerald-800">
+                  3. Serah Terima Kendaraan (Fasilitas)
+                </span>
+                <Car className="w-4 h-4 text-emerald-600" />
+              </div>
+              <div className="text-xl font-bold font-mono text-slate-900 mt-1">
+                {
+                  bastHandovers.filter(
+                    (b) => b.handoverCategory === 'Fasilitas Kendaraan Karyawan (Melekat ke 1 Karyawan)'
+                  ).length
+                }{' '}
+                Unit
+              </div>
+              <div className="text-[10px] text-slate-500 mt-1">
+                Fasilitas perusahaan yang melekat khusus ke 1 karyawan (BAST)
+              </div>
+            </div>
+
+            <div
+              onClick={() => setMutasiSubFilter('Penukaran Aset Antar Karyawan (Melalui GA)')}
+              className={`p-3.5 rounded-xl border cursor-pointer transition-all ${
+                mutasiSubFilter === 'Penukaran Aset Antar Karyawan (Melalui GA)'
+                  ? 'bg-purple-50/70 border-purple-400 shadow-xs'
+                  : 'bg-white border-slate-200 hover:border-purple-300'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-purple-800">
+                  4. Penukaran Aset Antar Karyawan (Via GA)
+                </span>
+                <ArrowRightLeft className="w-4 h-4 text-purple-600" />
+              </div>
+              <div className="text-xl font-bold font-mono text-slate-900 mt-1">
+                {
+                  bastHandovers.filter(
+                    (b) => b.handoverCategory === 'Penukaran Aset Antar Karyawan (Melalui GA)'
+                  ).length
+                }{' '}
+                BAST
+              </div>
+              <div className="text-[10px] text-slate-500 mt-1">
+                Tukar aset antar karyawan (Pihak I &amp; II) diverifikasi &amp; disahkan GA
+              </div>
+            </div>
+
+            <div
+              onClick={() => setMutasiSubFilter('PENGGUNAAN_OPERASIONAL_SEWAKTU')}
+              className={`p-3.5 rounded-xl border cursor-pointer transition-all ${
+                mutasiSubFilter === 'PENGGUNAAN_OPERASIONAL_SEWAKTU'
+                  ? 'bg-sky-50/70 border-sky-400 shadow-xs'
+                  : 'bg-white border-slate-200 hover:border-sky-300'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-sky-800">
+                  5. Penggunaan Kendaraan (Operasional)
+                </span>
+                <Fuel className="w-4 h-4 text-sky-600" />
+              </div>
+              <div className="text-xl font-bold font-mono text-slate-900 mt-1">{vehicleBookings.length} Jadwal</div>
+              <div className="text-[10px] text-slate-500 mt-1">
+                Konsep sama dengan Penggunaan Ruangan Sewaktu-waktu
+              </div>
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {assets.slice(0, 4).map((ast) => {
-              const emp = employees.find((e) => e.id === ast.assignedToEmployeeId);
-              return (
-                <div key={ast.id} className="p-4 bg-white border border-slate-200 rounded-lg space-y-3">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <span className="font-mono font-bold text-indigo-700 text-xs">{ast.assetCode}</span>
-                      <h4 className="font-bold text-slate-900 text-sm mt-0.5">{ast.name}</h4>
-                    </div>
-                    <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-mono">
-                      {ast.category}
-                    </span>
-                  </div>
+          {/* Filter Pills */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {(
+              [
+                { id: 'all', label: 'Semua (Serah Terima BAST, Penukaran & Penggunaan Operasional)' },
+                { id: 'Aset Karyawan (Personal)', label: 'BAST Aset untuk Karyawan (Laptop, Mouse, dll)' },
+                { id: 'Aset Menetap di Ruangan', label: 'BAST Aset Menetap di Ruangan (Pimpinan Ruangan)' },
+                {
+                  id: 'Fasilitas Kendaraan Karyawan (Melekat ke 1 Karyawan)',
+                  label: 'Serah Terima Kendaraan (Fasilitas Melekat ke 1 Karyawan)',
+                },
+                {
+                  id: 'Penukaran Aset Antar Karyawan (Melalui GA)',
+                  label: 'Penukaran Aset Antar Karyawan (Melalui GA)',
+                },
+                {
+                  id: 'PENGGUNAAN_OPERASIONAL_SEWAKTU',
+                  label: 'Penggunaan Kendaraan Operasional (Sewaktu-waktu seperti Ruangan)',
+                },
+              ] as const
+            ).map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => setMutasiSubFilter(f.id)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
+                  mutasiSubFilter === f.id
+                    ? 'bg-slate-900 text-white border-slate-900'
+                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
 
-                  <div className="text-xs text-slate-600 space-y-1 bg-slate-50 p-2.5 rounded border border-slate-100">
-                    <div className="flex justify-between">
-                      <span className="text-slate-500">Pengguna Saat Ini:</span>
-                      <span className="font-semibold text-slate-900">{emp ? emp.fullName : 'Pool GA'}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-500">Lokasi Penempatan:</span>
-                      <span>{ast.room} ({ast.building})</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-500">Kondisi:</span>
-                      <span className="font-semibold text-emerald-700">{ast.condition}</span>
-                    </div>
-                  </div>
-
-                  <div className="flex justify-end gap-2 pt-1">
-                    <button
-                      onClick={() => {
-                        setMutasiAssetId(ast.id);
-                        setIsMutasiModalOpen(true);
-                      }}
-                      className="px-2.5 py-1 text-xs font-semibold text-indigo-600 hover:bg-indigo-50 border border-indigo-200 rounded transition-colors"
-                    >
-                      Pindahkan Aset
-                    </button>
-                  </div>
+          {/* BAGIAN A: DAFTAR SERAH TERIMA ASET, PENUKARAN ANTAR KARYAWAN & FASILITAS PERUSAHAAN (BAST) */}
+          {mutasiSubFilter !== 'PENGGUNAAN_OPERASIONAL_SEWAKTU' && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                    Bagian A — Dokumen Serah Terima Aset, Penukaran Antar Karyawan via GA &amp; Fasilitas Perusahaan (BAST)
+                  </h4>
+                  <p className="text-[11px] text-slate-500">
+                    Mencakup Aset Kerja Karyawan (&gt;1 aset/BAST), Aset Menetap di Ruangan (Pimpinan Ruangan),{' '}
+                    <strong>Serah Terima Kendaraan Fasilitas Perusahaan yang Melekat ke 1 Karyawan</strong>, serta{' '}
+                    <strong>Penukaran Aset Antar Karyawan (Tetap Melalui Verifikasi GA)</strong>.
+                  </p>
                 </div>
-              );
-            })}
-          </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {bastHandovers
+                  .filter((b) => mutasiSubFilter === 'all' || b.handoverCategory === mutasiSubFilter)
+                  .map((bast) => {
+                    const isRoom = bast.handoverCategory === 'Aset Menetap di Ruangan';
+                    const isVehFacility =
+                      bast.handoverCategory === 'Fasilitas Kendaraan Karyawan (Melekat ke 1 Karyawan)';
+                    const isSwap = bast.handoverCategory === 'Penukaran Aset Antar Karyawan (Melalui GA)';
+
+                    return (
+                      <div
+                        key={bast.id}
+                        className="bg-white border border-slate-200 hover:border-indigo-300 rounded-xl p-4 shadow-xs flex flex-col justify-between space-y-3.5 transition-all"
+                      >
+                        <div className="space-y-3">
+                          {/* Header BAST */}
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span
+                                  className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
+                                    isRoom
+                                      ? 'bg-amber-50 text-amber-800 border-amber-200'
+                                      : isVehFacility
+                                      ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                      : isSwap
+                                      ? 'bg-purple-50 text-purple-800 border-purple-200'
+                                      : 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                                  }`}
+                                >
+                                  {bast.handoverCategory}
+                                </span>
+                                <span className="font-mono text-[10px] font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded">
+                                  {bast.bastNumber}
+                                </span>
+                                <span className="text-[10px] text-slate-400 font-mono">{bast.handoverDate}</span>
+                              </div>
+                              <h4 className="font-bold text-slate-900 text-xs mt-1.5">
+                                {isRoom
+                                  ? `Inventaris Menetap di Ruangan: ${bast.roomOrArea}`
+                                  : isVehFacility
+                                  ? `Fasilitas Kendaraan Perusahaan (Melekat ke 1 Karyawan) — ${bast.recipientName}`
+                                  : isSwap
+                                  ? `Penukaran Aset Antar Karyawan (Melalui GA): ${bast.swapPartyAName} ⇄ ${bast.recipientName}`
+                                  : `Serah Terima Aset Karyawan (${bast.items.length} Aset) — ${bast.recipientName}`}
+                              </h4>
+                            </div>
+
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
+                              {bast.items.length} Aset
+                            </span>
+                          </div>
+
+                          {/* Pihak Serah Terima / Penukaran */}
+                          {isSwap ? (
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 p-2.5 bg-purple-50/50 rounded-lg border border-purple-100 text-xs">
+                              <div>
+                                <span className="text-[10px] text-purple-700 block uppercase font-semibold">
+                                  Karyawan Pihak I
+                                </span>
+                                <div className="font-bold text-slate-900">{bast.swapPartyAName}</div>
+                                <div className="text-[10px] text-slate-500">{bast.swapPartyARole}</div>
+                              </div>
+                              <div>
+                                <span className="text-[10px] text-purple-700 block uppercase font-semibold">
+                                  Karyawan Pihak II
+                                </span>
+                                <div className="font-bold text-slate-900">{bast.recipientName}</div>
+                                <div className="text-[10px] text-slate-500">{bast.recipientRole}</div>
+                              </div>
+                              <div>
+                                <span className="text-[10px] text-emerald-700 block uppercase font-semibold">
+                                  Verifikator &amp; Pengesah GA
+                                </span>
+                                <div className="font-bold text-slate-800">{bast.gaOfficerName}</div>
+                                <div className="text-[10px] text-slate-500">{bast.gaOfficerRole}</div>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-2.5 bg-slate-50 rounded-lg border border-slate-100 text-xs">
+                              <div>
+                                <span className="text-[10px] text-slate-400 block uppercase font-semibold">
+                                  Pihak Penyerah (General Affairs)
+                                </span>
+                                <div className="font-bold text-slate-800">{bast.gaOfficerName}</div>
+                                <div className="text-[10px] text-slate-500">{bast.gaOfficerRole}</div>
+                              </div>
+                              <div>
+                                <span className="text-[10px] text-indigo-600 block uppercase font-semibold">
+                                  {isRoom
+                                    ? 'Pimpinan Penanggung Jawab Ruangan'
+                                    : isVehFacility
+                                    ? 'Karyawan Penerima Fasilitas Kendaraan (Melekat)'
+                                    : 'Karyawan Penerima Aset'}
+                                </span>
+                                <div className="font-bold text-slate-900">{bast.recipientName}</div>
+                                <div className="text-[10px] text-slate-500">{bast.recipientRole}</div>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Daftar Multi-Aset dalam 1 Serah Terima / Penukaran */}
+                          <div className="space-y-1.5">
+                            <span className="text-[10px] font-bold text-slate-500 uppercase block">
+                              {isSwap
+                                ? `Rincian Pertukaran Aset yang Disahkan GA (${bast.items.length} Item):`
+                                : `Daftar Aset dalam 1 Kali Serah Terima (${bast.items.length} Item):`}
+                            </span>
+                            <div className="space-y-1">
+                              {bast.items.map((item, idx) => (
+                                <div
+                                  key={`${bast.id}-item-${idx}`}
+                                  className="flex items-center justify-between px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
+                                >
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 bg-indigo-50 text-indigo-700 rounded shrink-0">
+                                      {item.assetCode}
+                                    </span>
+                                    <span className="font-semibold text-slate-800 truncate">{item.assetName}</span>
+                                  </div>
+                                  <span className="text-[10px] text-emerald-700 font-semibold shrink-0 ml-2">
+                                    {item.condition}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                            {bast.additionalAccessories && (
+                              <div className="text-[11px] text-slate-600 bg-indigo-50/50 border border-indigo-100 px-2.5 py-1.5 rounded-lg">
+                                <strong>Kelengkapan / Aksesoris Tambahan:</strong> {bast.additionalAccessories}
+                              </div>
+                            )}
+                            {bast.vehiclePlateNumber && (
+                              <div className="text-[11px] text-emerald-900 bg-emerald-50/70 border border-emerald-200 px-2.5 py-1.5 rounded-lg space-y-0.5">
+                                <div className="flex items-center justify-between font-mono font-bold">
+                                  <span>No. Polisi: {bast.vehiclePlateNumber}</span>
+                                  <span>KM Serah Terima: {(bast.vehicleStartOdometerKm || 0).toLocaleString()} KM</span>
+                                </div>
+                                {bast.facilitySkNumber && (
+                                  <div className="text-[10px] text-emerald-900 font-semibold">
+                                    Dasar Fasilitas Perusahaan: {bast.facilitySkNumber}
+                                  </div>
+                                )}
+                                <div className="text-[10px] text-emerald-800">
+                                  Status: <strong>Fasilitas Kendaraan Perusahaan (Melekat ke 1 Karyawan)</strong> · Dokumen:{' '}
+                                  {bast.vehicleDocumentsIncluded}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="text-[11px] text-slate-500 flex items-center justify-between">
+                            <span>
+                              📍 Lokasi: <strong className="text-slate-700">{bast.roomOrArea} ({bast.building})</strong>
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Footer Actions */}
+                        <div className="pt-2.5 border-t border-slate-100 flex items-center justify-between gap-2">
+                          <span className="text-[10px] text-slate-500 italic truncate">{bast.notes}</span>
+                          <button
+                            type="button"
+                            onClick={() => handlePreviewBastHandover(bast)}
+                            className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-semibold shrink-0 flex items-center gap-1.5"
+                          >
+                            <FileText className="w-3.5 h-3.5" />
+                            <span>Cetak / Lihat BAST</span>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+          )}
+
+          {/* BAGIAN B: PENGGUNAAN KENDARAAN OPERASIONAL SEWAKTU-WAKTU (KONSEP SAMA SEPERTI PENGGUNAAN RUANGAN SEWAKTU-WAKTU) */}
+          {(mutasiSubFilter === 'all' || mutasiSubFilter === 'PENGGUNAAN_OPERASIONAL_SEWAKTU') && (
+            <div className="bg-sky-50/40 border border-sky-200 rounded-xl p-4 sm:p-5 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 bg-sky-600 text-white rounded text-[10px] font-bold uppercase">
+                      Penggunaan Sewaktu-waktu (Non-Fasilitas Jabatan)
+                    </span>
+                    <h4 className="text-sm font-bold text-slate-900">
+                      Bagian B — Penggunaan Kendaraan Operasional (Konsep Sama dengan Penggunaan Ruangan Sewaktu-waktu)
+                    </h4>
+                  </div>
+                  <p className="text-xs text-slate-600 mt-1">
+                    Berbeda dengan serah terima kendaraan fasilitas yang melekat ke 1 karyawan, penggunaan kendaraan
+                    operasional ini bersifat <strong>reservasi/pemakaian sewaktu-waktu</strong> oleh karyawan untuk
+                    keperluan dinas berdasarkan tanggal &amp; jam pakai.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsVehicleModalOpen(true)}
+                  className="px-3.5 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-xs font-semibold shadow-xs shrink-0 flex items-center gap-1.5"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>+ Booking Penggunaan Kendaraan Operasional</span>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                {vehicleBookings.map((vb) => {
+                  const borrower = employees.find((e) => e.id === vb.borrowerId);
+                  return (
+                    <div
+                      key={vb.id}
+                      className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs space-y-3 flex flex-col justify-between"
+                    >
+                      <div className="space-y-2.5">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-sky-50 text-sky-700 border border-sky-200">
+                              Armada Operasional (Sewaktu-waktu)
+                            </span>
+                            <h5 className="font-bold text-slate-900 text-xs mt-1">{vb.vehicleName}</h5>
+                          </div>
+                          <span
+                            className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${
+                              vb.status === 'Disetujui'
+                                ? 'bg-blue-100 text-blue-700'
+                                : vb.status === 'Sedang Digunakan'
+                                ? 'bg-amber-100 text-amber-700'
+                                : vb.status === 'Dikembalikan'
+                                ? 'bg-emerald-100 text-emerald-700'
+                                : 'bg-slate-100 text-slate-600'
+                            }`}
+                          >
+                            {vb.status}
+                          </span>
+                        </div>
+
+                        <div className="text-xs text-slate-600 space-y-1">
+                          <div className="font-semibold text-slate-800">{vb.purpose}</div>
+                          <div className="flex items-center gap-1.5 text-slate-500 font-mono text-[11px]">
+                            <Calendar className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+                            <span>
+                              {vb.startDate} s/d {vb.endDate}
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-slate-500">
+                            Pengguna Sewaktu-waktu:{' '}
+                            <strong className="text-slate-800">{borrower?.fullName || 'Aditya Pratama'}</strong> ·
+                            Pengemudi: <strong className="text-slate-700">{vb.driverName || vb.driverType}</strong>
+                          </div>
+                          <div className="text-[11px] font-mono text-slate-600">
+                            Odometer: {(vb.startOdometer || 0).toLocaleString()} KM{' '}
+                            {vb.endOdometer ? `→ ${vb.endOdometer.toLocaleString()} KM` : ''}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="pt-2.5 border-t border-slate-100 flex items-center justify-between gap-2">
+                        <span className="text-[10px] text-slate-400">Rute: {vb.destination}</span>
+                        {vb.status === 'Disetujui' && (
+                          <button
+                            type="button"
+                            onClick={() => updateVehicleBookingStatus(vb.id, 'Sedang Digunakan')}
+                            className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded text-[10px] font-semibold"
+                          >
+                            Mulai Pakai
+                          </button>
+                        )}
+                        {vb.status === 'Sedang Digunakan' && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedVehicleForReturn(vb);
+                              setReturnForm({
+                                returnDate: new Date().toISOString().split('T')[0],
+                                endOdometer: (vb.startOdometer || 0) + 65,
+                                tollFuelCost: 150000,
+                                returnNotes: 'Kendaraan operasional selesai digunakan dan dikembalikan ke pool GA.',
+                              });
+                            }}
+                            className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[10px] font-semibold"
+                          >
+                            Selesai &amp; Kembalikan
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -1597,25 +2554,36 @@ export const GaAssetManagement: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 6: KENDARAAN OPERASIONAL & LOG BBM/KM */}
+      {/* TAB 6: PENGGUNAAN KENDARAAN OPERASIONAL (SEWAKTU-WAKTU — KONSEP SAMA DENGAN PENGGUNAAN RUANGAN) */}
       {activeTab === 'kendaraan' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between gap-4 flex-wrap bg-white p-4 border border-slate-200 rounded-lg shadow-xs">
             <div>
               <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                 <Car className="w-4 h-4 text-indigo-600" />
-                <span>Peminjaman Kendaraan Operasional & Log BBM/KM</span>
+                <span>Penggunaan Kendaraan Operasional (Sewaktu-waktu) &amp; Log BBM/KM</span>
               </h3>
-              <p className="text-xs text-slate-500">
-                Peminjaman armada mobil dinas, penugasan driver, pencatatan odometer (KM awal/akhir), dan biaya bahan bakar (BBM).
+              <p className="text-xs text-slate-500 mt-0.5">
+                Konsepnya sama dengan <strong>Penggunaan Ruangan Sewaktu-waktu</strong> (reservasi armada operasional pool berdasarkan tanggal &amp; jam pakai). Untuk kendaraan yang merupakan <strong>fasilitas perusahaan yang melekat ke 1 karyawan tertentu</strong>, kelola melalui BAST di tab{' '}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('mutasi');
+                    setMutasiSubFilter('Fasilitas Kendaraan Karyawan (Melekat ke 1 Karyawan)');
+                  }}
+                  className="text-emerald-700 font-bold underline hover:text-emerald-800"
+                >
+                  Mutasi &amp; Serah Terima Fasilitas Kendaraan
+                </button>
+                .
               </p>
             </div>
             <button
               onClick={() => setIsVehicleModalOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-xs font-semibold shadow-xs"
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold shadow-xs"
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>+ Booking Kendaraan</span>
+              <span>+ Booking Penggunaan Kendaraan Operasional (Sewaktu-waktu)</span>
             </button>
           </div>
 
@@ -1623,11 +2591,11 @@ export const GaAssetManagement: React.FC = () => {
             <table className="w-full text-xs text-left">
               <thead className="bg-slate-50 border-b border-slate-200 text-slate-700 font-semibold">
                 <tr>
-                  <th className="p-3">Kendaraan / Nopol</th>
-                  <th className="p-3">Peminjam & Driver</th>
-                  <th className="p-3">Keperluan / Rute</th>
-                  <th className="p-3">Periode</th>
-                  <th className="p-3">Odometer & BBM</th>
+                  <th className="p-3">Armada Operasional / Nopol</th>
+                  <th className="p-3">Karyawan Pengguna &amp; Pengemudi</th>
+                  <th className="p-3">Jam Pakai, Keperluan &amp; Rute</th>
+                  <th className="p-3">Tanggal Penggunaan</th>
+                  <th className="p-3">Odometer &amp; BBM</th>
                   <th className="p-3">Status</th>
                   <th className="p-3 text-right">Aksi</th>
                 </tr>
@@ -1635,14 +2603,20 @@ export const GaAssetManagement: React.FC = () => {
               <tbody className="divide-y divide-slate-100">
                 {vehicleBookings.map((vb) => (
                   <tr key={vb.id} className="hover:bg-slate-50/60">
-                    <td className="p-3 font-semibold text-slate-900">
-                      {vb.vehicleName}
+                    <td className="p-3">
+                      <div className="font-semibold text-slate-900">{vb.vehicleName}</div>
+                      <span className="inline-block mt-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded bg-sky-50 text-sky-700 border border-sky-200">
+                        Penggunaan Operasional Sewaktu-waktu
+                      </span>
                     </td>
                     <td className="p-3">
                       <div className="font-medium text-slate-800">{employees.find((e) => e.id === vb.borrowerId)?.fullName || 'Aditya Pratama'}</div>
-                      <div className="text-[11px] text-slate-400">Driver: {vb.driverName || 'Lepas Kunci'}</div>
+                      <div className="text-[11px] text-slate-400">Pengemudi: {vb.driverName || vb.driverType || 'Lepas Kunci'}</div>
                     </td>
-                    <td className="p-3 text-slate-600 max-w-xs">{vb.purpose}</td>
+                    <td className="p-3 text-slate-600 max-w-xs">
+                      <div className="font-medium text-slate-800">{vb.purpose}</div>
+                      <div className="text-[11px] text-slate-400">Tujuan: {vb.destination}</div>
+                    </td>
                     <td className="p-3 text-slate-600 font-mono text-[11px]">
                       {vb.startDate} s/d {vb.endDate}
                     </td>
@@ -2000,79 +2974,494 @@ export const GaAssetManagement: React.FC = () => {
         </div>
       )}
 
-      {/* MODAL: MUTASI ASET */}
+      {/* MODAL: SERAH TERIMA BAST MULTI-ASET, PENUKARAN ASET ANTAR KARYAWAN VIA GA & FASILITAS KENDARAAN MELEKAT KE KARYAWAN */}
       {isMutasiModalOpen && (
         <div
           onClick={() => setIsMutasiModalOpen(false)}
-          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 cursor-pointer"
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 cursor-pointer overflow-y-auto"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="bg-white rounded-xl shadow-xl max-w-lg w-full border border-slate-200 overflow-hidden cursor-default"
+            className="bg-white rounded-xl shadow-xl max-w-2xl w-full border border-slate-200 overflow-hidden cursor-default my-8"
           >
-            <div className="px-5 py-3.5 bg-slate-900 text-white flex items-center justify-between">
-              <h3 className="text-xs font-semibold">Perpindahan / Mutasi & Serah Terima Aset</h3>
+            <div className="px-5 py-4 bg-slate-900 text-white flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold">
+                  Formulir Berita Acara Serah Terima &amp; Penukaran Aset melalui GA (BAST GA)
+                </h3>
+                <p className="text-[11px] text-slate-300">
+                  Mencakup Serah Terima Aset Baru (belum ada pemegang) maupun Penukaran Aset Antar Karyawan yang wajib diverifikasi dan disahkan oleh General Affairs (GA).
+                </p>
+              </div>
               <button onClick={() => setIsMutasiModalOpen(false)}>
                 <X className="w-4 h-4 text-slate-400 hover:text-white" />
               </button>
             </div>
 
-            <form onSubmit={handleExecuteMutasi} className="p-5 space-y-3.5 text-xs">
+            <form onSubmit={handleExecuteMutasi} className="p-5 space-y-4 text-xs max-h-[80vh] overflow-y-auto">
+              {/* Pilihan Kategori Serah Terima / Penukaran (BAST) */}
               <div>
-                <label className="font-semibold text-slate-700 block mb-1">Pilih Aset Yang Dimutasi</label>
-                <select
-                  value={mutasiAssetId}
-                  onChange={(e) => setMutasiAssetId(e.target.value)}
-                  className="w-full p-2 border border-slate-300 rounded font-semibold"
-                >
-                  {assets.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      [{a.assetCode}] {a.name} - ({a.room})
-                    </option>
+                <label className="font-bold text-slate-800 block mb-1.5">
+                  1. Pilih Kategori Serah Terima / Penukaran Aset (Melalui GA) *
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {(
+                    [
+                      {
+                        id: 'Aset Karyawan (Personal)',
+                        title: '1. Aset untuk Karyawan (Laptop, Mouse, dll)',
+                        desc: 'Serah terima GA dengan Karyawan Penerima (1 BAST bisa >1 aset belum ada pemegang)',
+                      },
+                      {
+                        id: 'Aset Menetap di Ruangan',
+                        title: '2. Aset Menetap di Ruangan',
+                        desc: 'Tanggung jawab Pimpinan di ruangan tersebut bersama GA',
+                      },
+                      {
+                        id: 'Fasilitas Kendaraan Karyawan (Melekat ke 1 Karyawan)',
+                        title: '3. Serah Terima Kendaraan (Fasilitas 1 Karyawan)',
+                        desc: 'Kendaraan fasilitas perusahaan yang diberikan & melekat ke 1 karyawan',
+                      },
+                      {
+                        id: 'Penukaran Aset Antar Karyawan (Melalui GA)',
+                        title: '4. Penukaran Aset Antar Karyawan (Melalui GA)',
+                        desc: 'Antar karyawan saling bertukar/mengalihkan aset yang sedang dipegang, wajib melalui verifikasi GA',
+                      },
+                    ] as const
+                  ).map((opt) => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => {
+                        setMutasiCategory(opt.id);
+                        if (opt.id === 'Penukaran Aset Antar Karyawan (Melalui GA)') {
+                          const heldA = assets.filter((a) => a.assignedToEmployeeId === swapEmpAId);
+                          const heldB = assets.filter((a) => a.assignedToEmployeeId === swapEmpBId);
+                          setSelectedSwapAssetAIds(heldA[0] ? [heldA[0].id] : []);
+                          setSelectedSwapAssetBIds(heldB[0] ? [heldB[0].id] : []);
+                        } else if (opt.id === 'Fasilitas Kendaraan Karyawan (Melekat ke 1 Karyawan)') {
+                          const freeVeh = unassignedAssets.filter((a) => a.category === 'Kendaraan Operasional');
+                          setSelectedMutasiAssetIds(freeVeh[0] ? [freeVeh[0].id] : []);
+                        } else {
+                          const freeNonVeh = unassignedAssets.filter((a) => a.category !== 'Kendaraan Operasional');
+                          setSelectedMutasiAssetIds(freeNonVeh[0] ? [freeNonVeh[0].id] : []);
+                        }
+                      }}
+                      className={`p-2.5 rounded-xl border text-left transition-all ${
+                        mutasiCategory === opt.id
+                          ? opt.id === 'Penukaran Aset Antar Karyawan (Melalui GA)'
+                            ? 'bg-purple-50 border-purple-600 ring-2 ring-purple-500/20'
+                            : 'bg-indigo-50 border-indigo-600 ring-2 ring-indigo-500/20'
+                          : 'bg-white border-slate-200 hover:border-slate-300'
+                      }`}
+                    >
+                      <div className="font-bold text-slate-900">{opt.title}</div>
+                      <div className="text-[10px] text-slate-500 mt-0.5">{opt.desc}</div>
+                    </button>
                   ))}
-                </select>
+                </div>
               </div>
 
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">Penerima Baru / Pemegang Tanggung Jawab</label>
-                <EmployeeSelect
-                  employees={employees}
-                  selectedEmployeeId={newTargetEmpId}
-                  onSelect={(id) => setNewTargetEmpId(id)}
-                />
-              </div>
+              {mutasiCategory === 'Penukaran Aset Antar Karyawan (Melalui GA)' ? (
+                /* MODE PENUKARAN ASET ANTAR KARYAWAN (WAJIB MELALUI VERIFIKASI GA) */
+                <div className="space-y-4">
+                  <div className="p-3 bg-purple-50 border border-purple-200 rounded-xl text-[11px] text-purple-900 flex items-start gap-2.5">
+                    <ArrowRightLeft className="w-4 h-4 text-purple-700 shrink-0 mt-0.5" />
+                    <div>
+                      <strong>Aturan Penukaran Aset Antar Karyawan (Melalui GA):</strong> Penukaran aset kerja antar karyawan tidak boleh dilakukan secara sepihak tanpa pencatatan GA. Pilih <strong>Karyawan Pihak I</strong> &amp; aset yang diserahkan, <strong>Karyawan Pihak II</strong> &amp; aset penukarnya, serta <strong>Petugas GA Verifikator</strong> yang mengesahkan pertukaran.
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    {/* KARYAWAN PIHAK I & ASET YANG DISERAHKAN KE PIHAK II */}
+                    <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5">
+                      <div>
+                        <label className="font-bold text-purple-900 block mb-1">
+                          Karyawan Pihak I (Penyerah / Penukar 1) *
+                        </label>
+                        <EmployeeSelect
+                          employees={employees}
+                          selectedEmployeeId={swapEmpAId}
+                          onSelect={(id) => {
+                            setSwapEmpAId(id);
+                            const held = assets.filter((a) => a.assignedToEmployeeId === id);
+                            setSelectedSwapAssetAIds(held[0] ? [held[0].id] : []);
+                          }}
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-bold uppercase text-slate-600">
+                            Aset Dipegang Pihak I (Diserahkan ke Pihak II)
+                          </span>
+                          <span className="text-[10px] font-mono font-bold text-purple-700">
+                            {
+                              selectedSwapAssetAIds.filter((id) =>
+                                assets.some((a) => a.id === id && a.assignedToEmployeeId === swapEmpAId)
+                              ).length
+                            }{' '}
+                            dipilih
+                          </span>
+                        </div>
+                        {assets.filter((a) => a.assignedToEmployeeId === swapEmpAId).length === 0 ? (
+                          <div className="p-2.5 bg-white border border-slate-200 rounded-lg text-[11px] text-slate-500 text-center">
+                            Karyawan ini sedang tidak memegang aset terdaftar.
+                          </div>
+                        ) : (
+                          <div className="space-y-1.5 max-h-36 overflow-y-auto">
+                            {assets
+                              .filter((a) => a.assignedToEmployeeId === swapEmpAId)
+                              .map((a) => {
+                                const isChecked = selectedSwapAssetAIds.includes(a.id);
+                                return (
+                                  <label
+                                    key={a.id}
+                                    className={`flex items-center justify-between p-2 rounded-lg border cursor-pointer ${
+                                      isChecked
+                                        ? 'bg-purple-50 border-purple-400 text-purple-950 font-semibold'
+                                        : 'bg-white border-slate-200 text-slate-700'
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <input
+                                        type="checkbox"
+                                        checked={isChecked}
+                                        onChange={() => {
+                                          const next = isChecked
+                                            ? selectedSwapAssetAIds.filter((id) => id !== a.id)
+                                            : [...selectedSwapAssetAIds, a.id];
+                                          setSelectedSwapAssetAIds(next);
+                                        }}
+                                        className="rounded text-purple-600 w-3.5 h-3.5"
+                                      />
+                                      <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 bg-white border border-slate-200 rounded">
+                                        {a.assetCode}
+                                      </span>
+                                      <span className="truncate">{a.name}</span>
+                                    </div>
+                                  </label>
+                                );
+                              })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* KARYAWAN PIHAK II & ASET YANG DISERAHKAN KE PIHAK I */}
+                    <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5">
+                      <div>
+                        <label className="font-bold text-purple-900 block mb-1">
+                          Karyawan Pihak II (Lawan Tukar / Penerima) *
+                        </label>
+                        <EmployeeSelect
+                          employees={employees}
+                          selectedEmployeeId={swapEmpBId}
+                          onSelect={(id) => {
+                            setSwapEmpBId(id);
+                            const held = assets.filter((a) => a.assignedToEmployeeId === id);
+                            setSelectedSwapAssetBIds(held[0] ? [held[0].id] : []);
+                          }}
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-bold uppercase text-slate-600">
+                            Aset Dipegang Pihak II (Diserahkan ke Pihak I)
+                          </span>
+                          <span className="text-[10px] font-mono font-bold text-purple-700">
+                            {
+                              selectedSwapAssetBIds.filter((id) =>
+                                assets.some((a) => a.id === id && a.assignedToEmployeeId === swapEmpBId)
+                              ).length
+                            }{' '}
+                            dipilih
+                          </span>
+                        </div>
+                        {assets.filter((a) => a.assignedToEmployeeId === swapEmpBId).length === 0 ? (
+                          <div className="p-2.5 bg-white border border-slate-200 rounded-lg text-[11px] text-slate-500 text-center">
+                            Karyawan ini sedang tidak memegang aset terdaftar.
+                          </div>
+                        ) : (
+                          <div className="space-y-1.5 max-h-36 overflow-y-auto">
+                            {assets
+                              .filter((a) => a.assignedToEmployeeId === swapEmpBId)
+                              .map((a) => {
+                                const isChecked = selectedSwapAssetBIds.includes(a.id);
+                                return (
+                                  <label
+                                    key={a.id}
+                                    className={`flex items-center justify-between p-2 rounded-lg border cursor-pointer ${
+                                      isChecked
+                                        ? 'bg-purple-50 border-purple-400 text-purple-950 font-semibold'
+                                        : 'bg-white border-slate-200 text-slate-700'
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <input
+                                        type="checkbox"
+                                        checked={isChecked}
+                                        onChange={() => {
+                                          const next = isChecked
+                                            ? selectedSwapAssetBIds.filter((id) => id !== a.id)
+                                            : [...selectedSwapAssetBIds, a.id];
+                                          setSelectedSwapAssetBIds(next);
+                                        }}
+                                        className="rounded text-purple-600 w-3.5 h-3.5"
+                                      />
+                                      <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 bg-white border border-slate-200 rounded">
+                                        {a.assetCode}
+                                      </span>
+                                      <span className="truncate">{a.name}</span>
+                                    </div>
+                                  </label>
+                                );
+                              })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* PETUGAS GA VERIFIKATOR & AKSESORIS PENDAMPING */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="font-semibold text-slate-700 block mb-1">
+                        Petugas General Affairs (GA) Verifikator &amp; Pengesah Penukaran *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={gaHandoverOfficerName}
+                        onChange={(e) => setGaHandoverOfficerName(e.target.value)}
+                        className="w-full p-2 border border-slate-300 rounded-lg font-medium"
+                      />
+                    </div>
+                    <div>
+                      <label className="font-semibold text-slate-700 block mb-1">
+                        Kelengkapan / Aksesoris yang Ikut Ditukar
+                      </label>
+                      <input
+                        type="text"
+                        value={extraBatchItemsText}
+                        onChange={(e) => setExtraBatchItemsText(e.target.value)}
+                        placeholder="Contoh: Charger masing-masing unit, Tas Laptop..."
+                        className="w-full p-2 border border-slate-300 rounded-lg"
+                      />
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                /* MODE SERAH TERIMA ASET BARU (HANYA ASET YANG BELUM DIPEGANG SIAPAPUN) */
+                <>
+                  {/* Pilihan Multi-Aset (Hanya Aset yang Belum Dipegang oleh Siapapun / Belum Ada Penanggung Jawabnya) */}
+                  <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <div>
+                        <label className="font-bold text-slate-800 block">
+                          2. Pilih Aset yang Diserahterimakan (Hanya Aset yang Belum Dipegang / Belum Ada Penanggung Jawab) *
+                        </label>
+                        <span className="text-[10px] text-slate-500">
+                          Menampilkan <strong>{unassignedAssets.length} aset tersedia</strong> di inventaris GA yang belum memiliki penanggung jawab/pengguna.
+                        </span>
+                      </div>
+                      <span className="px-2 py-0.5 bg-indigo-600 text-white rounded font-mono text-[10px] font-bold">
+                        {selectedMutasiAssetIds.filter((id) => unassignedAssets.some((u) => u.id === id)).length} Aset Dipilih
+                      </span>
+                    </div>
+
+                    {unassignedAssets.length === 0 ? (
+                      <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg text-center text-amber-800 text-xs">
+                        Saat ini seluruh aset terdaftar sudah memiliki penanggung jawab/pemegang. Silakan registrasikan aset baru terlebih dahulu.
+                      </div>
+                    ) : (
+                      <div className="max-h-44 overflow-y-auto space-y-1.5 pr-1">
+                        {unassignedAssets.map((a) => {
+                          const isChecked = selectedMutasiAssetIds.includes(a.id);
+                          return (
+                            <label
+                              key={a.id}
+                              className={`flex items-center justify-between p-2 rounded-lg border cursor-pointer transition-colors ${
+                                isChecked
+                                  ? 'bg-indigo-50 border-indigo-400 text-indigo-950 font-semibold'
+                                  : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <input
+                                  type="checkbox"
+                                  checked={isChecked}
+                                  onChange={() => {
+                                    const next = isChecked
+                                      ? selectedMutasiAssetIds.filter((id) => id !== a.id)
+                                      : [...selectedMutasiAssetIds, a.id];
+                                    setSelectedMutasiAssetIds(next);
+                                    if (next[0]) setMutasiAssetId(next[0]);
+                                  }}
+                                  className="rounded text-indigo-600 w-4 h-4"
+                                />
+                                <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 bg-white border border-slate-200 rounded">
+                                  {a.assetCode}
+                                </span>
+                                <span className="truncate">{a.name}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                  Belum Ada Pemegang
+                                </span>
+                                <span className="text-[10px] text-slate-500">{a.category}</span>
+                              </div>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {(mutasiCategory === 'Aset Karyawan (Personal)' ||
+                      mutasiCategory === 'Aset Menetap di Ruangan') && (
+                      <div>
+                        <label className="font-semibold text-slate-700 block mb-1">
+                          Item Pendamping / Aksesoris Tambahan dalam Paket Serah Terima Ini
+                        </label>
+                        <input
+                          type="text"
+                          value={extraBatchItemsText}
+                          onChange={(e) => setExtraBatchItemsText(e.target.value)}
+                          placeholder="Contoh: Mouse Wireless, Charger, Tas Laptop, Dongle HDMI, Remote..."
+                          className="w-full p-2 bg-white border border-slate-300 rounded-lg"
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Pihak Serah Terima: Petugas GA & Penerima / Pimpinan Ruangan */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="font-semibold text-slate-700 block mb-1">
+                        Pihak Penyerah (Petugas General Affairs) *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={gaHandoverOfficerName}
+                        onChange={(e) => setGaHandoverOfficerName(e.target.value)}
+                        className="w-full p-2 border border-slate-300 rounded-lg font-medium"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="font-semibold text-slate-700 block mb-1">
+                        {mutasiCategory === 'Aset Menetap di Ruangan'
+                          ? 'Pimpinan di Ruangan Tersebut (Penanggung Jawab) *'
+                          : mutasiCategory === 'Fasilitas Kendaraan Karyawan (Melekat ke 1 Karyawan)'
+                          ? 'Karyawan Penerima Fasilitas Kendaraan Perusahaan (Melekat) *'
+                          : 'Karyawan Penerima Aset *'}
+                      </label>
+                      <EmployeeSelect
+                        employees={employees}
+                        selectedEmployeeId={newTargetEmpId}
+                        onSelect={(id) => setNewTargetEmpId(id)}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Detail Khusus Serah Terima Fasilitas Kendaraan yang Melekat ke 1 Karyawan */}
+                  {mutasiCategory === 'Fasilitas Kendaraan Karyawan (Melekat ke 1 Karyawan)' && (
+                    <div className="p-3.5 bg-emerald-50/60 border border-emerald-200 rounded-xl space-y-3">
+                      <div>
+                        <span className="font-bold text-emerald-950 block">
+                          Detail Fasilitas Kendaraan Perusahaan (Melekat Khusus ke 1 Karyawan)
+                        </span>
+                        <span className="text-[10px] text-emerald-800">
+                          Kendaraan ini diserahkan sebagai fasilitas perusahaan untuk karyawan penerima tersebut (bukan armada operasional sewaktu-waktu).
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div>
+                          <label className="font-semibold text-slate-700 block mb-1">Nomor Polisi (Nopol) *</label>
+                          <input
+                            type="text"
+                            required
+                            value={vehiclePlateInput}
+                            onChange={(e) => setVehiclePlateInput(e.target.value.toUpperCase())}
+                            className="w-full p-2 bg-white border border-slate-300 rounded-lg font-mono font-bold"
+                          />
+                        </div>
+                        <div>
+                          <label className="font-semibold text-slate-700 block mb-1">Odometer Serah Terima (KM) *</label>
+                          <input
+                            type="number"
+                            required
+                            value={vehicleOdometerInput}
+                            onChange={(e) => setVehicleOdometerInput(Number(e.target.value))}
+                            className="w-full p-2 bg-white border border-slate-300 rounded-lg font-mono font-bold"
+                          />
+                        </div>
+                        <div>
+                          <label className="font-semibold text-slate-700 block mb-1">No. SK / Dasar Fasilitas *</label>
+                          <input
+                            type="text"
+                            required
+                            value={facilitySkInput}
+                            onChange={(e) => setFacilitySkInput(e.target.value)}
+                            className="w-full p-2 bg-white border border-slate-300 rounded-lg font-medium"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="font-semibold text-slate-700 block mb-1">
+                          Kelengkapan Dokumen &amp; Perlengkapan Kendaraan (STNK, Kunci Utama/Cadangan, Polis Asuransi, Buku Servis)
+                        </label>
+                        <input
+                          type="text"
+                          value={vehicleDocsInput}
+                          onChange={(e) => setVehicleDocsInput(e.target.value)}
+                          className="w-full p-2 bg-white border border-slate-300 rounded-lg"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Gedung Baru</label>
+                  <label className="font-semibold text-slate-700 block mb-1">Gedung Penempatan *</label>
                   <input
                     type="text"
                     value={newTargetBuilding}
                     onChange={(e) => setNewTargetBuilding(e.target.value)}
-                    className="w-full p-2 border border-slate-300 rounded"
+                    className="w-full p-2 border border-slate-300 rounded-lg"
                     required
                   />
                 </div>
                 <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Ruangan Baru</label>
+                  <label className="font-semibold text-slate-700 block mb-1">
+                    {mutasiCategory === 'Aset Menetap di Ruangan'
+                      ? 'Nama Ruangan (Tempat Aset Menetap) *'
+                      : mutasiCategory === 'Fasilitas Kendaraan Karyawan (Melekat ke 1 Karyawan)'
+                      ? 'Alokasi Parkir / Homebase Fasilitas Kendaraan *'
+                      : 'Ruangan / Area Kerja Karyawan *'}
+                  </label>
                   <input
                     type="text"
                     value={newTargetRoom}
                     onChange={(e) => setNewTargetRoom(e.target.value)}
-                    className="w-full p-2 border border-slate-300 rounded"
+                    className="w-full p-2 border border-slate-300 rounded-lg"
                     required
                   />
                 </div>
               </div>
 
               <div>
-                <label className="font-semibold text-slate-700 block mb-1">Alasan & Catatan BAST</label>
+                <label className="font-semibold text-slate-700 block mb-1">Alasan &amp; Catatan Berita Acara (BAST)</label>
                 <textarea
                   rows={2}
                   value={mutasiNotes}
                   onChange={(e) => setMutasiNotes(e.target.value)}
-                  placeholder="Kebutuhan rotasi jabatan atau penambahan personil..."
-                  className="w-full p-2 border border-slate-300 rounded"
+                  placeholder="Catatan kondisi fisik dan tanggung jawab pemeliharaan aset/fasilitas..."
+                  className="w-full p-2 border border-slate-300 rounded-lg"
                 />
               </div>
 
@@ -2080,15 +3469,31 @@ export const GaAssetManagement: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setIsMutasiModalOpen(false)}
-                  className="px-3 py-1.5 border border-slate-300 rounded text-slate-700"
+                  className="px-4 py-2 border border-slate-300 rounded-lg text-slate-700 font-semibold"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-semibold"
+                  disabled={
+                    mutasiCategory === 'Penukaran Aset Antar Karyawan (Melalui GA)'
+                      ? swapEmpAId === swapEmpBId ||
+                        selectedSwapAssetAIds.filter((id) =>
+                          assets.some((a) => a.id === id && a.assignedToEmployeeId === swapEmpAId)
+                        ).length +
+                          selectedSwapAssetBIds.filter((id) =>
+                            assets.some((a) => a.id === id && a.assignedToEmployeeId === swapEmpBId)
+                          ).length ===
+                          0
+                      : selectedMutasiAssetIds.filter((id) => unassignedAssets.some((u) => u.id === id)).length === 0
+                  }
+                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-lg font-semibold shadow-xs"
                 >
-                  Konfirmasi Serah Terima
+                  {mutasiCategory === 'Penukaran Aset Antar Karyawan (Melalui GA)'
+                    ? 'Sahkan Penukaran Aset via GA & Terbitkan BAST'
+                    : `Terbitkan BAST Serah Terima (${
+                        selectedMutasiAssetIds.filter((id) => unassignedAssets.some((u) => u.id === id)).length
+                      } Aset)`}
                 </button>
               </div>
             </form>
@@ -2358,7 +3763,7 @@ export const GaAssetManagement: React.FC = () => {
         </div>
       )}
 
-      {/* MODAL: BOOKING KENDARAAN */}
+      {/* MODAL: BOOKING PENGGUNAAN KENDARAAN OPERASIONAL (SEWAKTU-WAKTU — KONSEP SAMA DENGAN PENGGUNAAN RUANGAN) */}
       {isVehicleModalOpen && (
         <div
           onClick={() => setIsVehicleModalOpen(false)}
@@ -2366,77 +3771,158 @@ export const GaAssetManagement: React.FC = () => {
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="bg-white rounded-xl shadow-xl max-w-md w-full border border-slate-200 overflow-hidden cursor-default"
+            className="bg-white rounded-xl shadow-xl max-w-lg w-full border border-slate-200 overflow-hidden cursor-default"
           >
             <div className="px-5 py-3.5 bg-slate-900 text-white flex items-center justify-between">
-              <h3 className="text-xs font-semibold">Formulir Peminjaman Mobil Operasional</h3>
+              <div>
+                <h3 className="text-xs font-semibold">
+                  Formulir Penggunaan Kendaraan Operasional (Sewaktu-waktu)
+                </h3>
+                <p className="text-[10px] text-slate-300">
+                  Konsep sama dengan Penggunaan Ruangan Sewaktu-waktu (bukan kendaraan fasilitas yang melekat ke 1 karyawan).
+                </p>
+              </div>
               <button onClick={() => setIsVehicleModalOpen(false)}>
                 <X className="w-4 h-4 text-slate-400 hover:text-white" />
               </button>
             </div>
             <form onSubmit={handleCreateVehicleBooking} className="p-5 space-y-3.5 text-xs">
               <div>
-                <label className="font-semibold text-slate-700 block mb-1">Armada Mobil</label>
+                <label className="font-semibold text-slate-700 block mb-1">
+                  Pilihan Armada Kendaraan Operasional (Pool Kantor) *
+                </label>
                 <select
                   value={vehicleForm.vehicleName}
                   onChange={(e) => setVehicleForm({ ...vehicleForm, vehicleName: e.target.value })}
                   className="w-full p-2 border border-slate-300 rounded font-medium"
                 >
-                  <option value="Toyota Innova Zenix (B 1234 NTM)">Toyota Innova Zenix (B 1234 NTM)</option>
-                  <option value="Toyota Avanza Veloz (B 5678 NTM)">Toyota Avanza Veloz (B 5678 NTM)</option>
-                  <option value="Toyota HiAce Commuter (B 9012 NTM)">Toyota HiAce Commuter 15-Seater (B 9012 NTM)</option>
-                  <option value="Daihatsu GranMax Blindvan (B 3456 NTM)">Daihatsu GranMax Blindvan Logistik (B 3456 NTM)</option>
+                  <option value="Toyota Avanza Veloz (B 5678 NTM) — Armada Pool Operasional">
+                    Toyota Avanza Veloz (B 5678 NTM) — Armada Pool Operasional (7-Seater)
+                  </option>
+                  <option value="Toyota Innova Zenix (B 8821 KJA) — Armada Pool Operasional">
+                    Toyota Innova Zenix (B 8821 KJA) — Armada Pool Operasional (7-Seater)
+                  </option>
+                  <option value="Toyota HiAce Commuter (B 9012 NTM) — Armada Pool Operasional">
+                    Toyota HiAce Commuter 15-Seater (B 9012 NTM) — Armada Pool Operasional
+                  </option>
+                  <option value="Daihatsu GranMax Blindvan (B 3456 NTM) — Armada Logistik">
+                    Daihatsu GranMax Blindvan Logistik (B 3456 NTM) — Armada Operasional
+                  </option>
                 </select>
               </div>
 
               <div>
-                <label className="font-semibold text-slate-700 block mb-1">Tujuan / Keperluan Dinas *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Contoh: Kunjungan Audit Proyek Site Karawang"
-                  value={vehicleForm.purpose}
-                  onChange={(e) => setVehicleForm({ ...vehicleForm, purpose: e.target.value })}
-                  className="w-full p-2 border border-slate-300 rounded"
+                <label className="font-semibold text-slate-700 block mb-1">
+                  Karyawan Pengguna / Pemohon Kendaraan Operasional *
+                </label>
+                <EmployeeSelect
+                  employees={employees}
+                  selectedEmployeeId={vehicleForm.borrowerId}
+                  onSelect={(id) => setVehicleForm({ ...vehicleForm, borrowerId: id })}
                 />
               </div>
 
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">Penugasan Pengemudi</label>
-                <input
-                  type="text"
-                  value={vehicleForm.driverName}
-                  onChange={(e) => setVehicleForm({ ...vehicleForm, driverName: e.target.value })}
-                  className="w-full p-2 border border-slate-300 rounded"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Keperluan Dinas / Agenda *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Contoh: Kunjungan Audit Proyek Site"
+                    value={vehicleForm.purpose}
+                    onChange={(e) => setVehicleForm({ ...vehicleForm, purpose: e.target.value })}
+                    className="w-full p-2 border border-slate-300 rounded"
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Rute / Lokasi Tujuan *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Contoh: Sudirman - Kawasan Industri Karawang"
+                    value={vehicleForm.destination}
+                    onChange={(e) => setVehicleForm({ ...vehicleForm, destination: e.target.value })}
+                    className="w-full p-2 border border-slate-300 rounded"
+                  />
+                </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              {/* Jadwal Tanggal & Jam Pakai (Sama Konsepnya dengan Reservasi Penggunaan Ruangan Sewaktu-waktu) */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 <ValidatedDateInput
                   id="vehicleStartDate"
-                  label="Tanggal Mulai *"
+                  label="Tgl Mulai *"
                   value={vehicleForm.startDate}
-                  onChange={(val) => setVehicleForm({ ...vehicleForm, startDate: val })}
+                  onChange={(val) => setVehicleForm({ ...vehicleForm, startDate: val, endDate: val })}
                   required
                 />
                 <ValidatedDateInput
                   id="vehicleEndDate"
-                  label="Tanggal Selesai *"
+                  label="Tgl Selesai *"
                   value={vehicleForm.endDate}
                   minDate={vehicleForm.startDate}
                   onChange={(val) => setVehicleForm({ ...vehicleForm, endDate: val })}
                   required
                 />
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Jam Mulai *</label>
+                  <input
+                    type="time"
+                    required
+                    value={vehicleForm.startTime}
+                    onChange={(e) => setVehicleForm({ ...vehicleForm, startTime: e.target.value })}
+                    className="w-full p-2 border border-slate-300 rounded font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Jam Selesai *</label>
+                  <input
+                    type="time"
+                    required
+                    value={vehicleForm.endTime}
+                    onChange={(e) => setVehicleForm({ ...vehicleForm, endTime: e.target.value })}
+                    className="w-full p-2 border border-slate-300 rounded font-mono"
+                  />
+                </div>
               </div>
 
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">Odometer KM Awal</label>
-                <input
-                  type="number"
-                  value={vehicleForm.startMileageKm}
-                  onChange={(e) => setVehicleForm({ ...vehicleForm, startMileageKm: Number(e.target.value) })}
-                  className="w-full p-2 border border-slate-300 rounded font-mono"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Mode Pengemudi</label>
+                  <select
+                    value={vehicleForm.driverType}
+                    onChange={(e) =>
+                      setVehicleForm({
+                        ...vehicleForm,
+                        driverType: e.target.value as 'Sopir Kantor' | 'Bawa Sendiri',
+                      })
+                    }
+                    className="w-full p-2 border border-slate-300 rounded font-medium"
+                  >
+                    <option value="Sopir Kantor">Dengan Sopir Kantor</option>
+                    <option value="Bawa Sendiri">Bawa Sendiri (Lepas Kunci)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Nama Sopir / Pengemudi</label>
+                  <input
+                    type="text"
+                    value={vehicleForm.driverName}
+                    onChange={(e) => setVehicleForm({ ...vehicleForm, driverName: e.target.value })}
+                    disabled={vehicleForm.driverType === 'Bawa Sendiri'}
+                    placeholder="Nama driver..."
+                    className="w-full p-2 border border-slate-300 rounded disabled:bg-slate-100"
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Odometer KM Awal</label>
+                  <input
+                    type="number"
+                    value={vehicleForm.startMileageKm}
+                    onChange={(e) => setVehicleForm({ ...vehicleForm, startMileageKm: Number(e.target.value) })}
+                    className="w-full p-2 border border-slate-300 rounded font-mono"
+                  />
+                </div>
               </div>
 
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-200">
@@ -2451,7 +3937,7 @@ export const GaAssetManagement: React.FC = () => {
                   type="submit"
                   className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-semibold"
                 >
-                  Ajukan Peminjaman
+                  Konfirmasi Booking Kendaraan Operasional
                 </button>
               </div>
             </form>

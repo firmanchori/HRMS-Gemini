@@ -53,7 +53,7 @@ export const CompanyCalendarManagement: React.FC = () => {
   const [eventForm, setEventForm] = useState({
     title: '',
     date: new Date().toISOString().split('T')[0],
-    type: 'Cuti Bersama Perusahaan' as 'Libur Nasional' | 'Cuti Bersama Perusahaan',
+    type: 'Cuti Bersama' as 'Cuti Bersama' | 'Libur Nasional' | 'Event' | 'Libur Perusahaan',
     deductsLeaveBucket: true,
     description: '',
   });
@@ -61,7 +61,13 @@ export const CompanyCalendarManagement: React.FC = () => {
   // Day Modal Leave Form State
   const [dayLeaveForm, setDayLeaveForm] = useState({
     employeeId: employees[0]?.id || '',
-    leaveType: 'Cuti Tahunan' as 'Cuti Tahunan' | 'Cuti Sakit' | 'Cuti Menikah' | 'Cuti Melahirkan' | 'Izin Urusan Pribadi',
+    leaveType: 'Cuti Tahunan' as
+      | 'Cuti Tahunan'
+      | 'Sakit Tanpa Surat Dokter'
+      | 'Sakit dengan Surat Dokter'
+      | 'Cuti Menikah'
+      | 'Cuti Melahirkan'
+      | 'Izin Urusan Pribadi',
     totalDays: 1,
     reason: '',
   });
@@ -163,7 +169,7 @@ export const CompanyCalendarManagement: React.FC = () => {
     setEventForm({
       title: '',
       date: new Date().toISOString().split('T')[0],
-      type: 'Cuti Bersama Perusahaan',
+      type: 'Cuti Bersama',
       deductsLeaveBucket: true,
       description: '',
     });
@@ -1053,7 +1059,7 @@ export const CompanyCalendarManagement: React.FC = () => {
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Jenis Hari Libur
+                    Kategori
                   </label>
                   <select
                     value={eventForm.type}
@@ -1062,13 +1068,15 @@ export const CompanyCalendarManagement: React.FC = () => {
                       setEventForm({
                         ...eventForm,
                         type: t,
-                        deductsLeaveBucket: t === 'Cuti Bersama Perusahaan',
+                        deductsLeaveBucket: t === 'Cuti Bersama',
                       });
                     }}
                     className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:outline-blue-600"
                   >
-                    <option value="Cuti Bersama Perusahaan">Cuti Bersama Perusahaan</option>
-                    <option value="Libur Nasional">Libur Nasional Resmi</option>
+                    <option value="Cuti Bersama">Cuti Bersama</option>
+                    <option value="Libur Nasional">Libur Nasional</option>
+                    <option value="Event">Event</option>
+                    <option value="Libur Perusahaan">Libur Perusahaan</option>
                   </select>
                 </div>
               </div>
@@ -1281,7 +1289,7 @@ export const CompanyCalendarManagement: React.FC = () => {
 
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      Jenis Hari Libur
+                      Kategori
                     </label>
                     <select
                       value={eventForm.type}
@@ -1290,13 +1298,15 @@ export const CompanyCalendarManagement: React.FC = () => {
                         setEventForm({
                           ...eventForm,
                           type: t,
-                          deductsLeaveBucket: t === 'Cuti Bersama Perusahaan',
+                          deductsLeaveBucket: t === 'Cuti Bersama',
                         });
                       }}
                       className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:outline-blue-600"
                     >
-                      <option value="Cuti Bersama Perusahaan">Cuti Bersama Perusahaan</option>
-                      <option value="Libur Nasional">Libur Nasional Resmi</option>
+                      <option value="Cuti Bersama">Cuti Bersama</option>
+                      <option value="Libur Nasional">Libur Nasional</option>
+                      <option value="Event">Event</option>
+                      <option value="Libur Perusahaan">Libur Perusahaan</option>
                     </select>
                   </div>
                 </div>
@@ -1368,7 +1378,7 @@ export const CompanyCalendarManagement: React.FC = () => {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      Jenis Cuti *
+                      Jenis Cuti / Izin Sakit *
                     </label>
                     <select
                       value={dayLeaveForm.leaveType}
@@ -1376,7 +1386,8 @@ export const CompanyCalendarManagement: React.FC = () => {
                       className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:outline-emerald-600"
                     >
                       <option value="Cuti Tahunan">Cuti Tahunan (Bucket 2)</option>
-                      <option value="Cuti Sakit">Cuti Sakit (Lampirkan Surat Dokter)</option>
+                      <option value="Sakit Tanpa Surat Dokter">Sakit Tanpa Surat Dokter</option>
+                      <option value="Sakit dengan Surat Dokter">Sakit dengan Surat Dokter</option>
                       <option value="Cuti Menikah">Cuti Menikah</option>
                       <option value="Cuti Melahirkan">Cuti Melahirkan</option>
                       <option value="Izin Urusan Pribadi">Izin Urusan Pribadi</option>
