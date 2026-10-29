@@ -289,7 +289,7 @@ export interface PersonaliaLog {
   letterNumber: string;
   reason: string;
   approvedBy: string;
-  status?: 'Disetujui' | 'Menunggu Approval' | 'Draf' | 'Menunggu';
+  status?: 'Disetujui' | 'Menunggu Approval' | 'Draf' | 'Menunggu' | 'Ditolak';
   notes?: string;
   newBranchLocation?: string;
   contractDurationMonths?: number;
@@ -393,7 +393,7 @@ export interface BusinessTripRequest {
   estimatedCost: number;
   perDiemDaily: number;
   accommodationCost: number;
-  status: 'Menunggu Approval' | 'Disetujui Atasan' | 'Disetujui Finance' | 'Selesai';
+  status: 'Menunggu Approval' | 'Disetujui Atasan' | 'Disetujui Finance' | 'Selesai' | 'Ditolak';
   approvedBy?: string;
 }
 
@@ -425,7 +425,7 @@ export interface ApprovalWorkflowItem {
     | 'Perbaikan Presensi'
     | 'Tukar Shift'
     | 'Lembur'
-    | 'Pinjaman'
+    | 'Pinjaman' | 'Reimbursement'
     | 'Promosi/Personalia'
     | 'Perjalanan Dinas'
     | 'Procurement PR'
@@ -525,7 +525,7 @@ export interface EmployeeLoan {
   remainingAmount: number;
   startDate: string;
   reason: string;
-  status: 'Aktif' | 'Lunas' | 'Menunggu Approval';
+  status: 'Aktif' | 'Lunas' | 'Menunggu Approval' | 'Ditolak';
   adminFee?: number;
   interestMethod?: string;
   interestRatePercent?: number;
@@ -1580,16 +1580,39 @@ export interface OvertimeRequest {
 }
 
 // 25. Reimbursement Claim & Payroll Opt-In
+export type ReimbursementCategory =
+  | 'Kesehatan / Rawat Jalan'
+  | 'Kacamata / Optik'
+  | 'Perawatan Gigi'
+  | 'Transportasi Dinas'
+  | 'Makan Lembur / Klien'
+  | 'Komunikasi & Internet'
+  | 'Pelatihan & Sertifikasi'
+  | 'Lainnya'
+  | string;
+
+export const REIMBURSEMENT_CATEGORIES: ReimbursementCategory[] = [
+  'Kesehatan / Rawat Jalan',
+  'Kacamata / Optik',
+  'Perawatan Gigi',
+  'Transportasi Dinas',
+  'Makan Lembur / Klien',
+  'Komunikasi & Internet',
+  'Pelatihan & Sertifikasi',
+  'Lainnya',
+];
 export interface ReimbursementClaim {
   id: string;
   tenantId: string;
   entityId?: string;
   employeeId: string;
   claimNumber: string;
-  category: 'Kesehatan / Rawat Jalan' | 'Kacamata' | 'Transportasi Dinas' | 'Komunikasi & Internet' | 'Pelatihan' | 'Lainnya';
+  category: ReimbursementCategory;
+  approvedAmount?: number;
   amount: number;
   description: string;
   receiptDate: string;
+  claimDate?: string;
   receiptNumber?: string;
   proofUrl?: string;
   status: 'Menunggu Review' | 'Disetujui' | 'Ditolak';

@@ -27,6 +27,7 @@ import { ScrollableTabNav } from '../common/ScrollableTabNav';
 import { formatRupiah } from '../../utils/taxCalculator';
 import { CurrencyInput } from '../common/CurrencyInput';
 import { EmployeeSelect } from '../common/EmployeeSelect';
+import { REIMBURSEMENT_CATEGORIES, ReimbursementCategory } from '../../types/hrms';
 
 export const EssPortal: React.FC = () => {
   const {
@@ -41,6 +42,16 @@ export const EssPortal: React.FC = () => {
     clockOut,
     moduleSettings,
     officeLocations,
+    reimbursementClaims,
+    addReimbursementClaim,
+    overtimeRequests,
+    submitOvertimeRequest,
+    attendanceCorrections,
+    submitAttendanceCorrection,
+    businessTrips,
+    submitBusinessTrip,
+    payrollRecords,
+    documents,
   } = useHrms();
 
   // Find the logged-in employee profile (fallback to first employee)
@@ -110,13 +121,13 @@ export const EssPortal: React.FC = () => {
 
   const [attendanceCorrectionForm, setAttendanceCorrectionForm] = useState({
     date: new Date().toISOString().split('T')[0],
-    correctionType: 'Lupa Clock-in Masuk',
+    correctionType: 'Lupa Absen Masuk',
     actualTime: '08:30',
     reason: '',
   });
 
   const [reimburseForm, setReimburseForm] = useState({
-    category: 'Transportasi Operasional',
+    category: 'Transportasi Dinas' as ReimbursementCategory,
     amount: 150000,
     receiptNo: '',
     description: '',
@@ -190,6 +201,7 @@ export const EssPortal: React.FC = () => {
       reason: leaveForm.reason.trim(),
     });
 
+
     const newReq = {
       id: `req-${Date.now().toString().slice(-4)}`,
       category: leaveForm.leaveType,
@@ -219,6 +231,7 @@ export const EssPortal: React.FC = () => {
       return;
     }
 
+
     const newReq = {
       id: `req-${Date.now().toString().slice(-4)}`,
       category: 'Lembur',
@@ -229,6 +242,22 @@ export const EssPortal: React.FC = () => {
     };
 
     setMyRequests([newReq, ...myRequests]);
+    const [startH, startM] = overtimeForm.startTime.split(':').map(Number);
+    const [endH, endM] = overtimeForm.endTime.split(':').map(Number);
+    const computedHours = Math.max(
+      1,
+      Math.round(((endH * 60 + (endM || 0) - (startH * 60 + (startM || 0))) / 60) * 10) / 10
+    );
+    submitOvertimeRequest({
+      employeeId: currentEmp.id,
+      date: overtimeForm.date,
+      startTime: overtimeForm.startTime,
+      endTime: overtimeForm.endTime,
+      hours: computedHours || Number(overtimeForm.totalHours) || 3,
+      reason: overtimeForm.taskDescription.trim(),
+      type: 'Pengajuan Karyawan',
+      compensationType: 'Lembur Berbayar',
+    });
     setNoticeMessage('Pengajuan lembur berhasil dikirim ke atasan langsung.');
     setOvertimeForm({
       date: new Date().toISOString().split('T')[0],
@@ -248,6 +277,7 @@ export const EssPortal: React.FC = () => {
       return;
     }
 
+
     const newReq = {
       id: `req-${Date.now().toString().slice(-4)}`,
       category: 'Koreksi Presensi',
@@ -258,10 +288,25 @@ export const EssPortal: React.FC = () => {
     };
 
     setMyRequests([newReq, ...myRequests]);
+    const isOut =
+      attendanceCorrectionForm.correctionType.toLowerCase().includes('pulang') ||
+      attendanceCorrectionForm.correctionType.toLowerCase().includes('out');
+    submitAttendanceCorrection({
+      employeeId: currentEmp.id,
+      date: attendanceCorrectionForm.date,
+      type: (attendanceCorrectionForm.correctionType === 'Lupa Clock-in Masuk'
+        ? 'Lupa Absen Masuk'
+        : attendanceCorrectionForm.correctionType === 'Lupa Clock-out Pulang'
+        ? 'Lupa Absen Pulang'
+        : attendanceCorrectionForm.correctionType) as any,
+      proposedClockIn: isOut ? '08:00' : attendanceCorrectionForm.actualTime,
+      proposedClockOut: isOut ? attendanceCorrectionForm.actualTime : '17:00',
+      reason: attendanceCorrectionForm.reason.trim(),
+    });
     setNoticeMessage('Pengajuan koreksi presensi berhasil diajukan ke atasan.');
     setAttendanceCorrectionForm({
       date: new Date().toISOString().split('T')[0],
-      correctionType: 'Lupa Clock-in Masuk',
+      correctionType: 'Lupa Absen Masuk',
       actualTime: '08:30',
       reason: '',
     });
@@ -276,6 +321,7 @@ export const EssPortal: React.FC = () => {
       return;
     }
 
+
     const newReq = {
       id: `req-${Date.now().toString().slice(-4)}`,
       category: 'Klaim Reimbursement',
@@ -287,9 +333,20 @@ export const EssPortal: React.FC = () => {
     };
 
     setMyRequests([newReq, ...myRequests]);
+    const todayStr = new Date().toISOString().split('T')[0];
+    addReimbursementClaim({
+      employeeId: currentEmp.id,
+      category: reimburseForm.category as ReimbursementCategory,
+      claimDate: todayStr,
+      receiptDate: todayStr,
+      receiptNumber: reimburseForm.receiptNo.trim() || `NOTA-${Date.now().toString().slice(-4)}`,
+      amount: Number(reimburseForm.amount),
+      description: reimburseForm.description.trim(),
+      processInPayroll: true,
+    });
     setNoticeMessage(`Klaim reimbursement ${formatRupiah(reimburseForm.amount)} berhasil dikirimkan.`);
     setReimburseForm({
-      category: 'Transportasi Operasional',
+      category: 'Transportasi Dinas' as ReimbursementCategory,
       amount: 150000,
       receiptNo: '',
       description: '',
@@ -312,6 +369,7 @@ export const EssPortal: React.FC = () => {
       });
     }
 
+
     const newReq = {
       id: `req-${Date.now().toString().slice(-4)}`,
       category: 'Pinjaman & Kasbon',
@@ -328,7 +386,109 @@ export const EssPortal: React.FC = () => {
   };
 
   const jointHolidaysCount = calendarEvents.filter((c) => c.deductsLeaveBucket).length;
-  const remainingLeave = Math.max(0, (currentEmp.annualLeaveBalance || 12) - jointHolidaysCount);
+  const baseLeaveBalance = (currentEmp as any).remainingLeaveDays ?? currentEmp.annualLeaveBalance ?? 12;
+  const remainingLeave = Math.max(0, baseLeaveBalance - jointHolidaysCount);
+  const currentMonthOvertimeHours = overtimeRequests
+    .filter((o) => o.employeeId === currentEmp.id && o.status === 'Disetujui')
+    .reduce((sum, o) => sum + (o.approvedHours ?? o.hours ?? 0), 0);
+
+  const allMyLiveRequests = [
+    ...leaveRequests
+      .filter((l) => l.employeeId === currentEmp.id)
+      .map((l) => ({
+        id: l.id,
+        category: l.leaveType,
+        title: `Permohonan ${l.leaveType}`,
+        date: l.startDate,
+        status: (l.status === 'Disetujui'
+          ? 'Disetujui'
+          : l.status === 'Ditolak'
+          ? 'Ditolak'
+          : 'Menunggu Persetujuan Atasan') as 'Menunggu Persetujuan Atasan' | 'Disetujui' | 'Ditolak',
+        detail: `${l.totalDays} Hari (${l.startDate} s/d ${l.endDate}) - ${l.reason}`,
+        amount: undefined as number | undefined,
+      })),
+    ...overtimeRequests
+      .filter((o) => o.employeeId === currentEmp.id)
+      .map((o) => ({
+        id: o.id,
+        category: 'Lembur',
+        title: `Pengajuan Lembur (${o.approvedHours ?? o.hours} Jam)`,
+        date: o.date,
+        status: (o.status === 'Disetujui'
+          ? 'Disetujui'
+          : o.status === 'Ditolak'
+          ? 'Ditolak'
+          : 'Menunggu Persetujuan Atasan') as 'Menunggu Persetujuan Atasan' | 'Disetujui' | 'Ditolak',
+        detail: `${o.date} (${o.startTime} - ${o.endTime}) - ${o.reason}`,
+        amount: undefined as number | undefined,
+      })),
+    ...attendanceCorrections
+      .filter((c) => c.employeeId === currentEmp.id)
+      .map((c) => ({
+        id: c.id,
+        category: 'Koreksi Presensi',
+        title: `Perbaikan Presensi: ${c.type}`,
+        date: c.date,
+        status: (c.status === 'Disetujui'
+          ? 'Disetujui'
+          : c.status === 'Ditolak'
+          ? 'Ditolak'
+          : 'Menunggu Persetujuan Atasan') as 'Menunggu Persetujuan Atasan' | 'Disetujui' | 'Ditolak',
+        detail: `Tanggal: ${c.date} (${c.proposedClockIn || '-'} - ${c.proposedClockOut || '-'}) - ${c.reason}`,
+        amount: undefined as number | undefined,
+      })),
+    ...reimbursementClaims
+      .filter((c) => c.employeeId === currentEmp.id)
+      .map((c) => ({
+        id: c.claimNumber,
+        category: 'Klaim Reimbursement',
+        title: `Klaim: ${c.category}`,
+        date: c.receiptDate || c.claimDate || '-',
+        status: (c.status === 'Disetujui' || c.status === 'Dibayar (Payroll)'
+          ? 'Disetujui'
+          : c.status === 'Ditolak'
+          ? 'Ditolak'
+          : 'Menunggu Persetujuan Atasan') as 'Menunggu Persetujuan Atasan' | 'Disetujui' | 'Ditolak',
+        detail: `No Bukti: ${c.receiptNumber || '-'} - ${c.description}${c.processInPayroll ? ' (Disertakan ke Payroll)' : ''}`,
+        amount: c.amount as number | undefined,
+      })),
+    ...businessTrips
+      .filter((t) => t.employeeId === currentEmp.id)
+      .map((t) => ({
+        id: t.tripNumber || t.id,
+        category: 'Perjalanan Dinas',
+        title: `SPPD ke ${t.destinationCity}`,
+        date: t.startDate,
+        status: (t.status === 'Disetujui Atasan' || t.status === 'Disetujui Finance' || t.status === 'Selesai'
+          ? 'Disetujui'
+          : t.status === 'Ditolak'
+          ? 'Ditolak'
+          : 'Menunggu Persetujuan Atasan') as 'Menunggu Persetujuan Atasan' | 'Disetujui' | 'Ditolak',
+        detail: `${t.totalDays} Hari (${t.startDate} s/d ${t.endDate}) - ${t.purpose}`,
+        amount: t.estimatedCost as number | undefined,
+      })),
+    ...loans
+      .filter((ln) => ln.employeeId === currentEmp.id)
+      .map((ln) => ({
+        id: ln.id,
+        category: 'Pinjaman & Kasbon',
+        title: `Pengajuan ${ln.loanType}`,
+        date: ln.startDate,
+        status: (ln.status === 'Aktif' || ln.status === 'Lunas'
+          ? 'Disetujui'
+          : ln.status === 'Ditolak'
+          ? 'Ditolak'
+          : 'Menunggu Persetujuan Atasan') as 'Menunggu Persetujuan Atasan' | 'Disetujui' | 'Ditolak',
+        detail: `Tenor ${ln.tenorMonths} Bulan - ${ln.reason}`,
+        amount: ln.totalAmount as number | undefined,
+      })),
+  ];
+
+  const latestPayroll = payrollRecords
+    .filter((p) => p.employeeId === currentEmp.id)
+    .sort((a, b) => (b.period || '').localeCompare(a.period || ''))[0];
+  const empDocuments = documents.filter((d) => d.targetEmployeeId === currentEmp.id);
 
   return (
     <div className="space-y-5">
@@ -390,14 +550,14 @@ export const EssPortal: React.FC = () => {
 
         <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs">
           <div className="text-[11px] text-slate-500 font-medium">Lembur Bulan Berjalan</div>
-          <div className="text-xl font-bold text-indigo-600 mt-0.5">3.0 Jam</div>
+          <div className="text-xl font-bold text-indigo-600 mt-0.5">{currentMonthOvertimeHours.toFixed(1)} Jam</div>
           <div className="text-[10px] text-slate-400 mt-0.5">Siap dihitung di payroll</div>
         </div>
 
         <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs">
           <div className="text-[11px] text-slate-500 font-medium">Pengajuan Menunggu</div>
           <div className="text-xl font-bold text-amber-600 mt-0.5">
-            {myRequests.filter((r) => r.status.includes('Menunggu')).length} Berkas
+            {allMyLiveRequests.filter((r) => r.status.includes('Menunggu')).length} Berkas
           </div>
           <div className="text-[10px] text-slate-400 mt-0.5">Dalam proses review</div>
         </div>
@@ -434,7 +594,7 @@ export const EssPortal: React.FC = () => {
                 : 'bg-slate-100 text-slate-600'
             }`}
           >
-            {myRequests.length}
+            {allMyLiveRequests.length}
           </span>
         </button>
 
@@ -677,7 +837,11 @@ export const EssPortal: React.FC = () => {
                       onChange={(e) => setAttendanceCorrectionForm({ ...attendanceCorrectionForm, correctionType: e.target.value })}
                       className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white"
                     >
-                      <option value="Lupa Clock-in Masuk">Lupa Clock-in Masuk</option>
+                      <option value="Lupa Absen Masuk">Lupa Absen Masuk (Clock-in)</option>
+                      <option value="Lupa Absen Pulang">Lupa Absen Pulang (Clock-out)</option>
+                      <option value="Koreksi Jam">Koreksi Jam / Kendala GPS</option>
+                      <option value="Izin Datang Terlambat">Izin Datang Terlambat</option>
+                      <option value="Izin Pulang Cepat">Izin Pulang Cepat</option>
                       <option value="Lupa Clock-out Pulang">Lupa Clock-out Pulang</option>
                       <option value="Kendala GPS / Jaringan">Kendala GPS / Error Jaringan</option>
                       <option value="Dinas Luar Mendadak">Dinas Luar Mendadak</option>
@@ -735,13 +899,17 @@ export const EssPortal: React.FC = () => {
                     <label className="font-semibold text-slate-700 block mb-1">Kategori Biaya *</label>
                     <select
                       value={reimburseForm.category}
-                      onChange={(e) => setReimburseForm({ ...reimburseForm, category: e.target.value })}
+                       onChange={(e) => setReimburseForm({ ...reimburseForm, category: e.target.value as ReimbursementCategory })}
                       className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white"
                     >
-                      <option value="Transportasi Operasional">Transportasi Operasional (Grab/Gojek/Bensin)</option>
-                      <option value="Makan Lembur / Klien">Makan Lembur / Jamuan Klien</option>
-                      <option value="Medis Rawat Jalan">Medis Rawat Jalan (Kwitansi Klinik)</option>
-                      <option value="Komunikasi & Internet">Pulsa & Paket Data Internet</option>
+                      {REIMBURSEMENT_CATEGORIES.map((cat) => (
+                        <option key={cat} value={cat}>
+                          {cat}
+                        </option>
+                      ))}
+
+
+
                     </select>
                   </div>
 
@@ -803,7 +971,8 @@ export const EssPortal: React.FC = () => {
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
-                  const newReq = {
+              
+    const newReq = {
                     id: `req-${Date.now().toString().slice(-4)}`,
                     category: 'Perjalanan Dinas',
                     title: `SPPD ke ${sppdForm.destination}`,
@@ -813,6 +982,22 @@ export const EssPortal: React.FC = () => {
                     amount: sppdForm.estimatedBudget,
                   };
                   setMyRequests([newReq, ...myRequests]);
+                  const diffDays = Math.max(
+                    1,
+                    Math.round((new Date(sppdForm.endDate).getTime() - new Date(sppdForm.startDate).getTime()) / 86400000) + 1
+                  );
+                  submitBusinessTrip({
+                    employeeId: currentEmp.id,
+                    destinationCity: sppdForm.destination,
+                    startDate: sppdForm.startDate,
+                    endDate: sppdForm.endDate,
+                    totalDays: diffDays,
+                    purpose: sppdForm.purpose,
+                    transportType: 'Pesawat',
+                    estimatedCost: Number(sppdForm.estimatedBudget) || 0,
+                    perDiemDaily: 350000,
+                    accommodationCost: Math.round((Number(sppdForm.estimatedBudget) || 0) * 0.4),
+                  });
                   setNoticeMessage(`Pengajuan SPPD ke ${sppdForm.destination} berhasil diajukan.`);
                   setActiveTab('status');
                 }}
@@ -963,7 +1148,7 @@ export const EssPortal: React.FC = () => {
             </div>
 
             <div className="divide-y divide-slate-100">
-              {myRequests.map((item) => (
+              {allMyLiveRequests.map((item) => (
                 <div key={item.id} className="p-4 hover:bg-slate-50 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
@@ -1021,7 +1206,7 @@ export const EssPortal: React.FC = () => {
               <div className="flex items-center justify-between pb-3 border-b border-slate-100">
                 <div className="flex items-center gap-2">
                   <Receipt className="w-4 h-4 text-emerald-600" />
-                  <span className="font-bold text-slate-900 text-sm">Slip Gaji Terakhir (April 2026)</span>
+                  <span className="font-bold text-slate-900 text-sm">Slip Gaji Terakhir ({latestPayroll?.period || 'Oktober 2026'})</span>
                 </div>
                 <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded text-[10px] font-bold">
                   Sudah Dibayarkan
@@ -1031,24 +1216,24 @@ export const EssPortal: React.FC = () => {
               <div className="space-y-2 text-xs">
                 <div className="flex justify-between py-1 border-b border-slate-50">
                   <span className="text-slate-500">Gaji Pokok:</span>
-                  <span className="font-mono font-semibold">{formatRupiah(currentEmp.salary || 14500000)}</span>
+                  <span className="font-mono font-semibold">{formatRupiah(latestPayroll?.basicSalary ?? (currentEmp as any).basicSalary ?? (currentEmp as any).salary ?? 14500000)}</span>
                 </div>
                 <div className="flex justify-between py-1 border-b border-slate-50">
                   <span className="text-slate-500">Tunjangan Jabatan:</span>
-                  <span className="font-mono font-semibold">{formatRupiah(2500000)}</span>
+                  <span className="font-mono font-semibold">{formatRupiah(latestPayroll?.allowances ?? (currentEmp as any).positionAllowance ?? 2500000)}</span>
                 </div>
                 <div className="flex justify-between py-1 border-b border-slate-50">
                   <span className="text-slate-500">Lembur (3 Jam):</span>
-                  <span className="font-mono font-semibold">{formatRupiah(420000)}</span>
+                  <span className="font-mono font-semibold">{formatRupiah((latestPayroll?.overtimePay ?? 0) + (latestPayroll?.reimbursement ?? 0) || 420000)}</span>
                 </div>
                 <div className="flex justify-between py-1 border-b border-slate-50 text-rose-600">
                   <span>Potongan BPJS & PPh 21 TER:</span>
-                  <span className="font-mono font-semibold">- {formatRupiah(840000)}</span>
+                  <span className="font-mono font-semibold">- {formatRupiah(latestPayroll?.totalDeductions ?? 840000)}</span>
                 </div>
                 <div className="flex justify-between pt-2 border-t border-slate-200 font-bold text-sm text-slate-900">
                   <span>Take Home Pay:</span>
                   <span className="font-mono text-emerald-600">
-                    {formatRupiah((currentEmp.salary || 14500000) + 2500000 + 420000 - 840000)}
+                    {formatRupiah(latestPayroll?.netPay ?? ((currentEmp as any).basicSalary || currentEmp.salary || 14500000) + 2500000 + 420000 - 840000)}
                   </span>
                 </div>
               </div>
@@ -1073,6 +1258,20 @@ export const EssPortal: React.FC = () => {
               </div>
 
               <div className="space-y-2 text-xs">
+                {empDocuments.map((doc) => (
+                  <div key={doc.id} className="p-3 bg-slate-50 rounded-lg border border-slate-200 flex items-center justify-between">
+                    <div>
+                      <div className="font-bold text-slate-900">{doc.title}</div>
+                      <div className="text-[10px] text-slate-400 font-mono">No: {doc.documentNumber} · Terbit {doc.issueDate}</div>
+                    </div>
+                    <button
+                      onClick={() => alert(doc.contentPreview || `Membuka dokumen ${doc.title}`)}
+                      className="px-2.5 py-1 bg-white border border-slate-300 hover:bg-slate-100 rounded text-[11px] font-semibold text-slate-700"
+                    >
+                      Lihat
+                    </button>
+                  </div>
+                ))}
                 <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 flex items-center justify-between">
                   <div>
                     <div className="font-bold text-slate-900">Surat Perjanjian Kerja (PKWTT)</div>
@@ -1086,6 +1285,20 @@ export const EssPortal: React.FC = () => {
                   </button>
                 </div>
 
+                {empDocuments.map((doc) => (
+                  <div key={doc.id} className="p-3 bg-slate-50 rounded-lg border border-slate-200 flex items-center justify-between">
+                    <div>
+                      <div className="font-bold text-slate-900">{doc.title}</div>
+                      <div className="text-[10px] text-slate-400 font-mono">No: {doc.documentNumber} · Terbit {doc.issueDate}</div>
+                    </div>
+                    <button
+                      onClick={() => alert(doc.contentPreview || `Membuka dokumen ${doc.title}`)}
+                      className="px-2.5 py-1 bg-white border border-slate-300 hover:bg-slate-100 rounded text-[11px] font-semibold text-slate-700"
+                    >
+                      Lihat
+                    </button>
+                  </div>
+                ))}
                 <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 flex items-center justify-between">
                   <div>
                     <div className="font-bold text-slate-900">SK Promosi Senior Engineer</div>

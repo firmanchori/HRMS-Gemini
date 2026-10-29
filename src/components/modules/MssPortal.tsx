@@ -38,6 +38,7 @@ export const MssPortal: React.FC = () => {
     setApprovalDelegation,
     calendarEvents,
     openFilePreview,
+    overtimeRequests,
   } = useHrms();
 
   const [activeTab, setActiveTab] = useState<'inbox' | 'monitoring' | 'cuti_tim' | 'delegasi'>('inbox');
@@ -327,6 +328,7 @@ export const MssPortal: React.FC = () => {
                 { id: 'Lembur', label: 'Lembur' },
                 { id: 'Perbaikan Presensi', label: 'Koreksi Presensi' },
                 { id: 'Perjalanan Dinas', label: 'SPPD' },
+                { id: 'Reimbursement', label: 'Reimbursement' },
               ].map((c) => (
                 <button
                   key={c.id}
@@ -586,12 +588,18 @@ export const MssPortal: React.FC = () => {
                   <div className="flex items-center gap-6">
                     <div className="text-right">
                       <span className="text-slate-400 block text-[10px]">Sisa Cuti Tahunan:</span>
-                      <span className="font-bold text-blue-600">{emp.annualLeaveBalance || 12} Hari</span>
+                      <span className="font-bold text-blue-600">{(emp as any).remainingLeaveDays ?? emp.annualLeaveBalance ?? 12} Hari</span>
                     </div>
 
                     <div className="text-right">
                       <span className="text-slate-400 block text-[10px]">Total Lembur Bulan Ini:</span>
-                      <span className="font-bold text-indigo-600">4.5 Jam</span>
+                      <span className="font-bold text-indigo-600">
+                        {overtimeRequests
+                          .filter((o) => o.employeeId === emp.id && o.status === 'Disetujui')
+                          .reduce((sum, o) => sum + (o.approvedHours ?? o.hours ?? 0), 0)
+                          .toFixed(1)}{' '}
+                        Jam
+                      </span>
                     </div>
 
                     <button
@@ -626,6 +634,14 @@ export const MssPortal: React.FC = () => {
           <form
             onSubmit={(e) => {
               e.preventDefault();
+              setApprovalDelegation({
+                principalId: currentUser?.employeeId || employees[0]?.id || 'emp-1',
+                substituteId: delegateToId,
+                startDate: delegationStartDate,
+                endDate: delegationEndDate,
+                reason: 'Delegasi persetujuan via Portal MSS',
+                isActive: true,
+              });
               setIsDelegationActive(true);
               setNoticeMessage('Pengaturan delegasi approver berhasil diaktifkan.');
             }}
@@ -673,7 +689,7 @@ export const MssPortal: React.FC = () => {
             </div>
 
             <div className="pt-2 flex items-center justify-between">
-              {isDelegationActive ? (
+              {isDelegationActive || approvalDelegations.some((d) => d.isActive) ? (
                 <span className="inline-flex items-center gap-1.5 text-emerald-700 font-bold bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
                   <Check className="w-3.5 h-3.5" />
                   <span>Delegasi Sedang Aktif</span>

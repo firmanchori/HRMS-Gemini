@@ -32,7 +32,7 @@ import {
   UserMinus,
   ExternalLink,
 } from 'lucide-react';
-import { PayrollRecord, Employee, PTKPStatus } from '../../types/hrms';
+import { PayrollRecord, Employee, PTKPStatus, ReimbursementClaim, REIMBURSEMENT_CATEGORIES, ReimbursementCategory } from '../../types/hrms';
 import {
   formatRupiah,
   calculatePPh21TER,
@@ -56,7 +56,7 @@ import { printPagesDirectly, exportPagesToPdf } from '../../utils/documentPdfExp
 import { openWhatsAppChat, WhatsAppTemplates } from '../../utils/whatsappHelper';
 import { ModuleDocumentModal } from '../common/ModuleDocumentModal';
 
-interface ReimbursementClaim {
+interface LegacyReimbursementClaim {
   id: string;
   employeeId: string;
   type: 'Rawat Jalan (Kesehatan)' | 'Kacamata / Optik' | 'Gigi' | 'Transportasi & Bensin' | 'Komunikasi & Internet';
@@ -68,7 +68,7 @@ interface ReimbursementClaim {
   approvedAmount?: number;
 }
 
-const INITIAL_REIMBURSEMENTS: ReimbursementClaim[] = [
+const INITIAL_REIMBURSEMENTS: LegacyReimbursementClaim[] = [
   {
     id: 'clm-001',
     employeeId: 'emp-001',
@@ -114,15 +114,19 @@ export const PayrollManagement: React.FC = () => {
     moduleSettings,
     updateModuleSettings,
     openFilePreview,
+    reimbursementClaims,
+    addReimbursementClaim,
+    reviewReimbursementClaim,
+    toggleReimbursementPayrollOptIn,
   } = useHrms();
 
   const handlePreviewClaim = (claim: ReimbursementClaim) => {
     const emp = employees.find((e) => e.id === claim.employeeId);
     openFilePreview({
-      title: `FORM PENGAJUAN KLAIM BIAYA / REIMBURSEMENT: ${claim.type.toUpperCase()}`,
-      documentNumber: claim.receiptNumber || `CLM-${claim.id}`,
+      title: `FORM PENGAJUAN KLAIM BIAYA / REIMBURSEMENT: ${claim.category.toUpperCase()}`,
+      documentNumber: claim.claimNumber || claim.receiptNumber || `CLM-${claim.id}`,
       typeBadge: 'Reimbursement Medis & Operasional',
-      date: claim.claimDate,
+      date: claim.receiptDate || claim.claimDate || '-',
       partyName: emp?.fullName || 'Karyawan',
       partyRole: `${emp?.position || 'Staff'} · ${emp?.department || 'Operasional'}`,
       statusBadge: {
@@ -130,18 +134,18 @@ export const PayrollManagement: React.FC = () => {
         variant: claim.status.includes('Disetujui') ? 'success' : claim.status.includes('Ditolak') ? 'danger' : 'warning',
       },
       detailsGrid: [
-        { label: 'Kategori Biaya', value: claim.type },
-        { label: 'No. Kwitansi / Struk', value: claim.receiptNumber },
+        { label: 'Kategori Biaya', value: claim.category },
+        { label: 'No. Kwitansi / Struk', value: claim.receiptNumber || '-' },
         { label: 'Nominal Diajukan', value: formatRupiah(claim.amount) },
         { label: 'Nominal Disetujui', value: formatRupiah(claim.approvedAmount || claim.amount) },
-        { label: 'Tanggal Kwitansi', value: claim.claimDate },
+        { label: 'Tanggal Kwitansi', value: claim.receiptDate || claim.claimDate },
         { label: 'Status Verifikasi HR', value: claim.status },
       ],
       contentParagraphs: [
         `Pengajuan klaim penggantian biaya (reimbursement) oleh ${emp?.fullName || '-'} (NIK: ${emp?.nik || '-'}) telah diajukan dengan rincian: "${claim.description}".`,
         `Kwitansi dan bukti pengeluaran sah telah diverifikasi oleh tim HR & Finance sesuai plafon benefit karyawan.`,
       ],
-      attachments: [{ fileName: `Kwitansi_${claim.receiptNumber.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`, fileSize: '210 KB', fileType: 'PDF/Struk RS' }],
+      attachments: [{ fileName: `Kwitansi_${(claim.receiptNumber || claim.claimNumber).replace(/[^a-zA-Z0-9]/g, '_')}.pdf`, fileSize: '210 KB', fileType: 'PDF/Struk RS' }],
       signeeName: 'Finance & Payroll Department',
       signeeRole: 'Tim Pemeriksa Klaim Medis & Kas Operasional',
     });
@@ -158,10 +162,11 @@ export const PayrollManagement: React.FC = () => {
   const [isDocModalOpen, setIsDocModalOpen] = useState(false);
 
   // Reimbursement State
-  const [claims, setClaims] = useState<ReimbursementClaim[]>(INITIAL_REIMBURSEMENTS);
+  const [, setClaims] = useState<any[]>(INITIAL_REIMBURSEMENTS);
+  const claims = reimbursementClaims.filter((c) => c.tenantId === currentTenant.id);
   const [isClaimModalOpen, setIsClaimModalOpen] = useState(false);
   const [claimEmpId, setClaimEmpId] = useState(employees[0]?.id || '');
-  const [claimType, setClaimType] = useState<ReimbursementClaim['type']>('Rawat Jalan (Kesehatan)');
+  const [claimType, setClaimType] = useState<ReimbursementCategory>('Kesehatan / Rawat Jalan');
   const [claimAmount, setClaimAmount] = useState<number>(500000);
   const [claimReceiptNo, setClaimReceiptNo] = useState('');
   const [claimDesc, setClaimDesc] = useState('');
@@ -285,7 +290,7 @@ export const PayrollManagement: React.FC = () => {
     e.preventDefault();
     if (!claimEmpId || claimAmount <= 0) return;
 
-    const newClaim: ReimbursementClaim = {
+    const newClaim: any = {
       id: `clm-${Date.now()}`,
       employeeId: claimEmpId,
       type: claimType,
@@ -296,13 +301,25 @@ export const PayrollManagement: React.FC = () => {
       status: 'Menunggu Review',
     };
 
+    const todayStr = new Date().toISOString().split('T')[0];
+    addReimbursementClaim({
+      employeeId: claimEmpId,
+      category: claimType,
+      claimDate: todayStr,
+      receiptDate: todayStr,
+      receiptNumber: claimReceiptNo || `KWT-${Date.now().toString().slice(-6)}`,
+      amount: Number(claimAmount),
+      description: claimDesc || 'Klaim reimbursement operasional/kesehatan',
+      processInPayroll: true,
+    });
     setClaims((prev) => [newClaim, ...prev]);
     setIsClaimModalOpen(false);
     setClaimDesc('');
     setClaimReceiptNo('');
   };
 
-  const handleReviewClaim = (id: string, status: ReimbursementClaim['status']) => {
+  const handleReviewClaim = (id: string, status: string) => {
+    reviewReimbursementClaim(id, status.includes('Disetujui'));
     setClaims((prev) =>
       prev.map((c) =>
         c.id === id
@@ -776,7 +793,7 @@ export const PayrollManagement: React.FC = () => {
                 >
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-slate-800">
-                      {claim.type}
+                      {claim.category} · <span className="font-mono text-indigo-600">{claim.claimNumber}</span>
                     </span>
                     <span
                       className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
@@ -810,7 +827,7 @@ export const PayrollManagement: React.FC = () => {
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-slate-500 font-sans">Tanggal Klaim:</span>
-                      <span className="font-mono text-slate-600">{claim.claimDate}</span>
+                      <span className="font-mono text-slate-600">{claim.receiptDate || claim.claimDate}</span>
                     </div>
                     <div className="text-[11px] text-slate-600 pt-1 border-t border-slate-200/60">
                       "{claim.description}"
@@ -896,14 +913,15 @@ export const PayrollManagement: React.FC = () => {
                         </div>
                       </td>
                       <td className="py-2.5 px-3">
-                        <span className="font-semibold text-slate-800">{claim.type}</span>
+                        <div className="font-semibold text-slate-800">{claim.category}</div>
+                        <div className="text-[10px] font-mono text-slate-400">{claim.claimNumber}</div>
                       </td>
                       <td className="py-2.5 px-3">
-                        <div className="font-mono text-indigo-700 font-semibold">{claim.receiptNumber}</div>
+                        <div className="font-mono text-indigo-700 font-semibold">{claim.receiptNumber || claim.claimNumber}</div>
                         <div className="text-[11px] text-slate-600">{claim.description}</div>
                       </td>
                       <td className="py-2.5 px-3 text-center font-mono text-slate-600">
-                        {claim.claimDate}
+                        {claim.receiptDate || claim.claimDate}
                       </td>
                       <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">
                         {formatRupiah(claim.amount)}
@@ -944,7 +962,25 @@ export const PayrollManagement: React.FC = () => {
                             </button>
                           </div>
                         ) : (
-                          <span className="text-[11px] text-slate-400">Selesai Ditinjau</span>
+                          <div className="flex flex-col items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                            <span className="text-[10px] text-slate-400">
+                              {claim.approvedBy ? `Oleh: ${claim.approvedBy}` : 'Selesai Ditinjau'}
+                            </span>
+                            {claim.status.includes('Disetujui') && (
+                              <button
+                                type="button"
+                                onClick={() => toggleReimbursementPayrollOptIn(claim.id)}
+                                className={`px-2 py-0.5 rounded text-[10px] font-semibold border transition-colors ${
+                                  claim.processInPayroll
+                                    ? 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100'
+                                    : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'
+                                }`}
+                                title="Klik untuk mengatur pencairan bersama Gaji (Payroll) atau Kas Kecil"
+                              >
+                                {claim.processInPayroll ? '✓ Cair di Payroll' : 'Kas Terpisah'}
+                              </button>
+                            )}
+                          </div>
                         )}
                       </td>
                     </tr>
@@ -2122,11 +2158,15 @@ export const PayrollManagement: React.FC = () => {
                   onChange={(e) => setClaimType(e.target.value as any)}
                   className="w-full p-2 border border-slate-300 rounded-md font-medium"
                 >
-                  <option value="Rawat Jalan (Kesehatan)">Rawat Jalan (Kesehatan / Dokter)</option>
-                  <option value="Kacamata / Optik">Kacamata / Optik</option>
-                  <option value="Gigi">Perawatan Gigi</option>
-                  <option value="Transportasi & Bensin">Transportasi Operasional & BBM</option>
-                  <option value="Komunikasi & Internet">Tunjangan Komunikasi & Kuota</option>
+                  {REIMBURSEMENT_CATEGORIES.map((cat) => (
+                    <option key={cat} value={cat}>
+                      {cat}
+                    </option>
+                  ))}
+
+
+
+
                 </select>
               </div>
 
@@ -2352,6 +2392,14 @@ export const PayrollManagement: React.FC = () => {
                         {formatRupiah(selectedPayslip.allowances)}
                       </span>
                     </div>
+                    {selectedPayslip.reimbursement > 0 && (
+                      <div className="flex justify-between">
+                        <span className="text-slate-600 font-sans">Klaim Biaya (Reimbursement)</span>
+                        <span className="text-emerald-700 font-semibold">
+                          {formatRupiah(selectedPayslip.reimbursement)}
+                        </span>
+                      </div>
+                    )}
                     {selectedPayslip.overtimePay > 0 && (
                       <div className="flex justify-between">
                         <span className="text-slate-600 font-sans">Upah Lembur Resmi</span>

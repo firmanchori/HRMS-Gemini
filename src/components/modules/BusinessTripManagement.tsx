@@ -44,6 +44,7 @@ export const BusinessTripManagement: React.FC = () => {
     reviewBusinessTrip,
     currentTenant,
     currentUser,
+    addReimbursementClaim,
   } = useHrms();
 
   const [activeTab, setActiveTab] = useState<'trips' | 'realisasi' | 'pengaturan'>('trips');
@@ -594,6 +595,8 @@ export const BusinessTripManagement: React.FC = () => {
                                     ? 'bg-emerald-100 text-emerald-800'
                                     : trip.status === 'Selesai'
                                     ? 'bg-blue-100 text-blue-800'
+                                    : trip.status === 'Ditolak'
+                                    ? 'bg-rose-100 text-rose-800'
                                     : 'bg-amber-100 text-amber-800'
                               }`}
                             >
@@ -601,7 +604,27 @@ export const BusinessTripManagement: React.FC = () => {
                             </span>
                           </td>
                           <td className="py-2.5 px-3 text-center">
-                            <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-indigo-600 transition-colors ml-auto" />
+                            <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+                              {trip.status === 'Menunggu Approval' && (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => reviewBusinessTrip(trip.id, 'Disetujui Atasan')}
+                                    className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[11px] font-semibold transition-colors"
+                                  >
+                                    Setujui
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => reviewBusinessTrip(trip.id, 'Ditolak')}
+                                    className="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded text-[11px] font-semibold transition-colors"
+                                  >
+                                    Tolak
+                                  </button>
+                                </>
+                              )}
+                              <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-indigo-600 transition-colors" />
+                            </div>
                           </td>
                         </tr>
                       );
@@ -1345,7 +1368,24 @@ export const BusinessTripManagement: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => {
-                    alert('Laporan settlement berhasil disimpan dan diajukan ke bagian Finance');
+                    const diff = actualExpense - selectedTripForClaim.estimatedCost;
+                    if (diff > 0) {
+                      const todayStr = new Date().toISOString().split('T')[0];
+                      addReimbursementClaim({
+                        employeeId: selectedTripForClaim.employeeId,
+                        category: 'Transportasi Dinas',
+                        receiptDate: todayStr,
+                        claimDate: todayStr,
+                        receiptNumber: `SETTLE-${selectedTripForClaim.tripNumber.replace(/\//g, '-')}`,
+                        amount: diff,
+                        description: `Reimbursement kelebihan realisasi biaya SPPD ${selectedTripForClaim.tripNumber} (${selectedTripForClaim.destinationCity}): ${receiptNotes || 'Sesuai lampiran nota dinas'}`,
+                        processInPayroll: true,
+                      });
+                      setSppdNotice(`Settlement ${selectedTripForClaim.tripNumber} disimpan & klaim kurang bayar ${formatRupiah(diff)} diteruskan ke Reimbursement Payroll & Approval Center.`);
+                    } else {
+                      setSppdNotice(`Laporan settlement ${selectedTripForClaim.tripNumber} berhasil disimpan.`);
+                    }
+                    setReceiptNotes('');
                     setSelectedTripForClaim(null);
                   }}
                   className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-semibold shadow-xs"

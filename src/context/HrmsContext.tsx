@@ -211,7 +211,7 @@ interface HrmsContextType {
   // 4. Loans & Kasbon
   loans: EmployeeLoan[];
   addLoan: (loan: Omit<EmployeeLoan, 'id' | 'tenantId' | 'remainingAmount' | 'status'>) => void;
-  updateLoanStatus: (id: string, status: 'Aktif' | 'Lunas' | 'Menunggu Approval') => void;
+  updateLoanStatus: (id: string, status: 'Aktif' | 'Lunas' | 'Menunggu Approval' | 'Ditolak') => void;
 
   // 5. Real-time KPI
   kpis: EmployeeKPI[];
@@ -844,7 +844,20 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const [approvalItems, setApprovalItems] = useState<ApprovalWorkflowItem[]>(() => {
     const saved = localStorage.getItem('nusahr_approvals');
-    return saved ? JSON.parse(saved) : INITIAL_APPROVALS;
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved) as ApprovalWorkflowItem[];
+        const existingIds = new Set(parsed.map((a) => a.id));
+        const merged = [...parsed];
+        for (const initApp of INITIAL_APPROVALS) {
+          if (!existingIds.has(initApp.id)) merged.push(initApp);
+        }
+        return merged;
+      } catch {
+        return INITIAL_APPROVALS;
+      }
+    }
+    return INITIAL_APPROVALS;
   });
 
   const [approvalDelegations, setApprovalDelegations] = useState<ApprovalDelegation[]>(() => {
@@ -934,8 +947,32 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // 25. Reimbursements
   const [reimbursementClaims, setReimbursementClaims] = useState<ReimbursementClaim[]>(() => {
-    const saved = localStorage.getItem('nusahr_reimbursements');
-    return saved ? JSON.parse(saved) : INITIAL_REIMBURSEMENT_CLAIMS;
+    const saved = localStorage.getItem('nusahr_reimbursements_v3');
+    const normalizeClaim = (c: any): ReimbursementClaim => ({
+      ...c,
+      category:
+        typeof c.category === 'object' && c.category !== null
+          ? String(c.category.value || c.category.label || 'Lainnya')
+          : String(c.category || c.type || 'Lainnya'),
+      receiptDate: c.receiptDate || c.claimDate || '2026-10-15',
+      claimDate: c.claimDate || c.receiptDate || '2026-10-15',
+      status: c.status || 'Menunggu Review',
+    });
+    if (saved) {
+      try {
+        const parsed = (JSON.parse(saved) as any[]).map(normalizeClaim);
+        const existingIds = new Set(parsed.map((c) => c.id));
+        const merged = [...parsed];
+        for (const initClaim of INITIAL_REIMBURSEMENT_CLAIMS) {
+          if (!existingIds.has(initClaim.id)) merged.push(normalizeClaim(initClaim));
+        }
+        return merged;
+      } catch {
+        return INITIAL_REIMBURSEMENT_CLAIMS.map(normalizeClaim);
+      }
+    }
+    return INITIAL_REIMBURSEMENT_CLAIMS.map(normalizeClaim);
+
   });
 
   // 26. Personalia Requests
@@ -1209,6 +1246,14 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem('nusahr_interview_types_v1', JSON.stringify(interviewTypeSettings));
   }, [interviewTypeSettings]);
 
+  useEffect(() => {
+    localStorage.setItem('nusahr_reimbursements_v3', JSON.stringify(reimbursementClaims));
+  }, [reimbursementClaims]);
+
+  useEffect(() => {
+    localStorage.setItem('nusahr_approvals', JSON.stringify(approvalItems));
+  }, [approvalItems]);
+
   // Filtered scoped items for active tenant
   const tenantEmployees = useMemo(
     () => employees.filter((e) => e.tenantId === currentTenant.id),
@@ -1332,6 +1377,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         ...prev,
       ]);
       logAuditAction('Personalia', 'SUBMIT_FOR_APPROVAL', log.id, `Pengajuan persetujuan SK ${action.type} untuk ${emp.fullName}`);
+      return;
     }
 
     // Update employee master record with specific field updates based on action type
@@ -1452,10 +1498,71 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       status: 'Menunggu',
     };
     setLeaveRequests((prev) => [newReq, ...prev]);
+    const emp = employees.find((e) => e.id === newReq.employeeId);
+    setApprovalItems((prev) => [
+      {
+        id: `appr-lv-${Date.now()}`,
+        tenantId: currentTenant.id,
+        category: 'Cuti',
+        referenceId: newReq.id,
+        title: `Permohonan ${newReq.leaveType} (${newReq.totalDays} Hari) - ${emp?.fullName || 'Karyawan'}`,
+        requesterId: newReq.employeeId,
+        department: emp?.department || 'Operasional',
+        submittedAt: new Date().toISOString().replace('T', ' ').slice(0, 16),
+        deadlineAt: new Date(Date.now() + 48 * 3600 * 1000).toISOString().replace('T', ' ').slice(0, 16),
+        level: 1,
+        totalLevels: 2,
+        assignedApproverRole: 'manager',
+        status: 'Menunggu',
+        notes: `${newReq.startDate} s/d ${newReq.endDate}: ${newReq.reason}`,
+      },
+      ...prev,
+    ]);
   };
 
   const reviewLeaveRequest = (id: string, approved: boolean) => {
     const req = leaveRequests.find((l) => l.id === id);
+    setApprovalItems((prev) =>
+      prev.map((a) =>
+        a.referenceId === id && a.category === 'Cuti'
+          ? { ...a, status: approved ? 'Disetujui' : 'Ditolak' }
+          : a
+      )
+    );
+    if (req && approved) {
+      const attStatus: AttendanceRecord['status'] = req.leaveType.includes('Sakit')
+        ? 'Sakit'
+        : req.leaveType.includes('Izin')
+        ? 'Izin'
+        : 'Cuti';
+      setAttendance((prev) => {
+        const exists = prev.some(
+          (a) => a.tenantId === currentTenant.id && a.employeeId === req.employeeId && a.date === req.startDate
+        );
+        if (exists) {
+          return prev.map((a) =>
+            a.tenantId === currentTenant.id && a.employeeId === req.employeeId && a.date === req.startDate
+              ? { ...a, status: attStatus, lateMinutes: 0, notes: `${req.leaveType}: ${req.reason}` }
+              : a
+          );
+        }
+        return [
+          {
+            id: `att-lv-${Date.now()}`,
+            tenantId: currentTenant.id,
+            employeeId: req.employeeId,
+            date: req.startDate,
+            clockIn: '-',
+            clockOut: '-',
+            status: attStatus,
+            overtimeHours: 0,
+            lateMinutes: 0,
+            notes: `${req.leaveType} Disetujui: ${req.reason}`,
+          },
+          ...prev,
+        ];
+      });
+    }
     if (!req) return;
 
     setLeaveRequests((prev) =>
@@ -1475,7 +1582,13 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setEmployees((prev) =>
         prev.map((e) =>
           e.id === req.employeeId
-            ? { ...e, remainingLeaveDays: Math.max(0, e.remainingLeaveDays - req.totalDays) }
+            ? {
+                ...e,
+                remainingLeaveDays:
+                  req.leaveType === 'Cuti Tahunan'
+                    ? Math.max(0, (e.remainingLeaveDays ?? 12) - req.totalDays)
+                    : e.remainingLeaveDays,
+              }
             : e
         )
       );
@@ -1500,7 +1613,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const periodDatePrefix = `${yearStr}-${monthStr}`;
 
     // Generate payroll records for all active employees of current tenant
-    const newRecords: PayrollRecord[] = tenantEmployees.map((emp) => {
+    const newRecords: PayrollRecord[] = tenantEmployees.filter((e) => e.status === 'Aktif').map((emp) => {
       // 1. Find employee's attendance strictly filtered by this period (FR-0.1)
       const empAttendance = attendance.filter(
         (a) => a.tenantId === currentTenant.id && a.employeeId === emp.id && a.date.startsWith(periodDatePrefix)
@@ -1543,7 +1656,19 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const effectiveBasicSalary = Math.round(emp.basicSalary * proRataRatio);
 
       // 5. Allowances
-      const allowances = emp.fixedAllowance + emp.transportAllowance + emp.mealAllowance;
+      const customAssignedComponents = employeeSalaryAssignments
+        .filter((asg) => asg.tenantId === currentTenant.id && asg.employeeId === emp.id && asg.isActive !== false)
+        .reduce((sum, asg) => {
+          const comp = salaryComponents.find((sc) => sc.id === asg.componentId);
+          if (comp && comp.category === 'Potongan') return sum;
+          return sum + (asg.customAmount ?? asg.amount ?? comp?.defaultAmount ?? 0);
+        }, 0);
+      const allowances =
+        (emp.fixedAllowance || 0) +
+        (emp.positionAllowance || 0) +
+        (emp.transportAllowance || 0) +
+        (emp.mealAllowance || 0) +
+        customAssignedComponents;
 
       // 6. Active Loan Deductions
       const activeLoan = loans.find(
@@ -1662,9 +1787,40 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       status: 'Menunggu Approval',
     };
     setLoans((prev) => [newLoan, ...prev]);
+    const emp = employees.find((e) => e.id === newLoan.employeeId);
+    setApprovalItems((prev) => [
+      {
+        id: `appr-ln-${Date.now()}`,
+        tenantId: currentTenant.id,
+        category: 'Pinjaman',
+        referenceId: newLoan.id,
+        title: `Pengajuan ${newLoan.loanType}: ${emp?.fullName || 'Karyawan'} (Tenor ${newLoan.tenorMonths} Bln)`,
+        requesterId: newLoan.employeeId,
+        department: emp?.department || 'Operasional',
+        amount: newLoan.totalAmount,
+        submittedAt: new Date().toISOString().replace('T', ' ').slice(0, 16),
+        deadlineAt: new Date(Date.now() + 48 * 3600 * 1000).toISOString().replace('T', ' ').slice(0, 16),
+        level: 1,
+        totalLevels: 2,
+        assignedApproverRole: 'payroll_admin',
+        status: 'Menunggu',
+        notes: newLoan.reason,
+      },
+      ...prev,
+    ]);
   };
 
-  const updateLoanStatus = (id: string, status: 'Aktif' | 'Lunas' | 'Menunggu Approval') => {
+  const updateLoanStatus = (id: string, status: 'Aktif' | 'Lunas' | 'Menunggu Approval' | 'Ditolak') => {
+    setApprovalItems((prev) =>
+      prev.map((a) =>
+        a.referenceId === id && a.category === 'Pinjaman'
+          ? {
+              ...a,
+              status: status === 'Aktif' || status === 'Lunas' ? 'Disetujui' : status === 'Ditolak' ? 'Ditolak' : 'Menunggu',
+            }
+          : a
+      )
+    );
     setLoans((prev) => prev.map((l) => (l.id === id ? { ...l, status } : l)));
   };
 
@@ -2109,6 +2265,24 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       prev.map((o) => {
         if (o.id === id) {
           const updated = { ...o, ...checklist };
+          if (checklist.assetReturned && !o.assetReturned) {
+            setAssets((prevAssets) =>
+              prevAssets.map((ast) =>
+                ast.assignedToEmployeeId === o.employeeId
+                  ? { ...ast, assignedToEmployeeId: undefined, condition: 'Baik' }
+                  : ast
+              )
+            );
+          }
+          if (checklist.financeCleared && !o.financeCleared) {
+            setLoans((prevLoans) =>
+              prevLoans.map((ln) =>
+                ln.employeeId === o.employeeId && ln.status === 'Aktif'
+                  ? { ...ln, remainingAmount: 0, status: 'Lunas' }
+                  : ln
+              )
+            );
+          }
           // If parklaring just issued, create document
           if (checklist.parklaringIssued && !o.parklaringIssued) {
             const emp = employees.find((e) => e.id === o.employeeId);
@@ -2757,6 +2931,41 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const reviewAttendanceCorrection = (id: string, approved: boolean) => {
+    const corr = attendanceCorrections.find((c) => c.id === id);
+    if (approved && corr) {
+      setAttendance((prev) => {
+        const exists = prev.find((a) => a.employeeId === corr.employeeId && a.date === corr.date);
+        if (exists) {
+          return prev.map((a) =>
+            a.id === exists.id
+              ? {
+                  ...a,
+                  clockIn: corr.proposedClockIn || a.clockIn,
+                  clockOut: corr.proposedClockOut || a.clockOut,
+                  status: 'Hadir',
+                  lateMinutes: 0,
+                  notes: `Koreksi Presensi (${corr.type}) disetujui: ${corr.reason}`,
+                }
+              : a
+          );
+        }
+        return [
+          {
+            id: `att-cor-${Date.now()}`,
+            tenantId: currentTenant.id,
+            employeeId: corr.employeeId,
+            date: corr.date,
+            clockIn: corr.proposedClockIn || '08:00',
+            clockOut: corr.proposedClockOut || '17:00',
+            status: 'Hadir',
+            lateMinutes: 0,
+            overtimeHours: 0,
+            notes: `Koreksi Presensi (${corr.type}) disetujui: ${corr.reason}`,
+          },
+          ...prev,
+        ];
+      });
+    }
     setAttendanceCorrections((prev) =>
       prev.map((c) => (c.id === id ? { ...c, status: approved ? 'Disetujui' : 'Ditolak', approvedBy: currentUser.name } : c))
     );
@@ -2873,6 +3082,8 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         approvePersonaliaRequest(item.referenceId);
       } else if (item.category === 'Lembur') {
         reviewOvertimeRequest(item.referenceId, true);
+      } else if (item.category === 'Reimbursement') {
+        reviewReimbursementClaim(item.referenceId, true, notes);
       }
       logAuditAction('Approval Center', 'APPROVE_FINAL', id, `Persetujuan final selesai untuk kategori ${item.category}`);
     } else {
@@ -2884,19 +3095,21 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (item.category === 'Cuti') {
         reviewLeaveRequest(item.referenceId, false);
       } else if (item.category === 'Pinjaman') {
-        updateLoanStatus(item.referenceId, 'Menunggu Approval');
+        updateLoanStatus(item.referenceId, 'Ditolak');
       } else if (item.category === 'Perbaikan Presensi') {
         reviewAttendanceCorrection(item.referenceId, false);
       } else if (item.category === 'Tukar Shift') {
         reviewShiftSwapRequest(item.referenceId, false);
       } else if (item.category === 'Perjalanan Dinas') {
-        reviewBusinessTrip(item.referenceId, 'Menunggu Approval');
+        reviewBusinessTrip(item.referenceId, 'Ditolak');
       } else if (item.category === 'Procurement PR') {
         updateProcurementStatus(item.referenceId, 'Pengajuan PR');
       } else if (item.category === 'Promosi/Personalia') {
         rejectPersonaliaRequest(item.referenceId);
       } else if (item.category === 'Lembur') {
         reviewOvertimeRequest(item.referenceId, false);
+      } else if (item.category === 'Reimbursement') {
+        reviewReimbursementClaim(item.referenceId, false, notes);
       }
       logAuditAction('Approval Center', 'REJECT', id, `Ditolak untuk kategori ${item.category}`);
     }
@@ -3480,10 +3693,39 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       status: 'Menunggu Review',
     };
     setReimbursementClaims((prev) => [newClaim, ...prev]);
+    const emp = employees.find((e) => e.id === newClaim.employeeId);
+    setApprovalItems((prev) => [
+      {
+        id: `appr-clm-${Date.now()}`,
+        tenantId: currentTenant.id,
+        category: 'Reimbursement',
+        referenceId: newClaim.id,
+        title: `Klaim ${newClaim.category}: ${emp?.fullName || newClaim.employeeId} (${newClaim.claimNumber})`,
+        requesterId: newClaim.employeeId,
+        department: emp?.department || 'Operasional',
+        amount: newClaim.amount,
+        submittedAt: new Date().toISOString().replace('T', ' ').slice(0, 16),
+        deadlineAt: new Date(Date.now() + 48 * 3600 * 1000).toISOString().replace('T', ' ').slice(0, 16),
+        level: 1,
+        totalLevels: 2,
+        assignedApproverRole: 'manager',
+        status: 'Menunggu',
+        notes: newClaim.description,
+      },
+      ...prev,
+    ]);
     logAuditAction('Reimbursement', 'SUBMIT_CLAIM', newClaim.id, `Pengajuan klaim ${newClaim.category} Rp ${newClaim.amount.toLocaleString('id-ID')}`);
   };
 
   const reviewReimbursementClaim = (id: string, approved: boolean, notes?: string) => {
+    setApprovalItems((prev) =>
+      prev.map((a) =>
+        a.referenceId === id && a.category === 'Reimbursement'
+          ? { ...a, status: approved ? 'Disetujui' : 'Ditolak', notes: notes || a.notes }
+          : a
+      )
+    );
+    logAuditAction('Reimbursement', approved ? 'APPROVE_CLAIM' : 'REJECT_CLAIM', id, `Klaim biaya ${approved ? 'disetujui' : 'ditolak'}`);
     setReimbursementClaims((prev) =>
       prev.map((c) =>
         c.id === id
@@ -3492,6 +3734,8 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
               status: approved ? 'Disetujui' : 'Ditolak',
               approvedBy: currentUser.name,
               notes: notes || c.notes,
+              approvedAmount: approved ? c.amount : 0,
+              processInPayroll: approved ? (c.processInPayroll ?? true) : false,
             }
           : c
       )
@@ -3539,6 +3783,34 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const approvePersonaliaRequest = (id: string) => {
+    const existingLog = personaliaLogs.find((l) => l.id === id);
+    if (existingLog) {
+      const emp = employees.find((e) => e.id === existingLog.employeeId);
+      if (emp) {
+        updateEmployee(emp.id, {
+          position: existingLog.newPosition || emp.position,
+          department: existingLog.newDepartment || emp.department,
+          grade: existingLog.newGrade || emp.grade,
+          basicSalary: existingLog.newSalary || emp.basicSalary,
+        });
+        createOfficialDocument({
+          type: existingLog.type === 'Promosi' ? 'Surat Promosi' : existingLog.type === 'Mutasi' ? 'Surat Mutasi' : 'SK Pengangkatan',
+          title: `Surat Keputusan ${existingLog.type}: ${emp.fullName}`,
+          targetEmployeeId: emp.id,
+          signeeName: currentUser.name,
+          signeeRole: 'VP Human Resources',
+          contentPreview: `Menetapkan perubahan status kepegawaian (${existingLog.type}) atas nama ${emp.fullName} dari jabatan ${existingLog.previousPosition} menjadi ${existingLog.newPosition}. Berlaku efektif ${existingLog.effectiveDate}.`,
+        });
+      }
+      setPersonaliaLogs((prev) =>
+        prev.map((l) => (l.id === id ? { ...l, status: 'Disetujui', approvedBy: currentUser.name } : l))
+      );
+      setApprovalItems((prev) =>
+        prev.map((a) => (a.referenceId === id ? { ...a, status: 'Disetujui' } : a))
+      );
+      logAuditAction('Personalia', 'APPROVE_LOG', id, `Persetujuan ${existingLog.type} untuk ${emp?.fullName || existingLog.employeeId}`);
+      return;
+    }
     const req = personaliaRequests.find((p) => p.id === id);
     if (!req) return;
 
@@ -3594,6 +3866,12 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const rejectPersonaliaRequest = (id: string) => {
+    setPersonaliaLogs((prev) =>
+      prev.map((l) => (l.id === id ? { ...l, status: 'Ditolak', approvedBy: currentUser.name } : l))
+    );
+    setApprovalItems((prev) =>
+      prev.map((a) => (a.referenceId === id ? { ...a, status: 'Ditolak' } : a))
+    );
     setPersonaliaRequests((prev) =>
       prev.map((p) => (p.id === id ? { ...p, status: 'Ditolak', approvedBy: currentUser.name } : p))
     );

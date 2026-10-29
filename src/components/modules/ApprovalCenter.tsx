@@ -353,6 +353,8 @@ export const ApprovalCenter: React.FC = () => {
                 <option value="Perbaikan Presensi">Perbaikan Presensi</option>
                 <option value="Tukar Shift">Tukar Shift</option>
                 <option value="Perjalanan Dinas">Perjalanan Dinas (SPPD)</option>
+                <option value="Reimbursement">Klaim Biaya (Reimbursement)</option>
+                <option value="Lembur">Lembur (Overtime)</option>
                 <option value="Pinjaman">Pinjaman & Kasbon</option>
                 <option value="Procurement PR">Procurement (PR/PO)</option>
                 <option value="Promosi/Personalia">Promosi & Personalia</option>
