@@ -1383,11 +1383,11 @@ export const EssPortal: React.FC = () => {
               })}
             </div>
 
-            {/* Simulasi Jarak GPS Karyawan terhadap Titik Lokasi Kantor */}
-            <div className="pt-2 border-t border-indigo-200/70 space-y-1">
+            {/* Simulasi Posisi GPS Karyawan — Radius ditetapkan oleh HR, tidak bisa diubah karyawan */}
+            <div className="pt-2 border-t border-indigo-200/70 space-y-1.5">
               <div className="flex items-center justify-between text-[11px]">
                 <span className="text-slate-600 font-medium">
-                  Jarak GPS Anda ke <strong>{activeClockLocation?.name}</strong>:
+                  Deteksi Jarak GPS ke <strong>{activeClockLocation?.name}</strong>:
                 </span>
                 <span
                   className={`font-mono font-bold ${
@@ -1397,14 +1397,28 @@ export const EssPortal: React.FC = () => {
                   {simulatedDistanceMeters}m / Maks. {activeLocationRadius}m
                 </span>
               </div>
-              <input
-                type="range"
-                min={5}
-                max={Math.max(activeLocationRadius * 2, 300)}
-                value={simulatedDistanceMeters}
-                onChange={(e) => setSimulatedDistanceMeters(Number(e.target.value))}
-                className="w-full accent-indigo-600 cursor-pointer h-1.5"
-              />
+              {/* Slider ini merupakan SIMULASI posisi GPS karyawan (demo prototype) — 
+                  di produksi nyata posisi ini otomatis dari GPS device. 
+                  Radius absensi ditetapkan oleh HR/Admin di Menu Lokasi Kantor, bukan oleh karyawan. */}
+              <div className="relative">
+                <input
+                  type="range"
+                  min={5}
+                  max={Math.max(activeLocationRadius * 2, 300)}
+                  value={simulatedDistanceMeters}
+                  onChange={(e) => setSimulatedDistanceMeters(Number(e.target.value))}
+                  className="w-full accent-indigo-600 cursor-pointer h-1.5"
+                  title="Simulasi posisi GPS (demo) — di produksi nyata posisi GPS terdeteksi otomatis"
+                />
+              </div>
+              <div className="flex items-center gap-1.5 text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
+                <span className="shrink-0">⚙</span>
+                <span>
+                  <strong>Radius {activeLocationRadius}m</strong> ditetapkan oleh HR/Admin di{' '}
+                  <strong>Menu Lokasi Kantor</strong>. Karyawan tidak dapat mengubah radius absensi.{' '}
+                  <em>(Slider di atas hanya simulasi posisi GPS untuk keperluan demo.)</em>
+                </span>
+              </div>
             </div>
           </div>
 

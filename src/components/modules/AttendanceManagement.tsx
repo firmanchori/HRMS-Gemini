@@ -190,7 +190,6 @@ export const AttendanceManagement: React.FC = () => {
 
   // Modals
   const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
-  const [isClockModalOpen, setIsClockModalOpen] = useState(false);
   const [isShiftSwapModalOpen, setIsShiftSwapModalOpen] = useState(false);
   const [isCorrectionModalOpen, setIsCorrectionModalOpen] = useState(false);
   const [confirmCorrectionAction, setConfirmCorrectionAction] = useState<{
@@ -207,18 +206,11 @@ export const AttendanceManagement: React.FC = () => {
         else if (isLeaveModalOpen) setIsLeaveModalOpen(false);
         else if (isShiftSwapModalOpen) setIsShiftSwapModalOpen(false);
         else if (isCorrectionModalOpen) setIsCorrectionModalOpen(false);
-        else if (isClockModalOpen) setIsClockModalOpen(false);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [confirmCorrectionAction, isLeaveModalOpen, isShiftSwapModalOpen, isCorrectionModalOpen, isClockModalOpen]);
-
-  // ESS Clock State
-  const [clockEmpId, setClockEmpId] = useState(employees[0]?.id || '');
-  const [clockType, setClockType] = useState<'in' | 'out'>('in');
-  const [clockNote, setClockNote] = useState('');
-  const [simulatedCamera, setSimulatedCamera] = useState(true);
+  }, [confirmCorrectionAction, isLeaveModalOpen, isShiftSwapModalOpen, isCorrectionModalOpen]);
 
   // Leave Form State
   const [leaveEmpId, setLeaveEmpId] = useState(employees[0]?.id || '');
@@ -250,7 +242,7 @@ export const AttendanceManagement: React.FC = () => {
   // Settings State
   const [lateGracePeriod, setLateGracePeriod] = useState(moduleSettings.attendance.lateGracePeriodMins || 15);
   const [latePenaltyPerHour, setLatePenaltyPerHour] = useState(moduleSettings.attendance.latePenaltyPerHour || 50000);
-  const [gpsRadius, setGpsRadius] = useState(moduleSettings.attendance.gpsRadiusMeters || 100);
+  // Catatan: gpsRadius TIDAK diatur di sini — setiap Lokasi Kantor punya radius sendiri (Menu Lokasi Kantor)
   const [requireCamera, setRequireCamera] = useState(moduleSettings.attendance.cameraSelfieRequired ?? true);
 
   // Kuota & Batas Toleransi per 1 Periode Payroll / 1 Bulan
@@ -383,7 +375,7 @@ export const AttendanceManagement: React.FC = () => {
     updateModuleSettings('attendance', {
       lateGracePeriodMins: Number(lateGracePeriod),
       latePenaltyPerHour: Number(latePenaltyPerHour),
-      gpsRadiusMeters: Number(gpsRadius),
+      // gpsRadiusMeters: Radius GPS tidak diatur di sini — diatur per Lokasi Kantor (Menu Lokasi Kantor)
       cameraSelfieRequired: requireCamera,
       maxLateOccurrencesMonthly: Number(maxLateMonthly),
       maxPermissionDaysMonthly: Number(maxPermissionMonthly),
