@@ -6,3 +6,4 @@ coverage/
 *.log
 .env*
 !.env.example
+docs/supabase_db_connection.md

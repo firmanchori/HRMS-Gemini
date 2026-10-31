@@ -78,3 +78,26 @@ Setiap modul wajib menggunakan struktur 2 baris terpisah yang elegan:
 2. **Kartu & Tabel di Tablet:**
    - Gunakan `overflow-x-auto` pada seluruh tabel data.
    - Grid statistik menggunakan `grid-cols-2 md:grid-cols-3 xl:grid-cols-6`.
+
+---
+
+### 4. Konvensi Status & Relasi Data (Tidak Mengubah Konsep Visual)
+
+> **Konsep UI sudah final dan TIDAK berubah.** Bagian ini hanya menegaskan bagaimana
+> status/relasi data harus *ditampilkan* memakai komponen yang sudah ada, menyusul
+> temuan di `docs/AUDIT_FINDINGS.md` bahwa beberapa status (ketersediaan aset, status
+> dokumen, progress TTD) belum punya satu sumber kebenaran di data — bukan masalah
+> tampilan. Lihat juga `.claude/design-rules.md`.
+
+1. Setiap entitas yang punya status lifecycle (Asset, Dokumen, Approval, Loan, dll)
+   tetap dirender sebagai badge pill yang sudah ada polanya di modul-modul existing
+   (lihat `EmployeeManagement`/`ApprovalCenter` untuk contoh pola badge) — begitu
+   backend menyediakan field status yang benar, tidak perlu komponen visual baru.
+2. Progress multi-signer dokumen (Pembuat/Mengetahui/Approver) ditampilkan dengan
+   pola checklist/step-indicator yang sama seperti yang sudah dipakai di Onboarding
+   Tracker — bukan komponen baru — hanya datanya yang perlu benar-benar per-individu
+   (lihat PRD §3.7).
+3. Field relasi (siapa pemegang aset, siapa approver, departemen apa) tetap tampil
+   sebagai dropdown/picker yang sudah ada gayanya di form existing; yang berubah
+   hanyalah bahwa pilihan tersebut harus terikat ke ID entitas nyata, bukan lagi
+   teks bebas (lihat `docs/ERD.md` §4 dan `docs/AUDIT_FINDINGS.md` §4).

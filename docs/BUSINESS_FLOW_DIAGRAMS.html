@@ -1,0 +1,482 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>NusaHR — Diagram Flow Bisnis & Sistem (Hasil Audit Pre-Backend)</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
+<style>
+  :root{
+    --bg:#f8fafc; --panel:#ffffff; --ink:#0f172a; --muted:#475569;
+    --line:#e2e8f0; --accent:#4f46e5; --accent-soft:#eef2ff;
+    --crit:#dc2626; --crit-bg:#fef2f2; --high:#d97706; --high-bg:#fffbeb;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;line-height:1.5}
+  header{background:linear-gradient(135deg,#312e81,#4f46e5);color:#fff;padding:28px 20px}
+  header h1{margin:0 0 6px;font-size:22px}
+  header p{margin:0;color:#e0e7ff;font-size:13px;max-width:900px}
+  .layout{display:flex;max-width:1400px;margin:0 auto}
+  nav{width:250px;flex:0 0 250px;padding:20px 12px;position:sticky;top:0;align-self:flex-start;max-height:100vh;overflow-y:auto}
+  nav a{display:block;padding:7px 10px;border-radius:8px;color:var(--muted);text-decoration:none;font-size:12.5px;margin-bottom:2px}
+  nav a:hover{background:var(--accent-soft);color:var(--accent)}
+  main{flex:1;min-width:0;padding:24px 24px 80px}
+  section{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px 22px;margin-bottom:28px}
+  section h2{margin:0 0 4px;font-size:17px}
+  section h2 .num{color:var(--accent);margin-right:8px}
+  section .desc{color:var(--muted);font-size:13px;margin:0 0 16px;max-width:900px}
+  .mermaid{background:#fff;border:1px solid var(--line);border-radius:10px;padding:14px;overflow-x:auto}
+  .badge{display:inline-block;font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;margin-left:8px}
+  .badge.crit{color:var(--crit);background:var(--crit-bg)}
+  .badge.high{color:var(--high);background:var(--high-bg)}
+  .note{font-size:12.5px;color:var(--muted);background:#f1f5f9;border-left:3px solid var(--accent);padding:10px 12px;border-radius:0 8px 8px 0;margin-top:12px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  @media (max-width:980px){.layout{flex-direction:column}nav{position:static;width:100%;max-height:none;display:flex;flex-wrap:wrap;gap:4px}.grid2{grid-template-columns:1fr}}
+  table{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:10px}
+  th,td{border:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}
+  th{background:#f8fafc}
+  code{background:#f1f5f9;padding:1px 5px;border-radius:5px;font-size:12px}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>NusaHR Enterprise HRMS — Diagram Sistem & Flow Bisnis</h1>
+  <p>Hasil audit frontend pre-backend (31 Okt 2026). Semua diagram di halaman ini menggambarkan
+  <strong>target desain yang benar</strong> setelah temuan inkonsistensi diperbaiki — bukan
+  rekonstruksi dari kode saat ini. Detail temuan ada di <code>docs/AUDIT_FINDINGS.md</code>.
+  Konsep UI/UX tidak berubah — ini murni peta data &amp; proses.</p>
+</header>
+
+<div class="layout">
+  <nav>
+    <a href="#arch">1. Arsitektur Sistem</a>
+    <a href="#db-core">2. Database — Core HR &amp; Org</a>
+    <a href="#db-approval">3. Database — Approval Engine</a>
+    <a href="#db-doc-asset">4. Database — Dokumen &amp; Aset</a>
+    <a href="#flow-approval-settings">5. Flow: Pengaturan Approval</a>
+    <a href="#flow-cuti">6. Flow: Cuti/Leave End-to-End</a>
+    <a href="#flow-document">7. Flow: TTD Dokumen &amp; QR</a>
+    <a href="#flow-asset">8. Flow: Siklus Hidup Aset GA</a>
+    <a href="#flow-recruitment">9. Flow: Rekrutmen → Onboarding</a>
+    <a href="#flow-personalia">10. Flow: Personalia (Promosi/Mutasi)</a>
+    <a href="#flow-sppd-loan">11. Flow: SPPD &amp; Pinjaman</a>
+    <a href="#module-map">12. Peta Keterhubungan Modul</a>
+    <a href="#tenancy">13. Hierarki Entitas &amp; Paket SaaS</a>
+  </nav>
+
+  <main>
+
+    <section id="arch">
+      <h2><span class="num">1.</span>Arsitektur Sistem — Target</h2>
+      <p class="desc">Lapisan presentasi tetap seperti sekarang (React 19 + Tailwind). Yang berubah
+      adalah lapisan state/persistensi: saat ini simulasi <code>localStorage</code> per-browser,
+      target-nya adalah API + database nyata dengan Approval Engine &amp; Document Engine sebagai
+      service terpisah yang dipakai bersama oleh semua modul.</p>
+      <div class="mermaid">
+flowchart TB
+  subgraph UI["Presentation Layer (tidak berubah)"]
+    M1["Modul: Employee, Personalia, Attendance, Payroll, GA, Dokumen, dst"]
+  end
+  subgraph SVC["Application Services (BARU — pengganti HrmsContext monolitik)"]
+    AE["Approval Engine Service"]
+    DE["Document &amp; Signature Service"]
+    CE["Calculation Engines: PPh21, BPJS, Overtime"]
+    NE["Org &amp; Master Data Service"]
+  end
+  subgraph DATA["Persistence Layer (BARU — pengganti localStorage)"]
+    PG["PostgreSQL: tenant-scoped + entity-scoped tables"]
+    OBJ["Object Storage: dokumen, foto, logo"]
+  end
+  UI -->|"REST/GraphQL API"| SVC
+  M1 -->|"submit request kategori apapun"| AE
+  M1 -->|"terbitkan dokumen resmi"| DE
+  DE -->|"dokumen butuh approval berjenjang"| AE
+  AE --> PG
+  DE --> PG
+  DE --> OBJ
+  NE --> PG
+  CE --> PG
+      </div>
+      <div class="note">Catatan audit: implementasi saat ini TIDAK memiliki Approval Engine/Document
+      Service sebagai layanan terpisah — logikanya tersebar &amp; sebagian hardcode di dalam satu
+      file <code>HrmsContext.tsx</code> (~4700 baris). Lihat <code>docs/AUDIT_FINDINGS.md</code> §1-2.</div>
+    </section>
+
+    <section id="db-core">
+      <h2><span class="num">2.</span>Database — Core HR &amp; Struktur Organisasi</h2>
+      <p class="desc">Perbaikan utama: <code>department</code> dan garis pelaporan jadi foreign key,
+      bukan teks bebas, dan setiap aksi personalia wajib menyinkronkan node org chart.</p>
+      <div class="mermaid">
+erDiagram
+  TENANTS ||--o{ COMPANY_ENTITIES : owns
+  COMPANY_ENTITIES ||--o{ COMPANY_DEPARTMENTS : has
+  COMPANY_ENTITIES ||--o{ ORG_STRUCTURE_NODES : scopes
+  ORG_STRUCTURE_NODES ||--o| ORG_STRUCTURE_NODES : "reports_to"
+  COMPANY_DEPARTMENTS ||--o{ EMPLOYEES : "department_id (FK, bukan teks)"
+  ORG_STRUCTURE_NODES ||--o| EMPLOYEES : "org_node_id (kursi resmi)"
+  EMPLOYEES ||--o| EMPLOYEES : "manager_id (satu-satunya sumber garis pelaporan)"
+  GRADE_SALARY_RANGES ||--o{ EMPLOYEES : governs
+  EMPLOYEES ||--o{ PERSONALIA_LOGS : "riwayat mutasi"
+  PERSONALIA_LOGS }o--|| ORG_STRUCTURE_NODES : "target_node_id"
+      </div>
+      <table>
+        <tr><th>Perubahan</th><th>Alasan (temuan audit)</th></tr>
+        <tr><td><code>employees.department_id</code> FK</td><td>Saat ini <code>department</code> teks bebas di 3 tempat berbeda, tidak bisa divalidasi — AUDIT_FINDINGS §4</td></tr>
+        <tr><td><code>employees.org_node_id</code> FK</td><td>Promosi/mutasi saat ini tidak menyinkronkan org chart sama sekali — AUDIT_FINDINGS §4</td></tr>
+        <tr><td>Hapus <code>direct_supervisor</code> (teks)</td><td>Dua field paralel untuk atasan (ID vs teks) berisiko konflik</td></tr>
+      </table>
+    </section>
+
+    <section id="db-approval">
+      <h2><span class="num">3.</span>Database — Approval Engine <span class="badge crit">Critical</span></h2>
+      <p class="desc">Model ini menggantikan tabel <code>approval_items</code> datar yang sekarang
+      hardcode levelnya di kode aplikasi.</p>
+      <div class="mermaid">
+erDiagram
+  APPROVAL_FLOW_DEFINITIONS ||--o{ APPROVAL_FLOW_STEPS : "level 1..N"
+  APPROVAL_FLOW_STEPS }o--|| ORG_STRUCTURE_NODES : "approver_node_id (opsional)"
+  APPROVAL_FLOW_DEFINITIONS ||--o{ APPROVAL_REQUESTS : governs
+  APPROVAL_REQUESTS }o--|| EMPLOYEES : requested_by
+  APPROVAL_REQUESTS ||--o{ APPROVAL_DECISIONS : "riwayat tiap level"
+  APPROVAL_REQUESTS ||--o{ APPROVAL_WATCHERS : "mengetahui / CC"
+  EMPLOYEES ||--o{ APPROVAL_DELEGATIONS : "sebagai principal"
+  EMPLOYEES ||--o{ APPROVAL_DELEGATIONS : "sebagai substitute"
+  APPROVAL_DECISIONS }o--|| EMPLOYEES : decided_by
+      </div>
+      <div class="note">Temuan kunci: <code>approval_delegations</code> sudah ada sebagai tipe di
+      frontend tapi nol data &amp; tidak pernah dibaca saat resolusi approver (bypass delegasi).
+      Beberapa kategori (Pinjaman, SPPD, Reimbursement) bisa "melompat" langsung ke status final
+      tanpa melewati seluruh baris <code>approval_flow_steps</code> — ini harus ditutup di level
+      service, bukan di UI. Lihat AUDIT_FINDINGS §1.</div>
+    </section>
+
+    <section id="db-doc-asset">
+      <h2><span class="num">4.</span>Database — Dokumen Resmi &amp; Aset GA <span class="badge crit">Critical</span></h2>
+      <div class="grid2">
+        <div>
+          <h3 style="font-size:13px;margin:0 0 8px;color:var(--muted)">Dokumen Multi-Signer</h3>
+          <div class="mermaid">
+erDiagram
+  OFFICIAL_DOCUMENTS ||--o{ DOCUMENT_SIGNATORIES : requires
+  DOCUMENT_SIGNATORIES }o--|| EMPLOYEES : "signed_by"
+  OFFICIAL_DOCUMENTS }o--o| APPROVAL_REQUESTS : "issued_after"
+  OFFICIAL_DOCUMENTS ||--o{ DOCUMENT_AUDIT_EVENTS : logs
+          </div>
+        </div>
+        <div>
+          <h3 style="font-size:13px;margin:0 0 8px;color:var(--muted)">Aset GA &amp; Procurement</h3>
+          <div class="mermaid">
+erDiagram
+  PROCUREMENT_ORDERS ||--o| ASSETS : "generates_on_received"
+  ASSETS ||--o{ ASSET_HANDOVERS : "riwayat pegang"
+  ASSET_HANDOVERS }o--|| EMPLOYEES : "from / to"
+  ASSETS }o--o| OFFICE_LOCATIONS : located_at
+  OFFBOARDING_RECORDS ||--o{ ASSET_HANDOVERS : "wajib_dikembalikan"
+          </div>
+        </div>
+      </div>
+      <div class="note">Lihat <code>docs/ERD.md</code> §4 untuk daftar kolom lengkap kedua model ini
+      (status lifecycle, tanggal garansi, hash tanda tangan, dsb).</div>
+    </section>
+
+    <section id="flow-approval-settings">
+      <h2><span class="num">5.</span>Flow: Pengaturan Approval (Sebelum Dipakai)</h2>
+      <p class="desc">Contoh konfigurasi untuk kategori <strong>Cuti</strong> — admin mengatur ini
+      sekali di menu Pengaturan, lalu seluruh pengajuan cuti otomatis memakai konfigurasi ini.</p>
+      <div class="mermaid">
+flowchart TD
+  A["Admin membuka: Pengaturan > Approval Flow > Kategori: Cuti"] --> B["Tentukan jumlah level: 2"]
+  B --> C["Level 1 approver = Role 'Atasan Langsung' (resolve via reportsToId)"]
+  C --> D["Level 2 approver = Node 'HR Manager' (org chart spesifik)"]
+  D --> E["SLA Level 1 = 24 jam, Level 2 = 24 jam"]
+  E --> F["Aktifkan substitute approver: Ya"]
+  F --> G["Aktifkan watcher 'Mengetahui': HRBU (opsional, notifikasi saja)"]
+  G --> H["Simpan sebagai Approval Flow Definition: Cuti"]
+  H --> I["Semua pengajuan Cuti baru otomatis memakai konfigurasi ini"]
+      </div>
+    </section>
+
+    <section id="flow-cuti">
+      <h2><span class="num">6.</span>Flow: Cuti/Leave End-to-End (dengan Approver Tidak Hadir &amp; SLA)</h2>
+      <p class="desc">Ini contoh "cuti" yang diminta: dari pengajuan, approve, approver tidak hadir,
+      sampai SLA.</p>
+      <div class="mermaid">
+flowchart TD
+  A["Karyawan ajukan Cuti via ESS"] --> B["Sistem hitung sisa kuota 2 bucket:\nCuti Bersama vs Hak Cuti Pribadi"]
+  B --> C{"Kuota cukup?"}
+  C -->|Tidak| X["Ditolak otomatis: kuota tidak cukup"]
+  C -->|Ya| D["Resolve approver Level 1 dari reportsToId"]
+  D --> E{"Approver Level 1\nsedang cuti/tidak aktif?"}
+  E -->|Ya, ada substitute terdaftar| F["Tiket muncul di antrian Substitute"]
+  E -->|Ya, tidak ada substitute| G["Eskalasi otomatis ke HR Admin"]
+  E -->|Tidak, aktif normal| H["Tiket muncul HANYA di antrian approver ini"]
+  F --> I{"Keputusan Level 1"}
+  G --> I
+  H --> I
+  I -->|Tolak| J["Status: Ditolak + alasan tersimpan\nKaryawan dinotifikasi"]
+  I -->|Setuju| K["Lanjut ke Level 2 (HR Manager)"]
+  K --> L{"Keputusan Level 2"}
+  L -->|Tolak| J
+  L -->|Setuju| M["Status: Disetujui Final"]
+  M --> N["Potong leave_ledger_entries sesuai bucket\n(tercatat, bukan langsung timpa angka)"]
+  N --> O["Buat AttendanceRecord: Cuti pada rentang tanggal"]
+  H -. "SLA 24 jam terlewati tanpa keputusan" .-> P["Reminder WhatsApp/Notifikasi"]
+  P -. "masih belum ada keputusan" .-> G
+      </div>
+    </section>
+
+    <section id="flow-document">
+      <h2><span class="num">7.</span>Flow: TTD Dokumen Resmi &amp; QR Verifikasi <span class="badge crit">Critical</span></h2>
+      <p class="desc">Perbaikan utama: QR TIDAK lagi muncul otomatis saat dokumen dibuat. QR hanya
+      muncul setelah seluruh pihak wajib (pembuat, approver, dan "mengetahui") konfirmasi.</p>
+      <div class="mermaid">
+flowchart TD
+  A["HR buat draft dokumen resmi (SK/PKWT/SP/BAST)"] --> B["Status: Draft — QR belum ada"]
+  B --> C["Sistem susun daftar wajib konfirmasi:\n1. Pembuat (maker)\n2. Approver (1..N sesuai Approval Flow kategori Dokumen)\n3. Mengetahui / CC (0..N, notifikasi saja)"]
+  C --> D["Kirim notifikasi ke semua pihak wajib"]
+  D --> E{"Pembuat sudah konfirmasi\n(review ulang isi)?"}
+  E -->|Belum| D
+  E -->|Sudah| F{"Semua Approver sudah\nkonfirmasi/setuju?"}
+  F -->|Belum, ada yang menolak| R["Status: Ditolak — dokumen dikembalikan untuk revisi"]
+  F -->|Belum semua setuju| D
+  F -->|Semua setuju| G{"Semua pihak 'Mengetahui'\nsudah melihat/ack?"}
+  G -->|Belum| D
+  G -->|Sudah| H["Lock nomor surat final (formula penomoran)"]
+  H --> I["Hitung hash kriptografis isi dokumen final"]
+  I --> J["Generate QR verifikasi berisi hash + nomor dokumen"]
+  J --> K["Status: Resmi Diterbitkan"]
+  K --> L["Catat Document Audit Event: QRGenerated, actor=system, waktu=sekarang"]
+      </div>
+    </section>
+
+    <section id="flow-asset">
+      <h2><span class="num">8.</span>Flow: Siklus Hidup Aset GA <span class="badge crit">Critical — Contoh Asli Pemilik Produk</span></h2>
+      <div class="mermaid">
+flowchart TD
+  A["Procurement: Purchase Order 'Barang Diterima'"] --> B["Sistem otomatis buat Asset baru:\nvendor, harga, tgl beli, tgl garansi terbawa dari PO"]
+  B --> C["Status Asset: Available (di GA pool)"]
+  C --> D["GA proses Handover ke Karyawan A"]
+  D --> E["Buat Asset_Handover: from=GA, to=Karyawan A, tgl, kondisi awal"]
+  E --> F["Status Asset: Assigned — assigned_to = Karyawan A"]
+  F --> G["Profil Karyawan A menampilkan aset ini di 'Aset yang Dipegang'"]
+  F --> H{"Perlu perbaikan?"}
+  H -->|Ya| I["Status Asset: InRepair (dicatat tiket maintenance)"]
+  I --> F
+  H -->|Tidak| J{"Karyawan A resign / swap aset?"}
+  J -->|Resign| K["Offboarding: cek asset_handovers aktif milik Karyawan A"]
+  K --> L["Checklist pengembalian PER ASET (bukan 1 boolean umum)"]
+  L --> M["Tiap aset dicentang kembali -> Asset_Handover.return_date diisi"]
+  M --> N["Status Asset: Available kembali di GA pool"]
+  J -->|Swap ke Karyawan B| O["Validasi dua sisi: aset A keluar DAN aset B masuk\ndalam satu transaksi (tidak sepihak)"]
+  O --> F
+  N --> C
+      </div>
+    </section>
+
+    <section id="flow-recruitment">
+      <h2><span class="num">9.</span>Flow: Rekrutmen → Onboarding → Karyawan Aktif</h2>
+      <p class="desc">Perbaikan: data karyawan hasil onboarding otomatis tidak lagi diisi data
+      pribadi acak — field yang belum tersedia wajib ditandai "Perlu Dilengkapi", tidak dipalsukan.</p>
+      <div class="mermaid">
+flowchart TD
+  A["Lowongan dibuka"] --> B["Kandidat melamar"]
+  B --> C["Screening CV"]
+  C --> D["Interview & Tes (skor manual oleh HR)"]
+  D --> E["Kalkulator Offering Letter"]
+  E --> F{"Kandidat menerima?"}
+  F -->|Ya| G["Onboarding Tracker dibuat\nposisi/departemen/gaji dari data offering"]
+  F -->|Tidak| X["Arsip / Reject"]
+  I2["Direct Hire (tanpa lowongan)"] --> G
+  G --> H["Checklist: berkas KTP/NPWP/BPJS, serah terima aset IT, induksi"]
+  H --> J["Selesai onboarding"]
+  J --> K["Generate NIK via mesin format yang SAMA dengan Add Employee manual\n(bukan jalur hardcode terpisah)"]
+  K --> L["Field pribadi yang belum diisi kandidat (tgl lahir, agama, No KK, dst):\nditandai 'Perlu Dilengkapi HR' — TIDAK diisi data acak"]
+  L --> M["Employee aktif, status: Menunggu Kelengkapan Data atau Aktif Penuh"]
+      </div>
+    </section>
+
+    <section id="flow-personalia">
+      <h2><span class="num">10.</span>Flow: Personalia — Promosi/Demosi/Mutasi (Sinkron Org Chart)</h2>
+      <div class="mermaid">
+flowchart TD
+  A["HR pilih karyawan target"] --> B["Pilih jenis aksi: Promosi/Demosi/Mutasi"]
+  B --> C["Pilih jabatan baru dari Org Structure Nodes (wajib, tidak bisa teks bebas)"]
+  C --> D["Validasi gaji baru terhadap Grade Salary Ranges\n(satu-satunya tabel referensi — tidak ada tabel duplikat hardcode)"]
+  D --> E["Approval berjenjang via Approval Engine kategori 'Personalia'"]
+  E --> F{"Disetujui?"}
+  F -->|Tidak| X["Ditolak + alasan tersimpan"]
+  F -->|Ya| G["Dalam SATU transaksi:\n1. Update employee.position/department/grade/basic_salary\n2. Set org_node_lama.current_employee_id = NULL, is_vacant = true\n3. Set org_node_baru.current_employee_id = employee.id"]
+  G --> H["Terbit SK Resmi via Document Engine (§7)\nmenunggu TTD sebelum QR muncul"]
+  H --> I["Org Chart & Employee Master otomatis konsisten"]
+      </div>
+    </section>
+
+    <section id="flow-sppd-loan">
+      <h2><span class="num">11.</span>Flow: SPPD (Perjalanan Dinas) &amp; Pinjaman/Kasbon</h2>
+      <div class="grid2">
+        <div>
+          <h3 style="font-size:13px;margin:0 0 8px;color:var(--muted)">SPPD</h3>
+          <div class="mermaid">
+flowchart TD
+  A["Ajukan SPPD: estimasi biaya"] --> B["Approval Level 1: Atasan"]
+  B --> C["Approval Level 2: Finance"]
+  C --> D["Perjalanan dilakukan"]
+  D --> E["Settlement: input biaya aktual + bukti struk"]
+  E --> F["Simpan actual_cost ke record SPPD itu sendiri\n(bukan hilang setelah submit)"]
+  F --> G{"Selisih > 0?"}
+  G -->|Ya| H["Buat Reimbursement Claim otomatis"]
+  G -->|Tidak| I["Selesai, tidak ada klaim"]
+          </div>
+        </div>
+        <div>
+          <h3 style="font-size:13px;margin:0 0 8px;color:var(--muted)">Pinjaman / Kasbon</h3>
+          <div class="mermaid">
+flowchart TD
+  A["Ajukan pinjaman, pilih Loan Scheme"] --> B["Validasi terhadap aturan scheme:\nmax tenor, max DSR, aturan pinjaman aktif"]
+  B --> C["Approval Level 1: Atasan"]
+  C --> D["Approval Level 2: Payroll Admin\n(WAJIB dua level, tidak boleh dilompati)"]
+  D --> E["Status: Aktif, loan_scheme_id tersimpan sebagai referensi"]
+  E --> F["Setiap payroll run: catat baris ledger cicilan\n(bukan hanya timpa remaining_amount)"]
+  F --> G{"Lunas?"}
+  G -->|Belum| F
+  G -->|Lunas| H["Status: Lunas"]
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="module-map">
+      <h2><span class="num">12.</span>Peta Keterhubungan Modul (Siapa Bergantung pada Siapa)</h2>
+      <p class="desc">Peta ini menunjukkan modul mana yang HARUS saling terhubung agar tidak ada lagi
+      "form berdiri sendiri" seperti temuan audit.</p>
+      <div class="mermaid">
+flowchart LR
+  ORG["Org Structure &amp; Grade/Salary\n(Master Rujukan)"]
+  EMP["Employee Master"]
+  APPR["Approval Engine"]
+  DOC["Document &amp; Signature Engine"]
+  ASSET["GA Asset"]
+  PROC["Procurement"]
+  OFFB["Offboarding"]
+  PAYROLL["Payroll"]
+  LOAN["Loan/Kasbon"]
+  LEAVE["Leave/Cuti"]
+  SPPD["SPPD"]
+  RECRUIT["Recruitment/Onboarding"]
+  KPI["Performance/KPI"]
+  COMPLY["Compliance (SP/PHK)"]
+  AUDIT["Audit Trail"]
+
+  ORG --> EMP
+  RECRUIT --> EMP
+  EMP --> KPI
+  EMP --> OFFB
+  LEAVE --> APPR
+  SPPD --> APPR
+  LOAN --> APPR
+  APPR --> DOC
+  DOC --> AUDIT
+  PROC --> ASSET
+  ASSET --> OFFB
+  OFFB --> ASSET
+  LOAN --> PAYROLL
+  LEAVE --> EMP
+  COMPLY --> OFFB
+  COMPLY --> AUDIT
+  KPI -.->|"idealnya menginformasikan"| EMP
+  ORG -.->|"idealnya memvalidasi"| COMPLY
+      </div>
+      <div class="note">Garis putus-putus = keterhubungan yang seharusnya ada tapi saat ini belum
+      terimplementasi (lihat AUDIT_FINDINGS.md §5 untuk KPI↔Probation, §1 untuk RBAC↔Approval).</div>
+    </section>
+
+    <section id="tenancy">
+      <h2><span class="num">13.</span>Hierarki Entitas, Visibilitas &amp; Paket SaaS <span class="badge high">Baru — Konsep Bisnis</span></h2>
+      <p class="desc">Ditambahkan 31 Okt 2026 dari penjelasan Apps Owner. Kedalaman pohon entitas
+      tidak terbatas; visibilitas data mengikuti arah leluhur→keturunan, bukan per-tenant datar.</p>
+      <div class="mermaid">
+flowchart TB
+  T["Tenant: PT Grup Nusantara\n(Paket: Enterprise, max 5000 karyawan, semua modul aktif)"]
+  T --> H["Holding: PT Grup Nusantara Tbk"]
+  H --> A1["Anak 1: PT Nusantara Teknologi"]
+  H --> A2["Anak 2: PT Nusantara Retail"]
+  A1 --> C1["Cucu 1a: PT Nusantara Teknologi Cabang Jakarta"]
+  A1 --> C2["Cucu 1b: PT Nusantara Teknologi Cabang Surabaya"]
+  A2 --> C3["Cucu 2a: PT Nusantara Retail Mart"]
+  C1 --> G1["Cicit: Unit Proyek Khusus"]
+
+  style H fill:#eef2ff,stroke:#4f46e5
+  style A1 fill:#f0fdf4,stroke:#16a34a
+  style A2 fill:#f0fdf4,stroke:#16a34a
+  style C1 fill:#fff7ed,stroke:#ea580c
+  style C2 fill:#fff7ed,stroke:#ea580c
+  style C3 fill:#fff7ed,stroke:#ea580c
+  style G1 fill:#fef2f2,stroke:#dc2626
+      </div>
+      <table>
+        <tr><th>Siapa melihat siapa?</th><th>Hasil</th></tr>
+        <tr><td>Holding melihat Anak 1, Anak 2, Cucu 1a/1b/2a, Cicit</td><td>✅ Boleh — semua keturunan, berapapun dalamnya</td></tr>
+        <tr><td>Anak 1 melihat Cucu 1a, 1b, dan Cicit (keturunan Cucu 1a)</td><td>✅ Boleh — keturunan sendiri</td></tr>
+        <tr><td>Anak 1 melihat Anak 2 atau Cucu 2a</td><td>❌ Tidak boleh — Anak 2 adalah <em>sibling</em>, bukan keturunan Anak 1</td></tr>
+        <tr><td>Cucu 1a melihat Cucu 1b</td><td>❌ Tidak boleh — sibling, sama-sama anak dari Anak 1</td></tr>
+        <tr><td>Karyawan di Cucu 2a mencari karyawan di Cucu 1a lewat ESS</td><td>✅ Boleh (hanya foto/NIK/jabatan) — pengecualian direktori, lihat di bawah</td></tr>
+      </table>
+      <div class="mermaid">
+flowchart LR
+  A["Entitas butuh pengaturan baru\n(cth: kebijakan cuti)"] --> B{"owner_entity_id\nsudah diatur?"}
+  B -->|"Belum, default"| C["owner_entity_id = entitas itu sendiri\nForm Pengaturan: EDITABLE oleh entitas ini"]
+  B -->|"Sudah, diambil alih leluhur"| D["owner_entity_id = entitas leluhur X\nForm Pengaturan: READ-ONLY, tampilkan 'Diatur oleh: X'"]
+  C --> E{"Leluhur ambil alih kapan saja?"}
+  E -->|Ya| D
+  D --> F{"Leluhur lepas kembali?"}
+  F -->|Ya| C
+      </div>
+      <div class="note">Implementasi tabel: <code>entity_closure</code> (closure table) untuk query
+      visibilitas <code>O(1)</code>, dan <code>entity_settings_overrides</code> untuk delegasi
+      pengaturan. Detail kolom di <code>docs/ERD.md</code> §4.4a, aturan query di
+      <code>docs/SYSTEM_DESIGN.md</code> §2.1-2.2.</div>
+      <div class="mermaid">
+flowchart LR
+  subgraph TenantSide["Di dalam Tenant — urusan Organisasi masing-masing"]
+    direction TB
+    H2["Holding"] --> A3["Anak 1"]
+    H2 --> A4["Anak 2"]
+    A3 --> C4["Cucu 1a"]
+  end
+  subgraph OwnerSide["App Owner — HANYA agregat"]
+    direction TB
+    Agg["Tenant: PT Grup Nusantara\njumlah_entitas: 4\njumlah_user: 128\npaket: Enterprise, exp: 2027-10-24"]
+  end
+  TenantSide -. "TIDAK pernah dikirim ke App Owner:\nnama entitas, struktur, siapa-lapor-siapa" .-> X["❌"]
+  TenantSide -->|"hanya COUNT(*)"| Agg
+      </div>
+      <div class="note">Koreksi 31 Okt 2026: hierarki entitas (bagian kiri) sepenuhnya urusan
+      internal tenant lewat menu Organisasi mereka sendiri. App Owner (bagian kanan) hanya pernah
+      melihat angka agregat per tenant untuk keperluan billing/limit paket — tidak pernah melihat
+      struktur, nama entitas, atau siapa melapor ke siapa. Lihat <code>docs/PRD.md</code> §1.1
+      poin 10 dan <code>docs/ERD.md</code> §4.4a.</div>
+    </section>
+
+  </main>
+</div>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: "base",
+    themeVariables: {
+      primaryColor: "#eef2ff",
+      primaryTextColor: "#1e1b4b",
+      primaryBorderColor: "#4f46e5",
+      lineColor: "#64748b",
+      secondaryColor: "#f8fafc",
+      tertiaryColor: "#fff7ed",
+      fontFamily: "-apple-system, Segoe UI, Roboto, sans-serif"
+    },
+    flowchart: { useMaxWidth: true, htmlLabels: true, curve: "basis" },
+    er: { useMaxWidth: true }
+  });
+</script>
+</body>
+</html>

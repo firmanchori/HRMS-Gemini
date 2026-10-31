@@ -1,9 +1,9 @@
 # Product Requirements Document (PRD)
 ## NusaHR Enterprise - Multi-Tenant Human Resource Management System (HRMS)
 
-**Versi Dokumen:** 2.4.0  
-**Status:** Approved & Implemented  
-**Tanggal:** 24 Oktober 2026  
+**Versi Dokumen:** 2.5.0 (Addendum Business-Flow Audit)
+**Status:** UI Approved & ~95% Implemented — Business Flow & Backend Belum Final
+**Tanggal:** 24 Oktober 2026 (revisi 31 Oktober 2026 — lihat §3.6-3.8 dan `docs/AUDIT_FINDINGS.md`)
 **Target Platform:** Web (Desktop, Tablet, Mobile Responsive PWA)  
 
 ---
@@ -12,6 +12,54 @@
 **NusaHR Enterprise** adalah platform Human Resource Management System (HRMS) multi-tenant kelas enterprise yang dirancang khusus untuk mematuhi regulasi ketenagakerjaan, perpajakan, dan jaminan sosial Republik Indonesia (UU Cipta Kerja, PP 35/2021, PMK 168/2023 TER 2024, UU ITE No. 11/2008, dan standar BPJS Ketenagakerjaan & Kesehatan).
 
 Platform ini mengakomodasi struktur korporasi multi-tier (Holding Company, Sub-holding / Anak Perusahaan, dan Cabang / Cucu Usaha) dalam arsitektur multi-tenant terisolasi.
+
+---
+
+### 1.1. Model Bisnis SaaS & Hierarki Entitas
+
+> Ditambahkan 31 Oktober 2026 berdasarkan penjelasan pemilik produk — ini adalah
+> model bisnis fondasi yang HARUS tercermin di desain Approval Engine, isolasi data,
+> dan RBAC (lihat `docs/ERD.md` §5 dan `docs/SYSTEM_DESIGN.md` §Multi-Tenancy).
+
+1. **Apps Owner (SaaS Owner)** adalah pemilik platform NusaHR — menjual paket
+   berlangganan ke perusahaan pelanggan (tenant), bukan salah satu tenant itu
+   sendiri.
+2. **Dua tipe pendaftaran tenant:** *Single Entitas* dan *Multi Entitas (Group)*.
+3. **Hierarki entitas tidak dibatasi 3 level.** Entitas Single bisa menambah anak
+   perusahaan, cucu, bahkan cicit perusahaan — kedalaman pohon entitas tidak terbatas
+   (bukan hanya Holding → Anak → Cucu seperti asumsi ERD versi lama).
+4. **Domain/email boleh sama antar level entitas.** Entitas anak boleh memakai
+   domain email yang sama dengan entitas induknya — `email`/`domain` TIDAK boleh
+   diasumsikan unik secara global antar entitas.
+5. **Visibilitas data bersifat hierarkis dan asimetris:**
+   - Entitas induk (di level manapun) bisa **melihat seluruh data** entitas-entitas
+     di bawahnya (anak, cucu, cicit, dst) — read access berjenjang ke bawah.
+   - Entitas anak **hanya bisa melihat entitas di bawahnya sendiri (cucu-nya)**,
+     TIDAK bisa melihat/mengurus entitas setara (sibling — anak lain dari induk yang
+     sama).
+   - Jadi visibilitas bukan sekadar "per tenant", tapi "per cabang pohon entitas".
+6. **Pengaturan (cuti, aset, dll) default dikelola masing-masing entitas** — fleksibel
+   per entitas. Namun entitas induk bisa **mengambil alih** pengaturan anaknya, baik
+   sejak awal dibuat (saat entitas anak pertama kali dibuat oleh induknya) maupun
+   di kemudian hari. Ini berarti setiap domain pengaturan butuh konsep "siapa yang
+   berhak mengedit" (`owner_entity_id`) yang bisa berbeda dari entitas pemilik data.
+7. **Entitas induk yang membuat entitas anak (+ akun admin-nya).** Selebihnya (data
+   & pengaturan operasional) ada di tangan entitas anak tersebut, kecuali diambil
+   alih sesuai poin 6.
+8. **Paket Berlangganan (dikelola Apps Owner):** setiap paket mengatur — mode
+   single/multi entitas, jumlah maksimum karyawan, modul apa saja yang aktif, dan
+   batas waktu langganan. Wajib ada minimal satu paket yang mengaktifkan SEMUA modul.
+9. **Pengecualian ESS — Direktori Karyawan Lintas Entitas:** menu pencarian karyawan
+   di ESS sengaja melanggar aturan visibilitas poin 5 — karyawan bisa mencari &
+   melihat data dasar (foto, NIK, jabatan) milik karyawan DI SEMUA entitas dalam satu
+   tenant, bukan hanya entitas sendiri. Ini direktori ringan, bukan akses penuh.
+10. **Batas Visibilitas App Owner (PENTING, koreksi 31 Okt 2026):** hierarki entitas
+    (poin 2-3, 6-7) adalah **urusan internal tenant sepenuhnya**, dikelola lewat menu
+    Organisasi masing-masing tenant (`OrganizationManagement`) — BUKAN urusan App
+    Owner. App Owner **tidak boleh melihat struktur entitas** tenant mana pun. Yang
+    boleh dilihat App Owner hanyalah **data agregat per tenant**: jumlah entitas dan
+    jumlah user (untuk keperluan penegakan limit paket & billing) — tanpa nama
+    entitas, tanpa struktur pohon, tanpa siapa-lapor-ke-siapa.
 
 ---
 
@@ -88,6 +136,85 @@ Platform ini mengakomodasi struktur korporasi multi-tier (Holding Company, Sub-h
    - **Logo Dokumen Resmi (Kop Dokumen):** Konfigurasi gambar logo resolusi tinggi untuk disematkan pada kop surat SK, kontrak, slip gaji, dan preview dokumen resmi.
    - **App Favicon & Identitas Aplikasi:** Pengaturan icon favicon browser `.ico` / `.png` / SVG serta logo header sistem yang langsung merender ke DOM web.
    - Preview interaktif real-time kop surat dan favicon sebelum disimpan.
+
+---
+
+### 3.6. Pengaturan Approval Berjenjang (Approval Engine) — Target Desain
+
+> Status saat ini (lihat `docs/AUDIT_FINDINGS.md` §1): level approval dan approver
+> masih hardcode di kode, tidak ada layar pengaturan, antrian approval tidak
+> ter-scope per approver, dan delegasi/SLA belum berfungsi nyata. Bagian ini
+> mendefinisikan bagaimana seharusnya alur ini bekerja sebelum backend dibangun.
+
+1. **Pengaturan Flow per Kategori (sebelum dipakai):** Admin mengatur, per kategori
+   request (Cuti, SPPD, Pinjaman, Lembur, Reimbursement, Personalia, Dokumen Resmi,
+   Procurement PR, dll): jumlah level approval, dan approver tiap level — dipilih
+   sebagai *Role* (misal "Manager Langsung"), *Node Org Chart spesifik* (misal
+   "VP Finance"), atau *User tertentu*. SLA jam per level juga diatur di sini, bukan
+   di layar global terpisah.
+2. **Resolusi Approver dari Hierarki Nyata:** Saat request dibuat, approver level-1
+   dihitung dari `reportsToId` karyawan pemohon di Org Chart — bukan string role yang
+   ditempel manual. Antrian approval (Approval Center & MSS Portal) hanya menampilkan
+   item yang approver-nya cocok dengan user yang login (atau delegasinya).
+3. **Approver Tidak Hadir / Delegasi:** Jika approver sedang cuti/tidak aktif pada
+   tanggal request, sistem otomatis menawarkan/meneruskan ke *substitute approver*
+   yang telah diatur sebelumnya (periode mulai-selesai). Delegasi harus benar-benar
+   mengubah siapa yang melihat/boleh memutuskan tiket, bukan sekadar catatan.
+4. **SLA & Eskalasi:** Jika tiket melewati `due_at` tanpa keputusan, sistem mengirim
+   reminder, lalu (jika diaktifkan) eskalasi otomatis ke level berikutnya/approver
+   pengganti. Tidak ada jalur di modul manapun yang boleh "melompati" level approval
+   yang telah ditentukan (lihat temuan bypass kontrol di AUDIT_FINDINGS.md §1).
+5. **Role "Mengetahui" (CC):** Pihak yang hanya perlu mengetahui (bukan memutuskan)
+   dicatat terpisah dari approver pemutus, dengan status "sudah dilihat/belum".
+
+### 3.7. Pengaturan Tanda Tangan Dokumen (TTD) & QR Verifikasi — Target Desain
+
+> Status saat ini (lihat `docs/AUDIT_FINDINGS.md` §2): QR dan status "Resmi
+> Diterbitkan" muncul otomatis saat dokumen dibuat, tanpa menunggu siapa pun
+> konfirmasi — ini harus diperbaiki sebelum backend terhubung.
+
+1. **Multi-Signer Wajib:** Setiap jenis dokumen resmi (SK, PKWT, SP, BAST, dll)
+   mendefinisikan daftar pihak wajib: Pembuat (maker), satu atau lebih
+   Approver/Penyetuju, dan nol atau lebih pihak "Mengetahui" — masing-masing adalah
+   baris tersendiri dengan status individual (`Pending`/`Dilihat`/`Dikonfirmasi`/
+   `Ditolak`) dan timestamp.
+2. **Gerbang Penerbitan QR:** Nomor surat final dan QR verifikasi **hanya muncul
+   setelah seluruh pihak wajib (pembuat + semua approver + semua "mengetahui")
+   berstatus `Dikonfirmasi`**. Sebelum itu, dokumen berstatus `Draft`/`Menunggu TTD`
+   dan tidak menampilkan QR sama sekali.
+3. **Terhubung ke Approval Engine:** Penerbitan dokumen resmi yang memerlukan
+   persetujuan berjenjang (misal SK Promosi) menggunakan Approval Engine yang sama
+   (§3.6) — bukan mekanisme terpisah yang kini berjalan sendiri di modul Dokumen.
+4. **Audit & Keaslian:** Setiap peristiwa (dibuat, dilihat, dikonfirmasi, ditolak, QR
+   diterbitkan) tercatat di jejak audit dengan aktor & waktu. Hash yang disematkan ke
+   QR adalah hash kriptografis nyata atas isi dokumen final (bukan nilai acak), agar
+   klaim kepatuhan UU ITE dapat dibuktikan.
+
+### 3.8. Siklus Hidup Aset GA — Target Desain
+
+> Status saat ini (lihat `docs/AUDIT_FINDINGS.md` §3): field tanggal pembelian/
+> garansi tidak bisa diisi, status ketersediaan aset tidak pernah benar-benar
+> diperbarui, dan Procurement tidak terhubung ke pembuatan Asset. Contoh ini berasal
+> langsung dari masukan pemilik produk.
+
+1. **Data Lengkap per Aset:** Setiap aset menyimpan tanggal pembelian/kedatangan
+   aktual (bisa diinput, bukan hardcode "hari ini"), tanggal akhir garansi, kondisi,
+   lokasi (referensi ke `OfficeLocation`, bukan teks bebas), dan `status` tunggal
+   (`Available`/`Assigned`/`InRepair`/`Retired`) yang menjadi satu-satunya sumber
+   kebenaran ketersediaan.
+2. **Serah Terima Dua Arah:** Setiap serah terima (handover) tercatat di riwayat
+   dengan `from`/`to` karyawan (atau GA pool), tanggal, kondisi saat serah-terima, dan
+   dokumen BAST terkait. Dari sisi karyawan, daftar "aset yang sedang saya pegang"
+   bisa dilihat langsung — bukan cuma dari sisi aset.
+3. **Pengembalian & Swap Atomik:** Mengembalikan aset ke GA mengubah statusnya jadi
+   `Available` lagi (saat ini tidak bisa terjadi sama sekali). Swap dua pihak
+   divalidasi agar tidak ada transfer sepihak yang timpang.
+4. **Procurement → Asset Otomatis:** Saat status Purchase Order menjadi "Barang
+   Diterima", record aset dibuat otomatis dengan vendor, harga, dan garansi terbawa
+   dari PO — bukan diketik ulang manual.
+5. **Offboarding Granular:** Checklist offboarding melacak pengembalian per aset
+   spesifik (bukan satu boolean umum), dan status aset ikut berubah otomatis saat
+   dicentang.
 
 ---
 

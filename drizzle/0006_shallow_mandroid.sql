@@ -1,0 +1,1 @@
+ALTER TABLE "tenant_subscriptions" ADD COLUMN "committed_months" integer;
