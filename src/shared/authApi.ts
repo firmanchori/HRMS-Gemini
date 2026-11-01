@@ -25,11 +25,25 @@ async function post<T>(path: string, body?: unknown): Promise<T> {
   return json as T;
 }
 
+async function get<T>(path: string): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, { credentials: "include" });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new AuthApiError(json.error || `Request failed (${res.status})`, res.status);
+  return json as T;
+}
+
 export interface AuthUser {
   id: string;
   name: string;
   email: string;
   role: "app_owner" | "tenant_admin";
+}
+
+export interface DevAccount {
+  name: string;
+  email: string;
+  role: string;
+  password: string | null;
 }
 
 export const authApi = {
@@ -39,4 +53,6 @@ export const authApi = {
   resetPassword: (token: string, newPassword: string) =>
     post<{ ok: true }>(`/api/auth/reset-password/${token}`, { newPassword }),
   confirmEmail: (token: string) => post<{ ok: true }>(`/api/auth/confirm-email/${token}`),
+  // Dev/test convenience only — the backend hides this (404) outside development.
+  listDevAccounts: () => get<DevAccount[]>("/api/auth/dev-accounts"),
 };

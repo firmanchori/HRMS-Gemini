@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
-import { Lock, Mail, Eye, EyeOff, ShieldCheck, AlertCircle, ArrowRight } from 'lucide-react';
-import { authApi, AuthApiError } from '../../shared/authApi';
+import React, { useState, useEffect } from 'react';
+import { Lock, Mail, Eye, EyeOff, ShieldCheck, AlertCircle, ArrowRight, FlaskConical } from 'lucide-react';
+import { authApi, AuthApiError, type DevAccount } from '../../shared/authApi';
 
 interface LoginScreenProps {
   onLoginSuccess: (email: string, role?: string) => void;
@@ -12,6 +12,21 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [devAccounts, setDevAccounts] = useState<DevAccount[]>([]);
+
+  useEffect(() => {
+    // Dev/test convenience only — the backend returns 404 outside development, so this silently does nothing in production.
+    authApi
+      .listDevAccounts()
+      .then((accounts) => setDevAccounts(accounts.filter((a) => a.password)))
+      .catch(() => setDevAccounts([]));
+  }, []);
+
+  function fillFromDevAccount(account: DevAccount) {
+    setEmail(account.email);
+    setPassword(account.password ?? '');
+    setErrorMessage(null);
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -127,6 +142,36 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
               )}
             </button>
           </form>
+
+          {devAccounts.length > 0 && (
+            <div className="pt-3 border-t border-slate-200">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5 mb-2">
+                <FlaskConical className="w-3 h-3" /> Akun Uji Coba (klik untuk isi otomatis)
+              </span>
+              <div className="space-y-1.5">
+                {devAccounts.map((acc) => (
+                  <button
+                    key={acc.email}
+                    type="button"
+                    onClick={() => fillFromDevAccount(acc)}
+                    className={`w-full text-left p-2 rounded-lg border text-[11px] transition-all ${
+                      email === acc.email
+                        ? 'border-indigo-600 bg-indigo-50/70 text-indigo-900 font-semibold'
+                        : 'border-slate-200 hover:border-slate-300 text-slate-700 bg-slate-50/50'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-slate-900">{acc.name}</span>
+                      <span className="text-[9px] text-slate-400 font-mono uppercase">{acc.role}</span>
+                    </div>
+                    <div className="text-[9px] text-slate-500 font-mono mt-0.5">
+                      {acc.email} &middot; {acc.password}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Footer Security Badges */}

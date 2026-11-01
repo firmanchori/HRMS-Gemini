@@ -35,6 +35,37 @@ authRouter.post("/login", authLimiter, validateBody(loginSchema), async (req, re
   res.json({ id: user.id, name: user.name, email: user.email, role: user.role });
 });
 
+// The one password every account seeded by this repo's dev tooling uses
+// (server/db/seed/examples.ts, APP_OWNER_SEED_PASSWORD default). Never a
+// real signup-created password — we can't recover those from a bcrypt hash,
+// so this stays null for any account that doesn't match it.
+const DEV_TEST_PASSWORD = "ChangeMe123!";
+
+/**
+ * Dev/test convenience only — lists the accounts for whichever context this
+ * request resolved to (tenant admins on a subdomain, App Owner on the bare
+ * domain), with the password filled in ONLY when it actually matches the
+ * known seed password (checked via bcrypt.compare, never assumed). Hidden
+ * entirely outside development so it can never leak real credentials.
+ */
+authRouter.get("/dev-accounts", async (req, res) => {
+  if (process.env.NODE_ENV === "production") return res.status(404).json({ error: "Not found" });
+
+  const role = req.tenant ? "tenant_admin" : "app_owner";
+  const whereClause = req.tenant ? and(eq(users.role, role), eq(users.tenantId, req.tenant.id)) : and(eq(users.role, role), isNull(users.tenantId));
+  const rows = await db.select().from(users).where(whereClause);
+
+  const accounts = await Promise.all(
+    rows.map(async (u) => ({
+      name: u.name,
+      email: u.email,
+      role: u.role,
+      password: u.passwordHash && (await bcrypt.compare(DEV_TEST_PASSWORD, u.passwordHash)) ? DEV_TEST_PASSWORD : null,
+    }))
+  );
+  res.json(accounts);
+});
+
 authRouter.post("/logout", (_req, res) => {
   clearSession(res);
   res.json({ ok: true });
