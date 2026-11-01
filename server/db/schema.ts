@@ -631,3 +631,121 @@ export const officeLocations = pgTable("office_locations", {
   notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+/**
+ * Master data, not a hardcoded dropdown list — "Tingkat/Strata Pendidikan
+ * seharusnya ada data masternya sehingga bisa terus di update dan
+ * diperbaharui" (user, 2026-11-02). Tenant-scoped (not global) because a
+ * tenant may add a level the standard set doesn't cover; seeded with the
+ * standard Indonesian minimum set for every new tenant (see
+ * server/db/seed/masterDataDefaults.ts), never baked into the enum.
+ */
+export const educationLevels = pgTable("education_levels", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  name: text("name").notNull(),
+  sortOrder: integer("sort_order").notNull().default(0),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+/** Master data for "Jurusan/Bidang Studi" — same rationale as educationLevels, picked via checklist (multi-select) on a requisition. */
+export const fieldsOfStudy = pgTable("fields_of_study", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  name: text("name").notNull(),
+  category: text("category"), // e.g. "Teknik", "Ekonomi & Bisnis", "Sosial Humaniora" — grouping for a long checklist
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const employmentStatusEnum = pgEnum("employment_status", ["Aktif", "Cuti Panjang", "Resign", "Diberhentikan", "Pensiun"]);
+
+/**
+ * The actual headcount — distinct from orgStructureNodes (the skeleton
+ * position/slot) and masterJobPositions (the position dictionary). An
+ * active employee optionally occupies one orgStructureNodes row
+ * (currentEmployeeId there is out of scope for this migration — kept as a
+ * separate lookup for now to avoid a cross-cutting change to the org
+ * module's own transactions).
+ */
+export const employees = pgTable("employees", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  entityId: uuid("entity_id").references(() => companyEntities.id).notNull(),
+  nik: text("nik").notNull(),
+  name: text("name").notNull(),
+  email: text("email"),
+  phone: text("phone"),
+  photoUrl: text("photo_url"),
+  positionId: uuid("position_id").references(() => masterJobPositions.id),
+  divisionId: uuid("division_id").references(() => companyDivisions.id),
+  departmentId: uuid("department_id").references(() => companyDepartments.id),
+  orgNodeId: uuid("org_node_id").references(() => orgStructureNodes.id),
+  employmentStatus: employmentStatusEnum("employment_status").notNull().default("Aktif"),
+  joinDate: timestamp("join_date", { withTimezone: true }),
+  resignDate: timestamp("resign_date", { withTimezone: true }),
+  resignReason: text("resign_reason"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const jobRequisitionStatusEnum = pgEnum("job_requisition_status", ["Draft", "PendingApproval", "Approved", "Rejected", "Closed"]);
+export const jobRequisitionTypeEnum = pgEnum("job_requisition_type", ["Baru", "Penggantian"]);
+
+/**
+ * FPTK (Formulir Permintaan Tenaga Kerja) — real backend, replacing the
+ * pure-mock form in RecruitmentManagement.tsx (user, 2026-11-02: "kenapa
+ * semua masih mockup form nya bukan real dari database"). knockoutCriteria/
+ * scoredCriteria/signatories stay jsonb (variable-shape checklist data, not
+ * normalized tables) matching the existing frontend draft shapes; the
+ * requisition process itself (one row, mutable until Approved) is what
+ * needed a real table.
+ */
+export const jobRequisitions = pgTable("job_requisitions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  entityId: uuid("entity_id").references(() => companyEntities.id).notNull(),
+  officeLocationId: uuid("office_location_id").references(() => officeLocations.id),
+  divisionId: uuid("division_id").references(() => companyDivisions.id),
+  departmentId: uuid("department_id").references(() => companyDepartments.id),
+  positionId: uuid("position_id").references(() => masterJobPositions.id),
+  requestedByUserId: uuid("requested_by_user_id").references(() => users.id).notNull(),
+  requisitionType: jobRequisitionTypeEnum("requisition_type").notNull().default("Baru"),
+  // Only set when requisitionType = "Penggantian" — must reference an
+  // employee whose employmentStatus is NOT "Aktif" (enforced in the route,
+  // not the schema: "dropdown nama karyawan ... status yang sudah keluar /
+  // resign / non-aktif").
+  replacementEmployeeId: uuid("replacement_employee_id").references(() => employees.id),
+  headcount: integer("headcount").notNull().default(1),
+  educationLevelId: uuid("education_level_id").references(() => educationLevels.id),
+  fieldsOfStudyIds: jsonb("fields_of_study_ids").notNull().default([]).$type<string[]>(),
+  // Flexible "minimum N years", not a fixed preset list (user, 2026-11-02:
+  // "Saat ini masih fix opsinya tidak fleksibel misal pengalaman minimal 1
+  // tahun, atau minimal 7 tahun").
+  minExperienceYears: integer("min_experience_years").notNull().default(0),
+  knockoutCriteria: jsonb("knockout_criteria").notNull().default([]).$type<unknown[]>(),
+  scoredCriteria: jsonb("scored_criteria").notNull().default([]).$type<unknown[]>(),
+  // [{ role, userId, isRequired, order }] — defaults come from
+  // documentSignatoryConfigs for documentType "FPTK"; a requester may add
+  // more up to that config's maxSignatories (enforced in the route).
+  signatories: jsonb("signatories").notNull().default([]).$type<unknown[]>(),
+  status: jobRequisitionStatusEnum("status").notNull().default("Draft"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+/**
+ * Signatory config lives in Document Management, per document type — not
+ * hardcoded inside each form (user, 2026-11-02; see also the
+ * project_signatory_config_via_document_management memory). Every
+ * document-generating flow (FPTK first, offer letters/SK/contracts later)
+ * reads this instead of inventing its own signatory list.
+ */
+export const documentSignatoryConfigs = pgTable("document_signatory_configs", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  documentType: text("document_type").notNull(), // "FPTK", "OfferLetter", "SK", "Kontrak", ...
+  roleLabel: text("role_label").notNull(), // e.g. "HR Manager", "Direktur Utama"
+  isRequired: boolean("is_required").notNull().default(true),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});

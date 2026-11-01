@@ -15,6 +15,11 @@ import {
   orgStructureSnapshots,
   officeLocations,
   users,
+  educationLevels,
+  fieldsOfStudy,
+  employees,
+  jobRequisitions,
+  documentSignatoryConfigs,
 } from "../db/schema.ts";
 import { requireTenantAdmin } from "../middleware/auth.ts";
 import { validateBody, validateParams, uuidParam } from "../lib/validate.ts";
@@ -756,5 +761,252 @@ tenantRouter.put("/office-locations/:id", validateParams(uuidParam("id")), valid
     .returning();
   if (!updated) return res.status(404).json({ error: "Lokasi kantor tidak ditemukan" });
   await logAudit({ actorUserId: req.session!.userId, tenantId, action: "office_location.update", details: { officeLocationId: updated.id } });
+  res.json(updated);
+});
+
+// ---------------------------------------------------------------------------
+// Master data: Tingkat/Strata Pendidikan & Jurusan/Bidang Studi — tenant-wide
+// reference data, not a hardcoded frontend list (user, 2026-11-02).
+// ---------------------------------------------------------------------------
+
+tenantRouter.get("/education-levels", async (req, res) => {
+  res.json(await db.select().from(educationLevels).where(eq(educationLevels.tenantId, req.session!.tenantId!)).orderBy(educationLevels.sortOrder));
+});
+
+const educationLevelSchema = z.object({
+  name: z.string().trim().min(1).max(100),
+  sortOrder: z.number().int().optional(),
+  isActive: z.boolean().optional(),
+});
+
+tenantRouter.post("/education-levels", validateBody(educationLevelSchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [created] = await db.insert(educationLevels).values({ ...req.body, tenantId }).returning();
+  res.status(201).json(created);
+});
+
+tenantRouter.put("/education-levels/:id", validateParams(uuidParam("id")), validateBody(educationLevelSchema.partial()), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [updated] = await db
+    .update(educationLevels)
+    .set(req.body)
+    .where(and(eq(educationLevels.id, req.params.id), eq(educationLevels.tenantId, tenantId)))
+    .returning();
+  if (!updated) return res.status(404).json({ error: "Tingkat pendidikan tidak ditemukan" });
+  res.json(updated);
+});
+
+tenantRouter.delete("/education-levels/:id", validateParams(uuidParam("id")), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [deleted] = await db.delete(educationLevels).where(and(eq(educationLevels.id, req.params.id), eq(educationLevels.tenantId, tenantId))).returning();
+  if (!deleted) return res.status(404).json({ error: "Tingkat pendidikan tidak ditemukan" });
+  res.json({ ok: true });
+});
+
+tenantRouter.get("/fields-of-study", async (req, res) => {
+  res.json(await db.select().from(fieldsOfStudy).where(eq(fieldsOfStudy.tenantId, req.session!.tenantId!)));
+});
+
+const fieldOfStudySchema = z.object({
+  name: z.string().trim().min(1).max(150),
+  category: z.string().trim().max(100).optional(),
+  isActive: z.boolean().optional(),
+});
+
+tenantRouter.post("/fields-of-study", validateBody(fieldOfStudySchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [created] = await db.insert(fieldsOfStudy).values({ ...req.body, tenantId }).returning();
+  res.status(201).json(created);
+});
+
+tenantRouter.put("/fields-of-study/:id", validateParams(uuidParam("id")), validateBody(fieldOfStudySchema.partial()), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [updated] = await db
+    .update(fieldsOfStudy)
+    .set(req.body)
+    .where(and(eq(fieldsOfStudy.id, req.params.id), eq(fieldsOfStudy.tenantId, tenantId)))
+    .returning();
+  if (!updated) return res.status(404).json({ error: "Jurusan/bidang studi tidak ditemukan" });
+  res.json(updated);
+});
+
+tenantRouter.delete("/fields-of-study/:id", validateParams(uuidParam("id")), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [deleted] = await db.delete(fieldsOfStudy).where(and(eq(fieldsOfStudy.id, req.params.id), eq(fieldsOfStudy.tenantId, tenantId))).returning();
+  if (!deleted) return res.status(404).json({ error: "Jurusan/bidang studi tidak ditemukan" });
+  res.json({ ok: true });
+});
+
+// ---------------------------------------------------------------------------
+// Employees — real headcount, vertically scoped like /users (self +
+// descendant entities only, never tenant-wide).
+// ---------------------------------------------------------------------------
+
+tenantRouter.get("/employees", async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [callerUser] = await db.select().from(users).where(eq(users.id, req.session!.userId)).limit(1);
+  const callerEntityId = await resolveCallerEntityId(callerUser, tenantId);
+  if (!callerEntityId) return res.json([]);
+  const visibleRows = await db.select({ id: entityClosure.descendantEntityId }).from(entityClosure).where(eq(entityClosure.ancestorEntityId, callerEntityId));
+  const visibleEntityIds = visibleRows.map((r) => r.id);
+  if (visibleEntityIds.length === 0) return res.json([]);
+  res.json(await db.select().from(employees).where(and(eq(employees.tenantId, tenantId), inArray(employees.entityId, visibleEntityIds))));
+});
+
+/** Only employees whose status is NOT "Aktif" — the FPTK "Nama Karyawan Sebelumnya (Jika Penggantian)" dropdown (user, 2026-11-02). */
+tenantRouter.get("/employees/inactive", async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [callerUser] = await db.select().from(users).where(eq(users.id, req.session!.userId)).limit(1);
+  const callerEntityId = await resolveCallerEntityId(callerUser, tenantId);
+  if (!callerEntityId) return res.json([]);
+  const visibleRows = await db.select({ id: entityClosure.descendantEntityId }).from(entityClosure).where(eq(entityClosure.ancestorEntityId, callerEntityId));
+  const visibleEntityIds = visibleRows.map((r) => r.id);
+  if (visibleEntityIds.length === 0) return res.json([]);
+  const rows = await db.select().from(employees).where(and(eq(employees.tenantId, tenantId), inArray(employees.entityId, visibleEntityIds)));
+  res.json(rows.filter((e) => e.employmentStatus !== "Aktif"));
+});
+
+const employeeSchema = z.object({
+  entityId: z.string().uuid(),
+  nik: z.string().trim().min(1).max(50),
+  name: z.string().trim().min(2).max(200),
+  email: z.string().trim().email().optional(),
+  phone: z.string().trim().max(50).optional(),
+  photoUrl: z.string().trim().max(2000).optional(),
+  positionId: z.string().uuid().optional(),
+  divisionId: z.string().uuid().optional(),
+  departmentId: z.string().uuid().optional(),
+  orgNodeId: z.string().uuid().optional(),
+  employmentStatus: z.enum(["Aktif", "Cuti Panjang", "Resign", "Diberhentikan", "Pensiun"]).optional(),
+  joinDate: z.string().datetime().optional(),
+  resignDate: z.string().datetime().optional(),
+  resignReason: z.string().trim().max(500).optional(),
+});
+
+tenantRouter.post("/employees", validateBody(employeeSchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [created] = await db.insert(employees).values({ ...req.body, tenantId }).returning();
+  await logAudit({ actorUserId: req.session!.userId, tenantId, action: "employee.create", details: { employeeId: created.id } });
+  res.status(201).json(created);
+});
+
+tenantRouter.put("/employees/:id", validateParams(uuidParam("id")), validateBody(employeeSchema.partial()), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [updated] = await db
+    .update(employees)
+    .set(req.body)
+    .where(and(eq(employees.id, req.params.id), eq(employees.tenantId, tenantId)))
+    .returning();
+  if (!updated) return res.status(404).json({ error: "Karyawan tidak ditemukan" });
+  await logAudit({ actorUserId: req.session!.userId, tenantId, action: "employee.update", details: { employeeId: updated.id } });
+  res.json(updated);
+});
+
+// ---------------------------------------------------------------------------
+// Document signatory config — per document type, read by every
+// document-generating flow (FPTK first) instead of each form hardcoding its
+// own signatory list (user, 2026-11-02; project_signatory_config_via_document_management).
+// ---------------------------------------------------------------------------
+
+tenantRouter.get("/document-signatory-configs", async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const documentType = typeof req.query.documentType === "string" ? req.query.documentType : undefined;
+  const conditions = documentType ? and(eq(documentSignatoryConfigs.tenantId, tenantId), eq(documentSignatoryConfigs.documentType, documentType)) : eq(documentSignatoryConfigs.tenantId, tenantId);
+  res.json(await db.select().from(documentSignatoryConfigs).where(conditions).orderBy(documentSignatoryConfigs.sortOrder));
+});
+
+const signatoryConfigSchema = z.object({
+  documentType: z.string().trim().min(1).max(100),
+  roleLabel: z.string().trim().min(1).max(200),
+  isRequired: z.boolean().optional(),
+  sortOrder: z.number().int().optional(),
+});
+
+tenantRouter.post("/document-signatory-configs", validateBody(signatoryConfigSchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [created] = await db.insert(documentSignatoryConfigs).values({ ...req.body, tenantId }).returning();
+  res.status(201).json(created);
+});
+
+tenantRouter.put("/document-signatory-configs/:id", validateParams(uuidParam("id")), validateBody(signatoryConfigSchema.partial()), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [updated] = await db
+    .update(documentSignatoryConfigs)
+    .set(req.body)
+    .where(and(eq(documentSignatoryConfigs.id, req.params.id), eq(documentSignatoryConfigs.tenantId, tenantId)))
+    .returning();
+  if (!updated) return res.status(404).json({ error: "Konfigurasi penandatangan tidak ditemukan" });
+  res.json(updated);
+});
+
+tenantRouter.delete("/document-signatory-configs/:id", validateParams(uuidParam("id")), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [deleted] = await db.delete(documentSignatoryConfigs).where(and(eq(documentSignatoryConfigs.id, req.params.id), eq(documentSignatoryConfigs.tenantId, tenantId))).returning();
+  if (!deleted) return res.status(404).json({ error: "Konfigurasi penandatangan tidak ditemukan" });
+  res.json({ ok: true });
+});
+
+// ---------------------------------------------------------------------------
+// Job Requisitions (FPTK) — real backend, replacing the mock-only form in
+// RecruitmentManagement.tsx (user, 2026-11-02).
+// ---------------------------------------------------------------------------
+
+tenantRouter.get("/job-requisitions", async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [callerUser] = await db.select().from(users).where(eq(users.id, req.session!.userId)).limit(1);
+  const callerEntityId = await resolveCallerEntityId(callerUser, tenantId);
+  if (!callerEntityId) return res.json([]);
+  const visibleRows = await db.select({ id: entityClosure.descendantEntityId }).from(entityClosure).where(eq(entityClosure.ancestorEntityId, callerEntityId));
+  const visibleEntityIds = visibleRows.map((r) => r.id);
+  if (visibleEntityIds.length === 0) return res.json([]);
+  res.json(await db.select().from(jobRequisitions).where(and(eq(jobRequisitions.tenantId, tenantId), inArray(jobRequisitions.entityId, visibleEntityIds))));
+});
+
+const jobRequisitionSchema = z.object({
+  entityId: z.string().uuid(),
+  officeLocationId: z.string().uuid().optional(),
+  divisionId: z.string().uuid().optional(),
+  departmentId: z.string().uuid().optional(),
+  positionId: z.string().uuid().optional(),
+  requisitionType: z.enum(["Baru", "Penggantian"]).optional(),
+  replacementEmployeeId: z.string().uuid().optional(),
+  headcount: z.number().int().min(1).optional(),
+  educationLevelId: z.string().uuid().optional(),
+  fieldsOfStudyIds: z.array(z.string().uuid()).optional(),
+  minExperienceYears: z.number().int().min(0).optional(),
+  knockoutCriteria: z.array(z.unknown()).optional(),
+  scoredCriteria: z.array(z.unknown()).optional(),
+  signatories: z.array(z.unknown()).optional(),
+  status: z.enum(["Draft", "PendingApproval", "Approved", "Rejected", "Closed"]).optional(),
+});
+
+tenantRouter.post("/job-requisitions", validateBody(jobRequisitionSchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const userId = req.session!.userId;
+
+  // "Nama Karyawan Sebelumnya (Jika Penggantian)" must be someone who has
+  // actually left — never an Aktif employee (user, 2026-11-02).
+  if (req.body.requisitionType === "Penggantian" && req.body.replacementEmployeeId) {
+    const [replacement] = await db.select().from(employees).where(eq(employees.id, req.body.replacementEmployeeId)).limit(1);
+    if (!replacement || replacement.tenantId !== tenantId) return res.status(404).json({ error: "Karyawan pengganti tidak ditemukan" });
+    if (replacement.employmentStatus === "Aktif") {
+      return res.status(400).json({ error: "Karyawan yang dipilih sebagai 'Nama Karyawan Sebelumnya' masih berstatus Aktif" });
+    }
+  }
+
+  const [created] = await db.insert(jobRequisitions).values({ ...req.body, tenantId, requestedByUserId: userId }).returning();
+  await logAudit({ actorUserId: userId, tenantId, action: "job_requisition.create", details: { jobRequisitionId: created.id } });
+  res.status(201).json(created);
+});
+
+tenantRouter.put("/job-requisitions/:id", validateParams(uuidParam("id")), validateBody(jobRequisitionSchema.partial()), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [updated] = await db
+    .update(jobRequisitions)
+    .set(req.body)
+    .where(and(eq(jobRequisitions.id, req.params.id), eq(jobRequisitions.tenantId, tenantId)))
+    .returning();
+  if (!updated) return res.status(404).json({ error: "FPTK tidak ditemukan" });
+  await logAudit({ actorUserId: req.session!.userId, tenantId, action: "job_requisition.update", details: { jobRequisitionId: updated.id } });
   res.json(updated);
 });

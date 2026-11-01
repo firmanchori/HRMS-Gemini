@@ -153,6 +153,77 @@ export interface OfficeLocation {
   notes: string | null;
 }
 
+export interface EducationLevel {
+  id: string;
+  tenantId: string;
+  name: string;
+  sortOrder: number;
+  isActive: boolean;
+}
+
+export interface FieldOfStudy {
+  id: string;
+  tenantId: string;
+  name: string;
+  category: string | null;
+  isActive: boolean;
+}
+
+export type EmploymentStatus = "Aktif" | "Cuti Panjang" | "Resign" | "Diberhentikan" | "Pensiun";
+
+export interface Employee {
+  id: string;
+  tenantId: string;
+  entityId: string;
+  nik: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  photoUrl: string | null;
+  positionId: string | null;
+  divisionId: string | null;
+  departmentId: string | null;
+  orgNodeId: string | null;
+  employmentStatus: EmploymentStatus;
+  joinDate: string | null;
+  resignDate: string | null;
+  resignReason: string | null;
+}
+
+export interface DocumentSignatoryConfig {
+  id: string;
+  tenantId: string;
+  documentType: string;
+  roleLabel: string;
+  isRequired: boolean;
+  sortOrder: number;
+}
+
+export type JobRequisitionStatus = "Draft" | "PendingApproval" | "Approved" | "Rejected" | "Closed";
+export type JobRequisitionType = "Baru" | "Penggantian";
+
+export interface JobRequisition {
+  id: string;
+  tenantId: string;
+  entityId: string;
+  officeLocationId: string | null;
+  divisionId: string | null;
+  departmentId: string | null;
+  positionId: string | null;
+  requestedByUserId: string;
+  requisitionType: JobRequisitionType;
+  replacementEmployeeId: string | null;
+  headcount: number;
+  educationLevelId: string | null;
+  fieldsOfStudyIds: string[];
+  minExperienceYears: number;
+  knockoutCriteria: unknown[];
+  scoredCriteria: unknown[];
+  signatories: unknown[];
+  status: JobRequisitionStatus;
+  createdAt: string;
+}
+
 export type OrgChangeSet = { create?: Record<string, unknown>[]; update?: { id: string; data: Record<string, unknown> }[]; delete?: string[] };
 
 export interface OrgChangeProposal {
@@ -240,4 +311,37 @@ export const tenantApi = {
   approveProposal: (id: string) => request<OrgChangeProposal>(`/api/tenant/org-change-proposals/${id}/approve`, { method: "POST" }),
   rejectProposal: (id: string, rejectionReason: string) =>
     request<OrgChangeProposal>(`/api/tenant/org-change-proposals/${id}/reject`, { method: "POST", body: JSON.stringify({ rejectionReason }) }),
+
+  // Master data — education levels & fields of study (user, 2026-11-02: these must have real master data, not a hardcoded list).
+  listEducationLevels: () => request<EducationLevel[]>("/api/tenant/education-levels"),
+  createEducationLevel: (data: { name: string; sortOrder?: number }) => request<EducationLevel>("/api/tenant/education-levels", { method: "POST", body: JSON.stringify(data) }),
+  updateEducationLevel: (id: string, data: Partial<EducationLevel>) => request<EducationLevel>(`/api/tenant/education-levels/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteEducationLevel: (id: string) => request<{ ok: true }>(`/api/tenant/education-levels/${id}`, { method: "DELETE" }),
+
+  listFieldsOfStudy: () => request<FieldOfStudy[]>("/api/tenant/fields-of-study"),
+  createFieldOfStudy: (data: { name: string; category?: string }) => request<FieldOfStudy>("/api/tenant/fields-of-study", { method: "POST", body: JSON.stringify(data) }),
+  updateFieldOfStudy: (id: string, data: Partial<FieldOfStudy>) => request<FieldOfStudy>(`/api/tenant/fields-of-study/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteFieldOfStudy: (id: string) => request<{ ok: true }>(`/api/tenant/fields-of-study/${id}`, { method: "DELETE" }),
+
+  // Employees — real headcount; the "inactive" list is what the FPTK "Nama Karyawan Sebelumnya (Jika Penggantian)" dropdown uses.
+  listEmployees: () => request<Employee[]>("/api/tenant/employees"),
+  listInactiveEmployees: () => request<Employee[]>("/api/tenant/employees/inactive"),
+  createEmployee: (data: Omit<Employee, "id" | "tenantId">) => request<Employee>("/api/tenant/employees", { method: "POST", body: JSON.stringify(data) }),
+  updateEmployee: (id: string, data: Partial<Employee>) => request<Employee>(`/api/tenant/employees/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+
+  // Document signatory config — set once per document type in Document Management, read by every document-generating flow (FPTK first).
+  listDocumentSignatoryConfigs: (documentType?: string) =>
+    request<DocumentSignatoryConfig[]>(`/api/tenant/document-signatory-configs${documentType ? `?documentType=${encodeURIComponent(documentType)}` : ""}`),
+  createDocumentSignatoryConfig: (data: { documentType: string; roleLabel: string; isRequired?: boolean; sortOrder?: number }) =>
+    request<DocumentSignatoryConfig>("/api/tenant/document-signatory-configs", { method: "POST", body: JSON.stringify(data) }),
+  updateDocumentSignatoryConfig: (id: string, data: Partial<DocumentSignatoryConfig>) =>
+    request<DocumentSignatoryConfig>(`/api/tenant/document-signatory-configs/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteDocumentSignatoryConfig: (id: string) => request<{ ok: true }>(`/api/tenant/document-signatory-configs/${id}`, { method: "DELETE" }),
+
+  // Job requisitions (FPTK) — real backend.
+  listJobRequisitions: () => request<JobRequisition[]>("/api/tenant/job-requisitions"),
+  createJobRequisition: (data: Partial<JobRequisition> & { entityId: string }) =>
+    request<JobRequisition>("/api/tenant/job-requisitions", { method: "POST", body: JSON.stringify(data) }),
+  updateJobRequisition: (id: string, data: Partial<JobRequisition>) =>
+    request<JobRequisition>(`/api/tenant/job-requisitions/${id}`, { method: "PUT", body: JSON.stringify(data) }),
 };

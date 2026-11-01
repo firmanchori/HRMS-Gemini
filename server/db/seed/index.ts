@@ -8,6 +8,7 @@ import { subscriptionPlans, users, modules, discountSchemes } from "../schema.ts
 import { seedModules } from "./modules.ts";
 import { seedExamples } from "./examples.ts";
 import { seedTenantOrgExamples } from "./tenantOrgExamples.ts";
+import { seedRecruitmentMasterData, seedRecruitmentSamplesForContoh } from "./recruitmentExamples.ts";
 import { computeMonthlyReference } from "../../lib/pricing.ts";
 
 const PRESET_TIERS = [
@@ -99,6 +100,8 @@ async function main() {
   await seedAppOwner();
   await seedExamples();
   await seedTenantOrgExamples();
+  await seedRecruitmentMasterData();
+  await seedRecruitmentSamplesForContoh();
   await pool.end();
 }
 

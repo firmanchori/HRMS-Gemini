@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useHrms } from '../../context/HrmsContext';
+import { NumberInput } from '../common/NumberInput';
+import { SearchableSelect } from '../common/SearchableSelect';
+import { tenantApi, type EducationLevel, type FieldOfStudy, type Employee as TenantEmployee } from '../../tenant/api';
 import {
   ClipboardCheck,
   UserPlus,
@@ -1869,6 +1872,7 @@ export const RecruitmentManagement: React.FC = () => {
   const [fptkHeadcount, setFptkHeadcount] = useState(1);
   const [fptkReason, setFptkReason] = useState<string>('Posisi Baru (New Position)');
   const [fptkReplacementFor, setFptkReplacementFor] = useState('');
+  const [fptkReplacementEmployeeId, setFptkReplacementEmployeeId] = useState('');
   const [fptkIsBudgeted, setFptkIsBudgeted] = useState<boolean>(true);
   const [fptkJustification, setFptkJustification] = useState('');
   const [fptkTargetDate, setFptkTargetDate] = useState('2026-11-15');
@@ -1877,8 +1881,21 @@ export const RecruitmentManagement: React.FC = () => {
   const [fptkSupervisedStaff, setFptkSupervisedStaff] = useState<number>(0);
   const [fptkMainResponsibilities, setFptkMainResponsibilities] = useState('');
   const [fptkEduLevel, setFptkEduLevel] = useState('D4 / S1 - Sarjana');
+  const [fptkEduLevelId, setFptkEduLevelId] = useState('');
   const [fptkEduMajor, setFptkEduMajor] = useState('Teknik Informatika / Sistem Informasi');
+  const [fptkFieldsOfStudyIds, setFptkFieldsOfStudyIds] = useState<string[]>([]);
   const [fptkMinExp, setFptkMinExp] = useState('3 - 5 Tahun');
+  const [fptkMinExpYears, setFptkMinExpYears] = useState<number>(3);
+
+  // Master data real dari backend — bukan preset hardcode lagi (user, 2026-11-02).
+  const [realEducationLevels, setRealEducationLevels] = useState<EducationLevel[]>([]);
+  const [realFieldsOfStudy, setRealFieldsOfStudy] = useState<FieldOfStudy[]>([]);
+  const [inactiveEmployees, setInactiveEmployees] = useState<TenantEmployee[]>([]);
+  useEffect(() => {
+    tenantApi.listEducationLevels().then(setRealEducationLevels).catch(() => setRealEducationLevels([]));
+    tenantApi.listFieldsOfStudy().then(setRealFieldsOfStudy).catch(() => setRealFieldsOfStudy([]));
+    tenantApi.listInactiveEmployees().then(setInactiveEmployees).catch(() => setInactiveEmployees([]));
+  }, []);
   const [fptkSkills, setFptkSkills] = useState('TypeScript, React, Node.js, PostgreSQL, Docker, CI/CD');
   const [fptkOtherRequirements, setFptkOtherRequirements] = useState('Komunikasi proaktif, problem-solving analitis, mampu bekerja mandiri & tim.');
   const [fptkRequirements, setFptkRequirements] = useState('');
@@ -2015,8 +2032,15 @@ export const RecruitmentManagement: React.FC = () => {
     setFptkSupervisedStaff(req.supervisedStaffCount || 0);
     setFptkMainResponsibilities(req.mainResponsibilities || '');
     setFptkEduLevel(req.educationLevel || fptkEduLevel);
+    setFptkEduLevelId(realEducationLevels.find((l) => l.name === req.educationLevel)?.id || '');
     setFptkEduMajor(req.educationMajor || fptkEduMajor);
+    setFptkFieldsOfStudyIds(
+      realFieldsOfStudy.filter((f) => (req.educationMajor || '').split(' / ').map((s) => s.trim()).includes(f.name)).map((f) => f.id)
+    );
     setFptkMinExp(req.minExperience || fptkMinExp);
+    const expMatch = /(\d+)/.exec(req.minExperience || '');
+    setFptkMinExpYears(expMatch ? parseInt(expMatch[1], 10) : 0);
+    setFptkReplacementEmployeeId(inactiveEmployees.find((e) => (req.replacementFor || '').startsWith(e.name))?.id || '');
     setFptkSkills(req.skills || '');
     setFptkOtherRequirements(req.otherRequirements || '');
     setFptkRequirements('');
@@ -10424,12 +10448,11 @@ PT Nusantara Multi Talenta Tbk`);
                       Jumlah Kebutuhan (Headcount) *
                     </label>
                     <div className="relative">
-                      <input
-                        type="number"
+                      <NumberInput
                         min={1}
                         required
                         value={fptkHeadcount}
-                        onChange={(e) => setFptkHeadcount(Math.max(1, Number(e.target.value)))}
+                        onChange={(val) => setFptkHeadcount(Math.max(1, val))}
                         className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold text-slate-900 bg-white"
                       />
                       <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs">
@@ -10497,13 +10520,21 @@ PT Nusantara Multi Talenta Tbk`);
                     <label className="font-semibold text-slate-700 block mb-1">
                       Nama Karyawan Sebelumnya (Jika Penggantian)
                     </label>
-                    <input
-                      type="text"
-                      placeholder="Contoh: Siti Rahmawati (Resign per akhir bulan)"
-                      value={fptkReplacementFor}
-                      onChange={(e) => setFptkReplacementFor(e.target.value)}
+                    <SearchableSelect
+                      options={inactiveEmployees.map((emp) => ({
+                        value: emp.id,
+                        label: emp.name,
+                        sublabel: `${emp.nik} · ${emp.employmentStatus}`,
+                      }))}
+                      value={fptkReplacementEmployeeId}
+                      onChange={(id) => {
+                        setFptkReplacementEmployeeId(id);
+                        const emp = inactiveEmployees.find((e) => e.id === id);
+                        setFptkReplacementFor(emp ? `${emp.name} (${emp.employmentStatus})` : '');
+                      }}
+                      placeholder="-- Pilih karyawan yang sudah keluar/non-aktif --"
                       disabled={!fptkReason.includes('Penggantian')}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-900 bg-white disabled:bg-slate-100 disabled:text-slate-400"
+                      emptyMessage="Belum ada karyawan berstatus keluar/non-aktif."
                     />
                   </div>
                 </div>
@@ -10556,11 +10587,10 @@ PT Nusantara Multi Talenta Tbk`);
                       Jumlah Staf yang Disupervisi
                     </label>
                     <div className="relative">
-                      <input
-                        type="number"
+                      <NumberInput
                         min={0}
                         value={fptkSupervisedStaff}
-                        onChange={(e) => setFptkSupervisedStaff(Math.max(0, Number(e.target.value)))}
+                        onChange={(val) => setFptkSupervisedStaff(Math.max(0, val))}
                         className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono text-slate-900 bg-white focus:ring-1 focus:ring-blue-600 focus:outline-none"
                         placeholder="0 jika Individual Contributor"
                       />
@@ -10622,46 +10652,69 @@ PT Nusantara Multi Talenta Tbk`);
                     <label className="font-semibold text-slate-700 block mb-1">
                       Tingkat / Strata Pendidikan *
                     </label>
-                    <select
-                      value={fptkEduLevel}
-                      onChange={(e) => setFptkEduLevel(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-900 bg-white focus:ring-1 focus:ring-blue-600 focus:outline-none"
-                    >
-                      {COMPANY_EDUCATION_LEVELS.map((lvl) => (
-                        <option key={lvl} value={lvl}>
-                          {lvl}
-                        </option>
-                      ))}
-                    </select>
+                    <SearchableSelect
+                      options={realEducationLevels.filter((l) => l.isActive).map((l) => ({ value: l.id, label: l.name }))}
+                      value={fptkEduLevelId}
+                      onChange={(id) => {
+                        setFptkEduLevelId(id);
+                        const lvl = realEducationLevels.find((l) => l.id === id);
+                        setFptkEduLevel(lvl?.name || '');
+                      }}
+                      placeholder="-- Pilih tingkat pendidikan --"
+                      required
+                      emptyMessage="Belum ada master data tingkat pendidikan. Tambahkan di menu Master Data."
+                    />
                   </div>
                   <div>
                     <label className="font-semibold text-slate-700 block mb-1">
                       Jurusan / Bidang Studi *
                     </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="Contoh: Teknik Informatika / Sistem Informasi"
-                      value={fptkEduMajor}
-                      onChange={(e) => setFptkEduMajor(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-900 bg-white focus:ring-1 focus:ring-blue-600 focus:outline-none"
-                    />
+                    <div className="w-full border border-slate-300 rounded-lg bg-white max-h-40 overflow-y-auto p-2 space-y-1">
+                      {realFieldsOfStudy.filter((f) => f.isActive).length === 0 && (
+                        <p className="text-[11px] text-slate-400 px-1">Belum ada master data jurusan. Tambahkan di menu Master Data.</p>
+                      )}
+                      {realFieldsOfStudy.filter((f) => f.isActive).map((field) => {
+                        const checked = fptkFieldsOfStudyIds.includes(field.id);
+                        return (
+                          <label key={field.id} className="flex items-center gap-2 text-xs px-1 py-0.5 rounded hover:bg-slate-50 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={(e) => {
+                                const next = e.target.checked
+                                  ? [...fptkFieldsOfStudyIds, field.id]
+                                  : fptkFieldsOfStudyIds.filter((id) => id !== field.id);
+                                setFptkFieldsOfStudyIds(next);
+                                setFptkEduMajor(realFieldsOfStudy.filter((f) => next.includes(f.id)).map((f) => f.name).join(' / '));
+                              }}
+                            />
+                            <span className="font-medium text-slate-800">{field.name}</span>
+                            {field.category && <span className="text-slate-400">· {field.category}</span>}
+                          </label>
+                        );
+                      })}
+                    </div>
                   </div>
                   <div>
                     <label className="font-semibold text-slate-700 block mb-1">
                       Lama Pengalaman Kerja *
                     </label>
-                    <select
-                      value={fptkMinExp}
-                      onChange={(e) => setFptkMinExp(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-900 bg-white focus:ring-1 focus:ring-blue-600 focus:outline-none"
-                    >
-                      {COMPANY_EXP_LEVELS.map((exp) => (
-                        <option key={exp} value={exp}>
-                          {exp}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="relative">
+                      <NumberInput
+                        min={0}
+                        value={fptkMinExpYears}
+                        onChange={(val) => {
+                          const years = Math.max(0, val);
+                          setFptkMinExpYears(years);
+                          setFptkMinExp(years === 0 ? 'Tanpa syarat pengalaman (Fresh Graduate)' : `Minimal ${years} Tahun`);
+                        }}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono text-slate-900 bg-white focus:ring-1 focus:ring-blue-600 focus:outline-none"
+                        placeholder="0 jika Fresh Graduate"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs">
+                        Tahun (minimal)
+                      </span>
+                    </div>
                   </div>
                 </div>
 
@@ -10741,19 +10794,20 @@ PT Nusantara Multi Talenta Tbk`);
                             <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block mb-0.5">Kategori</label>
                             <input
                               type="text"
-                              list="fptk-knockout-categories"
+                              readOnly
                               value={k.category}
-                              onChange={(e) => setFptkKnockoutDrafts((prev) => prev.map((x) => (x.id === k.id ? { ...x, category: e.target.value } : x)))}
-                              className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white focus:ring-1 focus:ring-rose-500 focus:outline-none"
+                              title="Berasal dari daftar kategori baku — pilih kategori lain dari tombol + Tambah Kriteria Gugur untuk mengubahnya"
+                              className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs bg-slate-50 text-slate-600 cursor-not-allowed"
                             />
                           </div>
                           <div className="md:col-span-4">
                             <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block mb-0.5">Nama Kriteria</label>
                             <input
                               type="text"
+                              readOnly
                               value={k.label}
-                              onChange={(e) => setFptkKnockoutDrafts((prev) => prev.map((x) => (x.id === k.id ? { ...x, label: e.target.value } : x)))}
-                              className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white focus:ring-1 focus:ring-rose-500 focus:outline-none"
+                              title="Berasal dari daftar kategori baku — pilih kategori lain dari tombol + Tambah Kriteria Gugur untuk mengubahnya"
+                              className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs bg-slate-50 text-slate-600 cursor-not-allowed"
                             />
                           </div>
                           <div className="md:col-span-3">
@@ -10792,11 +10846,6 @@ PT Nusantara Multi Talenta Tbk`);
                       </div>
                     );
                   })}
-                  <datalist id="fptk-knockout-categories">
-                    {KNOCKOUT_CATEGORY_PRESETS.map((p) => (
-                      <option key={p.category} value={p.category} />
-                    ))}
-                  </datalist>
                 </div>
 
                 {/* B. Kriteria Skor */}
@@ -10850,12 +10899,11 @@ PT Nusantara Multi Talenta Tbk`);
                         </div>
                         <div className="md:col-span-3">
                           <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block mb-0.5">Bobot (%)</label>
-                          <input
-                            type="number"
+                          <NumberInput
                             min={0}
                             max={100}
                             value={s.weight}
-                            onChange={(e) => setFptkScoredDrafts((prev) => prev.map((x) => (x.id === s.id ? { ...x, weight: Number(e.target.value) } : x)))}
+                            onChange={(val) => setFptkScoredDrafts((prev) => prev.map((x) => (x.id === s.id ? { ...x, weight: val } : x)))}
                             className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-mono bg-white focus:ring-1 focus:ring-emerald-500 focus:outline-none"
                           />
                         </div>
@@ -10909,7 +10957,7 @@ PT Nusantara Multi Talenta Tbk`);
                       <span>Yang Mengajukan *</span>
                     </span>
                     <span className="text-[10px] text-slate-400 font-normal">
-                      Otomatis dari akun login pembuat form (Readonly)
+                      Diisi otomatis sesuai akun Anda yang sedang login
                     </span>
                   </label>
                   <input

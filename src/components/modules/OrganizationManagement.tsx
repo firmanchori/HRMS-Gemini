@@ -2,6 +2,7 @@ import React, { useState, useRef, useMemo, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom';
 import { useHrms } from '../../context/HrmsContext';
 import { ORG_STRUCTURE_TEMPLATES } from '../../utils/orgStructureTemplates';
+import { NIK_TOKEN_CATALOG, previewNikPattern } from '../../utils/nikGenerator';
 import {
   Network,
   Building2,
@@ -5513,10 +5514,10 @@ export const OrganizationManagement: React.FC = () => {
           }}
         >
           <div
-            className="bg-white rounded-xl shadow-xl max-w-lg w-full border border-slate-200 overflow-hidden"
+            className="bg-white rounded-xl shadow-xl max-w-2xl w-full border border-slate-200 overflow-hidden max-h-[92vh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="px-5 py-4 bg-slate-900 text-white flex items-center justify-between">
+            <div className="px-5 py-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
               <div>
                 <h3 className="text-sm font-bold flex items-center gap-2">
                   <Network className="w-4 h-4 text-indigo-400" />
@@ -5533,7 +5534,8 @@ export const OrganizationManagement: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleCreateEntity} className="p-5 space-y-4 text-xs">
+            <form onSubmit={handleCreateEntity} className="flex flex-col flex-1 overflow-hidden text-xs">
+            <div className="p-5 space-y-4 overflow-y-auto flex-1">
               {entityFormErrors.submit && (
                 <div className="px-3 py-2 bg-red-50 border border-red-200 rounded text-red-700 font-medium">
                   {entityFormErrors.submit}
@@ -5700,12 +5702,52 @@ export const OrganizationManagement: React.FC = () => {
                     Akan memakai: {entities.find((e) => e.id === newEntityParentId)?.nikPattern || '(pola induk saat ini)'}
                   </p>
                 ) : (
-                  <input
-                    type="text"
-                    value={newEntityNikPattern}
-                    onChange={(e) => setNewEntityNikPattern(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded font-mono text-[11px]"
-                  />
+                  <div className="space-y-2">
+                    <input
+                      type="text"
+                      value={newEntityNikPattern}
+                      onChange={(e) => setNewEntityNikPattern(e.target.value)}
+                      placeholder="Contoh: {ENTITY}-{YYYY}-{SEQ:3}"
+                      className="w-full px-3 py-2 border border-slate-300 rounded font-mono text-[11px]"
+                    />
+
+                    {/* Contoh Hasil (Live Preview) */}
+                    <div className="px-3 py-2 bg-indigo-50 border border-indigo-200 rounded-lg flex items-center justify-between gap-2">
+                      <span className="text-[11px] text-indigo-700 font-semibold">Contoh Hasil NIK:</span>
+                      <span className="text-[11px] font-mono font-bold text-indigo-900">
+                        {previewNikPattern(newEntityNikPattern || '{ENTITY}-{YYYY}-{SEQ:3}', 'permanent', newEntityCode.toUpperCase() || 'ABC', 1)}
+                      </span>
+                    </div>
+
+                    {/* Daftar Token - Klik untuk Sisipkan */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-semibold text-slate-600">Daftar Token Variabel (Klik untuk Sisipkan):</span>
+                        <span className="text-[10px] text-slate-400">{NIK_TOKEN_CATALOG.length} Token Tersedia</span>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                        {NIK_TOKEN_CATALOG.map((tok) => (
+                          <button
+                            key={tok.token}
+                            type="button"
+                            onClick={() => setNewEntityNikPattern((prev) => `${prev}${tok.token}`)}
+                            title={tok.description}
+                            className="p-1.5 text-left bg-white hover:bg-indigo-50/70 border border-slate-200 hover:border-indigo-300 rounded-lg transition-all group"
+                          >
+                            <div className="flex items-center justify-between gap-1">
+                              <code className="text-[10px] font-mono font-bold text-indigo-700 group-hover:text-indigo-900 truncate">
+                                {tok.token}
+                              </code>
+                              <span className="text-[9px] px-1 bg-slate-50 text-slate-500 rounded border border-slate-200 font-mono shrink-0">
+                                {tok.example}
+                              </span>
+                            </div>
+                            <div className="text-[10px] text-slate-600 mt-0.5 truncate">{tok.label}</div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
                 )}
               </div>
 
@@ -5786,8 +5828,9 @@ export const OrganizationManagement: React.FC = () => {
                   </div>
                 </div>
               </div>
+            </div>
 
-              <div className="pt-3 border-t border-slate-200 flex justify-end gap-2">
+              <div className="p-5 pt-3 border-t border-slate-200 flex justify-end gap-2 shrink-0">
                 <button
                   type="button"
                   onClick={() => setIsAddEntityModalOpen(false)}
