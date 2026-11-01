@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeNewEntityClosureRows, buildEntityTree, applyChangeSet, type EntityNode } from "./orgStructure.ts";
+import { computeNewEntityClosureRows, buildEntityTree, applyChangeSet, resolveNikPattern, type EntityNode } from "./orgStructure.ts";
 
 describe("computeNewEntityClosureRows — vertical-only visibility", () => {
   it("a root entity (no parent) only gets a self row at depth 0", () => {
@@ -50,6 +50,20 @@ describe("buildEntityTree", () => {
     const anakA = tree[0].children.find((c) => c.entity.name === "Anak A")!;
     expect(anakA.children).toHaveLength(1);
     expect(anakA.children[0].entity.name).toBe("Cucu C");
+  });
+});
+
+describe("resolveNikPattern — explicit follow-parent toggle for NIK format", () => {
+  it("a root entity never follows a parent, regardless of the flag", () => {
+    expect(resolveNikPattern(false, true, "999.XXXX.YYYY", "111.ZZZZ")).toEqual({ nikPattern: "111.ZZZZ", nikPatternFollowsParent: false });
+  });
+
+  it("following copies the parent's CURRENT pattern (dead copy), ignoring any requested value", () => {
+    expect(resolveNikPattern(true, true, "999.XXXX.YYYY", "ignored")).toEqual({ nikPattern: "999.XXXX.YYYY", nikPatternFollowsParent: true });
+  });
+
+  it("not following uses the requested custom pattern and records the independent choice", () => {
+    expect(resolveNikPattern(true, false, "999.XXXX.YYYY", "111.ZZZZ")).toEqual({ nikPattern: "111.ZZZZ", nikPatternFollowsParent: false });
   });
 });
 

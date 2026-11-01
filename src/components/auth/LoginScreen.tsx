@@ -18,13 +18,15 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
     // Dev/test convenience only — the backend returns 404 outside development, so this silently does nothing in production.
     authApi
       .listDevAccounts()
-      .then((accounts) => setDevAccounts(accounts.filter((a) => a.password)))
+      .then(setDevAccounts)
       .catch(() => setDevAccounts([]));
   }, []);
 
   function fillFromDevAccount(account: DevAccount) {
     setEmail(account.email);
-    setPassword(account.password ?? '');
+    // Only overwrite the password field when we actually know it — otherwise
+    // leave whatever the user already typed so they can fill it in themselves.
+    if (account.password) setPassword(account.password);
     setErrorMessage(null);
   }
 
@@ -165,7 +167,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                       <span className="text-[9px] text-slate-400 font-mono uppercase">{acc.role}</span>
                     </div>
                     <div className="text-[9px] text-slate-500 font-mono mt-0.5">
-                      {acc.email} &middot; {acc.password}
+                      {acc.email} &middot; {acc.password ?? 'password tidak diketahui'}
                     </div>
                   </button>
                 ))}

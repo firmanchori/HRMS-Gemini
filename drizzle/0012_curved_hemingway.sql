@@ -1,0 +1,1 @@
+ALTER TABLE "company_entities" ADD COLUMN "nik_pattern_follows_parent" boolean DEFAULT true NOT NULL;

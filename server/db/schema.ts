@@ -418,6 +418,13 @@ export const companyEntities = pgTable("company_entities", {
   address: text("address"),
   city: text("city"),
   nikPattern: text("nik_pattern"),
+  // Explicit toggle (user correction, 2026-11-01): unlike the other copied
+  // fields, NIK format needs a visible, persistent choice — not just "was it
+  // omitted at creation". true = this entity's nikPattern was copied from
+  // its parent's CURRENT value (dead copy, re-copied whenever this flag is
+  // (re)set to true); false = someone deliberately set a custom pattern.
+  // Always false for a root entity (nothing to follow).
+  nikPatternFollowsParent: boolean("nik_pattern_follows_parent").notNull().default(true),
   docPrefix: text("doc_prefix"),
   status: entityStatusEnum("status").notNull().default("Aktif"),
   createdByEntityId: uuid("created_by_entity_id"),

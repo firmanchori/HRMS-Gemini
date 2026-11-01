@@ -55,6 +55,26 @@ export function buildEntityTree<T extends EntityNode>(entities: T[]): EntityTree
   return roots.map(toNode);
 }
 
+/**
+ * NIK format inheritance needs an explicit, persistent choice (user
+ * correction 2026-11-01) — not just "was it omitted at creation" like the
+ * other copied entity fields. followParent=true always copies the parent's
+ * CURRENT pattern (a dead copy, re-triggered every time this is set to
+ * true again) and records that choice; false means someone deliberately
+ * typed a custom pattern. A root entity (hasParent=false) can never follow
+ * a parent, regardless of what's requested.
+ */
+export function resolveNikPattern(
+  hasParent: boolean,
+  followParent: boolean,
+  parentNikPattern: string | null,
+  requestedNikPattern: string | null
+): { nikPattern: string | null; nikPatternFollowsParent: boolean } {
+  if (!hasParent) return { nikPattern: requestedNikPattern, nikPatternFollowsParent: false };
+  if (followParent) return { nikPattern: parentNikPattern, nikPatternFollowsParent: true };
+  return { nikPattern: requestedNikPattern, nikPatternFollowsParent: false };
+}
+
 export interface OrgChanges {
   divisions?: { create?: Record<string, unknown>[]; update?: { id: string; data: Record<string, unknown> }[]; delete?: string[] };
   departments?: { create?: Record<string, unknown>[]; update?: { id: string; data: Record<string, unknown> }[]; delete?: string[] };

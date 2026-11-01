@@ -15,7 +15,7 @@ import {
 } from "../db/schema.ts";
 import { requireTenantAdmin } from "../middleware/auth.ts";
 import { validateBody, validateParams, uuidParam } from "../lib/validate.ts";
-import { computeNewEntityClosureRows, buildEntityTree, applyChangeSet } from "../lib/orgStructure.ts";
+import { computeNewEntityClosureRows, buildEntityTree, applyChangeSet, resolveNikPattern } from "../lib/orgStructure.ts";
 import { logAudit } from "../lib/audit.ts";
 
 export const tenantRouter = Router();
@@ -38,6 +38,8 @@ const createEntitySchema = z.object({
   address: z.string().trim().max(500).optional(),
   city: z.string().trim().max(100).optional(),
   nikPattern: z.string().trim().max(100).optional(),
+  // Explicit, not implicit — defaults to true (follow) only when a parent exists; see resolveNikPattern.
+  followParentNikPattern: z.boolean().optional(),
   docPrefix: z.string().trim().max(50).optional(),
 });
 
@@ -51,6 +53,8 @@ tenantRouter.post("/entities", validateBody(createEntitySchema), async (req, res
     if (!parent) return res.status(400).json({ error: "Entitas induk tidak ditemukan" });
   }
 
+  const nikResolution = resolveNikPattern(!!parent, body.followParentNikPattern ?? true, parent?.nikPattern ?? null, body.nikPattern ?? null);
+
   // Dead copy from the parent's CURRENT values — only for fields the request didn't explicitly set.
   const values = {
     tenantId,
@@ -63,7 +67,8 @@ tenantRouter.post("/entities", validateBody(createEntitySchema), async (req, res
     npwp: body.npwp ?? null,
     address: body.address ?? null,
     city: body.city ?? null,
-    nikPattern: body.nikPattern ?? parent?.nikPattern ?? null,
+    nikPattern: nikResolution.nikPattern,
+    nikPatternFollowsParent: nikResolution.nikPatternFollowsParent,
     docPrefix: body.docPrefix ?? parent?.docPrefix ?? null,
     createdByEntityId: parent?.id ?? null,
   };
@@ -119,12 +124,27 @@ const updateEntitySchema = createEntitySchema.omit({ parentEntityId: true }).par
 /** Reparenting is deliberately not supported here — moving a subtree would require rewriting its entire closure, left for a dedicated endpoint if ever needed. */
 tenantRouter.put("/entities/:id", validateParams(uuidParam("id")), validateBody(updateEntitySchema), async (req, res) => {
   const tenantId = req.session!.tenantId!;
-  const [updated] = await db
-    .update(companyEntities)
-    .set(req.body)
-    .where(and(eq(companyEntities.id, req.params.id), eq(companyEntities.tenantId, tenantId)))
-    .returning();
-  if (!updated) return res.status(404).json({ error: "Entitas tidak ditemukan" });
+  const body = req.body as z.infer<typeof updateEntitySchema>;
+
+  const [existing] = await db.select().from(companyEntities).where(and(eq(companyEntities.id, req.params.id), eq(companyEntities.tenantId, tenantId))).limit(1);
+  if (!existing) return res.status(404).json({ error: "Entitas tidak ditemukan" });
+
+  const updateValues: Record<string, unknown> = { ...body };
+  delete updateValues.followParentNikPattern; // not a real column — resolved below
+
+  // Re-resolve NIK format whenever the flag is flipped or the pattern is hand-edited — see resolveNikPattern.
+  if (body.followParentNikPattern !== undefined || body.nikPattern !== undefined) {
+    let parentNikPattern: string | null = null;
+    if (existing.parentEntityId) {
+      const [parent] = await db.select().from(companyEntities).where(eq(companyEntities.id, existing.parentEntityId)).limit(1);
+      parentNikPattern = parent?.nikPattern ?? null;
+    }
+    const resolved = resolveNikPattern(!!existing.parentEntityId, body.followParentNikPattern ?? false, parentNikPattern, body.nikPattern ?? existing.nikPattern);
+    updateValues.nikPattern = resolved.nikPattern;
+    updateValues.nikPatternFollowsParent = resolved.nikPatternFollowsParent;
+  }
+
+  const [updated] = await db.update(companyEntities).set(updateValues).where(eq(companyEntities.id, existing.id)).returning();
   await logAudit({ actorUserId: req.session!.userId, tenantId, action: "entity.update", details: { entityId: updated.id } });
   res.json(updated);
 });
