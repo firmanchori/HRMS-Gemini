@@ -19,6 +19,7 @@ import {
   LogOut,
   X,
   ExternalLink,
+  Landmark,
 } from "lucide-react";
 import { ScrollableTabNav } from "../components/common/ScrollableTabNav";
 import { api, ApiError, type Me, type TenantRow, type Inquiry, type AuditLogRow, type Plan, type BankAccount, type PlanChangePreview, type PlanChangeDirection } from "./api";
@@ -30,6 +31,7 @@ import { PromotionsTab } from "./PromotionsTab";
 import { AffiliatesTab } from "./AffiliatesTab";
 import { RegisterTenantTab } from "./RegisterTenantTab";
 import { SettingsTab } from "./SettingsTab";
+import { BankAccountsTab } from "./BankAccountsTab";
 import { ConfirmButton } from "./ConfirmButton";
 
 function ForgotPasswordForm({ onBack }: { onBack: () => void }) {
@@ -887,6 +889,7 @@ type TabKey =
   | "promotions"
   | "affiliates"
   | "inbox"
+  | "bank_accounts"
   | "settings"
   | "audit";
 
@@ -906,6 +909,7 @@ export function AppOwnerApp() {
     { key: "promotions", label: "Promo & Diskon", icon: Tag },
     { key: "affiliates", label: "Affiliate", icon: UserPlus },
     { key: "inbox", label: "Inbox", icon: InboxIcon },
+    { key: "bank_accounts", label: "Rekening Transfer", icon: Landmark },
     { key: "settings", label: "Pengaturan Email", icon: Mail },
     { key: "audit", label: "Log Aktivitas", icon: ScrollText },
   ];
@@ -964,6 +968,7 @@ export function AppOwnerApp() {
         {tab === "promotions" && <PromotionsTab />}
         {tab === "affiliates" && <AffiliatesTab />}
         {tab === "inbox" && <InboxTab />}
+        {tab === "bank_accounts" && <BankAccountsTab />}
         {tab === "settings" && <SettingsTab />}
         {tab === "audit" && <AuditLogTab />}
       </main>
