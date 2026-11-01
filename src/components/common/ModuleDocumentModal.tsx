@@ -63,6 +63,7 @@ const ModuleDocumentModalContent: React.FC<ModuleDocumentModalProps> = ({
 }) => {
   const {
     currentTenant,
+    currentEntity,
     employees,
     documentTemplates,
     createOfficialDocument,
@@ -554,6 +555,7 @@ const ModuleDocumentModalContent: React.FC<ModuleDocumentModalProps> = ({
                 documentNumber={documentNumber}
                 content={renderedContent}
                 tenant={currentTenant}
+                letterheadCustomLogoUrl={currentEntity?.documentLogoUrl}
                 employee={targetEmployee}
                 signeeName={signeeName}
                 signeeRole={signeeRole}

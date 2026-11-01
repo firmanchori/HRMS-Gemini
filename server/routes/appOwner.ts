@@ -23,6 +23,7 @@ import {
   subscriptionUsageEvents,
   accountCredits,
   invoices,
+  companyEntities,
 } from "../db/schema.ts";
 import { requireAppOwner } from "../middleware/auth.ts";
 import { logAudit } from "../lib/audit.ts";
@@ -79,9 +80,12 @@ async function activateTenant(tenantId: string, actorUserId: string, auditAction
 }
 
 /**
- * App Owner may only see aggregate counts per tenant (user count, plan,
- * subscription window) — never a tenant's internal entity structure, per
- * docs/PRD.md §1.1 poin 10 and docs/SYSTEM_DESIGN.md §2.4.
+ * App Owner may only see aggregate counts per tenant (user count, entity
+ * count, plan, subscription window) — never a tenant's internal entity
+ * structure (names, addresses, org chart, etc.), per docs/PRD.md §1.1 poin
+ * 10 and docs/SYSTEM_DESIGN.md §2.4. A plain count is not internal structure,
+ * and App Owner needs it to see how a tenant's usage compares to its plan's
+ * maxEntities limit.
  */
 appOwnerRouter.get("/tenants", async (_req, res) => {
   const rows = await db
@@ -91,8 +95,10 @@ appOwnerRouter.get("/tenants", async (_req, res) => {
       subdomain: tenants.subdomain,
       status: tenants.status,
       planName: subscriptionPlans.name,
+      maxEntities: subscriptionPlans.maxEntities,
       expiresAt: tenantSubscriptions.expiresAt,
       userCount: sql<number>`(select count(*) from ${users} where ${users.tenantId} = ${tenants.id})`,
+      entityCount: sql<number>`(select count(*) from ${companyEntities} where ${companyEntities.tenantId} = ${tenants.id})`,
     })
     .from(tenants)
     .leftJoin(subscriptionPlans, eq(tenants.planId, subscriptionPlans.id))

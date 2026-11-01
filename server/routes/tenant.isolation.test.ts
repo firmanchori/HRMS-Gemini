@@ -48,27 +48,45 @@ afterAll(async () => {
   }
   await db.delete(orgStructureSnapshots).where(eq(orgStructureSnapshots.tenantId, tenantId));
   await db.delete(orgChangeProposals).where(eq(orgChangeProposals.tenantId, tenantId));
+  await db.delete(auditLogEntries).where(eq(auditLogEntries.tenantId, tenantId));
+  await db.delete(users).where(eq(users.tenantId, tenantId)); // must go before companyEntities — users.entityId references it
   await db.delete(companyEntities).where(eq(companyEntities.tenantId, tenantId));
   await db.delete(tenantSubscriptions).where(eq(tenantSubscriptions.tenantId, tenantId));
-  await db.delete(auditLogEntries).where(eq(auditLogEntries.tenantId, tenantId));
-  await db.delete(users).where(eq(users.tenantId, tenantId));
   await db.delete(tenants).where(eq(tenants.id, tenantId));
   await pool.end();
 });
 
 const origin = `http://${SUBDOMAIN}.${baseDomain}`;
 
+/** Every child entity must bundle exactly one admin for it — see tenant.ts's provisioning rule. */
+let adminSeq = 0;
+function childAdminPayload() {
+  adminSeq += 1;
+  return { name: `Admin Anak ${adminSeq}`, email: `admin-anak-${adminSeq}@orgtest.local`, password: "ChangeMe123!" };
+}
+
+let holdingId: string;
+let anakAId: string;
+
 describe("entity visibility — vertical only, never sibling-to-sibling", () => {
   it("builds a holding -> {anakA, anakB}, anakA -> cucuC tree and enforces visibility", async () => {
     const holdingRes = await agent.post("/api/tenant/entities").set("Origin", origin).send({ name: "Holding", code: "HOLD" });
     expect(holdingRes.status).toBe(201);
-    const holdingId = holdingRes.body.id;
+    holdingId = holdingRes.body.id;
 
-    const anakARes = await agent.post("/api/tenant/entities").set("Origin", origin).send({ name: "Anak A", code: "ANAKA", parentEntityId: holdingId });
-    const anakAId = anakARes.body.id;
-    const anakBRes = await agent.post("/api/tenant/entities").set("Origin", origin).send({ name: "Anak B", code: "ANAKB", parentEntityId: holdingId });
+    const anakARes = await agent.post("/api/tenant/entities").set("Origin", origin).send({ name: "Anak A", code: "ANAKA", parentEntityId: holdingId, admin: childAdminPayload() });
+    expect(anakARes.status).toBe(201);
+    anakAId = anakARes.body.id;
+    const anakBRes = await agent.post("/api/tenant/entities").set("Origin", origin).send({ name: "Anak B", code: "ANAKB", parentEntityId: holdingId, admin: childAdminPayload() });
     const anakBId = anakBRes.body.id;
-    const cucuCRes = await agent.post("/api/tenant/entities").set("Origin", origin).send({ name: "Cucu C", code: "CUCUC", parentEntityId: anakAId });
+
+    // Anak A's own admin logs in to create Anak A's child — the holding's admin has no authority over Anak A's descendants.
+    const anakAAdminAgent = request.agent(app);
+    const anakAAdminCreds = { email: anakARes.body.admin.email, password: "ChangeMe123!" };
+    const anakALoginRes = await anakAAdminAgent.post("/api/auth/login").set("Origin", origin).send(anakAAdminCreds);
+    expect(anakALoginRes.status).toBe(200);
+    const cucuCRes = await anakAAdminAgent.post("/api/tenant/entities").set("Origin", origin).send({ name: "Cucu C", code: "CUCUC", parentEntityId: anakAId, admin: childAdminPayload() });
+    expect(cucuCRes.status).toBe(201);
     const cucuCId = cucuCRes.body.id;
 
     // Holding sees everything.
@@ -88,9 +106,29 @@ describe("entity visibility — vertical only, never sibling-to-sibling", () => 
   });
 });
 
+describe("entity provisioning — a parent's job stops at its child's one admin", () => {
+  it("rejects a root-level (no parent) entity once the tenant already has a holding", async () => {
+    const res = await agent.post("/api/tenant/entities").set("Origin", origin).send({ name: "Second Holding", code: "HOLD2" });
+    expect(res.status).toBe(403);
+  });
+
+  it("rejects the holding's admin creating a grandchild directly under Anak A (only Anak A's own admin may)", async () => {
+    const res = await agent.post("/api/tenant/entities").set("Origin", origin).send({ name: "Illicit Cucu", code: "ILLICIT", parentEntityId: anakAId, admin: childAdminPayload() });
+    expect(res.status).toBe(403);
+  });
+
+  it("requires a bundled admin when creating any child entity", async () => {
+    const res = await agent.post("/api/tenant/entities").set("Origin", origin).send({ name: "No Admin Child", code: "NOADMIN", parentEntityId: holdingId });
+    expect(res.status).toBe(400);
+  });
+});
+
 describe("org change proposal lifecycle", () => {
   it("requires an official letter number before a proposal can be approved", async () => {
-    const entityRes = await agent.post("/api/tenant/entities").set("Origin", origin).send({ name: "Proposal Test Entity", code: "PTE" });
+    const entityRes = await agent
+      .post("/api/tenant/entities")
+      .set("Origin", origin)
+      .send({ name: "Proposal Test Entity", code: "PTE", parentEntityId: holdingId, admin: childAdminPayload() });
     const entityId = entityRes.body.id;
 
     const draftRes = await agent
@@ -111,7 +149,10 @@ describe("org change proposal lifecycle", () => {
   });
 
   it("approving applies the diff and snapshots the prior state", async () => {
-    const entityRes = await agent.post("/api/tenant/entities").set("Origin", origin).send({ name: "Apply Test Entity", code: "ATE" });
+    const entityRes = await agent
+      .post("/api/tenant/entities")
+      .set("Origin", origin)
+      .send({ name: "Apply Test Entity", code: "ATE", parentEntityId: holdingId, admin: childAdminPayload() });
     const entityId = entityRes.body.id;
 
     const draftRes = await agent
@@ -136,5 +177,31 @@ describe("org change proposal lifecycle", () => {
     const snapshots = await db.select().from(orgStructureSnapshots).where(eq(orgStructureSnapshots.proposalId, proposalId));
     expect(snapshots).toHaveLength(1);
     expect(snapshots[0].divisions).toEqual([]); // snapshot taken BEFORE the new division existed
+  });
+});
+
+describe("governance lock gates direct structure edits", () => {
+  it("allows direct division CRUD while unlocked, then blocks it once locked", async () => {
+    const entityRes = await agent
+      .post("/api/tenant/entities")
+      .set("Origin", origin)
+      .send({ name: "Lock Test Entity", code: "LTE", parentEntityId: holdingId, admin: childAdminPayload() });
+    const entityId = entityRes.body.id;
+    expect(entityRes.body.isGovernanceLocked).toBe(false);
+
+    const createRes = await agent.post("/api/tenant/divisions").set("Origin", origin).send({ entityId, code: "OPS", name: "Operations" });
+    expect(createRes.status).toBe(201);
+    const divisionId = createRes.body.id;
+
+    await agent.put(`/api/tenant/entities/${entityId}`).set("Origin", origin).send({ isGovernanceLocked: true });
+
+    const blockedCreateRes = await agent.post("/api/tenant/divisions").set("Origin", origin).send({ entityId, code: "FIN", name: "Finance" });
+    expect(blockedCreateRes.status).toBe(403);
+
+    const blockedUpdateRes = await agent.put(`/api/tenant/divisions/${divisionId}`).set("Origin", origin).send({ name: "Operations & Logistics" });
+    expect(blockedUpdateRes.status).toBe(403);
+
+    const blockedDeleteRes = await agent.delete(`/api/tenant/divisions/${divisionId}`).set("Origin", origin);
+    expect(blockedDeleteRes.status).toBe(403);
   });
 });

@@ -110,11 +110,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
       ],
     },
     {
-      title: 'ADMINISTRASI & SAAS OWNER',
+      title: 'ADMINISTRASI & KEAMANAN',
       items: [
         { id: 'rbac', label: 'Management User', icon: KeyRound },
         { id: 'audit', label: 'Audit Trail & Log Aktivitas', icon: History },
-        { id: 'tenants', label: 'Manajemen Tenant', icon: Building },
+        { id: 'branding', label: 'Branding Perusahaan', icon: Building },
       ],
     },
   ];

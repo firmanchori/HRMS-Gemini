@@ -8,6 +8,7 @@ import {
   uuid,
   pgEnum,
   primaryKey,
+  doublePrecision,
 } from "drizzle-orm/pg-core";
 
 export const tenantStatusEnum = pgEnum("tenant_status", [
@@ -218,6 +219,14 @@ export const invoices = pgTable("invoices", {
 export const users = pgTable("users", {
   id: uuid("id").defaultRandom().primaryKey(),
   tenantId: uuid("tenant_id").references(() => tenants.id),
+  // Which company entity this tenant_admin is scoped to (null for app_owner,
+  // and briefly null for a brand-new tenant's registration admin until its
+  // holding entity is created). A tenant_admin can only manage THIS entity's
+  // own user roster and create the one admin for an entity it directly
+  // parents — never a sibling's or an ancestor's (see tenant.ts entities/users
+  // routes). Visibility of entities themselves still follows the separate
+  // vertical entity_closure rule.
+  entityId: uuid("entity_id").references((): any => companyEntities.id),
   role: userRoleEnum("role").notNull(),
   name: text("name").notNull(),
   email: text("email").notNull(),
@@ -427,6 +436,17 @@ export const companyEntities = pgTable("company_entities", {
   nikPatternFollowsParent: boolean("nik_pattern_follows_parent").notNull().default(true),
   docPrefix: text("doc_prefix"),
   status: entityStatusEnum("status").notNull().default("Aktif"),
+  // Mirrors the existing frontend concept (isEntityGovernanceLocked):
+  // false = baseline setup mode, HR can edit divisions/departments/
+  // positions/org nodes directly; true = formal governance is in force and
+  // the SAME edits must go through org_change_proposals with an official
+  // letter number instead. Enforced server-side in server/routes/tenant.ts,
+  // not just hidden in the UI.
+  isGovernanceLocked: boolean("is_governance_locked").notNull().default(false),
+  // Branding is per-entity, not per-tenant — a holding's anak/cucu perusahaan can have its
+  // own kop-surat logo and browser favicon distinct from the parent's (user correction).
+  documentLogoUrl: text("document_logo_url"),
+  appFaviconUrl: text("app_favicon_url"),
   createdByEntityId: uuid("created_by_entity_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
@@ -589,5 +609,25 @@ export const orgStructureNodes = pgTable("org_structure_nodes", {
   isVacant: boolean("is_vacant").notNull().default(true),
   level: integer("level").notNull().default(1),
   masterJobPositionId: uuid("master_job_position_id").references(() => masterJobPositions.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const officeLocationTypeEnum = pgEnum("office_location_type", ["Kantor Pusat", "Kantor Cabang", "Gudang", "Workshop", "Site Operasional"]);
+
+/** entityId is nullable — a tenant-wide location (e.g. a shared warehouse) doesn't have to belong to one specific entity. */
+export const officeLocations = pgTable("office_locations", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  entityId: uuid("entity_id").references(() => companyEntities.id),
+  code: text("code").notNull(),
+  name: text("name").notNull(),
+  type: officeLocationTypeEnum("type").notNull().default("Kantor Cabang"),
+  address: text("address"),
+  city: text("city"),
+  latitude: doublePrecision("latitude"),
+  longitude: doublePrecision("longitude"),
+  radiusMeters: integer("radius_meters").notNull().default(100),
+  isActive: boolean("is_active").notNull().default(true),
+  notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });

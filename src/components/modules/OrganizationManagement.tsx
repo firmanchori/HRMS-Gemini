@@ -1,6 +1,7 @@
 import React, { useState, useRef, useMemo, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useHrms } from '../../context/HrmsContext';
+import { ORG_STRUCTURE_TEMPLATES } from '../../utils/orgStructureTemplates';
 import {
   Network,
   Building2,
@@ -301,6 +302,10 @@ export const OrganizationManagement: React.FC = () => {
     orgProposals,
     submitOrgProposal,
     reviewOrgProposal,
+    deleteOrgProposal,
+    applyOrgTemplate,
+    copyOrgStructureFromEntity,
+    addEntity,
     orgSnapshots,
     replaceEntityStructure,
     addDivision,
@@ -358,6 +363,7 @@ export const OrganizationManagement: React.FC = () => {
   const [previewMasterJobPosition, setPreviewMasterJobPosition] = useState<MasterJobPosition | null>(null);
   const [previewEntity, setPreviewEntity] = useState<CompanyEntity | null>(null);
   const [previewProposal, setPreviewProposal] = useState<OrgChangeProposal | null>(null);
+  const [deletingProposal, setDeletingProposal] = useState<OrgChangeProposal | null>(null);
   const [previewSnapshot, setPreviewSnapshot] = useState<OrgStructureSnapshot | null>(null);
 
   // Dedicated selection states (memilih entitas & posisi tanpa langsung membuka modal popup)
@@ -396,7 +402,88 @@ export const OrganizationManagement: React.FC = () => {
   const [savedDraftTimestamp, setSavedDraftTimestamp] = useState<string | null>(null);
 
   // Direct CRUD Modals (HANYA AKTIF KETIKA BELUM DIKUNCI / MODE SETUP)
+  const [isLockConfirmModalOpen, setIsLockConfirmModalOpen] = useState(false);
   const [isDivisionModalOpen, setIsDivisionModalOpen] = useState(false);
+  // Setup awal struktur (template bawaan / salin dari entitas lain) — hanya relevan saat entitas belum punya divisi sama sekali.
+  const [isSetupTemplateModalOpen, setIsSetupTemplateModalOpen] = useState(false);
+  const [isApplyingTemplate, setIsApplyingTemplate] = useState(false);
+  const [setupTemplateError, setSetupTemplateError] = useState<string | null>(null);
+  const [copySourceEntityId, setCopySourceEntityId] = useState('');
+  const [previewTemplateKey, setPreviewTemplateKey] = useState<string | null>(null);
+  const [templateIndustryFilter, setTemplateIndustryFilter] = useState<string>('ALL');
+
+  // Tambah Anak/Cucu Perusahaan — pindah dari menu "Manajemen Tenant" lama (dihapus) ke sini,
+  // karena entitas perusahaan memang bagian dari struktur organisasi, bukan konsep SaaS tenant.
+  const [isAddEntityModalOpen, setIsAddEntityModalOpen] = useState(false);
+  const [newEntityParentId, setNewEntityParentId] = useState<string>('');
+  const [newEntityName, setNewEntityName] = useState('');
+  const [newEntityCode, setNewEntityCode] = useState('');
+  const [newEntityLevel, setNewEntityLevel] = useState<'anak' | 'cucu'>('anak');
+  const [newEntityRelation, setNewEntityRelation] = useState<'resmi' | 'administratif'>('resmi');
+  const [newEntityCity, setNewEntityCity] = useState('Jakarta Selatan');
+  const [newEntityAddress, setNewEntityAddress] = useState('');
+  const [newEntityNpwp, setNewEntityNpwp] = useState('01.999.888.7-000.000');
+  const [newEntityNikPattern, setNewEntityNikPattern] = useState('{ENTITY}-{YYYY}-{SEQ:3}');
+  const [newEntityFollowParentNik, setNewEntityFollowParentNik] = useState(true);
+  const [newEntityDocPrefix, setNewEntityDocPrefix] = useState('');
+  const [newAdminName, setNewAdminName] = useState('');
+  const [newAdminEmail, setNewAdminEmail] = useState('');
+  const [newAdminPassword, setNewAdminPassword] = useState('');
+  const [entityFormErrors, setEntityFormErrors] = useState<Record<string, string>>({});
+  const [isSubmittingEntity, setIsSubmittingEntity] = useState(false);
+
+  useEffect(() => {
+    if (isAddEntityModalOpen) setEntityFormErrors({});
+  }, [isAddEntityModalOpen]);
+
+  const handleCreateEntity = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const errors: Record<string, string> = {};
+    if (!newEntityParentId) errors.parentEntityId = 'Entitas induk wajib dipilih';
+    if (!newEntityName.trim()) errors.name = 'Nama legal perusahaan wajib diisi';
+    if (!newEntityCode.trim()) errors.code = 'Kode singkat wajib diisi';
+    if (!newAdminName.trim()) errors.adminName = 'Nama admin entitas ini wajib diisi';
+    if (!newAdminEmail.trim()) errors.adminEmail = 'Email admin wajib diisi';
+    if (newAdminPassword.length < 8) errors.adminPassword = 'Password admin minimal 8 karakter';
+
+    if (Object.keys(errors).length > 0) {
+      setEntityFormErrors(errors);
+      return;
+    }
+    setEntityFormErrors({});
+    setIsSubmittingEntity(true);
+
+    try {
+      await addEntity(
+        {
+          name: newEntityName,
+          code: newEntityCode.toUpperCase(),
+          level: newEntityLevel,
+          parentEntityId: newEntityParentId,
+          relationType: newEntityRelation,
+          address: newEntityAddress || `Kawasan Bisnis ${newEntityCity}`,
+          city: newEntityCity,
+          npwp: newEntityNpwp,
+          nikPattern: newEntityNikPattern || `${newEntityCode.toUpperCase()}-{YYYY}-{SEQ:3}`,
+          nikPatternFollowsParent: newEntityFollowParentNik,
+          docPrefix: newEntityDocPrefix || `HRD-${newEntityCode.toUpperCase()}`,
+          status: 'Aktif',
+        },
+        { name: newAdminName, email: newAdminEmail, password: newAdminPassword }
+      );
+
+      setIsAddEntityModalOpen(false);
+      setNewEntityName('');
+      setNewEntityCode('');
+      setNewAdminName('');
+      setNewAdminEmail('');
+      setNewAdminPassword('');
+    } catch (err) {
+      setEntityFormErrors({ submit: err instanceof Error ? err.message : 'Gagal membuat entitas, coba lagi.' });
+    } finally {
+      setIsSubmittingEntity(false);
+    }
+  };
   const [divisionFormData, setDivisionFormData] = useState({
     id: '',
     name: '',
@@ -483,8 +570,8 @@ export const OrganizationManagement: React.FC = () => {
     changeType: 'Buat Posisi Baru' as OrgChangeProposal['changeType'],
     effectiveDate: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString().split('T')[0],
     skDocNumber: `SK-DIR/RESTRUCT/${new Date().getFullYear()}/${String(Math.floor(100 + Math.random() * 900))}`,
-    skDocFileName: 'SK_Restrukturisasi_Direksi_2026.pdf',
-    skDocUrl: 'https://images.unsplash.com/photo-1568667256549-094345857637?w=800',
+    skDocFileName: '',
+    skDocUrl: '',
     description: '',
     targetType: 'position' as 'position' | 'division' | 'department' | 'entity',
     targetPositionTitle: '',
@@ -555,23 +642,19 @@ export const OrganizationManagement: React.FC = () => {
 
   // Scoped active entity data
   const entityNodes = useMemo(() => {
-    const direct = orgNodes.filter((n) => n.entityId === currentEntityId);
-    return direct.length > 0 ? direct : orgNodes;
+    return orgNodes.filter((n) => n.entityId === currentEntityId);
   }, [orgNodes, currentEntityId]);
 
   const entityDivisions = useMemo(() => {
-    const direct = divisions.filter((d) => d.entityId === currentEntityId);
-    return direct.length > 0 ? direct : divisions;
+    return divisions.filter((d) => d.entityId === currentEntityId);
   }, [divisions, currentEntityId]);
 
   const entityDepartments = useMemo(() => {
-    const direct = departments.filter((d) => d.entityId === currentEntityId);
-    return direct.length > 0 ? direct : departments;
+    return departments.filter((d) => d.entityId === currentEntityId);
   }, [departments, currentEntityId]);
 
   const entityMasterPositions = useMemo(() => {
-    const direct = masterJobPositions.filter((mjp) => mjp.entityId === currentEntityId);
-    return direct.length > 0 ? direct : masterJobPositions;
+    return masterJobPositions.filter((mjp) => mjp.entityId === currentEntityId);
   }, [masterJobPositions, currentEntityId]);
 
   const occupiedPositions = useMemo(() => entityNodes.filter((n) => !n.isVacant), [entityNodes]);
@@ -702,7 +785,8 @@ export const OrganizationManagement: React.FC = () => {
   const isDraftStep1Valid = Boolean(
     restructureForm.title.trim() &&
     restructureForm.skDocNumber.trim() &&
-    restructureForm.effectiveDate.trim()
+    restructureForm.effectiveDate.trim() &&
+    restructureForm.skDocFileName.trim()
   );
 
   const isDraftStep2Valid = isDraftStep1Valid && draftGradeSalaryRanges.length > 0;
@@ -921,8 +1005,9 @@ export const OrganizationManagement: React.FC = () => {
   }, [entities, selectedCorpEntityId, currentEntity]);
 
   const corpSelectedEntityNodes = useMemo(() => {
+    if (!corpSelectedEntity) return [];
     return orgNodes.filter((n) => n.entityId === corpSelectedEntity.id);
-  }, [orgNodes, corpSelectedEntity.id]);
+  }, [orgNodes, corpSelectedEntity]);
 
   const corpSelectedEntityRootNodes = useMemo(() => {
     return corpSelectedEntityNodes.filter(
@@ -931,6 +1016,7 @@ export const OrganizationManagement: React.FC = () => {
   }, [corpSelectedEntityNodes]);
 
   const corpSelectedEntityEmployees = useMemo(() => {
+    if (!corpSelectedEntity) return [];
     return employees.filter((e) => e.company === corpSelectedEntity.name || e.entityId === corpSelectedEntity.id);
   }, [employees, corpSelectedEntity]);
 
@@ -1910,6 +1996,18 @@ export const OrganizationManagement: React.FC = () => {
     );
   };
 
+  if (!currentEntity) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 bg-white rounded-2xl border border-slate-200 p-12 text-center">
+        <Building2 className="w-10 h-10 text-slate-300" />
+        <h2 className="text-base font-semibold text-slate-800">Belum Ada Entitas Perusahaan</h2>
+        <p className="text-sm text-slate-500 max-w-md">
+          Perusahaan Anda belum memiliki data entitas. Buat entitas pertama (misalnya perusahaan induk) di menu Manajemen Tenant untuk mulai mengatur struktur organisasi.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-5 animate-in fade-in duration-200">
 
@@ -1959,7 +2057,7 @@ export const OrganizationManagement: React.FC = () => {
             className="flex items-center justify-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold shadow-xs transition-colors shrink-0 w-full sm:w-auto"
           >
             <FileCheck2 className="w-3.5 h-3.5 shrink-0" />
-            <span>Ajukan Restrukturisasi Resmi (SK)</span>
+            <span>Ajukan Restrukturisasi</span>
           </button>
         </div>
       </div>
@@ -1999,11 +2097,11 @@ export const OrganizationManagement: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
           <button
             type="button"
             onClick={() => setIsDocModalOpen(true)}
-            className="px-3.5 py-2 rounded-lg text-xs font-semibold transition-all shrink-0 flex items-center justify-center gap-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 cursor-pointer shadow-xs"
+            className="px-3.5 py-2 rounded-lg text-xs font-semibold transition-all shrink-0 flex items-center justify-center gap-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 cursor-pointer shadow-xs w-full sm:w-auto"
           >
             <FileText className="w-3.5 h-3.5 text-indigo-600" />
             <span>Dokumen SK Karier & Organisasi</span>
@@ -2012,14 +2110,14 @@ export const OrganizationManagement: React.FC = () => {
           <button
             type="button"
             onClick={() => {
+              if (!currentEntityLocked) {
+                setIsLockConfirmModalOpen(true);
+                return;
+              }
               toggleEntityGovernanceLock(currentEntityId);
-              showToast(
-                !currentEntityLocked
-                  ? `Struktur ${currentEntity.name} berhasil dikunci. Tata kelola ber-SK resmi sekarang berlaku.`
-                  : `Mode setup awal dibuka untuk entitas ${currentEntity.name}.`
-              );
+              showToast(`Mode setup awal dibuka untuk entitas ${currentEntity.name}.`);
             }}
-            className={`px-3.5 py-2 rounded-lg text-xs font-semibold transition-all shrink-0 flex items-center justify-center gap-1.5 ${
+            className={`px-3.5 py-2 rounded-lg text-xs font-semibold transition-all shrink-0 flex items-center justify-center gap-1.5 w-full sm:w-auto ${
               currentEntityLocked
                 ? 'bg-white/10 hover:bg-white/20 text-white border border-white/20'
                 : 'bg-amber-600 hover:bg-amber-700 text-white shadow-xs'
@@ -2142,7 +2240,7 @@ export const OrganizationManagement: React.FC = () => {
           }`}
         >
           <History className="w-3.5 h-3.5" />
-          <span>Riwayat Restrukturisasi & SK</span>
+          <span>Riwayat Restrukturisasi</span>
           <span
             className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full transition-colors ${
               activeTab === 'history'
@@ -2150,7 +2248,7 @@ export const OrganizationManagement: React.FC = () => {
                 : 'bg-slate-100 text-slate-700'
             }`}
           >
-            {orgProposals.length} Dokumen
+            {orgProposals.filter((p) => p.entityId === currentEntityId).length} Dokumen
           </span>
         </button>
       </ScrollableTabNav>
@@ -2308,8 +2406,22 @@ export const OrganizationManagement: React.FC = () => {
                 </p>
               </div>
 
-              {/* Zoom Controls + Export PDF / PNG */}
-              <div className="flex items-center gap-1.5 bg-white border border-slate-200 p-1 rounded-xl text-xs shadow-xs">
+              <div className="flex items-center gap-2 flex-wrap shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNewEntityParentId(currentEntity?.id || '');
+                    setNewEntityLevel(currentEntity?.level === 'holding' ? 'anak' : 'cucu');
+                    setIsAddEntityModalOpen(true);
+                  }}
+                  className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors shrink-0"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Tambah Anak / Cucu Perusahaan</span>
+                </button>
+
+                {/* Zoom Controls + Export PDF / PNG */}
+                <div className="flex items-center gap-1.5 bg-white border border-slate-200 p-1 rounded-xl text-xs shadow-xs">
                 <button
                   type="button"
                   onClick={() => setCorpZoomScale((z) => Math.max(0.4, Number((z - 0.1).toFixed(1))))}
@@ -2360,6 +2472,7 @@ export const OrganizationManagement: React.FC = () => {
                   <FileText className="w-3.5 h-3.5 text-rose-600" />
                   <span>Export PDF</span>
                 </button>
+                </div>
               </div>
             </div>
 
@@ -2647,6 +2760,37 @@ export const OrganizationManagement: React.FC = () => {
                   </div>
                 </div>
               </div>
+
+              {/* Setup Awal: Template Bawaan / Salin dari Entitas Lain — hanya tampil saat entitas belum punya divisi sama sekali */}
+              {entityDivisions.length === 0 && !currentEntityLocked && (
+                <div className="p-4 rounded-xl border-2 border-dashed border-indigo-300 bg-indigo-50/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-start gap-3">
+                    <div className="w-9 h-9 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
+                      <Sparkles className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-indigo-950">Mulai dari Template, Bukan dari Kosong</h3>
+                      <p className="text-xs text-indigo-800 max-w-xl">
+                        Entitas {currentEntity.name} belum punya divisi, departemen, atau jabatan. Gunakan template standar bawaan, atau salin struktur dari entitas lain yang sudah ada — bisa diedit lagi setelahnya.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSetupTemplateError(null);
+                      setCopySourceEntityId('');
+                      setPreviewTemplateKey(null);
+                      setTemplateIndustryFilter('ALL');
+                      setIsSetupTemplateModalOpen(true);
+                    }}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold shadow-xs flex items-center gap-1.5 shrink-0 transition-colors"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>Gunakan Template / Salin Struktur</span>
+                  </button>
+                </div>
+              )}
 
               {/* Master Divisi Section */}
               <div className="space-y-4">
@@ -3746,7 +3890,7 @@ export const OrganizationManagement: React.FC = () => {
             <div>
               <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
                 <FileCheck2 className="w-4 h-4 text-indigo-600" />
-                Arsip Riwayat SK Restrukturisasi & Koreksi Administratif
+                Arsip Riwayat Restrukturisasi & Koreksi Administratif
               </h3>
               <p className="text-xs text-slate-500 mt-0.5">
                 Setiap usulan restrukturisasi dapat dirancang draftnya, diajukan, serta di-approve atau ditolak di dalam modal pratinjau.
@@ -3793,7 +3937,7 @@ export const OrganizationManagement: React.FC = () => {
             <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
               <div className="divide-y divide-slate-100">
                 {orgProposals
-                  .filter((p) => p.entityId === currentEntityId || !p.entityId)
+                  .filter((p) => p.entityId === currentEntityId)
                   .map((prop) => (
                     <div
                       key={prop.id}
@@ -3811,7 +3955,7 @@ export const OrganizationManagement: React.FC = () => {
                               ? 'bg-amber-50 text-amber-700 border-amber-200'
                               : 'bg-indigo-50 text-indigo-700 border-indigo-200'
                           }`}>
-                            {prop.isCorrectionOnly ? 'Koreksi Administratif Typo' : `SK Restrukturisasi: ${prop.changeType}`}
+                            {prop.isCorrectionOnly ? 'Koreksi Administratif Typo' : `Restrukturisasi: ${prop.changeType}`}
                           </span>
 
                           {prop.skDocNumber && (
@@ -3862,7 +4006,7 @@ export const OrganizationManagement: React.FC = () => {
                     </div>
                   ))}
 
-                {orgProposals.filter((p) => p.entityId === currentEntityId || !p.entityId).length === 0 && (
+                {orgProposals.filter((p) => p.entityId === currentEntityId).length === 0 && (
                   <div className="p-8 text-center text-slate-400 text-xs">
                     Belum ada pengajuan restrukturisasi untuk entitas ini.
                   </div>
@@ -5168,6 +5312,17 @@ export const OrganizationManagement: React.FC = () => {
                   Tutup
                 </button>
 
+                {previewProposal.status === 'Draft' && (
+                  <button
+                    type="button"
+                    onClick={() => setDeletingProposal(previewProposal)}
+                    className="px-3.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Hapus Draf</span>
+                  </button>
+                )}
+
                 {previewProposal.status === 'Menunggu Approval' && !isRejectingInModal && (
                   <div className="flex items-center gap-2">
                     <button
@@ -5194,6 +5349,47 @@ export const OrganizationManagement: React.FC = () => {
                   </div>
                 )}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL KONFIRMASI HAPUS DRAF USULAN RESTRUKTURISASI */}
+      {deletingProposal && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setDeletingProposal(null);
+          }}
+        >
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full border border-slate-200 overflow-hidden p-5 space-y-4 text-xs">
+            <div className="font-bold text-sm text-slate-900 flex items-center gap-2">
+              <Trash2 className="w-4 h-4 text-rose-600" />
+              <span>Hapus Draf Usulan?</span>
+            </div>
+            <p className="text-slate-600">
+              Apakah Anda yakin ingin menghapus draf usulan <strong>{deletingProposal.proposalTitle}</strong>? Draf yang belum diajukan ini akan dihapus permanen dan tidak dapat dikembalikan.
+            </p>
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setDeletingProposal(null)}
+                className="px-3.5 py-1.5 bg-slate-100 text-slate-700 rounded-lg font-semibold"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  deleteOrgProposal(deletingProposal.id);
+                  showToast(`Draf usulan "${deletingProposal.proposalTitle}" telah dihapus.`);
+                  setDeletingProposal(null);
+                  setPreviewProposal(null);
+                }}
+                className="px-4 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg font-semibold"
+              >
+                Ya, Hapus
+              </button>
             </div>
           </div>
         </div>
@@ -5302,6 +5498,614 @@ export const OrganizationManagement: React.FC = () => {
                 className="px-4 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg font-semibold text-xs transition-colors"
               >
                 Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: TAMBAH ANAK / CUCU PERUSAHAAN (pindah dari menu "Manajemen Tenant" lama) */}
+      {isAddEntityModalOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsAddEntityModalOpen(false);
+          }}
+        >
+          <div
+            className="bg-white rounded-xl shadow-xl max-w-lg w-full border border-slate-200 overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-5 py-4 bg-slate-900 text-white flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold flex items-center gap-2">
+                  <Network className="w-4 h-4 text-indigo-400" />
+                  <span>
+                    Daftarkan {newEntityLevel === 'anak' ? 'Anak Perusahaan' : 'Cucu Perusahaan'} Baru
+                  </span>
+                </h3>
+                <span className="text-[11px] text-slate-400">
+                  Struktur multi-tier entitas perusahaan
+                </span>
+              </div>
+              <button onClick={() => setIsAddEntityModalOpen(false)}>
+                <X className="w-4 h-4 text-slate-400 hover:text-white" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateEntity} className="p-5 space-y-4 text-xs">
+              {entityFormErrors.submit && (
+                <div className="px-3 py-2 bg-red-50 border border-red-200 rounded text-red-700 font-medium">
+                  {entityFormErrors.submit}
+                </div>
+              )}
+
+              {/* Parent Selector */}
+              <div>
+                <label className="font-medium text-slate-700 block mb-1">
+                  Entitas Induk (Parent Entity) *
+                </label>
+                <select
+                  value={newEntityParentId}
+                  onChange={(e) => {
+                    const selId = e.target.value;
+                    setNewEntityParentId(selId);
+                    const selEnt = entities.find((ent) => ent.id === selId);
+                    if (selEnt && selEnt.level === 'holding') {
+                      setNewEntityLevel('anak');
+                    } else {
+                      setNewEntityLevel('cucu');
+                    }
+                  }}
+                  className="w-full px-3 py-2 border border-slate-300 rounded font-medium bg-white"
+                  required
+                >
+                  <option value="">Pilih Entitas Induk...</option>
+                  {entities
+                    .filter((e) => e.level !== 'cucu')
+                    .map((ent) => (
+                      <option key={ent.id} value={ent.id}>
+                        {ent.level === 'holding' ? '🏢 [Holding]' : '🏭 [Anak]'} {ent.name} (
+                        {ent.code})
+                      </option>
+                    ))}
+                </select>
+                {entityFormErrors.parentEntityId && (
+                  <p className="mt-1 text-red-600">{entityFormErrors.parentEntityId}</p>
+                )}
+              </div>
+
+              {/* Tingkat & Hubungan Saham */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-medium text-slate-700 block mb-1">
+                    Tingkatan Entitas (Level)
+                  </label>
+                  <select
+                    value={newEntityLevel}
+                    onChange={(e) => setNewEntityLevel(e.target.value as any)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded font-semibold bg-white"
+                  >
+                    <option value="anak">Sub Holding / Anak Perusahaan</option>
+                    <option value="cucu">Cucu Perusahaan</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="font-medium text-slate-700 block mb-1">Hubungan Saham</label>
+                  <select
+                    value={newEntityRelation}
+                    onChange={(e) => setNewEntityRelation(e.target.value as any)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded font-semibold bg-white"
+                  >
+                    <option value="resmi">Resmi (Konsolidasi Saham Lebih dari 50%)</option>
+                    <option value="administratif">Afiliasi Administratif / Kerjasama</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Nama & Kode */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="col-span-2">
+                  <label className="font-medium text-slate-700 block mb-1">
+                    Nama Legal Perusahaan *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="PT Nusantara Finansial Global"
+                    value={newEntityName}
+                    onChange={(e) => setNewEntityName(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded font-medium"
+                  />
+                  {entityFormErrors.name && <p className="mt-1 text-red-600">{entityFormErrors.name}</p>}
+                </div>
+                <div>
+                  <label className="font-medium text-slate-700 block mb-1">Kode Singkat *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="NFG"
+                    value={newEntityCode}
+                    onChange={(e) => {
+                      const val = e.target.value.toUpperCase();
+                      setNewEntityCode(val);
+                      setNewEntityNikPattern(`${val}-{YYYY}-{SEQ:3}`);
+                      setNewEntityDocPrefix(`HRD-${val}`);
+                    }}
+                    className="w-full px-3 py-2 border border-slate-300 rounded font-mono font-bold"
+                  />
+                  {entityFormErrors.code && <p className="mt-1 text-red-600">{entityFormErrors.code}</p>}
+                </div>
+              </div>
+
+              {/* Kota & NPWP */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-medium text-slate-700 block mb-1">Domisili Kota *</label>
+                  <input
+                    type="text"
+                    required
+                    value={newEntityCity}
+                    onChange={(e) => setNewEntityCity(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded"
+                  />
+                </div>
+                <div>
+                  <label className="font-medium text-slate-700 block mb-1">NPWP Badan</label>
+                  <input
+                    type="text"
+                    value={newEntityNpwp}
+                    onChange={(e) => setNewEntityNpwp(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded font-mono"
+                  />
+                </div>
+              </div>
+
+              {/* Pola NIK Karyawan */}
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-2">
+                <label className="font-medium text-slate-700 block">Format Pola NIK Karyawan</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <label
+                    className={`p-2 rounded-lg border cursor-pointer transition-all text-[11px] ${
+                      newEntityFollowParentNik ? 'bg-white border-indigo-600 ring-1 ring-indigo-600' : 'bg-white/60 border-slate-200'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="followParentNik"
+                      checked={newEntityFollowParentNik}
+                      onChange={() => setNewEntityFollowParentNik(true)}
+                      className="mr-1.5"
+                    />
+                    Ikuti pola entitas induk
+                  </label>
+                  <label
+                    className={`p-2 rounded-lg border cursor-pointer transition-all text-[11px] ${
+                      !newEntityFollowParentNik ? 'bg-white border-indigo-600 ring-1 ring-indigo-600' : 'bg-white/60 border-slate-200'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="followParentNik"
+                      checked={!newEntityFollowParentNik}
+                      onChange={() => setNewEntityFollowParentNik(false)}
+                      className="mr-1.5"
+                    />
+                    Format sendiri
+                  </label>
+                </div>
+                {newEntityFollowParentNik ? (
+                  <p className="text-[11px] text-slate-500 font-mono">
+                    Akan memakai: {entities.find((e) => e.id === newEntityParentId)?.nikPattern || '(pola induk saat ini)'}
+                  </p>
+                ) : (
+                  <input
+                    type="text"
+                    value={newEntityNikPattern}
+                    onChange={(e) => setNewEntityNikPattern(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded font-mono text-[11px]"
+                  />
+                )}
+              </div>
+
+              {/* Prefix Nomor Dokumen (opsional) */}
+              <div>
+                <label className="font-medium text-slate-700 block mb-1">
+                  Prefix Nomor Dokumen <span className="text-slate-400 font-normal">(opsional)</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder={`Otomatis: HRD-${newEntityCode.toUpperCase() || 'KODE'}`}
+                  value={newEntityDocPrefix}
+                  onChange={(e) => setNewEntityDocPrefix(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded font-mono text-[11px]"
+                />
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Dipakai untuk nomor seri dokumen resmi entitas ini (SK, surat, dsb). Kosongkan untuk otomatis dari kode entitas.
+                </p>
+              </div>
+
+              {/* Alamat */}
+              <div>
+                <label className="font-medium text-slate-700 block mb-1">
+                  Alamat Kantor Operasional
+                </label>
+                <input
+                  type="text"
+                  placeholder="Gedung Cyber Lt. 5, Jl. Rasuna Said"
+                  value={newEntityAddress}
+                  onChange={(e) => setNewEntityAddress(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded"
+                />
+              </div>
+
+              {/* Akun Admin Entitas Baru — tanggung jawab entitas induk berhenti di sini */}
+              <div className="pt-3 border-t border-slate-200 space-y-3">
+                <div>
+                  <h4 className="font-semibold text-slate-800">Akun Admin Entitas Ini</h4>
+                  <p className="text-[11px] text-slate-500">
+                    Anda hanya membuatkan satu akun admin untuk entitas baru ini. Setelah dibuat, pengaturan
+                    lanjutan entitas ini (pengguna lain, struktur, dsb.) dikelola sendiri oleh admin tersebut —
+                    bukan oleh entitas induk.
+                  </p>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="col-span-2">
+                    <label className="font-medium text-slate-700 block mb-1">Nama Admin *</label>
+                    <input
+                      type="text"
+                      placeholder="Nama lengkap admin entitas"
+                      value={newAdminName}
+                      onChange={(e) => setNewAdminName(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-300 rounded"
+                    />
+                    {entityFormErrors.adminName && <p className="mt-1 text-red-600">{entityFormErrors.adminName}</p>}
+                  </div>
+                  <div className="col-span-2">
+                    <label className="font-medium text-slate-700 block mb-1">Email Admin *</label>
+                    <input
+                      type="email"
+                      placeholder="admin@entitas.com"
+                      value={newAdminEmail}
+                      onChange={(e) => setNewAdminEmail(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-300 rounded"
+                    />
+                    {entityFormErrors.adminEmail && <p className="mt-1 text-red-600">{entityFormErrors.adminEmail}</p>}
+                  </div>
+                  <div className="col-span-2">
+                    <label className="font-medium text-slate-700 block mb-1">Password Awal Admin *</label>
+                    <input
+                      type="password"
+                      placeholder="Minimal 8 karakter"
+                      value={newAdminPassword}
+                      onChange={(e) => setNewAdminPassword(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-300 rounded"
+                    />
+                    {entityFormErrors.adminPassword && <p className="mt-1 text-red-600">{entityFormErrors.adminPassword}</p>}
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-slate-200 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsAddEntityModalOpen(false)}
+                  className="px-3 py-2 bg-slate-100 text-slate-700 rounded font-semibold"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingEntity}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed text-white rounded font-semibold shadow-xs"
+                >
+                  {isSubmittingEntity ? 'Menyimpan...' : 'Simpan Entitas & Buat Admin'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL KONFIRMASI KUNCI BASELINE */}
+      {isLockConfirmModalOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsLockConfirmModalOpen(false);
+          }}
+        >
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full border border-slate-200 overflow-hidden p-5 space-y-4 text-xs">
+            <div className="font-bold text-sm text-slate-900 flex items-center gap-2">
+              <Lock className="w-4 h-4 text-amber-600" />
+              <span>Kunci Baseline Struktur {currentEntity.name}?</span>
+            </div>
+            <p className="text-slate-600 leading-relaxed">
+              Setelah dikunci, divisi, departemen, dan jabatan yang sudah ada <b>tidak bisa lagi diubah atau ditambah secara langsung</b>. Setiap perubahan ke depannya wajib melalui proses <b>Pengajuan Restrukturisasi</b> (dengan nomor Surat Keputusan) yang perlu disetujui direksi.
+            </p>
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setIsLockConfirmModalOpen(false)}
+                className="px-3.5 py-1.5 bg-slate-100 text-slate-700 rounded-lg font-semibold"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  toggleEntityGovernanceLock(currentEntityId);
+                  showToast(`Struktur ${currentEntity.name} berhasil dikunci. Perubahan selanjutnya wajib melalui pengajuan restrukturisasi.`);
+                  setIsLockConfirmModalOpen(false);
+                }}
+                className="px-4 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-semibold"
+              >
+                Ya, Kunci Sekarang
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* MODAL: SETUP AWAL — TEMPLATE BAWAAN / SALIN DARI ENTITAS LAIN */}
+      {/* ======================================================== */}
+      {isSetupTemplateModalOpen && (
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isApplyingTemplate) setIsSetupTemplateModalOpen(false);
+          }}
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in"
+        >
+          <div className="bg-white rounded-2xl max-w-lg w-full border border-slate-200 shadow-2xl overflow-hidden max-h-[calc(100dvh-1.5rem)] flex flex-col">
+            <div className="p-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-indigo-400" />
+                <div>
+                  <h3 className="font-bold text-sm">Setup Awal Struktur Organisasi</h3>
+                  <span className="text-[11px] text-slate-400">Entitas: {currentEntity.name}</span>
+                </div>
+              </div>
+              <button onClick={() => !isApplyingTemplate && setIsSetupTemplateModalOpen(false)} className="text-slate-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-5 text-xs overflow-y-auto flex-1">
+              {setupTemplateError && (
+                <div className="px-3 py-2 bg-red-50 border border-red-200 rounded text-red-700 font-medium">{setupTemplateError}</div>
+              )}
+
+              {/* Opsi A: Template Bawaan */}
+              {previewTemplateKey ? (
+                (() => {
+                  const tpl = ORG_STRUCTURE_TEMPLATES.find((t) => t.key === previewTemplateKey);
+                  if (!tpl) return null;
+                  return (
+                    <div className="space-y-3">
+                      <button
+                        type="button"
+                        onClick={() => setPreviewTemplateKey(null)}
+                        className="text-indigo-600 hover:text-indigo-800 font-semibold flex items-center gap-1"
+                      >
+                        <ChevronRight className="w-3.5 h-3.5 rotate-180" />
+                        <span>Kembali ke Daftar Template</span>
+                      </button>
+
+                      <div>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-bold">{tpl.industry}</span>
+                          <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[10px] font-bold">{tpl.stage}</span>
+                        </div>
+                        <h4 className="font-bold text-slate-900 text-sm mt-1">{tpl.label}</h4>
+                        <p className="text-slate-500">{tpl.description}</p>
+                      </div>
+
+                      <div className="space-y-2 max-h-64 overflow-y-auto border border-slate-200 rounded-xl p-3 bg-slate-50">
+                        <div>
+                          <div className="font-bold text-slate-700 mb-1">Divisi ({tpl.divisions.length})</div>
+                          <ul className="space-y-0.5">
+                            {tpl.divisions.map((d) => (
+                              <li key={d.code} className="text-slate-600">• {d.name}{d.headTitle ? ` — ${d.headTitle}` : ''}</li>
+                            ))}
+                          </ul>
+                        </div>
+                        {tpl.departments.length > 0 && (
+                          <div>
+                            <div className="font-bold text-slate-700 mb-1">Departemen/Unit ({tpl.departments.length})</div>
+                            <ul className="space-y-0.5">
+                              {tpl.departments.map((d) => (
+                                <li key={d.code} className="text-slate-600">• {d.name}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        <div>
+                          <div className="font-bold text-slate-700 mb-1">Jabatan ({tpl.positions.length})</div>
+                          <ul className="space-y-0.5">
+                            {tpl.positions.map((p) => (
+                              <li key={p.code} className="text-slate-600">• {p.title}</li>
+                            ))}
+                          </ul>
+                        </div>
+                        <div>
+                          <div className="font-bold text-slate-700 mb-1">Grade Gaji ({tpl.grades.length})</div>
+                          <ul className="space-y-0.5">
+                            {tpl.grades.map((g) => (
+                              <li key={g.gradeCode} className="text-slate-600">
+                                • {g.gradeName}{g.midSalary ? ` — sekitar Rp ${g.midSalary.toLocaleString('id-ID')}/bulan` : ''}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        disabled={isApplyingTemplate}
+                        onClick={async () => {
+                          setSetupTemplateError(null);
+                          setIsApplyingTemplate(true);
+                          try {
+                            await applyOrgTemplate(currentEntityId, tpl.key);
+                            showToast(`Template "${tpl.label}" berhasil diterapkan untuk ${currentEntity.name}.`);
+                            setIsSetupTemplateModalOpen(false);
+                            setPreviewTemplateKey(null);
+                          } catch (err) {
+                            setSetupTemplateError(err instanceof Error ? err.message : 'Gagal menerapkan template, coba lagi.');
+                          } finally {
+                            setIsApplyingTemplate(false);
+                          }
+                        }}
+                        className="w-full px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-bold disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {isApplyingTemplate ? 'Menerapkan...' : `Terapkan Template "${tpl.label}"`}
+                      </button>
+                    </div>
+                  );
+                })()
+              ) : (
+                <div className="space-y-2">
+                  <h4 className="font-bold text-slate-800">Gunakan Template Bawaan</h4>
+                  <p className="text-slate-500">Pilih sesuai jenis industri dan tingkat kematangan perusahaan Anda — bisa dilihat detailnya dulu sebelum diterapkan.</p>
+
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {['ALL', ...Array.from(new Set(ORG_STRUCTURE_TEMPLATES.map((t) => t.industry)))].map((ind) => (
+                      <button
+                        key={ind}
+                        type="button"
+                        onClick={() => setTemplateIndustryFilter(ind)}
+                        className={`px-2.5 py-1 rounded-full text-[10px] font-bold border transition-colors ${
+                          templateIndustryFilter === ind
+                            ? 'bg-indigo-600 text-white border-indigo-600'
+                            : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'
+                        }`}
+                      >
+                        {ind === 'ALL' ? 'Semua Industri' : ind}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="space-y-2">
+                    {ORG_STRUCTURE_TEMPLATES.filter((tpl) => templateIndustryFilter === 'ALL' || tpl.industry === templateIndustryFilter).map((tpl) => (
+                      <button
+                        key={tpl.key}
+                        type="button"
+                        onClick={() => setPreviewTemplateKey(tpl.key)}
+                        className="w-full text-left p-3 border border-slate-200 rounded-xl hover:border-indigo-400 hover:bg-indigo-50/50 transition-colors"
+                      >
+                        <div className="flex items-center gap-1.5 flex-wrap mb-1">
+                          <span className="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-bold">{tpl.industry}</span>
+                          <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[10px] font-bold">{tpl.stage}</span>
+                        </div>
+                        <div className="font-bold text-slate-900">{tpl.label}</div>
+                        <div className="text-slate-500 mt-0.5">{tpl.description}</div>
+                        <div className="text-[10px] text-indigo-600 font-semibold mt-1">
+                          {tpl.divisions.length} Divisi • {tpl.departments.length} Departemen • {tpl.positions.length} Jabatan • {tpl.grades.length} Grade · Lihat detail →
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Opsi B: Salin dari Entitas Lain */}
+              {!previewTemplateKey && (
+                <div className="space-y-2 pt-3 border-t border-slate-100">
+                  <h4 className="font-bold text-slate-800">Atau Salin dari Entitas Lain</h4>
+                  <p className="text-slate-500">Menyalin seluruh divisi, departemen, dan jabatan dari entitas yang sudah ada di tenant ini sebagai titik awal.</p>
+                  <select
+                    value={copySourceEntityId}
+                    onChange={(e) => setCopySourceEntityId(e.target.value)}
+                    disabled={isApplyingTemplate}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-medium bg-white"
+                  >
+                    <option value="">Pilih entitas sumber...</option>
+                    {entities
+                      .filter((e) => e.id !== currentEntityId)
+                      .map((e) => (
+                        <option key={e.id} value={e.id}>
+                          {e.name} ({e.code})
+                        </option>
+                      ))}
+                  </select>
+
+                  {copySourceEntityId && (() => {
+                    const srcDivisions = divisions.filter((d) => d.entityId === copySourceEntityId);
+                    const srcDepartments = departments.filter((d) => d.entityId === copySourceEntityId);
+                    const srcPositions = masterJobPositions.filter((p) => p.entityId === copySourceEntityId);
+                    return (
+                      <div className="space-y-2 max-h-56 overflow-y-auto border border-slate-200 rounded-xl p-3 bg-slate-50">
+                        {srcDivisions.length === 0 && srcPositions.length === 0 ? (
+                          <p className="text-slate-400 italic">Entitas ini belum punya divisi/jabatan untuk disalin.</p>
+                        ) : (
+                          <>
+                            <div>
+                              <div className="font-bold text-slate-700 mb-1">Divisi ({srcDivisions.length})</div>
+                              <ul className="space-y-0.5">
+                                {srcDivisions.map((d) => (
+                                  <li key={d.id} className="text-slate-600">• {d.name}</li>
+                                ))}
+                              </ul>
+                            </div>
+                            {srcDepartments.length > 0 && (
+                              <div>
+                                <div className="font-bold text-slate-700 mb-1">Departemen/Unit ({srcDepartments.length})</div>
+                                <ul className="space-y-0.5">
+                                  {srcDepartments.map((d) => (
+                                    <li key={d.id} className="text-slate-600">• {d.name}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                            <div>
+                              <div className="font-bold text-slate-700 mb-1">Jabatan ({srcPositions.length})</div>
+                              <ul className="space-y-0.5">
+                                {srcPositions.map((p) => (
+                                  <li key={p.id} className="text-slate-600">• {p.title}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })()}
+
+                  <button
+                    type="button"
+                    disabled={isApplyingTemplate || !copySourceEntityId}
+                    onClick={async () => {
+                      setSetupTemplateError(null);
+                      setIsApplyingTemplate(true);
+                      try {
+                        const sourceEntity = entities.find((e) => e.id === copySourceEntityId);
+                        await copyOrgStructureFromEntity(currentEntityId, copySourceEntityId);
+                        showToast(`Struktur dari "${sourceEntity?.name}" berhasil disalin ke ${currentEntity.name}.`);
+                        setIsSetupTemplateModalOpen(false);
+                      } catch (err) {
+                        setSetupTemplateError(err instanceof Error ? err.message : 'Gagal menyalin struktur, coba lagi.');
+                      } finally {
+                        setIsApplyingTemplate(false);
+                      }
+                    }}
+                    className="w-full px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg font-bold disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isApplyingTemplate ? 'Menyalin...' : 'Salin Struktur ke Entitas Ini'}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 border-t border-slate-100 shrink-0">
+              <button
+                type="button"
+                disabled={isApplyingTemplate}
+                onClick={() => setIsSetupTemplateModalOpen(false)}
+                className="w-full px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-semibold disabled:opacity-60"
+              >
+                Nanti Saja, Isi Manual
               </button>
             </div>
           </div>
@@ -6469,8 +7273,8 @@ export const OrganizationManagement: React.FC = () => {
                         <span className="text-[10px] text-slate-400 font-normal">Format PDF / DOCX / Scan SK</span>
                       </label>
                       <div className="flex items-center gap-2">
-                        <div className="flex-1 px-3 py-2 bg-white border border-slate-300 rounded-lg font-mono text-xs text-slate-700 truncate">
-                          {restructureForm.skDocFileName}
+                        <div className={`flex-1 px-3 py-2 bg-white border border-slate-300 rounded-lg font-mono text-xs truncate ${restructureForm.skDocFileName ? 'text-slate-700' : 'text-slate-400 italic'}`}>
+                          {restructureForm.skDocFileName || 'Belum ada file dipilih'}
                         </div>
                         <label className="px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold rounded-lg text-xs cursor-pointer flex items-center gap-1 shrink-0">
                           <UploadCloud className="w-3.5 h-3.5" />
@@ -6577,6 +7381,15 @@ export const OrganizationManagement: React.FC = () => {
                           <Plus className="w-4 h-4" />
                           <span>Tambah Draft Grade</span>
                         </button>
+                      </div>
+                    </div>
+
+                    {/* Rekomendasi Tahap Grade */}
+                    <div className="p-3 bg-indigo-50/70 border border-indigo-200 rounded-xl text-[11px] text-indigo-950 flex items-start gap-2">
+                      <Sparkles className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+                      <div>
+                        <span className="font-bold block">Rekomendasi:</span>
+                        Idealnya minimal 3 grade (Direksi/Manajerial/Staff) agar skala gaji tidak tumpang tindih antar level. Jarak antar grade (gap) yang wajar sekitar 15-25% dari nilai tengah (mid) ke grade berikutnya.
                       </div>
                     </div>
 
@@ -6814,6 +7627,15 @@ export const OrganizationManagement: React.FC = () => {
                       </div>
                     </div>
 
+                    {/* Rekomendasi Tahap Divisi */}
+                    <div className="p-3 bg-indigo-50/70 border border-indigo-200 rounded-xl text-[11px] text-indigo-950 flex items-start gap-2">
+                      <Sparkles className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+                      <div>
+                        <span className="font-bold block">Rekomendasi:</span>
+                        Buat divisi berdasarkan FUNGSI utama bisnis (misal HR, Finance, Operations), bukan berdasarkan nama orang atau proyek sementara. Untuk entitas kecil, 3-5 divisi biasanya sudah cukup — hindari membuat divisi yang isinya cuma 1 orang.
+                      </div>
+                    </div>
+
                     {/* List of Draft Divisi Cards - Exactly 3 fields matching Form Master Divisi */}
                     <div className="space-y-3">
                       {draftDivisions.map((div, idx) => (
@@ -6981,6 +7803,15 @@ export const OrganizationManagement: React.FC = () => {
                             </span>
                           </div>
                         </label>
+                      </div>
+                    </div>
+
+                    {/* Rekomendasi Tahap Departemen */}
+                    <div className="p-3 bg-indigo-50/70 border border-indigo-200 rounded-xl text-[11px] text-indigo-950 flex items-start gap-2">
+                      <Sparkles className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+                      <div>
+                        <span className="font-bold block">Rekomendasi:</span>
+                        Pakai Departemen hanya jika divisi Anda punya lebih dari ±8 orang atau sub-fungsi yang jelas (misal HR → Recruitment & People Development). Untuk tim kecil, pilih mode Ramping agar struktur tidak terlalu berjenjang.
                       </div>
                     </div>
 
@@ -7262,6 +8093,15 @@ export const OrganizationManagement: React.FC = () => {
                       </div>
                     </div>
 
+                    {/* Rekomendasi Tahap Jabatan & Posisi */}
+                    <div className="p-3 bg-indigo-50/70 border border-indigo-200 rounded-xl text-[11px] text-indigo-950 flex items-start gap-2">
+                      <Sparkles className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+                      <div>
+                        <span className="font-bold block">Rekomendasi:</span>
+                        Pastikan setiap posisi punya SATU atasan langsung (reports to) yang jelas — hindari rantai pelaporan lebih dari 5-6 jenjang agar keputusan tidak lambat. Cocokkan grade jabatan dengan grade gaji dari Tahap 2 agar konsisten.
+                      </div>
+                    </div>
+
                     {/* List of Draft Posisi Cards - Matching Master Jabatan + Hierarchy & Seat Formation */}
                     <div className="space-y-3">
                       {draftNodes.map((node, idx) => (
@@ -7533,10 +8373,13 @@ export const OrganizationManagement: React.FC = () => {
 
                   <button
                     type="button"
-                    onClick={() => setIsRestructureModalOpen(false)}
-                    className="px-3.5 py-1.5 text-slate-600 hover:bg-slate-100 rounded-lg font-medium text-xs transition-colors"
+                    onClick={() => {
+                      if (hasSavedDraft) handleDiscardSavedDraft();
+                      setIsRestructureModalOpen(false);
+                    }}
+                    className="px-3.5 py-1.5 text-slate-600 hover:bg-rose-50 hover:text-rose-600 rounded-lg font-medium text-xs transition-colors"
                   >
-                    Batal
+                    {hasSavedDraft ? 'Hapus Draf' : 'Batal'}
                   </button>
 
                   <button

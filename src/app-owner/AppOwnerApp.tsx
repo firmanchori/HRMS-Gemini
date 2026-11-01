@@ -534,6 +534,12 @@ function TenantDetailModal({ tenant, onClose, onChanged }: { tenant: TenantRow; 
               <span className="text-slate-400 block">Jumlah User</span>
               <span className="font-semibold text-slate-700">{tenant.userCount}</span>
             </div>
+            <div>
+              <span className="text-slate-400 block">Jumlah Entitas</span>
+              <span className="font-semibold text-slate-700">
+                {tenant.entityCount}{tenant.maxEntities != null ? ` / ${tenant.maxEntities}` : ""}
+              </span>
+            </div>
           </div>
 
           <div className="border-t border-slate-100 pt-3">
@@ -659,6 +665,7 @@ function TenantsTab() {
               <th className="text-left px-4 py-2.5 font-semibold">Status</th>
               <th className="text-left px-4 py-2.5 font-semibold">Berlaku Sampai</th>
               <th className="text-left px-4 py-2.5 font-semibold">User</th>
+              <th className="text-left px-4 py-2.5 font-semibold">Entitas</th>
             </tr>
           </thead>
           <tbody>
@@ -682,11 +689,14 @@ function TenantsTab() {
                   {t.expiresAt ? new Date(t.expiresAt).toLocaleDateString("id-ID") : "-"}
                 </td>
                 <td className="px-4 py-2.5 text-slate-500">{t.userCount}</td>
+                <td className="px-4 py-2.5 text-slate-500">
+                  {t.entityCount}{t.maxEntities != null ? ` / ${t.maxEntities}` : ""}
+                </td>
               </tr>
             ))}
             {tenants.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-slate-400 text-xs">
+                <td colSpan={7} className="px-4 py-8 text-center text-slate-400 text-xs">
                   Belum ada tenant terdaftar.
                 </td>
               </tr>

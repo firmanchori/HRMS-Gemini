@@ -650,6 +650,7 @@ export interface JobRequisition {
   reqNumber: string;
   position: string; // Nama Posisi / Jabatan
   department: string;
+  officeLocationId?: string; // Lokasi penempatan kerja (referensi ke Master Lokasi Kantor)
   grade: string; // Tampilan Grade (e.g. 'Grade 2 s/d Grade 3')
   gradeMin?: string; // Grade Opsi Dari (e.g. 'Grade 1 - Staff')
   gradeMax?: string; // Grade Opsi Sampai (e.g. 'Grade 3 - Lead / Supervisor')
@@ -1534,6 +1535,14 @@ export interface CompanyEntity {
   status: 'Aktif' | 'Nonaktif';
   useDepartmentLevel?: boolean; // Fleksibel: true jika butuh departemen, false jika lean (Divisi langsung ke Jabatan)
   nikSettings?: FlexibleNikSettings;
+  // true = tata kelola resmi ber-SK aktif (CRUD langsung ke struktur diblokir, wajib lewat proposal restrukturisasi); false = mode setup awal.
+  isGovernanceLocked?: boolean;
+  // Branding per entitas — anak/cucu perusahaan bisa punya logo kop surat & favicon sendiri, berbeda dari induknya.
+  documentLogoUrl?: string;
+  appFaviconUrl?: string;
+  // true = nikPattern ini adalah copy-mati dari pola induk saat ini (ikut berubah lagi hanya jika flag ini di-set true ulang);
+  // false = format sendiri yang sengaja diisi berbeda dari induk. Selalu false untuk entitas tanpa induk (holding).
+  nikPatternFollowsParent?: boolean;
 }
 
 // 23. Employee Staging (Onboarding Gate)

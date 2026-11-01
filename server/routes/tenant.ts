@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
-import { eq, inArray, and } from "drizzle-orm";
+import bcrypt from "bcryptjs";
+import { eq, inArray, and, isNull } from "drizzle-orm";
 import { db } from "../db/client.ts";
 import {
   companyEntities,
@@ -12,6 +13,8 @@ import {
   orgStructureNodes,
   orgChangeProposals,
   orgStructureSnapshots,
+  officeLocations,
+  users,
 } from "../db/schema.ts";
 import { requireTenantAdmin } from "../middleware/auth.ts";
 import { validateBody, validateParams, uuidParam } from "../lib/validate.ts";
@@ -21,11 +24,38 @@ import { logAudit } from "../lib/audit.ts";
 export const tenantRouter = Router();
 tenantRouter.use(requireTenantAdmin);
 
+/**
+ * Which entity a tenant_admin is personally scoped to — the entity whose own
+ * roster they manage, and the only entity under which they're allowed to
+ * create a direct child. `users.entityId` is null for a tenant's very first
+ * (registration) admin until its holding entity exists; it's ALSO still
+ * null forever for tenants seeded before this scoping existed, so we fall
+ * back to "the tenant's own root/holding entity" in that case rather than
+ * treating them as scope-less.
+ */
+async function resolveCallerEntityId(callerUser: { entityId: string | null } | undefined, tenantId: string): Promise<string | null> {
+  if (callerUser?.entityId) return callerUser.entityId;
+  const [rootEntity] = await db.select().from(companyEntities).where(and(eq(companyEntities.tenantId, tenantId), isNull(companyEntities.parentEntityId))).limit(1);
+  return rootEntity?.id ?? null;
+}
+
 // ---------------------------------------------------------------------------
 // Entities — unlimited-depth tree, entity_closure maintained on create.
 // "Bawa pengaturan dari parent" = a one-time dead copy of the parent's
 // CURRENT column values at creation, never a live link (user correction).
+//
+// Provisioning rule: an entity's admin may create a DIRECT child entity, but
+// their responsibility for that child stops at creating its one admin user
+// — everything else for the child (its own structure, its own further
+// users) is the child admin's job, never the parent's. Applies recursively:
+// anak -> cucu -> cicit, each level only ever touches its immediate child.
 // ---------------------------------------------------------------------------
+
+const createEntityAdminSchema = z.object({
+  name: z.string().trim().min(2).max(200),
+  email: z.string().trim().toLowerCase().email(),
+  password: z.string().min(8).max(200),
+});
 
 const createEntitySchema = z.object({
   parentEntityId: z.string().uuid().optional(),
@@ -41,6 +71,11 @@ const createEntitySchema = z.object({
   // Explicit, not implicit — defaults to true (follow) only when a parent exists; see resolveNikPattern.
   followParentNikPattern: z.boolean().optional(),
   docPrefix: z.string().trim().max(50).optional(),
+  isGovernanceLocked: z.boolean().optional(),
+  documentLogoUrl: z.string().trim().max(2000).optional(),
+  appFaviconUrl: z.string().trim().max(2000).optional(),
+  // Required when parentEntityId is set — the one admin account the creating entity provisions for its new child.
+  admin: createEntityAdminSchema.optional(),
 });
 
 tenantRouter.post("/entities", validateBody(createEntitySchema), async (req, res) => {
@@ -51,6 +86,24 @@ tenantRouter.post("/entities", validateBody(createEntitySchema), async (req, res
   if (body.parentEntityId) {
     [parent] = await db.select().from(companyEntities).where(and(eq(companyEntities.id, body.parentEntityId), eq(companyEntities.tenantId, tenantId))).limit(1);
     if (!parent) return res.status(400).json({ error: "Entitas induk tidak ditemukan" });
+  }
+
+  const [callerUser] = await db.select().from(users).where(eq(users.id, req.session!.userId)).limit(1);
+  const callerEntityId = await resolveCallerEntityId(callerUser, tenantId);
+
+  if (!body.parentEntityId) {
+    if (callerEntityId !== null) {
+      return res.status(403).json({ error: "Entitas utama (holding) untuk tenant ini sudah ada. Entitas baru harus dibuat sebagai anak dari entitas yang sudah ada." });
+    }
+  } else {
+    if (callerEntityId !== body.parentEntityId) {
+      return res.status(403).json({ error: "Hanya admin dari entitas induk langsung yang berwenang membuat entitas anak di bawahnya." });
+    }
+    if (!body.admin) {
+      return res.status(400).json({ error: "Wajib membuat satu akun admin untuk entitas baru ini." });
+    }
+    const [existingEmail] = await db.select().from(users).where(and(eq(users.tenantId, tenantId), eq(users.email, body.admin.email))).limit(1);
+    if (existingEmail) return res.status(400).json({ error: "Email admin tersebut sudah digunakan di tenant ini." });
   }
 
   const nikResolution = resolveNikPattern(!!parent, body.followParentNikPattern ?? true, parent?.nikPattern ?? null, body.nikPattern ?? null);
@@ -70,6 +123,7 @@ tenantRouter.post("/entities", validateBody(createEntitySchema), async (req, res
     nikPattern: nikResolution.nikPattern,
     nikPatternFollowsParent: nikResolution.nikPatternFollowsParent,
     docPrefix: body.docPrefix ?? parent?.docPrefix ?? null,
+    isGovernanceLocked: body.isGovernanceLocked ?? false,
     createdByEntityId: parent?.id ?? null,
   };
 
@@ -81,8 +135,23 @@ tenantRouter.post("/entities", validateBody(createEntitySchema), async (req, res
   const closureRows = computeNewEntityClosureRows(created.id, parentAncestorRows);
   await db.insert(entityClosure).values(closureRows);
 
-  await logAudit({ actorUserId: req.session!.userId, tenantId, action: "entity.create", details: { entityId: created.id, parentEntityId: body.parentEntityId ?? null } });
-  res.status(201).json(created);
+  // The tenant's very first (registration) admin becomes permanently scoped to the holding entity it just created.
+  if (!body.parentEntityId && callerUser && callerUser.entityId === null) {
+    await db.update(users).set({ entityId: created.id }).where(eq(users.id, callerUser.id));
+  }
+
+  let createdAdmin: { id: string; name: string; email: string } | null = null;
+  if (body.admin) {
+    const passwordHash = await bcrypt.hash(body.admin.password, 10);
+    const [adminUser] = await db
+      .insert(users)
+      .values({ tenantId, entityId: created.id, role: "tenant_admin", name: body.admin.name, email: body.admin.email, passwordHash })
+      .returning();
+    createdAdmin = { id: adminUser.id, name: adminUser.name, email: adminUser.email };
+  }
+
+  await logAudit({ actorUserId: req.session!.userId, tenantId, action: "entity.create", details: { entityId: created.id, parentEntityId: body.parentEntityId ?? null, adminUserId: createdAdmin?.id ?? null } });
+  res.status(201).json({ ...created, admin: createdAdmin });
 });
 
 /** Lists entities visible from `viewAsEntityId` (itself + all descendants, never a sibling or ancestor) — or every entity in the tenant when omitted. */
@@ -162,6 +231,279 @@ tenantRouter.get("/entities/:id/org-structure", validateParams(uuidParam("id")),
 });
 
 // ---------------------------------------------------------------------------
+// Users — each tenant_admin manages only their OWN entity's roster. Viewing
+// follows the same vertical rule as entities (self + descendants, never a
+// sibling or ancestor); creating/removing is scoped to the caller's own
+// entity only — adding staff to a descendant is that descendant's own
+// admin's job (see entity provisioning rule above).
+// ---------------------------------------------------------------------------
+
+const PUBLIC_USER_COLUMNS = { id: users.id, tenantId: users.tenantId, entityId: users.entityId, role: users.role, name: users.name, email: users.email, createdAt: users.createdAt };
+
+tenantRouter.get("/users", async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [callerUser] = await db.select().from(users).where(eq(users.id, req.session!.userId)).limit(1);
+  const callerEntityId = await resolveCallerEntityId(callerUser, tenantId);
+  if (!callerEntityId) return res.json([]);
+
+  const visibleRows = await db.select({ id: entityClosure.descendantEntityId }).from(entityClosure).where(eq(entityClosure.ancestorEntityId, callerEntityId));
+  const visibleEntityIds = visibleRows.map((r) => r.id);
+  if (visibleEntityIds.length === 0) return res.json([]);
+
+  const rows = await db.select(PUBLIC_USER_COLUMNS).from(users).where(and(eq(users.tenantId, tenantId), inArray(users.entityId, visibleEntityIds)));
+  res.json(rows);
+});
+
+const createUserSchema = z.object({
+  name: z.string().trim().min(2).max(200),
+  email: z.string().trim().toLowerCase().email(),
+  password: z.string().min(8).max(200),
+});
+
+tenantRouter.post("/users", validateBody(createUserSchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const body = req.body as z.infer<typeof createUserSchema>;
+
+  const [callerUser] = await db.select().from(users).where(eq(users.id, req.session!.userId)).limit(1);
+  const callerEntityId = await resolveCallerEntityId(callerUser, tenantId);
+  if (!callerEntityId) return res.status(403).json({ error: "Entitas Anda belum ditentukan" });
+
+  const [existingEmail] = await db.select().from(users).where(and(eq(users.tenantId, tenantId), eq(users.email, body.email))).limit(1);
+  if (existingEmail) return res.status(400).json({ error: "Email tersebut sudah digunakan di tenant ini." });
+
+  const passwordHash = await bcrypt.hash(body.password, 10);
+  const [created] = await db
+    .insert(users)
+    .values({ tenantId, entityId: callerEntityId, role: "tenant_admin", name: body.name, email: body.email, passwordHash })
+    .returning(PUBLIC_USER_COLUMNS);
+
+  await logAudit({ actorUserId: req.session!.userId, tenantId, action: "user.create", details: { userId: created.id, entityId: callerEntityId } });
+  res.status(201).json(created);
+});
+
+tenantRouter.delete("/users/:id", validateParams(uuidParam("id")), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [callerUser] = await db.select().from(users).where(eq(users.id, req.session!.userId)).limit(1);
+  const callerEntityId = await resolveCallerEntityId(callerUser, tenantId);
+
+  const [existing] = await db.select().from(users).where(and(eq(users.id, req.params.id), eq(users.tenantId, tenantId))).limit(1);
+  if (!existing) return res.status(404).json({ error: "User tidak ditemukan" });
+  if (existing.id === req.session!.userId) return res.status(400).json({ error: "Tidak bisa menghapus akun Anda sendiri" });
+  if (existing.entityId !== callerEntityId) return res.status(403).json({ error: "Hanya admin entitas ini yang bisa menghapus user ini" });
+
+  await db.delete(users).where(eq(users.id, existing.id));
+  await logAudit({ actorUserId: req.session!.userId, tenantId, action: "user.delete", details: { userId: existing.id } });
+  res.json({ ok: true });
+});
+
+// ---------------------------------------------------------------------------
+// Direct CRUD for divisions/departments/positions/org-nodes — allowed ONLY
+// while the entity is in baseline setup mode (isGovernanceLocked = false),
+// mirroring the existing frontend concept. Once locked, the SAME kinds of
+// edits must go through org_change_proposals above (officialLetterNumber
+// required to approve) instead of this direct path — enforced here
+// server-side, not just hidden in the UI.
+// ---------------------------------------------------------------------------
+
+type UnlockCheck = { ok: true; entity: typeof companyEntities.$inferSelect } | { ok: false; status: 404 | 403; error: string };
+
+async function requireUnlockedEntity(entityId: string, tenantId: string): Promise<UnlockCheck> {
+  const [entity] = await db.select().from(companyEntities).where(and(eq(companyEntities.id, entityId), eq(companyEntities.tenantId, tenantId))).limit(1);
+  if (!entity) return { ok: false, status: 404, error: "Entitas tidak ditemukan" };
+  if (entity.isGovernanceLocked) return { ok: false, status: 403, error: "Entitas ini sudah terkunci — ajukan perubahan lewat proposal restrukturisasi resmi" };
+  return { ok: true, entity };
+}
+
+const divisionSchema = z.object({
+  entityId: z.string().uuid(),
+  code: z.string().trim().min(1).max(50),
+  name: z.string().trim().min(2).max(200),
+  headTitle: z.string().trim().max(200).optional(),
+  description: z.string().trim().max(1000).optional(),
+});
+
+/** Tenant-wide listing (every entity's divisions) — the frontend filters by entity client-side, same pattern as grades/office-locations below. */
+tenantRouter.get("/divisions", async (req, res) => {
+  res.json(await db.select().from(companyDivisions).where(eq(companyDivisions.tenantId, req.session!.tenantId!)));
+});
+
+tenantRouter.post("/divisions", validateBody(divisionSchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const check = await requireUnlockedEntity(req.body.entityId, tenantId);
+  if (!check.ok) return res.status(check.status).json({ error: check.error });
+  const [created] = await db.insert(companyDivisions).values({ ...req.body, tenantId }).returning();
+  await logAudit({ actorUserId: req.session!.userId, tenantId, action: "division.create", details: { divisionId: created.id } });
+  res.status(201).json(created);
+});
+
+tenantRouter.put("/divisions/:id", validateParams(uuidParam("id")), validateBody(divisionSchema.partial()), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [existing] = await db.select().from(companyDivisions).where(and(eq(companyDivisions.id, req.params.id), eq(companyDivisions.tenantId, tenantId))).limit(1);
+  if (!existing) return res.status(404).json({ error: "Divisi tidak ditemukan" });
+  const check = await requireUnlockedEntity(existing.entityId, tenantId);
+  if (!check.ok) return res.status(check.status).json({ error: check.error });
+  const [updated] = await db.update(companyDivisions).set(req.body).where(eq(companyDivisions.id, existing.id)).returning();
+  await logAudit({ actorUserId: req.session!.userId, tenantId, action: "division.update", details: { divisionId: updated.id } });
+  res.json(updated);
+});
+
+tenantRouter.delete("/divisions/:id", validateParams(uuidParam("id")), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [existing] = await db.select().from(companyDivisions).where(and(eq(companyDivisions.id, req.params.id), eq(companyDivisions.tenantId, tenantId))).limit(1);
+  if (!existing) return res.status(404).json({ error: "Divisi tidak ditemukan" });
+  const check = await requireUnlockedEntity(existing.entityId, tenantId);
+  if (!check.ok) return res.status(check.status).json({ error: check.error });
+  await db.delete(companyDivisions).where(eq(companyDivisions.id, existing.id));
+  await logAudit({ actorUserId: req.session!.userId, tenantId, action: "division.delete", details: { divisionId: existing.id } });
+  res.json({ ok: true });
+});
+
+const departmentSchema = z.object({
+  entityId: z.string().uuid(),
+  divisionId: z.string().uuid().optional(),
+  code: z.string().trim().min(1).max(50),
+  name: z.string().trim().min(2).max(200),
+  headTitle: z.string().trim().max(200).optional(),
+  description: z.string().trim().max(1000).optional(),
+});
+
+tenantRouter.get("/departments", async (req, res) => {
+  res.json(await db.select().from(companyDepartments).where(eq(companyDepartments.tenantId, req.session!.tenantId!)));
+});
+
+tenantRouter.post("/departments", validateBody(departmentSchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const check = await requireUnlockedEntity(req.body.entityId, tenantId);
+  if (!check.ok) return res.status(check.status).json({ error: check.error });
+  const [created] = await db.insert(companyDepartments).values({ ...req.body, tenantId }).returning();
+  await logAudit({ actorUserId: req.session!.userId, tenantId, action: "department.create", details: { departmentId: created.id } });
+  res.status(201).json(created);
+});
+
+tenantRouter.put("/departments/:id", validateParams(uuidParam("id")), validateBody(departmentSchema.partial()), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [existing] = await db.select().from(companyDepartments).where(and(eq(companyDepartments.id, req.params.id), eq(companyDepartments.tenantId, tenantId))).limit(1);
+  if (!existing) return res.status(404).json({ error: "Departemen tidak ditemukan" });
+  const check = await requireUnlockedEntity(existing.entityId, tenantId);
+  if (!check.ok) return res.status(check.status).json({ error: check.error });
+  const [updated] = await db.update(companyDepartments).set(req.body).where(eq(companyDepartments.id, existing.id)).returning();
+  await logAudit({ actorUserId: req.session!.userId, tenantId, action: "department.update", details: { departmentId: updated.id } });
+  res.json(updated);
+});
+
+tenantRouter.delete("/departments/:id", validateParams(uuidParam("id")), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [existing] = await db.select().from(companyDepartments).where(and(eq(companyDepartments.id, req.params.id), eq(companyDepartments.tenantId, tenantId))).limit(1);
+  if (!existing) return res.status(404).json({ error: "Departemen tidak ditemukan" });
+  const check = await requireUnlockedEntity(existing.entityId, tenantId);
+  if (!check.ok) return res.status(check.status).json({ error: check.error });
+  await db.delete(companyDepartments).where(eq(companyDepartments.id, existing.id));
+  await logAudit({ actorUserId: req.session!.userId, tenantId, action: "department.delete", details: { departmentId: existing.id } });
+  res.json({ ok: true });
+});
+
+const positionSchema = z.object({
+  entityId: z.string().uuid(),
+  code: z.string().trim().min(1).max(50),
+  title: z.string().trim().min(2).max(200),
+  defaultLevel: z.number().int().min(1).max(5).optional(),
+  divisionId: z.string().uuid().optional(),
+  departmentId: z.string().uuid().optional(),
+  jobFamily: z.string().trim().max(100).optional(),
+  jobGrade: z.string().trim().max(50).optional(),
+  minGrade: z.string().trim().max(50).optional(),
+  maxGrade: z.string().trim().max(50).optional(),
+  gradingScheme: z.enum(["single", "broadbanding"]).optional(),
+  description: z.string().trim().max(1000).optional(),
+  requirements: z.string().trim().max(1000).optional(),
+});
+
+tenantRouter.get("/positions", async (req, res) => {
+  res.json(await db.select().from(masterJobPositions).where(eq(masterJobPositions.tenantId, req.session!.tenantId!)));
+});
+
+tenantRouter.post("/positions", validateBody(positionSchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const check = await requireUnlockedEntity(req.body.entityId, tenantId);
+  if (!check.ok) return res.status(check.status).json({ error: check.error });
+  const [created] = await db.insert(masterJobPositions).values({ ...req.body, tenantId }).returning();
+  await logAudit({ actorUserId: req.session!.userId, tenantId, action: "position.create", details: { positionId: created.id } });
+  res.status(201).json(created);
+});
+
+tenantRouter.put("/positions/:id", validateParams(uuidParam("id")), validateBody(positionSchema.partial()), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [existing] = await db.select().from(masterJobPositions).where(and(eq(masterJobPositions.id, req.params.id), eq(masterJobPositions.tenantId, tenantId))).limit(1);
+  if (!existing) return res.status(404).json({ error: "Posisi tidak ditemukan" });
+  const check = await requireUnlockedEntity(existing.entityId, tenantId);
+  if (!check.ok) return res.status(check.status).json({ error: check.error });
+  const [updated] = await db.update(masterJobPositions).set(req.body).where(eq(masterJobPositions.id, existing.id)).returning();
+  await logAudit({ actorUserId: req.session!.userId, tenantId, action: "position.update", details: { positionId: updated.id } });
+  res.json(updated);
+});
+
+tenantRouter.delete("/positions/:id", validateParams(uuidParam("id")), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [existing] = await db.select().from(masterJobPositions).where(and(eq(masterJobPositions.id, req.params.id), eq(masterJobPositions.tenantId, tenantId))).limit(1);
+  if (!existing) return res.status(404).json({ error: "Posisi tidak ditemukan" });
+  const check = await requireUnlockedEntity(existing.entityId, tenantId);
+  if (!check.ok) return res.status(check.status).json({ error: check.error });
+  await db.delete(masterJobPositions).where(eq(masterJobPositions.id, existing.id));
+  await logAudit({ actorUserId: req.session!.userId, tenantId, action: "position.delete", details: { positionId: existing.id } });
+  res.json({ ok: true });
+});
+
+const orgNodeSchema = z.object({
+  entityId: z.string().uuid(),
+  title: z.string().trim().min(2).max(200),
+  divisionId: z.string().uuid().optional(),
+  departmentId: z.string().uuid().optional(),
+  code: z.string().trim().max(50).optional(),
+  jobGrade: z.string().trim().max(50).optional(),
+  description: z.string().trim().max(1000).optional(),
+  reportsToId: z.string().uuid().optional(),
+  relationType: z.enum(["struktural", "administratif"]).optional(),
+  isVacant: z.boolean().optional(),
+  level: z.number().int().min(1).optional(),
+  masterJobPositionId: z.string().uuid().optional(),
+});
+
+tenantRouter.get("/org-nodes", async (req, res) => {
+  res.json(await db.select().from(orgStructureNodes).where(eq(orgStructureNodes.tenantId, req.session!.tenantId!)));
+});
+
+tenantRouter.post("/org-nodes", validateBody(orgNodeSchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const check = await requireUnlockedEntity(req.body.entityId, tenantId);
+  if (!check.ok) return res.status(check.status).json({ error: check.error });
+  const [created] = await db.insert(orgStructureNodes).values({ ...req.body, tenantId }).returning();
+  await logAudit({ actorUserId: req.session!.userId, tenantId, action: "org_node.create", details: { orgNodeId: created.id } });
+  res.status(201).json(created);
+});
+
+tenantRouter.put("/org-nodes/:id", validateParams(uuidParam("id")), validateBody(orgNodeSchema.partial()), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [existing] = await db.select().from(orgStructureNodes).where(and(eq(orgStructureNodes.id, req.params.id), eq(orgStructureNodes.tenantId, tenantId))).limit(1);
+  if (!existing) return res.status(404).json({ error: "Posisi struktur tidak ditemukan" });
+  const check = await requireUnlockedEntity(existing.entityId, tenantId);
+  if (!check.ok) return res.status(check.status).json({ error: check.error });
+  const [updated] = await db.update(orgStructureNodes).set(req.body).where(eq(orgStructureNodes.id, existing.id)).returning();
+  await logAudit({ actorUserId: req.session!.userId, tenantId, action: "org_node.update", details: { orgNodeId: updated.id } });
+  res.json(updated);
+});
+
+tenantRouter.delete("/org-nodes/:id", validateParams(uuidParam("id")), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [existing] = await db.select().from(orgStructureNodes).where(and(eq(orgStructureNodes.id, req.params.id), eq(orgStructureNodes.tenantId, tenantId))).limit(1);
+  if (!existing) return res.status(404).json({ error: "Posisi struktur tidak ditemukan" });
+  const check = await requireUnlockedEntity(existing.entityId, tenantId);
+  if (!check.ok) return res.status(check.status).json({ error: check.error });
+  await db.delete(orgStructureNodes).where(eq(orgStructureNodes.id, existing.id));
+  await logAudit({ actorUserId: req.session!.userId, tenantId, action: "org_node.delete", details: { orgNodeId: existing.id } });
+  res.json({ ok: true });
+});
+
+// ---------------------------------------------------------------------------
 // Grade & salary ranges — compensation reference data, not part of the
 // organizational skeleton, so plain CRUD (not gated by the proposal
 // workflow below).
@@ -199,6 +541,15 @@ tenantRouter.put("/grades/:id", validateParams(uuidParam("id")), validateBody(gr
   if (!updated) return res.status(404).json({ error: "Grade tidak ditemukan" });
   await logAudit({ actorUserId: req.session!.userId, tenantId, action: "grade.update", details: { gradeId: updated.id } });
   res.json(updated);
+});
+
+tenantRouter.delete("/grades/:id", validateParams(uuidParam("id")), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [existing] = await db.select().from(gradeSalaryRanges).where(and(eq(gradeSalaryRanges.id, req.params.id), eq(gradeSalaryRanges.tenantId, tenantId))).limit(1);
+  if (!existing) return res.status(404).json({ error: "Grade tidak ditemukan" });
+  await db.delete(gradeSalaryRanges).where(eq(gradeSalaryRanges.id, existing.id));
+  await logAudit({ actorUserId: req.session!.userId, tenantId, action: "grade.delete", details: { gradeId: existing.id } });
+  res.json({ ok: true });
 });
 
 // ---------------------------------------------------------------------------
@@ -362,5 +713,48 @@ tenantRouter.post("/org-change-proposals/:id/reject", validateParams(uuidParam("
     .where(eq(orgChangeProposals.id, existing.id))
     .returning();
   await logAudit({ actorUserId: req.session!.userId, tenantId, action: "org_change_proposal.reject", details: { proposalId: updated.id } });
+  res.json(updated);
+});
+
+// ---------------------------------------------------------------------------
+// Office locations — used for GPS-radius attendance check-in, not part of
+// the org-chart skeleton, so plain CRUD (no proposal/approval workflow).
+// ---------------------------------------------------------------------------
+
+const officeLocationSchema = z.object({
+  entityId: z.string().uuid().optional(),
+  code: z.string().trim().min(1).max(50),
+  name: z.string().trim().min(2).max(200),
+  type: z.enum(["Kantor Pusat", "Kantor Cabang", "Gudang", "Workshop", "Site Operasional"]).optional(),
+  address: z.string().trim().max(500).optional(),
+  city: z.string().trim().max(100).optional(),
+  latitude: z.number().min(-90).max(90).optional(),
+  longitude: z.number().min(-180).max(180).optional(),
+  radiusMeters: z.number().int().min(10).max(5000).optional(),
+  notes: z.string().trim().max(1000).optional(),
+});
+
+tenantRouter.post("/office-locations", validateBody(officeLocationSchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [created] = await db.insert(officeLocations).values({ ...req.body, tenantId }).returning();
+  await logAudit({ actorUserId: req.session!.userId, tenantId, action: "office_location.create", details: { officeLocationId: created.id } });
+  res.status(201).json(created);
+});
+
+tenantRouter.get("/office-locations", async (req, res) => {
+  res.json(await db.select().from(officeLocations).where(eq(officeLocations.tenantId, req.session!.tenantId!)));
+});
+
+const updateOfficeLocationSchema = officeLocationSchema.partial().extend({ isActive: z.boolean().optional() });
+
+tenantRouter.put("/office-locations/:id", validateParams(uuidParam("id")), validateBody(updateOfficeLocationSchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [updated] = await db
+    .update(officeLocations)
+    .set(req.body)
+    .where(and(eq(officeLocations.id, req.params.id), eq(officeLocations.tenantId, tenantId)))
+    .returning();
+  if (!updated) return res.status(404).json({ error: "Lokasi kantor tidak ditemukan" });
+  await logAudit({ actorUserId: req.session!.userId, tenantId, action: "office_location.update", details: { officeLocationId: updated.id } });
   res.json(updated);
 });

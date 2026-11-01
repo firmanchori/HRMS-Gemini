@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs";
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "../db/client.ts";
 import { users, passwordResetTokens, emailChangeRequests } from "../db/schema.ts";
-import { issueSession, clearSession } from "../middleware/auth.ts";
+import { issueSession, clearSession, readSession } from "../middleware/auth.ts";
 import { generateToken, hashToken } from "../lib/token.ts";
 import { sendPasswordResetEmail, sendEmailChangeConfirmation } from "../lib/email.ts";
 import { validateBody } from "../lib/validate.ts";
@@ -78,6 +78,28 @@ authRouter.get("/dev-accounts", async (req, res) => {
     }))
   );
   res.json(accounts);
+});
+
+/**
+ * Lets the frontend ask "am I still logged in?" on page load/refresh —
+ * without this, a refresh has no way to tell a valid httpOnly session cookie
+ * apart from no session at all, so it always fell back to the login screen
+ * even right after a successful login.
+ */
+authRouter.get("/me", async (req, res) => {
+  const session = readSession(req);
+  if (!session) return res.status(401).json({ error: "Belum login" });
+
+  if (session.role === "app_owner") {
+    if (req.tenant !== null) return res.status(403).json({ error: "Sesi tidak cocok dengan domain ini" });
+  } else {
+    if (!req.tenant || session.tenantId !== req.tenant.id) return res.status(403).json({ error: "Sesi tidak cocok dengan subdomain ini" });
+    if (req.tenant.status !== "Active") return res.status(403).json({ error: "Akun perusahaan Anda tidak aktif" });
+  }
+
+  const [user] = await db.select().from(users).where(eq(users.id, session.userId)).limit(1);
+  if (!user) return res.status(401).json({ error: "Belum login" });
+  res.json({ id: user.id, name: user.name, email: user.email, role: user.role });
 });
 
 authRouter.post("/logout", (_req, res) => {

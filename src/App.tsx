@@ -21,7 +21,7 @@ import { PersonaliaManagement } from './components/modules/PersonaliaManagement'
 import { BusinessTripManagement } from './components/modules/BusinessTripManagement';
 import { ApprovalCenter } from './components/modules/ApprovalCenter';
 import { RbacManagement } from './components/modules/RbacManagement';
-import { TenantManagement } from './components/modules/TenantManagement';
+import { BrandingManagement } from './components/modules/BrandingManagement';
 import { EssPortal } from './components/modules/EssPortal';
 import { MssPortal } from './components/modules/MssPortal';
 import { AuditTrailManagement } from './components/modules/AuditTrailManagement';
@@ -34,7 +34,7 @@ import { authApi } from './shared/authApi';
 import { UserRole } from './types/hrms';
 
 const MainLayout: React.FC = () => {
-  const { activeModule, setActiveModule, setCurrentUserRole } = useHrms();
+  const { activeModule, setActiveModule, setCurrentUserRole, setCurrentSessionUser, loadTenantOrgData } = useHrms();
 
   // Deteksi jika link tes online pelamar sedang dibuka via URL query param (?testToken=...)
   const [portalToken, setPortalToken] = useState<string | null>(() => {
@@ -43,14 +43,31 @@ const MainLayout: React.FC = () => {
   });
 
   // Real session: the httpOnly cookie from a successful login persists
-  // server-side, but there's no "am I already logged in" check on mount yet
-  // (matching the App Owner console's current behavior) — every fresh page
-  // load requires logging in again via the real backend.
+  // server-side across page refreshes, so on mount we ask the backend
+  // (/api/auth/me) whether that cookie is still valid instead of always
+  // forcing a fresh login.
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isCheckingSession, setIsCheckingSession] = useState(true);
   const [isMigrationWizardOpen, setIsMigrationWizardOpen] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isDesktopCollapsed, setIsDesktopCollapsed] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+
+  useEffect(() => {
+    authApi
+      .me()
+      .then((user) => {
+        setCurrentUserRole(user.role as UserRole);
+        setCurrentSessionUser({ id: user.id, name: user.name, email: user.email });
+        setIsAuthenticated(true);
+        return loadTenantOrgData();
+      })
+      .catch(() => {
+        // Tidak ada sesi valid — tetap di halaman login, bukan error.
+      })
+      .finally(() => setIsCheckingSession(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -164,8 +181,8 @@ const MainLayout: React.FC = () => {
         return <AuditTrailManagement />;
       case 'reports':
         return <ReportsManagement />;
-      case 'tenants':
-        return <TenantManagement />;
+      case 'branding':
+        return <BrandingManagement />;
       default:
         return (
           <DashboardOverview
@@ -189,14 +206,24 @@ const MainLayout: React.FC = () => {
     );
   }
 
+  if (isCheckingSession) {
+    return (
+      <div className="flex h-screen w-screen items-center justify-center bg-slate-100">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-300 border-t-indigo-600" />
+      </div>
+    );
+  }
+
   if (!isAuthenticated) {
     return (
       <LoginScreen
-        onLoginSuccess={(email, role) => {
+        onLoginSuccess={(user, role) => {
           if (role) {
             setCurrentUserRole(role as UserRole);
           }
+          setCurrentSessionUser(user);
           setIsAuthenticated(true);
+          loadTenantOrgData().catch((err) => console.error('Gagal memuat data struktur organisasi:', err));
         }}
       />
     );

@@ -1,0 +1,1 @@
+ALTER TABLE "company_entities" ADD COLUMN "is_governance_locked" boolean DEFAULT false NOT NULL;

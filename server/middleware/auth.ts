@@ -27,6 +27,11 @@ export function issueSession(res: Response, payload: SessionPayload) {
   const token = jwt.sign(payload, secret(), { expiresIn: "8h" });
   res.cookie(COOKIE_NAME, token, {
     httpOnly: true,
+    // The dev frontend proxies /api/* through its own origin (see
+    // vite.config.ts) so this always looks like a same-site request to the
+    // browser, even though the tenant subdomain and this API are different
+    // hosts underneath — SameSite=Lax is enough, and it's what keeps
+    // automated tests (supertest, over plain HTTP) working too.
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     maxAge: 8 * 60 * 60 * 1000,
@@ -37,7 +42,7 @@ export function clearSession(res: Response) {
   res.clearCookie(COOKIE_NAME);
 }
 
-function readSession(req: Request): SessionPayload | null {
+export function readSession(req: Request): SessionPayload | null {
   const token = req.cookies?.[COOKIE_NAME];
   if (!token) return null;
   try {

@@ -174,6 +174,7 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   const currentEntity = entities.find((e) => e.id === currentEntityId) || entities[0];
+  const currentEntityName = currentEntity?.name ?? '—';
 
   // Match corresponding employee for rich photo avatar
   const currentEmployee =
@@ -481,7 +482,7 @@ export const Header: React.FC<HeaderProps> = ({
                       <div className="text-[11px] text-slate-300 font-mono truncate">{currentUser.email}</div>
                       <div className="flex items-center gap-1 mt-1 text-[10px] text-indigo-300 font-medium truncate">
                         <Building2 className="w-3 h-3 text-indigo-400 shrink-0" />
-                        <span className="truncate">{currentEntity.name}</span>
+                        <span className="truncate">{currentEntityName}</span>
                       </div>
                     </div>
                   </div>
@@ -804,7 +805,7 @@ export const Header: React.FC<HeaderProps> = ({
                     </div>
                     <div>
                       <span className="text-[10px] text-slate-400 uppercase font-semibold block">Entitas Perusahaan:</span>
-                      <span className="font-bold text-slate-800">{currentEntity.name}</span>
+                      <span className="font-bold text-slate-800">{currentEntityName}</span>
                     </div>
                   </div>
                 </div>

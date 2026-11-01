@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useHrms } from '../../context/HrmsContext';
 import {
   ShieldCheck,
@@ -21,8 +22,8 @@ import {
   Trash2,
 } from 'lucide-react';
 import { UserRole, UserAccount, RoleDefinition, OperationPermissions } from '../../types/hrms';
-import { EmployeeSelect } from '../common/EmployeeSelect';
 import { ScrollableTabNav } from '../common/ScrollableTabNav';
+import { EmployeeSelect } from '../common/EmployeeSelect';
 
 export const RbacManagement: React.FC = () => {
   const {
@@ -51,8 +52,11 @@ export const RbacManagement: React.FC = () => {
   // Form State for User
   const [newUserName, setNewUserName] = useState('');
   const [newUserEmail, setNewUserEmail] = useState('');
-  const [newUserRole, setNewUserRole] = useState<string>('employee');
-  const [linkedEmpId, setLinkedEmpId] = useState(employees[0]?.id || '');
+  const [newUserPassword, setNewUserPassword] = useState('');
+  const [linkedEmpId, setLinkedEmpId] = useState('');
+  const [addUserError, setAddUserError] = useState<string | null>(null);
+  const [isSubmittingUser, setIsSubmittingUser] = useState(false);
+  const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
 
   // Form State for New Role
   const [newRoleForm, setNewRoleForm] = useState({
@@ -62,7 +66,9 @@ export const RbacManagement: React.FC = () => {
     copyFrom: 'employee',
   });
 
-  const tenantUsers = users.filter((u) => u.tenantId === currentTenant.id);
+  // Not re-filtered by currentTenant.id — the backend already scopes `users` to the entities
+  // you're allowed to see (your own entity + its descendants), same reasoning as entities elsewhere.
+  const tenantUsers = users;
 
   const modulesList = [
     { id: 'employees', label: 'Manajemen Karyawan' },
@@ -121,24 +127,36 @@ export const RbacManagement: React.FC = () => {
     setTimeout(() => setFeedbackNotice(null), 4000);
   };
 
-  const handleAddUserSubmit = (e: React.FormEvent) => {
+  const handleAddUserSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newUserName || !newUserEmail) return;
-
-    addUser({
-      name: newUserName,
-      email: newUserEmail,
-      role: newUserRole as UserRole,
-      employeeId: linkedEmpId || undefined,
-      department: 'Head Office',
-      status: 'Aktif',
-    });
-
-    setFeedbackNotice(`User baru ${newUserName} berhasil didaftarkan sebagai role ${newUserRole}`);
-    setTimeout(() => setFeedbackNotice(null), 4000);
-    setIsAddUserModalOpen(false);
-    setNewUserName('');
-    setNewUserEmail('');
+    if (!linkedEmpId) {
+      setAddUserError('Pilih karyawan yang akan diberi akun login');
+      return;
+    }
+    if (!newUserName.trim() || !newUserEmail.trim()) {
+      setAddUserError('Nama dan email wajib diisi');
+      return;
+    }
+    if (newUserPassword.length < 8) {
+      setAddUserError('Password minimal 8 karakter');
+      return;
+    }
+    setAddUserError(null);
+    setIsSubmittingUser(true);
+    try {
+      await addUser({ name: newUserName, email: newUserEmail, role: 'super_admin', status: 'Aktif', employeeId: linkedEmpId }, newUserPassword);
+      setFeedbackNotice(`User baru ${newUserName} berhasil didaftarkan.`);
+      setTimeout(() => setFeedbackNotice(null), 4000);
+      setIsAddUserModalOpen(false);
+      setNewUserName('');
+      setNewUserEmail('');
+      setNewUserPassword('');
+      setLinkedEmpId('');
+    } catch (err) {
+      setAddUserError(err instanceof Error ? err.message : 'Gagal menambahkan user, coba lagi.');
+    } finally {
+      setIsSubmittingUser(false);
+    }
   };
 
   return (
@@ -165,7 +183,14 @@ export const RbacManagement: React.FC = () => {
           </button>
 
           <button
-            onClick={() => setIsAddUserModalOpen(true)}
+            onClick={() => {
+              setAddUserError(null);
+              setLinkedEmpId('');
+              setNewUserName('');
+              setNewUserEmail('');
+              setNewUserPassword('');
+              setIsAddUserModalOpen(true);
+            }}
             className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors shrink-0"
           >
             <Plus className="w-3.5 h-3.5" />
@@ -174,16 +199,25 @@ export const RbacManagement: React.FC = () => {
         </div>
       </div>
 
-      {feedbackNotice && (
-        <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center justify-between text-xs text-emerald-800 animate-fadeIn">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-            <span>{feedbackNotice}</span>
-          </div>
-          <button onClick={() => setFeedbackNotice(null)}>
-            <X className="w-4 h-4 text-emerald-600" />
+      {/* Toast mengambang — tetap terlihat meski halaman sedang digulir dalam-dalam ke tabel matrix izin, supaya klik yang tidak sengaja tetap ketahuan. */}
+      {typeof document !== 'undefined' && feedbackNotice && createPortal(
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed top-5 right-5 z-[999999] bg-slate-900 text-white px-4 py-3 rounded-xl shadow-2xl text-xs font-semibold flex items-center gap-2.5 border border-slate-700 animate-in fade-in max-w-md pointer-events-auto ring-1 ring-white/10"
+        >
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span className="leading-snug flex-1">{feedbackNotice}</span>
+          <button
+            type="button"
+            onClick={() => setFeedbackNotice(null)}
+            className="text-slate-400 hover:text-white p-0.5 rounded transition-colors"
+            title="Tutup Notifikasi"
+          >
+            <X className="w-3.5 h-3.5" />
           </button>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Row 2: Standard Enterprise Scrollable Tab Navigation (With Icons) */}
@@ -326,11 +360,7 @@ export const RbacManagement: React.FC = () => {
                             </button>
                             {user.id !== currentUser.id && (
                               <button
-                                onClick={() => {
-                                  if (confirm(`Hapus akun user "${user.name}"?`)) {
-                                    deleteUser(user.id);
-                                  }
-                                }}
+                                onClick={() => setDeletingUserId(user.id)}
                                 className="text-[11px] text-rose-600 hover:text-rose-800 font-medium"
                                 title="Hapus User"
                               >
@@ -600,6 +630,7 @@ export const RbacManagement: React.FC = () => {
                   onChange={(e) => setNewRoleForm({ ...newRoleForm, copyFrom: e.target.value })}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white font-medium focus:outline-indigo-600"
                 >
+                  <option value="">Kosong (tanpa izin apapun / blank)</option>
                   {roles.map((r) => (
                     <option key={r.id} value={r.id}>
                       Salin dari {r.label}
@@ -607,7 +638,7 @@ export const RbacManagement: React.FC = () => {
                   ))}
                 </select>
                 <span className="text-[10px] text-slate-400 mt-1 block">
-                  Izin awal akan disalin dari template ini dan dapat Anda ubah kapan saja di tabel matriks.
+                  Pilih "Kosong" untuk mulai tanpa izin sama sekali, atau salin dari role lain sebagai titik awal — izinnya dapat Anda ubah kapan saja di tabel matriks.
                 </span>
               </div>
 
@@ -815,6 +846,25 @@ export const RbacManagement: React.FC = () => {
             </div>
 
             <form onSubmit={handleAddUserSubmit} className="p-5 space-y-4 text-xs">
+              {addUserError && (
+                <div className="px-3 py-2 bg-red-50 border border-red-200 rounded text-red-700 font-medium">{addUserError}</div>
+              )}
+
+              <EmployeeSelect
+                label="Karyawan *"
+                employees={employees}
+                value={linkedEmpId}
+                required
+                onChange={(id) => {
+                  setLinkedEmpId(id);
+                  const emp = employees.find((e) => e.id === id);
+                  if (emp) {
+                    setNewUserName(emp.fullName);
+                    setNewUserEmail(emp.email || newUserEmail);
+                  }
+                }}
+              />
+
               <div>
                 <label className="font-medium text-slate-700 block mb-1">Nama Lengkap Pengguna *</label>
                 <input
@@ -840,26 +890,16 @@ export const RbacManagement: React.FC = () => {
               </div>
 
               <div>
-                <label className="font-medium text-slate-700 block mb-1">Peran Otorisasi (Role) *</label>
-                <select
-                  value={newUserRole}
-                  onChange={(e) => setNewUserRole(e.target.value as any)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded bg-white font-semibold"
-                >
-                  {roles.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.label}
-                    </option>
-                  ))}
-                </select>
+                <label className="font-medium text-slate-700 block mb-1">Password Awal *</label>
+                <input
+                  type="password"
+                  required
+                  placeholder="Minimal 8 karakter"
+                  value={newUserPassword}
+                  onChange={(e) => setNewUserPassword(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded"
+                />
               </div>
-
-              <EmployeeSelect
-                label="Tautkan dengan Data Karyawan (Opsional)"
-                employees={employees}
-                value={linkedEmpId}
-                onChange={setLinkedEmpId}
-              />
 
               <div className="pt-3 border-t border-slate-200 flex justify-end gap-2">
                 <button
@@ -871,12 +911,58 @@ export const RbacManagement: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-semibold shadow-xs"
+                  disabled={isSubmittingUser}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white rounded font-semibold shadow-xs"
                 >
-                  Buat Akun User
+                  {isSubmittingUser ? 'Menyimpan...' : 'Buat Akun User'}
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL KONFIRMASI HAPUS USER */}
+      {deletingUserId && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setDeletingUserId(null);
+          }}
+        >
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full border border-slate-200 overflow-hidden p-5 space-y-4 text-xs">
+            <div className="font-bold text-sm text-slate-900 flex items-center gap-2">
+              <Trash2 className="w-4 h-4 text-rose-600" />
+              <span>Hapus Akun User?</span>
+            </div>
+            <p className="text-slate-600">
+              Apakah Anda yakin ingin menghapus akun <strong>{tenantUsers.find((u) => u.id === deletingUserId)?.name}</strong>? Akun ini tidak akan bisa login lagi setelah dihapus.
+            </p>
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setDeletingUserId(null)}
+                className="px-3.5 py-1.5 bg-slate-100 text-slate-700 rounded-lg font-semibold"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const id = deletingUserId;
+                  setDeletingUserId(null);
+                  try {
+                    await deleteUser(id);
+                  } catch (err) {
+                    setFeedbackNotice(err instanceof Error ? err.message : 'Gagal menghapus user.');
+                    setTimeout(() => setFeedbackNotice(null), 4000);
+                  }
+                }}
+                className="px-4 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg font-semibold"
+              >
+                Ya, Hapus
+              </button>
+            </div>
           </div>
         </div>
       )}

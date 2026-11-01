@@ -944,6 +944,7 @@ export const RecruitmentManagement: React.FC = () => {
     addCandidate,
     updateCandidateStage,
     currentTenant,
+    currentEntity,
     currentUser,
     employees = [],
     addOnboardingProcess,
@@ -973,6 +974,7 @@ export const RecruitmentManagement: React.FC = () => {
     saveCandidateInterviewEvaluation,
     deleteCandidateInterviewEvaluation,
     addRoomBooking,
+    officeLocations = [],
   } = useHrms();
 
   const safeTenant = currentTenant || {
@@ -1863,6 +1865,7 @@ export const RecruitmentManagement: React.FC = () => {
   const [fptkGradeMin, setFptkGradeMin] = useState('Grade 2 - Officer / Senior Staff');
   const [fptkGradeMax, setFptkGradeMax] = useState('Grade 3 - Lead / Supervisor');
   const [fptkDept, setFptkDept] = useState(companyDepartments[0] || 'Engineering');
+  const [fptkLocationId, setFptkLocationId] = useState('');
   const [fptkHeadcount, setFptkHeadcount] = useState(1);
   const [fptkReason, setFptkReason] = useState<string>('Posisi Baru (New Position)');
   const [fptkReplacementFor, setFptkReplacementFor] = useState('');
@@ -2000,6 +2003,7 @@ export const RecruitmentManagement: React.FC = () => {
     setFptkGradeMin(req.gradeMin || fptkGradeMin);
     setFptkGradeMax(req.gradeMax || fptkGradeMax);
     setFptkDept(req.department || fptkDept);
+    setFptkLocationId(req.officeLocationId || '');
     setFptkHeadcount(req.headcount || 1);
     setFptkReason(req.reason || 'Posisi Baru (New Position)');
     setFptkReplacementFor(req.replacementFor || '');
@@ -3042,6 +3046,7 @@ export const RecruitmentManagement: React.FC = () => {
       gradeMin: fptkGradeMin,
       gradeMax: fptkGradeMax,
       department: fptkDept,
+      officeLocationId: fptkLocationId || undefined,
       headcount: Number(fptkHeadcount) || 1,
       reason: fptkReason,
       replacementFor: fptkReason.includes('Penggantian') ? fptkReplacementFor : undefined,
@@ -3080,6 +3085,7 @@ export const RecruitmentManagement: React.FC = () => {
     setIsRequisitionModalOpen(false);
     resetFptkFormExtras();
     setFptkPosition('');
+    setFptkLocationId('');
     setFptkJustification('');
     setFptkMainResponsibilities('');
     setFptkReplacementFor('');
@@ -10347,6 +10353,27 @@ PT Nusantara Multi Talenta Tbk`);
                       {companyDepartments.map((dept) => (
                         <option key={dept} value={dept}>
                           {dept}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 pt-1">
+                  <div>
+                    <label className="font-semibold text-slate-700 block mb-1">
+                      Lokasi Penempatan *
+                    </label>
+                    <select
+                      required
+                      value={fptkLocationId}
+                      onChange={(e) => setFptkLocationId(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-900 font-medium bg-white focus:ring-1 focus:ring-blue-600 focus:outline-none"
+                    >
+                      <option value="">Pilih Lokasi Kantor...</option>
+                      {officeLocations.filter((loc) => loc.isActive).map((loc) => (
+                        <option key={loc.id} value={loc.id}>
+                          {loc.name} ({loc.city})
                         </option>
                       ))}
                     </select>
@@ -19435,9 +19462,9 @@ PT Nusantara Multi Talenta Tbk`);
                 {/* Kop Surat Resmi */}
                 <div className="border-b-2 border-slate-900 pb-4 flex items-center justify-between gap-4">
                   <div className="flex items-center gap-3.5">
-                    {safeTenant.documentLogoUrl ? (
+                    {(currentEntity?.documentLogoUrl || safeTenant.documentLogoUrl) ? (
                       <img
-                        src={safeTenant.documentLogoUrl}
+                        src={currentEntity?.documentLogoUrl || safeTenant.documentLogoUrl}
                         alt={safeTenant.name}
                         className="w-14 h-14 rounded-xl object-contain border border-slate-200 p-1 bg-white shadow-xs shrink-0"
                       />

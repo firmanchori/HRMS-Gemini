@@ -3,7 +3,7 @@ import { Lock, Mail, Eye, EyeOff, ShieldCheck, AlertCircle, ArrowRight, FlaskCon
 import { authApi, AuthApiError, type DevAccount } from '../../shared/authApi';
 
 interface LoginScreenProps {
-  onLoginSuccess: (email: string, role?: string) => void;
+  onLoginSuccess: (user: { id: string; name: string; email: string }, role?: string) => void;
 }
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
@@ -38,7 +38,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
       const user = await authApi.login(email, password);
       // The real backend only issues one role for this context (tenant_admin);
       // mapped to the mock RBAC's full-access role until per-employee accounts exist.
-      onLoginSuccess(user.email, 'super_admin');
+      onLoginSuccess(user, 'super_admin');
     } catch (err) {
       setErrorMessage(err instanceof AuthApiError ? err.message : 'Gagal masuk, coba lagi.');
     } finally {

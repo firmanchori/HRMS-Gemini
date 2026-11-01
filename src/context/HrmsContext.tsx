@@ -1,5 +1,17 @@
 import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import {
+  tenantApi,
+  type CompanyEntity as ApiCompanyEntity,
+  type OfficeLocation as ApiOfficeLocation,
+  type CompanyDivision as ApiCompanyDivision,
+  type CompanyDepartment as ApiCompanyDepartment,
+  type MasterJobPosition as ApiMasterJobPosition,
+  type OrgStructureNode as ApiOrgStructureNode,
+  type GradeSalaryRange as ApiGradeSalaryRange,
+  type TenantUser as ApiTenantUser,
+} from '../tenant/api';
+import { ORG_STRUCTURE_TEMPLATES } from '../utils/orgStructureTemplates';
+import {
   Tenant,
   UserAccount,
   UserRole,
@@ -104,18 +116,15 @@ import {
   DEFAULT_ONBOARDING_CHECKLIST_TEMPLATES,
   INITIAL_DOCUMENT_TEMPLATES,
   INITIAL_MODULE_SETTINGS,
-  INITIAL_ENTITIES,
   INITIAL_EMPLOYEE_STAGING,
   INITIAL_OVERTIME_REQUESTS,
   INITIAL_REIMBURSEMENT_CLAIMS,
   INITIAL_PERSONALIA_REQUESTS,
-  INITIAL_MASTER_JOB_POSITIONS,
   INITIAL_ORG_NODES,
   INITIAL_ORG_PROPOSALS,
   INITIAL_PROBATION_EVALUATIONS,
   INITIAL_CONTRACT_REVIEWS,
   INITIAL_CALENDAR_EVENTS,
-  INITIAL_GRADE_SALARY_RANGES,
   INITIAL_SALARY_COMPONENTS,
   INITIAL_EMPLOYEE_SALARY_ASSIGNMENTS,
   INITIAL_GA_ROOM_BOOKINGS,
@@ -130,7 +139,6 @@ import {
   INITIAL_ROLE_PERMISSIONS,
   INITIAL_DIVISIONS,
   INITIAL_DEPARTMENTS,
-  INITIAL_OFFICE_LOCATIONS,
 } from '../data/initialData';
 import { calculatePPh21TER, calculateBPJS, calculateOvertimePay, calculateSeverancePay } from '../utils/taxCalculator';
 import { generateDocumentNumber } from '../utils/documentNumbering';
@@ -149,9 +157,12 @@ interface HrmsContextType {
   updateTenantBranding: (documentLogoUrl?: string, appFaviconUrl?: string) => void;
   currentUser: UserAccount;
   setCurrentUserRole: (role: UserRole) => void;
+  /** Set once from the real session (login success / the on-mount session check) so `currentUser` reflects who's actually logged in, not a hardcoded placeholder. */
+  setCurrentSessionUser: (user: { id: string; name: string; email: string } | null) => void;
   users: UserAccount[];
-  addUser: (user: Omit<UserAccount, 'id' | 'tenantId'>) => void;
-  deleteUser: (id: string) => void;
+  /** Creates a real additional login account scoped to your own entity — the backend rejects it otherwise. */
+  addUser: (user: Omit<UserAccount, 'id' | 'tenantId'>, password: string) => Promise<void>;
+  deleteUser: (id: string) => Promise<void>;
   roles: RoleDefinition[];
   addRole: (role: RoleDefinition, copyFrom?: string) => void;
   deleteRole: (id: string) => void;
@@ -373,10 +384,13 @@ interface HrmsContextType {
   currentEntityId: string;
   setCurrentEntityId: (id: string) => void;
   currentEntity: CompanyEntity;
-  addEntity: (entity: Omit<CompanyEntity, 'id' | 'tenantId'>) => void;
+  /** `admin` is required when `entity.parentEntityId` is set — the one admin account the creating entity must provision for its new child; see backend provisioning rule. Rejects (with an Indonesian message) on failure so the caller can show it inline. */
+  addEntity: (entity: Omit<CompanyEntity, 'id' | 'tenantId'>, admin?: { name: string; email: string; password: string }) => Promise<void>;
   updateEntity: (id: string, updates: Partial<CompanyEntity>) => void;
   deleteEntity: (id: string) => void;
   toggleEntityDepartmentLevel: (entityId: string) => void;
+  /** Loads real entities + office locations from the backend, replacing whatever mock data is currently in state. Call once right after a successful login. */
+  loadTenantOrgData: () => Promise<void>;
 
   // 22B. Divisi & Departemen Fleksibel
   divisions: CompanyDivision[];
@@ -393,6 +407,10 @@ interface HrmsContextType {
   addMasterJobPosition: (posData: Omit<MasterJobPosition, 'id'>) => void;
   updateMasterJobPosition: (id: string, updates: Partial<MasterJobPosition>) => void;
   deleteMasterJobPosition: (id: string) => void;
+  /** Bulk-fills a brand-new entity's divisions/departments/jabatan/grade from a predefined starter template. */
+  applyOrgTemplate: (entityId: string, templateKey: string) => Promise<void>;
+  /** Bulk-copies divisions/departments/jabatan from another entity in the same tenant as a starting point. */
+  copyOrgStructureFromEntity: (targetEntityId: string, sourceEntityId: string) => Promise<void>;
   assignEmployeeToPosition: (positionId: string, employeeId: string | null) => void;
 
   // 22C. Format NIK Fleksibel
@@ -434,6 +452,8 @@ interface HrmsContextType {
   orgProposals: OrgChangeProposal[];
   submitOrgProposal: (proposal: Omit<OrgChangeProposal, 'id' | 'tenantId' | 'status' | 'implemented'>) => void;
   reviewOrgProposal: (id: string, approved: boolean, rejectionReason?: string) => void;
+  /** Only ever call this on a Draft-status proposal — a Draft hasn't been submitted for approval yet, so deleting it is safe; anything already Menunggu Approval/Disetujui/Ditolak is a real decision record and must not be deletable here. */
+  deleteOrgProposal: (id: string) => void;
   orgSnapshots: OrgStructureSnapshot[];
   replaceEntityStructure: (
     entityId: string,
@@ -441,7 +461,7 @@ interface HrmsContextType {
     newDepartments: CompanyDepartment[],
     newNodes: OrgStructureNode[],
     proposalInfo?: { skDocNumber?: string; title?: string; effectiveDate?: string; reason?: string }
-  ) => void;
+  ) => Promise<void>;
 
   // 28. Probation Evaluation
   probationEvaluations: ProbationEvaluation[];
@@ -519,6 +539,162 @@ interface HrmsContextType {
   deleteOfficeLocation: (id: string) => void;
 }
 
+/**
+ * Adapters between the real backend's entity shape and the mock frontend's
+ * `CompanyEntity` type — the backend deliberately has no `level` enum
+ * (unlimited-depth tree via parentEntityId + a closure table instead of the
+ * old fixed holding/anak/cucu 3-tier model), so `level` here is a DISPLAY
+ * value computed from depth, never sent back to the API.
+ */
+function computeLevelFromDepth(apiEntity: ApiCompanyEntity, allApiEntities: ApiCompanyEntity[]): 'holding' | 'anak' | 'cucu' {
+  let depth = 0;
+  let current = apiEntity;
+  const byId = new Map(allApiEntities.map((e) => [e.id, e]));
+  while (current.parentEntityId) {
+    const parent = byId.get(current.parentEntityId);
+    if (!parent) break;
+    depth += 1;
+    current = parent;
+  }
+  if (depth === 0) return 'holding';
+  if (depth === 1) return 'anak';
+  return 'cucu';
+}
+
+function mapApiEntityToMock(apiEntity: ApiCompanyEntity, allApiEntities: ApiCompanyEntity[]): CompanyEntity {
+  return {
+    id: apiEntity.id,
+    tenantId: apiEntity.tenantId,
+    parentEntityId: apiEntity.parentEntityId ?? undefined,
+    name: apiEntity.name,
+    code: apiEntity.code,
+    relationType: apiEntity.relationType,
+    level: computeLevelFromDepth(apiEntity, allApiEntities),
+    address: apiEntity.address ?? '',
+    city: apiEntity.city ?? '',
+    npwp: apiEntity.npwp ?? '',
+    nikPattern: apiEntity.nikPattern ?? '',
+    docPrefix: apiEntity.docPrefix ?? '',
+    status: apiEntity.status,
+    useDepartmentLevel: apiEntity.useDepartmentLevel,
+    isGovernanceLocked: apiEntity.isGovernanceLocked,
+    documentLogoUrl: apiEntity.documentLogoUrl ?? undefined,
+    appFaviconUrl: apiEntity.appFaviconUrl ?? undefined,
+    nikPatternFollowsParent: apiEntity.nikPatternFollowsParent,
+  };
+}
+
+function mapApiOfficeLocationToMock(apiLoc: ApiOfficeLocation, entityNameById: Map<string, string>): OfficeLocation {
+  return {
+    id: apiLoc.id,
+    tenantId: apiLoc.tenantId,
+    entityId: apiLoc.entityId ?? undefined,
+    code: apiLoc.code,
+    name: apiLoc.name,
+    type: apiLoc.type,
+    companyName: apiLoc.entityId ? entityNameById.get(apiLoc.entityId) ?? '' : '',
+    address: apiLoc.address ?? '',
+    city: apiLoc.city ?? '',
+    latitude: apiLoc.latitude ?? 0,
+    longitude: apiLoc.longitude ?? 0,
+    radiusMeters: apiLoc.radiusMeters,
+    isActive: apiLoc.isActive,
+    notes: apiLoc.notes ?? undefined,
+  };
+}
+
+function mapApiDivisionToMock(apiDiv: ApiCompanyDivision): CompanyDivision {
+  return {
+    id: apiDiv.id,
+    entityId: apiDiv.entityId,
+    code: apiDiv.code,
+    name: apiDiv.name,
+    headTitle: apiDiv.headTitle ?? undefined,
+    description: apiDiv.description ?? undefined,
+  };
+}
+
+function mapApiDepartmentToMock(apiDept: ApiCompanyDepartment): CompanyDepartment {
+  return {
+    id: apiDept.id,
+    entityId: apiDept.entityId,
+    divisionId: apiDept.divisionId ?? undefined,
+    code: apiDept.code,
+    name: apiDept.name,
+    headTitle: apiDept.headTitle ?? undefined,
+    description: apiDept.description ?? undefined,
+  };
+}
+
+/**
+ * Backend stores division/department as FKs (divisionId/departmentId);
+ * the mock frontend type stores them as plain NAME strings — this looks the
+ * name up from the already-mapped divisions/departments lists so existing UI
+ * that reads `.division`/`.department` as display strings keeps working.
+ */
+function mapApiPositionToMock(
+  apiPos: ApiMasterJobPosition,
+  divisionNameById: Map<string, string>,
+  departmentNameById: Map<string, string>
+): MasterJobPosition {
+  return {
+    id: apiPos.id,
+    entityId: apiPos.entityId,
+    code: apiPos.code,
+    title: apiPos.title,
+    defaultLevel: apiPos.defaultLevel,
+    division: apiPos.divisionId ? divisionNameById.get(apiPos.divisionId) : undefined,
+    department: apiPos.departmentId ? departmentNameById.get(apiPos.departmentId) : undefined,
+    jobFamily: apiPos.jobFamily ?? undefined,
+    jobGrade: apiPos.jobGrade ?? undefined,
+    minGrade: apiPos.minGrade ?? undefined,
+    maxGrade: apiPos.maxGrade ?? undefined,
+    gradingScheme: apiPos.gradingScheme ?? undefined,
+    description: apiPos.description ?? undefined,
+    requirements: apiPos.requirements ?? undefined,
+  };
+}
+
+function mapApiOrgNodeToMock(
+  apiNode: ApiOrgStructureNode,
+  divisionNameById: Map<string, string>,
+  departmentNameById: Map<string, string>
+): OrgStructureNode {
+  return {
+    id: apiNode.id,
+    entityId: apiNode.entityId,
+    title: apiNode.title,
+    department: apiNode.departmentId ? departmentNameById.get(apiNode.departmentId) ?? 'Umum' : 'Umum',
+    division: apiNode.divisionId ? divisionNameById.get(apiNode.divisionId) : undefined,
+    code: apiNode.code ?? undefined,
+    jobGrade: apiNode.jobGrade ?? undefined,
+    description: apiNode.description ?? undefined,
+    reportsToId: apiNode.reportsToId ?? undefined,
+    relationType: apiNode.relationType,
+    currentEmployeeId: undefined,
+    isVacant: apiNode.isVacant,
+    level: apiNode.level,
+    masterJobPositionId: apiNode.masterJobPositionId ?? undefined,
+  };
+}
+
+function mapApiGradeToMock(apiGrade: ApiGradeSalaryRange): GradeSalaryRange {
+  return {
+    id: apiGrade.id,
+    tenantId: apiGrade.tenantId,
+    entityId: apiGrade.entityId ?? undefined,
+    gradeCode: apiGrade.gradeCode,
+    gradeName: apiGrade.gradeName,
+    minSalary: apiGrade.minSalary ?? 0,
+    midSalary: apiGrade.midSalary ?? 0,
+    maxSalary: apiGrade.maxSalary ?? 0,
+    singleValueSalary: apiGrade.singleValueSalary ?? undefined,
+    effectiveDate: apiGrade.effectiveDate,
+    version: apiGrade.version,
+    notes: apiGrade.notes ?? undefined,
+  };
+}
+
 const HrmsContext = createContext<HrmsContextType | null>(null);
 
 export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -579,14 +755,20 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Current User State & Role Switching
   const [currentUserRole, setCurrentUserRole] = useState<UserRole>('super_admin');
+  const [currentSessionUser, setCurrentSessionUser] = useState<{ id: string; name: string; email: string } | null>(null);
   const [roles, setRoles] = useState<RoleDefinition[]>(() => {
     const saved = localStorage.getItem('nusahr_roles');
     return saved ? JSON.parse(saved) : DEFAULT_ROLES;
   });
-  const [users, setUsers] = useState<UserAccount[]>(() => {
-    const saved = localStorage.getItem('nusahr_users');
-    return saved ? JSON.parse(saved) : INITIAL_USERS;
-  });
+  // Real backend login accounts, loaded via loadTenantOrgData(). Every real account is a
+  // tenant_admin scoped to one entity; mapped to 'super_admin' here to match how LoginScreen
+  // already labels a real session, since this app's in-house role/permission matrix (below)
+  // has no backend equivalent yet.
+  const [apiUsers, setApiUsers] = useState<ApiTenantUser[]>([]);
+  const users = useMemo<UserAccount[]>(
+    () => apiUsers.map((u) => ({ id: u.id, tenantId: u.tenantId, name: u.name, email: u.email, role: 'super_admin', status: 'Aktif' })),
+    [apiUsers]
+  );
   const [rolePermissions, setRolePermissions] = useState<Record<string, OperationPermissions>>(() => {
     const saved = localStorage.getItem('nusahr_role_permissions');
     if (saved) {
@@ -606,17 +788,18 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem('nusahr_roles', JSON.stringify(roles));
   }, [roles]);
 
-  useEffect(() => {
-    localStorage.setItem('nusahr_users', JSON.stringify(users));
-  }, [users]);
+  // users is now derived from real backend accounts — no mock persistence.
 
   useEffect(() => {
     localStorage.setItem('nusahr_role_permissions', JSON.stringify(rolePermissions));
   }, [rolePermissions]);
 
   const currentUser = useMemo(() => {
-    const found = users.find((u) => u.tenantId === currentTenant.id && u.role === currentUserRole);
-    if (found) return found;
+    if (currentSessionUser) {
+      const found = users.find((u) => u.id === currentSessionUser.id);
+      if (found) return found;
+      return { id: currentSessionUser.id, tenantId: currentTenant.id, name: currentSessionUser.name, email: currentSessionUser.email, role: currentUserRole };
+    }
     return {
       id: 'current-usr',
       tenantId: currentTenant.id,
@@ -624,7 +807,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       email: 'aditya@nusantara.id',
       role: currentUserRole,
     };
-  }, [currentTenant.id, currentUserRole, users]);
+  }, [currentTenant.id, currentUserRole, users, currentSessionUser]);
 
   // Active module view
   const [activeModule, setActiveModule] = useState<string>('dashboard');
@@ -905,11 +1088,12 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return saved ? JSON.parse(saved) : INITIAL_MODULE_SETTINGS;
   });
 
-  // 22. Entities & Holding
-  const [entities, setEntities] = useState<CompanyEntity[]>(() => {
-    const saved = localStorage.getItem('nusahr_entities');
-    return saved ? JSON.parse(saved) : INITIAL_ENTITIES;
-  });
+  // 22. Entities & Holding — real backend data, loaded via loadTenantOrgData() right after login.
+  const [apiEntities, setApiEntities] = useState<ApiCompanyEntity[]>([]);
+  const entities = useMemo<CompanyEntity[]>(
+    () => apiEntities.map((e) => mapApiEntityToMock(e, apiEntities)),
+    [apiEntities]
+  );
   const [currentEntityId, setCurrentEntityId] = useState<string>(() => {
     return localStorage.getItem('nusahr_active_entity') || 'ent-ntm-holding';
   });
@@ -917,21 +1101,35 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return entities.find((e) => e.id === currentEntityId) || entities[0];
   }, [entities, currentEntityId]);
 
-  // 22B. Divisions & Departments
-  const [divisions, setDivisions] = useState<CompanyDivision[]>(() => {
-    const saved = localStorage.getItem('nusahr_divisions_v3');
-    return saved ? JSON.parse(saved) : INITIAL_DIVISIONS;
-  });
-  const [departments, setDepartments] = useState<CompanyDepartment[]>(() => {
-    const saved = localStorage.getItem('nusahr_departments_v3');
-    return saved ? JSON.parse(saved) : INITIAL_DEPARTMENTS;
-  });
+  // Setelah data entitas asli dimuat, pastikan currentEntityId selalu menunjuk ke entitas yang benar-benar ada.
+  useEffect(() => {
+    if (entities.length === 0) return;
+    if (!entities.some((e) => e.id === currentEntityId)) {
+      const holding = entities.find((e) => !e.parentEntityId) || entities[0];
+      setCurrentEntityId(holding.id);
+      localStorage.setItem('nusahr_active_entity', holding.id);
+    }
+  }, [entities, currentEntityId]);
 
-  // 22B-2. Master Jabatan (Kamus Jabatan)
-  const [masterJobPositions, setMasterJobPositions] = useState<MasterJobPosition[]>(() => {
-    const saved = localStorage.getItem('nusahr_master_job_positions_v3');
-    return saved ? JSON.parse(saved) : INITIAL_MASTER_JOB_POSITIONS;
-  });
+  // 22B. Divisions & Departments — real backend data, loaded via loadTenantOrgData().
+  const [apiDivisions, setApiDivisions] = useState<ApiCompanyDivision[]>([]);
+  const [apiDepartments, setApiDepartments] = useState<ApiCompanyDepartment[]>([]);
+  const divisions = useMemo<CompanyDivision[]>(() => apiDivisions.map(mapApiDivisionToMock), [apiDivisions]);
+  const departments = useMemo<CompanyDepartment[]>(() => apiDepartments.map(mapApiDepartmentToMock), [apiDepartments]);
+  const divisionNameById = useMemo(() => new Map(apiDivisions.map((d) => [d.id, d.name])), [apiDivisions]);
+  const departmentNameById = useMemo(() => new Map(apiDepartments.map((d) => [d.id, d.name])), [apiDepartments]);
+  /** Resolves a division/department NAME string (what the mock-shaped UI reads/writes) back to its real id, scoped to one entity — used by every CRUD handler below that has to translate the other direction. */
+  const resolveDivisionId = (entityId: string, name: string | undefined): string | undefined =>
+    name ? apiDivisions.find((d) => d.entityId === entityId && d.name === name)?.id : undefined;
+  const resolveDepartmentId = (entityId: string, name: string | undefined): string | undefined =>
+    name ? apiDepartments.find((d) => d.entityId === entityId && d.name === name)?.id : undefined;
+
+  // 22B-2. Master Jabatan (Kamus Jabatan) — real backend data.
+  const [apiPositions, setApiPositions] = useState<ApiMasterJobPosition[]>([]);
+  const masterJobPositions = useMemo<MasterJobPosition[]>(
+    () => apiPositions.map((p) => mapApiPositionToMock(p, divisionNameById, departmentNameById)),
+    [apiPositions, divisionNameById, departmentNameById]
+  );
 
   // 23. Employee Staging
   const [employeeStaging, setEmployeeStaging] = useState<EmployeeStaging[]>(() => {
@@ -981,31 +1179,24 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return saved ? JSON.parse(saved) : INITIAL_PERSONALIA_REQUESTS;
   });
 
-  // 27. Org Nodes & Proposals
-  const [orgNodes, setOrgNodes] = useState<OrgStructureNode[]>(() => {
-    const saved = localStorage.getItem('nusahr_org_nodes_v3');
-    return saved ? JSON.parse(saved) : INITIAL_ORG_NODES;
-  });
+  // 27. Org Nodes & Proposals — real backend data for the nodes themselves.
+  const [apiOrgNodes, setApiOrgNodes] = useState<ApiOrgStructureNode[]>([]);
+  // Employee occupancy has no backend column yet (no employees table exists) — tracked
+  // as a local-only overlay until that's wired, so "assign employee" keeps working
+  // without inventing a fake backend field.
+  const [employeeAssignmentOverrides, setEmployeeAssignmentOverrides] = useState<Record<string, string | null>>({});
+  const orgNodes = useMemo<OrgStructureNode[]>(() => {
+    return apiOrgNodes.map((n) => {
+      const mapped = mapApiOrgNodeToMock(n, divisionNameById, departmentNameById);
+      const override = employeeAssignmentOverrides[n.id];
+      if (override === undefined) return mapped;
+      return { ...mapped, currentEmployeeId: override ?? undefined, isVacant: !override };
+    });
+  }, [apiOrgNodes, divisionNameById, departmentNameById, employeeAssignmentOverrides]);
   const [orgProposals, setOrgProposals] = useState<OrgChangeProposal[]>(() => {
     const saved = localStorage.getItem('nusahr_org_proposals');
     return saved ? JSON.parse(saved) : INITIAL_ORG_PROPOSALS;
   });
-  const [lockedEntities, setLockedEntities] = useState<Record<string, boolean>>(() => {
-    const saved = localStorage.getItem('nusahr_org_locked_entities');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        // fallback
-      }
-    }
-    return {
-      'ent-ntm-holding': true,
-      'ent-ntm-digital': true,
-      'ent-ntm-cloud': false,
-    };
-  });
-
   const [orgSnapshots, setOrgSnapshots] = useState<OrgStructureSnapshot[]>(() => {
     const saved = localStorage.getItem('nusahr_org_snapshots');
     if (saved) {
@@ -1037,25 +1228,21 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem('nusahr_org_snapshots', JSON.stringify(orgSnapshots));
   }, [orgSnapshots]);
 
+  // Reads/writes the entity's REAL isGovernanceLocked column — must stay in
+  // sync with the backend, which enforces this same flag server-side on
+  // every direct division/department/position/org-node CRUD call.
   const isEntityGovernanceLocked = (entityId?: string) => {
     const targetId = entityId || currentEntityId;
-    return lockedEntities[targetId] ?? false;
+    return entities.find((e) => e.id === targetId)?.isGovernanceLocked ?? false;
   };
 
   const toggleEntityGovernanceLock = (entityId: string) => {
-    setLockedEntities((prev) => {
-      const next = { ...prev, [entityId]: !prev[entityId] };
-      localStorage.setItem('nusahr_org_locked_entities', JSON.stringify(next));
-      return next;
-    });
+    const target = entities.find((e) => e.id === entityId);
+    updateEntity(entityId, { isGovernanceLocked: !(target?.isGovernanceLocked ?? false) });
   };
 
   const setIsOrgGovernanceLocked = (locked: boolean) => {
-    setLockedEntities((prev) => {
-      const next = { ...prev, [currentEntityId]: locked };
-      localStorage.setItem('nusahr_org_locked_entities', JSON.stringify(next));
-      return next;
-    });
+    updateEntity(currentEntityId, { isGovernanceLocked: locked });
   };
 
   // 28. Probation Evaluations
@@ -1077,10 +1264,8 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   // 31. Grade Salary Ranges
-  const [gradeSalaryRanges, setGradeSalaryRanges] = useState<GradeSalaryRange[]>(() => {
-    const saved = localStorage.getItem('nusahr_grades_v2');
-    return saved ? JSON.parse(saved) : INITIAL_GRADE_SALARY_RANGES;
-  });
+  const [apiGrades, setApiGrades] = useState<ApiGradeSalaryRange[]>([]);
+  const gradeSalaryRanges = useMemo<GradeSalaryRange[]>(() => apiGrades.map(mapApiGradeToMock), [apiGrades]);
 
   const [jobGradingScheme, setJobGradingScheme] = useState<'single' | 'broadbanding'>(() => {
     const saved = localStorage.getItem('nusahr_job_grading_scheme');
@@ -1119,39 +1304,77 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return saved ? JSON.parse(saved) : INITIAL_GA_TICKETS;
   });
 
-  // 40. Master Lokasi Kantor
-  const [officeLocations, setOfficeLocations] = useState<OfficeLocation[]>(() => {
-    const saved = localStorage.getItem('nusahr_office_locations');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved) as OfficeLocation[];
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      } catch {
-        // fallback
-      }
-    }
-    return INITIAL_OFFICE_LOCATIONS;
-  });
-
-  useEffect(() => {
-    localStorage.setItem('nusahr_office_locations', JSON.stringify(officeLocations));
-  }, [officeLocations]);
+  // 40. Master Lokasi Kantor — real backend data, loaded via loadTenantOrgData().
+  const [apiOfficeLocations, setApiOfficeLocations] = useState<ApiOfficeLocation[]>([]);
+  const officeLocations = useMemo<OfficeLocation[]>(() => {
+    const entityNameById = new Map(apiEntities.map((e) => [e.id, e.name]));
+    return apiOfficeLocations.map((l) => mapApiOfficeLocationToMock(l, entityNameById));
+  }, [apiOfficeLocations, apiEntities]);
 
   const addOfficeLocation = (loc: Omit<OfficeLocation, 'id' | 'tenantId'>) => {
-    const newLoc: OfficeLocation = {
-      ...loc,
-      id: `loc-${Date.now().toString().slice(-5)}`,
-      tenantId: currentTenant.id,
-    };
-    setOfficeLocations((prev) => [...prev, newLoc]);
+    tenantApi
+      .createOfficeLocation({
+        entityId: loc.entityId ?? null,
+        code: loc.code,
+        name: loc.name,
+        type: loc.type,
+        address: loc.address || null,
+        city: loc.city || null,
+        latitude: loc.latitude ?? null,
+        longitude: loc.longitude ?? null,
+        radiusMeters: loc.radiusMeters,
+        notes: loc.notes ?? null,
+      })
+      .then((created) => setApiOfficeLocations((prev) => [...prev, created]))
+      .catch((err) => console.error('Gagal menambahkan lokasi kantor:', err));
   };
 
   const updateOfficeLocation = (id: string, updates: Partial<OfficeLocation>) => {
-    setOfficeLocations((prev) => prev.map((l) => (l.id === id ? { ...l, ...updates } : l)));
+    tenantApi
+      .updateOfficeLocation(id, {
+        entityId: updates.entityId,
+        code: updates.code,
+        name: updates.name,
+        type: updates.type,
+        address: updates.address,
+        city: updates.city,
+        latitude: updates.latitude,
+        longitude: updates.longitude,
+        radiusMeters: updates.radiusMeters,
+        isActive: updates.isActive,
+        notes: updates.notes,
+      })
+      .then((updated) => setApiOfficeLocations((prev) => prev.map((l) => (l.id === id ? updated : l))))
+      .catch((err) => console.error('Gagal memperbarui lokasi kantor:', err));
   };
 
   const deleteOfficeLocation = (id: string) => {
-    setOfficeLocations((prev) => prev.filter((l) => l.id !== id));
+    // Backend tidak menyediakan hard-delete lokasi; nonaktifkan saja (isActive: false).
+    tenantApi
+      .updateOfficeLocation(id, { isActive: false })
+      .then((updated) => setApiOfficeLocations((prev) => prev.map((l) => (l.id === id ? updated : l))))
+      .catch((err) => console.error('Gagal menghapus lokasi kantor:', err));
+  };
+
+  const loadTenantOrgData = async () => {
+    const [realEntities, realOfficeLocations, realDivisions, realDepartments, realPositions, realOrgNodes, realGrades, realUsers] = await Promise.all([
+      tenantApi.listEntities(),
+      tenantApi.listOfficeLocations(),
+      tenantApi.listDivisions(),
+      tenantApi.listDepartments(),
+      tenantApi.listPositions(),
+      tenantApi.listOrgNodes(),
+      tenantApi.listGrades(),
+      tenantApi.listUsers(),
+    ]);
+    setApiEntities(realEntities);
+    setApiOfficeLocations(realOfficeLocations);
+    setApiDivisions(realDivisions);
+    setApiDepartments(realDepartments);
+    setApiPositions(realPositions);
+    setApiOrgNodes(realOrgNodes);
+    setApiGrades(realGrades);
+    setApiUsers(realUsers);
   };
 
   // 34. Vendor Invoices (AP)
@@ -1210,25 +1433,9 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem('nusahr_payroll', JSON.stringify(payrollRecords));
   }, [payrollRecords]);
 
-  useEffect(() => {
-    localStorage.setItem('nusahr_entities', JSON.stringify(entities));
-  }, [entities]);
+  // entities is now derived from real backend data (apiEntities) — no mock persistence.
 
-  useEffect(() => {
-    localStorage.setItem('nusahr_divisions_v3', JSON.stringify(divisions));
-  }, [divisions]);
-
-  useEffect(() => {
-    localStorage.setItem('nusahr_departments_v3', JSON.stringify(departments));
-  }, [departments]);
-
-  useEffect(() => {
-    localStorage.setItem('nusahr_master_job_positions_v3', JSON.stringify(masterJobPositions));
-  }, [masterJobPositions]);
-
-  useEffect(() => {
-    localStorage.setItem('nusahr_grades_v2', JSON.stringify(gradeSalaryRanges));
-  }, [gradeSalaryRanges]);
+  // divisions/departments/masterJobPositions/gradeSalaryRanges are now derived from real backend data — no mock persistence.
 
   useEffect(() => {
     localStorage.setItem('nusahr_job_grading_scheme', jobGradingScheme);
@@ -3254,22 +3461,24 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setAuditLogs((prev) => [entry, ...prev]);
   };
 
-  const addUser = (userData: Omit<UserAccount, 'id' | 'tenantId'>) => {
-    const newUser: UserAccount = {
-      ...userData,
-      id: `usr-${Date.now().toString().slice(-4)}`,
-      tenantId: currentTenant.id,
-      status: userData.status || 'Aktif',
-    };
-    setUsers((prev) => [newUser, ...prev]);
-    logAuditAction('RBAC User', 'ADD_USER', newUser.id, `Pendaftaran user baru: ${newUser.name} (${newUser.email}) role ${newUser.role}`);
+  const addUser = async (userData: Omit<UserAccount, 'id' | 'tenantId'>, password: string) => {
+    try {
+      const created = await tenantApi.createUser({ name: userData.name, email: userData.email, password });
+      setApiUsers((prev) => [created, ...prev]);
+      logAuditAction('RBAC User', 'ADD_USER', created.id, `Pendaftaran user baru: ${created.name} (${created.email})`);
+    } catch (err) {
+      throw new Error(err instanceof Error ? err.message : 'Gagal menambahkan user');
+    }
   };
 
-  const deleteUser = (id: string) => {
+  const deleteUser = async (id: string) => {
     const target = users.find((u) => u.id === id);
-    setUsers((prev) => prev.filter((u) => u.id !== id));
-    if (target) {
-      logAuditAction('RBAC User', 'DELETE_USER', id, `Menghapus akun user ${target.name} (${target.email})`);
+    try {
+      await tenantApi.deleteUser(id);
+      setApiUsers((prev) => prev.filter((u) => u.id !== id));
+      if (target) logAuditAction('RBAC User', 'DELETE_USER', id, `Menghapus akun user ${target.name} (${target.email})`);
+    } catch (err) {
+      throw new Error(err instanceof Error ? err.message : 'Gagal menghapus user');
     }
   };
 
@@ -3338,34 +3547,76 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     logAuditAction('RBAC Permission', 'UPDATE_PERMISSION', key, `Update izin [${op.toUpperCase()}=${allowed}] untuk role ${roleKey} di modul ${module}`);
   };
 
-  // 22. Entity Handlers
-  const addEntity = (entityData: Omit<CompanyEntity, 'id' | 'tenantId'>) => {
-    const newEnt: CompanyEntity = {
-      ...entityData,
-      id: `ent-${Date.now()}`,
-      tenantId: currentTenant.id,
-    };
-    setEntities((prev) => [...prev, newEnt]);
-    logAuditAction('Struktur Entitas', 'TAMBAH_ENTITAS', newEnt.id, `Menambahkan entitas: ${newEnt.name}`);
+  // 22. Entity Handlers — backed by the real /api/tenant/entities endpoints.
+  const addEntity = async (
+    entityData: Omit<CompanyEntity, 'id' | 'tenantId'>,
+    admin?: { name: string; email: string; password: string }
+  ) => {
+    try {
+      const created = await tenantApi.createEntity({
+        name: entityData.name,
+        code: entityData.code,
+        ...(entityData.parentEntityId ? { parentEntityId: entityData.parentEntityId } : {}),
+        relationType: entityData.relationType,
+        address: entityData.address || null,
+        city: entityData.city || null,
+        npwp: entityData.npwp || null,
+        nikPattern: entityData.nikPattern || null,
+        followParentNikPattern: entityData.nikPatternFollowsParent ?? true,
+        docPrefix: entityData.docPrefix || null,
+        status: entityData.status,
+        useDepartmentLevel: entityData.useDepartmentLevel,
+        ...(admin ? { admin } : {}),
+      });
+      setApiEntities((prev) => [...prev, created]);
+      logAuditAction('Struktur Entitas', 'TAMBAH_ENTITAS', created.id, `Menambahkan entitas: ${created.name}`);
+      if (created.admin) {
+        logAuditAction('Struktur Entitas', 'TAMBAH_ADMIN_ENTITAS', created.id, `Membuat akun admin "${created.admin.email}" untuk entitas ${created.name}`);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Gagal menambahkan entitas';
+      throw new Error(message);
+    }
   };
 
   const updateEntity = (id: string, updates: Partial<CompanyEntity>) => {
-    setEntities((prev) => prev.map((e) => (e.id === id ? { ...e, ...updates } : e)));
-    logAuditAction('Struktur Entitas', 'UPDATE_ENTITAS', id, `Memperbarui konfigurasi entitas ${id}`);
+    tenantApi
+      .updateEntity(id, {
+        name: updates.name,
+        relationType: updates.relationType,
+        address: updates.address,
+        city: updates.city,
+        npwp: updates.npwp,
+        nikPattern: updates.nikPattern,
+        followParentNikPattern: updates.nikPatternFollowsParent,
+        docPrefix: updates.docPrefix,
+        status: updates.status,
+        useDepartmentLevel: updates.useDepartmentLevel,
+        isGovernanceLocked: updates.isGovernanceLocked,
+        documentLogoUrl: updates.documentLogoUrl,
+        appFaviconUrl: updates.appFaviconUrl,
+      })
+      .then((updated) => {
+        setApiEntities((prev) => prev.map((e) => (e.id === id ? updated : e)));
+        logAuditAction('Struktur Entitas', 'UPDATE_ENTITAS', id, `Memperbarui konfigurasi entitas ${id}`);
+      })
+      .catch((err) => console.error('Gagal memperbarui entitas:', err));
   };
 
   const deleteEntity = (id: string) => {
-    setEntities((prev) => prev.filter((e) => e.id !== id));
-    logAuditAction('Struktur Entitas', 'HAPUS_ENTITAS', id, `Menghapus entitas ${id}`);
+    // Backend tidak menyediakan hard-delete entitas (struktur bersejarah); nonaktifkan saja.
+    tenantApi
+      .updateEntity(id, { status: 'Nonaktif' })
+      .then((updated) => {
+        setApiEntities((prev) => prev.map((e) => (e.id === id ? updated : e)));
+        logAuditAction('Struktur Entitas', 'HAPUS_ENTITAS', id, `Menonaktifkan entitas ${id}`);
+      })
+      .catch((err) => console.error('Gagal menghapus entitas:', err));
   };
 
   const toggleEntityDepartmentLevel = (entityId: string) => {
-    setEntities((prev) =>
-      prev.map((e) =>
-        e.id === entityId ? { ...e, useDepartmentLevel: !(e.useDepartmentLevel ?? true) } : e
-      )
-    );
     const target = entities.find((e) => e.id === entityId);
+    updateEntity(entityId, { useDepartmentLevel: !(target?.useDepartmentLevel ?? true) });
     logAuditAction(
       'Struktur Organisasi',
       'TOGGLE_DEPT_LEVEL',
@@ -3376,76 +3627,243 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // 22B. Divisi & Departemen Handlers
   const addDivision = (divData: Omit<CompanyDivision, 'id'>) => {
-    const newDiv: CompanyDivision = {
-      ...divData,
-      id: `div-${Date.now()}`,
-    };
-    setDivisions((prev) => [...prev, newDiv]);
-    logAuditAction('Struktur Divisi', 'TAMBAH_DIVISI', newDiv.id, `Menambahkan divisi: ${newDiv.name}`);
+    tenantApi
+      .createDivision({ entityId: divData.entityId, code: divData.code, name: divData.name, headTitle: divData.headTitle ?? null, description: divData.description ?? null })
+      .then((created) => {
+        setApiDivisions((prev) => [...prev, created]);
+        logAuditAction('Struktur Divisi', 'TAMBAH_DIVISI', created.id, `Menambahkan divisi: ${created.name}`);
+      })
+      .catch((err) => console.error('Gagal menambahkan divisi:', err));
   };
 
   const updateDivision = (id: string, updates: Partial<CompanyDivision>) => {
-    setDivisions((prev) => prev.map((d) => (d.id === id ? { ...d, ...updates } : d)));
-    logAuditAction('Struktur Divisi', 'UPDATE_DIVISI', id, `Memperbarui divisi ${id}`);
+    tenantApi
+      .updateDivision(id, { code: updates.code, name: updates.name, headTitle: updates.headTitle, description: updates.description })
+      .then((updated) => {
+        setApiDivisions((prev) => prev.map((d) => (d.id === id ? updated : d)));
+        logAuditAction('Struktur Divisi', 'UPDATE_DIVISI', id, `Memperbarui divisi ${id}`);
+      })
+      .catch((err) => console.error('Gagal memperbarui divisi:', err));
   };
 
   const deleteDivision = (id: string) => {
-    setDivisions((prev) => prev.filter((d) => d.id !== id));
-    logAuditAction('Struktur Divisi', 'HAPUS_DIVISI', id, `Menghapus divisi ${id}`);
+    tenantApi
+      .deleteDivision(id)
+      .then(() => {
+        setApiDivisions((prev) => prev.filter((d) => d.id !== id));
+        logAuditAction('Struktur Divisi', 'HAPUS_DIVISI', id, `Menghapus divisi ${id}`);
+      })
+      .catch((err) => console.error('Gagal menghapus divisi:', err));
   };
 
   const addDepartment = (deptData: Omit<CompanyDepartment, 'id'>) => {
-    const newDept: CompanyDepartment = {
-      ...deptData,
-      id: `dept-${Date.now()}`,
-    };
-    setDepartments((prev) => [...prev, newDept]);
-    logAuditAction('Struktur Departemen', 'TAMBAH_DEPARTEMEN', newDept.id, `Menambahkan departemen: ${newDept.name}`);
+    tenantApi
+      .createDepartment({
+        entityId: deptData.entityId,
+        divisionId: deptData.divisionId ?? null,
+        code: deptData.code,
+        name: deptData.name,
+        headTitle: deptData.headTitle ?? null,
+        description: deptData.description ?? null,
+      })
+      .then((created) => {
+        setApiDepartments((prev) => [...prev, created]);
+        logAuditAction('Struktur Departemen', 'TAMBAH_DEPARTEMEN', created.id, `Menambahkan departemen: ${created.name}`);
+      })
+      .catch((err) => console.error('Gagal menambahkan departemen:', err));
   };
 
   const updateDepartment = (id: string, updates: Partial<CompanyDepartment>) => {
-    setDepartments((prev) => prev.map((d) => (d.id === id ? { ...d, ...updates } : d)));
-    logAuditAction('Struktur Departemen', 'UPDATE_DEPARTEMEN', id, `Memperbarui departemen ${id}`);
+    tenantApi
+      .updateDepartment(id, { code: updates.code, name: updates.name, headTitle: updates.headTitle, description: updates.description })
+      .then((updated) => {
+        setApiDepartments((prev) => prev.map((d) => (d.id === id ? updated : d)));
+        logAuditAction('Struktur Departemen', 'UPDATE_DEPARTEMEN', id, `Memperbarui departemen ${id}`);
+      })
+      .catch((err) => console.error('Gagal memperbarui departemen:', err));
   };
 
   const deleteDepartment = (id: string) => {
-    setDepartments((prev) => prev.filter((d) => d.id !== id));
-    logAuditAction('Struktur Departemen', 'HAPUS_DEPARTEMEN', id, `Menghapus departemen ${id}`);
+    tenantApi
+      .deleteDepartment(id)
+      .then(() => {
+        setApiDepartments((prev) => prev.filter((d) => d.id !== id));
+        logAuditAction('Struktur Departemen', 'HAPUS_DEPARTEMEN', id, `Menghapus departemen ${id}`);
+      })
+      .catch((err) => console.error('Gagal menghapus departemen:', err));
   };
 
-  // 22B-2. Master Jabatan Handlers
+  // 22B-2. Master Jabatan Handlers — `division`/`department` arrive as NAME strings (mock-shaped UI); resolved to real ids here.
   const addMasterJobPosition = (posData: Omit<MasterJobPosition, 'id'>) => {
-    const newPos: MasterJobPosition = {
-      ...posData,
-      id: `mjp-${Date.now()}`,
-    };
-    setMasterJobPositions((prev) => [...prev, newPos]);
-    logAuditAction('Master Jabatan', 'TAMBAH_MASTER_JABATAN', newPos.id, `Menambahkan standar jabatan: ${newPos.title}`);
+    tenantApi
+      .createPosition({
+        entityId: posData.entityId,
+        code: posData.code,
+        title: posData.title,
+        defaultLevel: posData.defaultLevel,
+        divisionId: resolveDivisionId(posData.entityId, posData.division) ?? null,
+        departmentId: resolveDepartmentId(posData.entityId, posData.department) ?? null,
+        jobFamily: posData.jobFamily ?? null,
+        jobGrade: posData.jobGrade ?? null,
+        minGrade: posData.minGrade ?? null,
+        maxGrade: posData.maxGrade ?? null,
+        gradingScheme: posData.gradingScheme ?? 'single',
+        description: posData.description ?? null,
+        requirements: posData.requirements ?? null,
+      })
+      .then((created) => {
+        setApiPositions((prev) => [...prev, created]);
+        logAuditAction('Master Jabatan', 'TAMBAH_MASTER_JABATAN', created.id, `Menambahkan standar jabatan: ${created.title}`);
+      })
+      .catch((err) => console.error('Gagal menambahkan standar jabatan:', err));
   };
 
   const updateMasterJobPosition = (id: string, updates: Partial<MasterJobPosition>) => {
-    setMasterJobPositions((prev) => prev.map((p) => (p.id === id ? { ...p, ...updates } : p)));
-    logAuditAction('Master Jabatan', 'UPDATE_MASTER_JABATAN', id, `Memperbarui standar jabatan ${id}`);
+    const target = masterJobPositions.find((p) => p.id === id);
+    const entityId = target?.entityId;
+    tenantApi
+      .updatePosition(id, {
+        code: updates.code,
+        title: updates.title,
+        defaultLevel: updates.defaultLevel,
+        divisionId: updates.division !== undefined && entityId ? resolveDivisionId(entityId, updates.division) : undefined,
+        departmentId: updates.department !== undefined && entityId ? resolveDepartmentId(entityId, updates.department) : undefined,
+        jobFamily: updates.jobFamily,
+        jobGrade: updates.jobGrade,
+        minGrade: updates.minGrade,
+        maxGrade: updates.maxGrade,
+        gradingScheme: updates.gradingScheme,
+        description: updates.description,
+        requirements: updates.requirements,
+      })
+      .then((updated) => {
+        setApiPositions((prev) => prev.map((p) => (p.id === id ? updated : p)));
+        logAuditAction('Master Jabatan', 'UPDATE_MASTER_JABATAN', id, `Memperbarui standar jabatan ${id}`);
+      })
+      .catch((err) => console.error('Gagal memperbarui standar jabatan:', err));
   };
 
   const deleteMasterJobPosition = (id: string) => {
-    setMasterJobPositions((prev) => prev.filter((p) => p.id !== id));
-    logAuditAction('Master Jabatan', 'HAPUS_MASTER_JABATAN', id, `Menghapus standar jabatan ${id}`);
+    tenantApi
+      .deletePosition(id)
+      .then(() => {
+        setApiPositions((prev) => prev.filter((p) => p.id !== id));
+        logAuditAction('Master Jabatan', 'HAPUS_MASTER_JABATAN', id, `Menghapus standar jabatan ${id}`);
+      })
+      .catch((err) => console.error('Gagal menghapus standar jabatan:', err));
+  };
+
+  /** One-click starter setup for a brand-new entity — bulk-creates a predefined set of divisions/departments/jabatan/grade so setup doesn't have to start from a blank slate. Rejects on failure (e.g. entity already locked) so the caller can show it. */
+  const applyOrgTemplate = async (entityId: string, templateKey: string) => {
+    const template = ORG_STRUCTURE_TEMPLATES.find((t) => t.key === templateKey);
+    if (!template) throw new Error('Template tidak ditemukan');
+
+    const createdDivisions = await Promise.all(
+      template.divisions.map((d) => tenantApi.createDivision({ entityId, code: d.code, name: d.name, headTitle: d.headTitle ?? null, description: null }))
+    );
+    const divisionIdByCode = new Map(template.divisions.map((d, i) => [d.code, createdDivisions[i].id]));
+
+    const createdDepartments = await Promise.all(
+      template.departments.map((d) =>
+        tenantApi.createDepartment({ entityId, divisionId: divisionIdByCode.get(d.divisionCode) ?? null, code: d.code, name: d.name, headTitle: null, description: null })
+      )
+    );
+    const departmentIdByCode = new Map(template.departments.map((d, i) => [d.code, createdDepartments[i].id]));
+
+    const createdPositions = await Promise.all(
+      template.positions.map((p) =>
+        tenantApi.createPosition({
+          entityId,
+          code: p.code,
+          title: p.title,
+          defaultLevel: p.defaultLevel,
+          divisionId: p.divisionCode ? divisionIdByCode.get(p.divisionCode) ?? null : null,
+          departmentId: p.departmentCode ? departmentIdByCode.get(p.departmentCode) ?? null : null,
+          jobFamily: null,
+          jobGrade: null,
+          minGrade: null,
+          maxGrade: null,
+          gradingScheme: 'single',
+          description: null,
+          requirements: null,
+        })
+      )
+    );
+
+    // Grades are tenant-wide (not per-entity), so only seed them the first time — applying a second template elsewhere shouldn't duplicate them.
+    const createdGrades =
+      gradeSalaryRanges.length === 0
+        ? await Promise.all(
+            template.grades.map((g) =>
+              tenantApi.createGrade({ entityId: null, gradeCode: g.gradeCode, gradeName: g.gradeName, minSalary: g.minSalary ?? null, midSalary: g.midSalary ?? null, maxSalary: g.maxSalary ?? null, singleValueSalary: null, notes: null })
+            )
+          )
+        : [];
+
+    setApiDivisions((prev) => [...prev, ...createdDivisions]);
+    setApiDepartments((prev) => [...prev, ...createdDepartments]);
+    setApiPositions((prev) => [...prev, ...createdPositions]);
+    if (createdGrades.length > 0) setApiGrades((prev) => [...prev, ...createdGrades]);
+
+    logAuditAction('Struktur Organisasi', 'TERAPKAN_TEMPLATE', entityId, `Menerapkan template "${template.label}" untuk entitas ${entityId}`);
+  };
+
+  /** Copies another entity's divisions/departments/master jabatan as a starting point for this one — a faster alternative to the built-in templates when an existing entity already has the right shape. */
+  const copyOrgStructureFromEntity = async (targetEntityId: string, sourceEntityId: string) => {
+    const sourceDivisions = apiDivisions.filter((d) => d.entityId === sourceEntityId);
+    const sourceDepartments = apiDepartments.filter((d) => d.entityId === sourceEntityId);
+    const sourcePositions = apiPositions.filter((p) => p.entityId === sourceEntityId);
+
+    const createdDivisions = await Promise.all(
+      sourceDivisions.map((d) => tenantApi.createDivision({ entityId: targetEntityId, code: d.code, name: d.name, headTitle: d.headTitle, description: d.description }))
+    );
+    const divisionIdBySourceId = new Map(sourceDivisions.map((d, i) => [d.id, createdDivisions[i].id]));
+
+    const createdDepartments = await Promise.all(
+      sourceDepartments.map((d) =>
+        tenantApi.createDepartment({
+          entityId: targetEntityId,
+          divisionId: d.divisionId ? divisionIdBySourceId.get(d.divisionId) ?? null : null,
+          code: d.code,
+          name: d.name,
+          headTitle: d.headTitle,
+          description: d.description,
+        })
+      )
+    );
+    const departmentIdBySourceId = new Map(sourceDepartments.map((d, i) => [d.id, createdDepartments[i].id]));
+
+    const createdPositions = await Promise.all(
+      sourcePositions.map((p) =>
+        tenantApi.createPosition({
+          entityId: targetEntityId,
+          code: p.code,
+          title: p.title,
+          defaultLevel: p.defaultLevel,
+          divisionId: p.divisionId ? divisionIdBySourceId.get(p.divisionId) ?? null : null,
+          departmentId: p.departmentId ? departmentIdBySourceId.get(p.departmentId) ?? null : null,
+          jobFamily: p.jobFamily,
+          jobGrade: p.jobGrade,
+          minGrade: p.minGrade,
+          maxGrade: p.maxGrade,
+          gradingScheme: p.gradingScheme,
+          description: p.description,
+          requirements: p.requirements,
+        })
+      )
+    );
+
+    setApiDivisions((prev) => [...prev, ...createdDivisions]);
+    setApiDepartments((prev) => [...prev, ...createdDepartments]);
+    setApiPositions((prev) => [...prev, ...createdPositions]);
+
+    const sourceEntityName = entities.find((e) => e.id === sourceEntityId)?.name ?? sourceEntityId;
+    logAuditAction('Struktur Organisasi', 'SALIN_STRUKTUR', targetEntityId, `Menyalin struktur divisi/departemen/jabatan dari entitas "${sourceEntityName}"`);
   };
 
   const assignEmployeeToPosition = (positionId: string, employeeId: string | null) => {
-    setOrgNodes((prev) =>
-      prev.map((node) => {
-        if (node.id === positionId) {
-          return {
-            ...node,
-            currentEmployeeId: employeeId || undefined,
-            isVacant: !employeeId,
-          };
-        }
-        return node;
-      })
-    );
+    // No backend column for this yet (no employees table) — tracked as a local overlay; see employeeAssignmentOverrides above.
+    setEmployeeAssignmentOverrides((prev) => ({ ...prev, [positionId]: employeeId }));
     if (employeeId) {
       const targetNode = orgNodes.find((n) => n.id === positionId);
       if (targetNode) {
@@ -3886,7 +4304,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // 27. Org Proposals
-  const replaceEntityStructure = (
+  const replaceEntityStructure = async (
     entityId: string,
     newDivisions: CompanyDivision[],
     newDepartments: CompanyDepartment[],
@@ -3915,10 +4333,66 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     setOrgSnapshots((prev) => [snapshot, ...prev]);
 
-    // 2. Replace data existing entitas dengan data draft baru
-    setDivisions((prev) => [...prev.filter((d) => d.entityId !== entityId), ...newDivisions]);
-    setDepartments((prev) => [...prev.filter((d) => d.entityId !== entityId), ...newDepartments]);
-    setOrgNodes((prev) => [...prev.filter((n) => n.entityId !== entityId), ...newNodes]);
+    // 2. Replace the real backend rows for this entity: delete everything existing, then
+    // recreate from the draft, remapping draft-local ids to the real ones the backend assigns.
+    const oldOrgNodeIds = apiOrgNodes.filter((n) => n.entityId === entityId).map((n) => n.id);
+    const oldDepartmentIds = apiDepartments.filter((d) => d.entityId === entityId).map((d) => d.id);
+    const oldDivisionIds = apiDivisions.filter((d) => d.entityId === entityId).map((d) => d.id);
+    await Promise.all(oldOrgNodeIds.map((id) => tenantApi.deleteOrgNode(id)));
+    await Promise.all(oldDepartmentIds.map((id) => tenantApi.deleteDepartment(id)));
+    await Promise.all(oldDivisionIds.map((id) => tenantApi.deleteDivision(id)));
+
+    const createdDivisions = await Promise.all(
+      newDivisions.map((d) => tenantApi.createDivision({ entityId, code: d.code, name: d.name, headTitle: d.headTitle ?? null, description: d.description ?? null }))
+    );
+    const divisionIdByDraftId = new Map(newDivisions.map((d, i) => [d.id, createdDivisions[i].id]));
+
+    const createdDepartments = await Promise.all(
+      newDepartments.map((d) =>
+        tenantApi.createDepartment({
+          entityId,
+          divisionId: (d.divisionId ? divisionIdByDraftId.get(d.divisionId) : undefined) ?? null,
+          code: d.code,
+          name: d.name,
+          headTitle: d.headTitle ?? null,
+          description: d.description ?? null,
+        })
+      )
+    );
+    const divisionIdByName = new Map(createdDivisions.map((d) => [d.name, d.id]));
+    const departmentIdByName = new Map(createdDepartments.map((d) => [d.name, d.id]));
+
+    const createdNodesRaw = await Promise.all(
+      newNodes.map((n) =>
+        tenantApi.createOrgNode({
+          entityId,
+          title: n.title,
+          divisionId: (n.division ? divisionIdByName.get(n.division) : undefined) ?? null,
+          departmentId: (n.department ? departmentIdByName.get(n.department) : undefined) ?? null,
+          reportsToId: null, // relinked in the second pass below, once every node has a real id
+          code: n.code ?? null,
+          jobGrade: n.jobGrade ?? null,
+          description: n.description ?? null,
+          relationType: n.relationType ?? 'struktural',
+          isVacant: n.isVacant,
+          level: n.level,
+          masterJobPositionId: n.masterJobPositionId ?? null,
+        })
+      )
+    );
+    // Second pass: now that every node has a real id, relink reportsToId (draft-local ids -> real ids).
+    const nodeIdByDraftId = new Map(newNodes.map((n, i) => [n.id, createdNodesRaw[i].id]));
+    const createdNodes = await Promise.all(
+      newNodes.map((n, i) =>
+        n.reportsToId && nodeIdByDraftId.get(n.reportsToId)
+          ? tenantApi.updateOrgNode(createdNodesRaw[i].id, { reportsToId: nodeIdByDraftId.get(n.reportsToId) })
+          : createdNodesRaw[i]
+      )
+    );
+
+    setApiDivisions((prev) => [...prev.filter((d) => d.entityId !== entityId), ...createdDivisions]);
+    setApiDepartments((prev) => [...prev.filter((d) => d.entityId !== entityId), ...createdDepartments]);
+    setApiOrgNodes((prev) => [...prev.filter((n) => n.entityId !== entityId), ...createdNodes]);
 
     logAuditAction(
       'Struktur Organisasi',
@@ -4039,23 +4513,67 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
   };
 
+  const deleteOrgProposal = (id: string) => {
+    const target = orgProposals.find((p) => p.id === id);
+    setOrgProposals((prev) => prev.filter((p) => p.id !== id));
+    logAuditAction('Struktur Organisasi', 'HAPUS_DRAFT_PROPOSAL', id, `Menghapus draf usulan restrukturisasi: ${target?.proposalTitle || id}`);
+  };
+
   const addOrgNode = (node: Omit<OrgStructureNode, 'id'>) => {
-    const newNode: OrgStructureNode = {
-      ...node,
-      id: `org-pos-${Date.now()}`,
-    };
-    setOrgNodes((prev) => [...prev, newNode]);
-    logAuditAction('Struktur Organisasi', 'TAMBAH_POSISI', newNode.id, `Menambahkan posisi jabatan: ${newNode.title}`);
+    tenantApi
+      .createOrgNode({
+        entityId: node.entityId,
+        title: node.title,
+        divisionId: resolveDivisionId(node.entityId, node.division) ?? null,
+        departmentId: resolveDepartmentId(node.entityId, node.department) ?? null,
+        code: node.code ?? null,
+        jobGrade: node.jobGrade ?? null,
+        description: node.description ?? null,
+        reportsToId: node.reportsToId ?? null,
+        relationType: node.relationType ?? 'struktural',
+        isVacant: node.isVacant,
+        level: node.level,
+        masterJobPositionId: node.masterJobPositionId ?? null,
+      })
+      .then((created) => {
+        setApiOrgNodes((prev) => [...prev, created]);
+        logAuditAction('Struktur Organisasi', 'TAMBAH_POSISI', created.id, `Menambahkan posisi jabatan: ${created.title}`);
+      })
+      .catch((err) => console.error('Gagal menambahkan posisi jabatan:', err));
   };
 
   const updateOrgNode = (id: string, updates: Partial<OrgStructureNode>) => {
-    setOrgNodes((prev) => prev.map((n) => (n.id === id ? { ...n, ...updates } : n)));
-    logAuditAction('Struktur Organisasi', 'UPDATE_POSISI', id, `Memperbarui posisi jabatan ${id}`);
+    const target = orgNodes.find((n) => n.id === id);
+    const entityId = target?.entityId;
+    tenantApi
+      .updateOrgNode(id, {
+        title: updates.title,
+        divisionId: updates.division !== undefined && entityId ? resolveDivisionId(entityId, updates.division) : undefined,
+        departmentId: updates.department !== undefined && entityId ? resolveDepartmentId(entityId, updates.department) : undefined,
+        code: updates.code,
+        jobGrade: updates.jobGrade,
+        description: updates.description,
+        reportsToId: updates.reportsToId,
+        relationType: updates.relationType,
+        isVacant: updates.isVacant,
+        level: updates.level,
+        masterJobPositionId: updates.masterJobPositionId,
+      })
+      .then((updated) => {
+        setApiOrgNodes((prev) => prev.map((n) => (n.id === id ? updated : n)));
+        logAuditAction('Struktur Organisasi', 'UPDATE_POSISI', id, `Memperbarui posisi jabatan ${id}`);
+      })
+      .catch((err) => console.error('Gagal memperbarui posisi jabatan:', err));
   };
 
   const deleteOrgNode = (id: string) => {
-    setOrgNodes((prev) => prev.filter((n) => n.id !== id));
-    logAuditAction('Struktur Organisasi', 'HAPUS_POSISI', id, `Menghapus posisi jabatan ${id}`);
+    tenantApi
+      .deleteOrgNode(id)
+      .then(() => {
+        setApiOrgNodes((prev) => prev.filter((n) => n.id !== id));
+        logAuditAction('Struktur Organisasi', 'HAPUS_POSISI', id, `Menghapus posisi jabatan ${id}`);
+      })
+      .catch((err) => console.error('Gagal menghapus posisi jabatan:', err));
   };
 
   // 28. Probation Evaluations
@@ -4166,22 +4684,47 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // 31. Grade Salary Ranges
   const addGradeSalaryRange = (range: Omit<GradeSalaryRange, 'id' | 'tenantId'>) => {
-    const newRange: GradeSalaryRange = {
-      ...range,
-      id: `grd-${Date.now()}`,
-      tenantId: currentTenant.id,
-    };
-    setGradeSalaryRanges((prev) => [...prev, newRange]);
-    logAuditAction('Grade Gaji', 'TAMBAH_GRADE', newRange.id, `Menambahkan grade ${newRange.gradeCode}`);
+    tenantApi
+      .createGrade({
+        entityId: range.entityId ?? null,
+        gradeCode: range.gradeCode,
+        gradeName: range.gradeName,
+        minSalary: range.minSalary,
+        midSalary: range.midSalary,
+        maxSalary: range.maxSalary,
+        singleValueSalary: range.singleValueSalary ?? null,
+        notes: range.notes ?? null,
+      })
+      .then((created) => {
+        setApiGrades((prev) => [...prev, created]);
+        logAuditAction('Grade Gaji', 'TAMBAH_GRADE', created.id, `Menambahkan grade ${created.gradeCode}`);
+      })
+      .catch((err) => console.error('Gagal menambahkan grade:', err));
   };
 
   const updateGradeSalaryRange = (id: string, updates: Partial<GradeSalaryRange>) => {
-    setGradeSalaryRanges((prev) => prev.map((g) => (g.id === id ? { ...g, ...updates } : g)));
+    tenantApi
+      .updateGrade(id, {
+        gradeCode: updates.gradeCode,
+        gradeName: updates.gradeName,
+        minSalary: updates.minSalary,
+        midSalary: updates.midSalary,
+        maxSalary: updates.maxSalary,
+        singleValueSalary: updates.singleValueSalary,
+        notes: updates.notes,
+      })
+      .then((updated) => setApiGrades((prev) => prev.map((g) => (g.id === id ? updated : g))))
+      .catch((err) => console.error('Gagal memperbarui grade:', err));
   };
 
   const deleteGradeSalaryRange = (id: string) => {
-    setGradeSalaryRanges((prev) => prev.filter((g) => g.id !== id));
-    logAuditAction('Grade Gaji', 'HAPUS_GRADE', id, `Menghapus master grade ${id}`);
+    tenantApi
+      .deleteGrade(id)
+      .then(() => {
+        setApiGrades((prev) => prev.filter((g) => g.id !== id));
+        logAuditAction('Grade Gaji', 'HAPUS_GRADE', id, `Menghapus master grade ${id}`);
+      })
+      .catch((err) => console.error('Gagal menghapus grade:', err));
   };
 
   // 32. Salary Components
@@ -4448,6 +4991,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updateTenantBranding,
         currentUser,
         setCurrentUserRole,
+        setCurrentSessionUser,
         users,
         addUser,
         deleteUser,
@@ -4571,7 +5115,10 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         moduleSettings,
         updateModuleSettings,
         // 22 - 37 Domains
-        entities: entities.filter((e) => e.tenantId === currentTenant.id),
+        // Not re-filtered by currentTenant.id — the backend already scopes this to the
+        // logged-in session's real tenant; currentTenant is still mock/App-Owner-side
+        // tenant-switcher state whose id never matches the real tenant UUID.
+        entities,
         currentEntityId,
         setCurrentEntityId,
         currentEntity,
@@ -4579,6 +5126,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updateEntity,
         deleteEntity,
         toggleEntityDepartmentLevel,
+        loadTenantOrgData,
         divisions: divisions.filter((d) => entities.some((e) => e.id === d.entityId && e.tenantId === currentTenant.id)),
         addDivision,
         updateDivision,
@@ -4591,6 +5139,8 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         addMasterJobPosition,
         updateMasterJobPosition,
         deleteMasterJobPosition,
+        applyOrgTemplate,
+        copyOrgStructureFromEntity,
         assignEmployeeToPosition,
         flexibleNikSettings,
         updateFlexibleNikSettings,
@@ -4620,6 +5170,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         orgProposals: orgProposals.filter((p) => p.tenantId === currentTenant.id),
         submitOrgProposal,
         reviewOrgProposal,
+        deleteOrgProposal,
         orgSnapshots: orgSnapshots.filter((s) => s.tenantId === currentTenant.id),
         replaceEntityStructure,
         probationEvaluations: probationEvaluations.filter((p) => p.tenantId === currentTenant.id),
@@ -4667,7 +5218,8 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         openFilePreview,
         closeFilePreview,
         resetToSampleFlowData,
-        officeLocations: officeLocations.filter((l) => l.tenantId === currentTenant.id),
+        // Same reasoning as `entities` above — real backend data, already tenant-scoped server-side.
+        officeLocations,
         addOfficeLocation,
         updateOfficeLocation,
         deleteOfficeLocation,

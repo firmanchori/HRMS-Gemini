@@ -1,0 +1,243 @@
+// Relative by default so requests go through this page's own origin (dev
+// server proxies /api/* to the backend — see vite.config.ts) and stay
+// same-site for the session cookie. Override via VITE_API_BASE when the API
+// truly lives on a different origin (e.g. a production deployment).
+const API_BASE = import.meta.env.VITE_API_BASE || "";
+
+export class ApiError extends Error {
+  constructor(message: string, public status: number, public details?: unknown) {
+    super(message);
+  }
+}
+
+async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...options,
+    credentials: "include",
+    headers: { "Content-Type": "application/json", ...options.headers },
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new ApiError(body.error || `Request failed (${res.status})`, res.status, body.details);
+  return body as T;
+}
+
+export interface TenantUser {
+  id: string;
+  tenantId: string;
+  entityId: string | null;
+  role: "tenant_admin";
+  name: string;
+  email: string;
+  createdAt: string;
+}
+
+export interface CompanyEntity {
+  id: string;
+  tenantId: string;
+  parentEntityId: string | null;
+  name: string;
+  code: string;
+  emailDomain: string | null;
+  relationType: "resmi" | "administratif";
+  useDepartmentLevel: boolean;
+  npwp: string | null;
+  address: string | null;
+  city: string | null;
+  nikPattern: string | null;
+  nikPatternFollowsParent: boolean;
+  docPrefix: string | null;
+  status: "Aktif" | "Nonaktif";
+  isGovernanceLocked: boolean;
+  documentLogoUrl: string | null;
+  appFaviconUrl: string | null;
+  createdByEntityId: string | null;
+  createdAt: string;
+}
+
+export interface EntityTreeNode {
+  entity: CompanyEntity;
+  children: EntityTreeNode[];
+}
+
+export interface CompanyDivision {
+  id: string;
+  tenantId: string;
+  entityId: string;
+  code: string;
+  name: string;
+  headTitle: string | null;
+  description: string | null;
+}
+
+export interface CompanyDepartment {
+  id: string;
+  tenantId: string;
+  entityId: string;
+  divisionId: string | null;
+  code: string;
+  name: string;
+  headTitle: string | null;
+  description: string | null;
+}
+
+export interface MasterJobPosition {
+  id: string;
+  tenantId: string;
+  entityId: string;
+  code: string;
+  title: string;
+  defaultLevel: number;
+  divisionId: string | null;
+  departmentId: string | null;
+  jobFamily: string | null;
+  jobGrade: string | null;
+  minGrade: string | null;
+  maxGrade: string | null;
+  gradingScheme: "single" | "broadbanding";
+  description: string | null;
+  requirements: string | null;
+}
+
+export interface OrgStructureNode {
+  id: string;
+  tenantId: string;
+  entityId: string;
+  title: string;
+  divisionId: string | null;
+  departmentId: string | null;
+  code: string | null;
+  jobGrade: string | null;
+  description: string | null;
+  reportsToId: string | null;
+  relationType: "struktural" | "administratif";
+  isVacant: boolean;
+  level: number;
+  masterJobPositionId: string | null;
+}
+
+export interface OrgStructure {
+  divisions: CompanyDivision[];
+  departments: CompanyDepartment[];
+  positions: MasterJobPosition[];
+  orgNodes: OrgStructureNode[];
+}
+
+export interface GradeSalaryRange {
+  id: string;
+  tenantId: string;
+  entityId: string | null;
+  gradeCode: string;
+  gradeName: string;
+  minSalary: number | null;
+  midSalary: number | null;
+  maxSalary: number | null;
+  singleValueSalary: number | null;
+  effectiveDate: string;
+  version: number;
+  notes: string | null;
+}
+
+export interface OfficeLocation {
+  id: string;
+  tenantId: string;
+  entityId: string | null;
+  code: string;
+  name: string;
+  type: "Kantor Pusat" | "Kantor Cabang" | "Gudang" | "Workshop" | "Site Operasional";
+  address: string | null;
+  city: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  radiusMeters: number;
+  isActive: boolean;
+  notes: string | null;
+}
+
+export type OrgChangeSet = { create?: Record<string, unknown>[]; update?: { id: string; data: Record<string, unknown> }[]; delete?: string[] };
+
+export interface OrgChangeProposal {
+  id: string;
+  tenantId: string;
+  entityId: string;
+  title: string;
+  description: string | null;
+  officialLetterNumber: string | null;
+  changes: { divisions?: OrgChangeSet; departments?: OrgChangeSet; positions?: OrgChangeSet; orgNodes?: OrgChangeSet };
+  status: "Draft" | "PendingApproval" | "Approved" | "Rejected";
+  proposedByUserId: string;
+  approvedByUserId: string | null;
+  approvedAt: string | null;
+  rejectionReason: string | null;
+  createdAt: string;
+}
+
+export const tenantApi = {
+  // Entities
+  createEntity: (
+    data: Partial<CompanyEntity> & {
+      name: string;
+      code: string;
+      followParentNikPattern?: boolean;
+      /** Required when parentEntityId is set — the one admin account this call provisions for the new child entity. */
+      admin?: { name: string; email: string; password: string };
+    }
+  ) => request<CompanyEntity & { admin: { id: string; name: string; email: string } | null }>("/api/tenant/entities", { method: "POST", body: JSON.stringify(data) }),
+  listEntities: (viewAsEntityId?: string) => request<CompanyEntity[]>(`/api/tenant/entities${viewAsEntityId ? `?viewAsEntityId=${viewAsEntityId}` : ""}`),
+  getEntityTree: () => request<EntityTreeNode[]>("/api/tenant/entities/tree"),
+  getEntity: (id: string) => request<CompanyEntity>(`/api/tenant/entities/${id}`),
+  updateEntity: (id: string, data: Partial<CompanyEntity> & { followParentNikPattern?: boolean }) =>
+    request<CompanyEntity>(`/api/tenant/entities/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  getOrgStructure: (entityId: string) => request<OrgStructure>(`/api/tenant/entities/${entityId}/org-structure`),
+
+  // Users — each tenant_admin manages only their own entity's roster; viewing follows the same vertical rule as entities.
+  listUsers: () => request<TenantUser[]>("/api/tenant/users"),
+  createUser: (data: { name: string; email: string; password: string }) => request<TenantUser>("/api/tenant/users", { method: "POST", body: JSON.stringify(data) }),
+  deleteUser: (id: string) => request<{ ok: true }>(`/api/tenant/users/${id}`, { method: "DELETE" }),
+
+  // Direct CRUD — only works while the entity is unlocked (isGovernanceLocked = false); 403 once locked.
+  createDivision: (data: Omit<CompanyDivision, "id" | "tenantId">) => request<CompanyDivision>("/api/tenant/divisions", { method: "POST", body: JSON.stringify(data) }),
+  listDivisions: () => request<CompanyDivision[]>("/api/tenant/divisions"),
+  updateDivision: (id: string, data: Partial<CompanyDivision>) => request<CompanyDivision>(`/api/tenant/divisions/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteDivision: (id: string) => request<{ ok: true }>(`/api/tenant/divisions/${id}`, { method: "DELETE" }),
+
+  createDepartment: (data: Omit<CompanyDepartment, "id" | "tenantId">) => request<CompanyDepartment>("/api/tenant/departments", { method: "POST", body: JSON.stringify(data) }),
+  listDepartments: () => request<CompanyDepartment[]>("/api/tenant/departments"),
+  updateDepartment: (id: string, data: Partial<CompanyDepartment>) => request<CompanyDepartment>(`/api/tenant/departments/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteDepartment: (id: string) => request<{ ok: true }>(`/api/tenant/departments/${id}`, { method: "DELETE" }),
+
+  createPosition: (data: Omit<MasterJobPosition, "id" | "tenantId">) => request<MasterJobPosition>("/api/tenant/positions", { method: "POST", body: JSON.stringify(data) }),
+  listPositions: () => request<MasterJobPosition[]>("/api/tenant/positions"),
+  updatePosition: (id: string, data: Partial<MasterJobPosition>) => request<MasterJobPosition>(`/api/tenant/positions/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deletePosition: (id: string) => request<{ ok: true }>(`/api/tenant/positions/${id}`, { method: "DELETE" }),
+
+  createOrgNode: (data: Omit<OrgStructureNode, "id" | "tenantId">) => request<OrgStructureNode>("/api/tenant/org-nodes", { method: "POST", body: JSON.stringify(data) }),
+  listOrgNodes: () => request<OrgStructureNode[]>("/api/tenant/org-nodes"),
+  updateOrgNode: (id: string, data: Partial<OrgStructureNode>) => request<OrgStructureNode>(`/api/tenant/org-nodes/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteOrgNode: (id: string) => request<{ ok: true }>(`/api/tenant/org-nodes/${id}`, { method: "DELETE" }),
+
+  // Grades — plain CRUD, never gated by the governance lock.
+  createGrade: (data: Omit<GradeSalaryRange, "id" | "tenantId" | "effectiveDate" | "version">) =>
+    request<GradeSalaryRange>("/api/tenant/grades", { method: "POST", body: JSON.stringify(data) }),
+  listGrades: () => request<GradeSalaryRange[]>("/api/tenant/grades"),
+  updateGrade: (id: string, data: Partial<GradeSalaryRange>) => request<GradeSalaryRange>(`/api/tenant/grades/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteGrade: (id: string) => request<{ ok: true }>(`/api/tenant/grades/${id}`, { method: "DELETE" }),
+
+  // Office locations — plain CRUD.
+  createOfficeLocation: (data: Omit<OfficeLocation, "id" | "tenantId" | "isActive">) =>
+    request<OfficeLocation>("/api/tenant/office-locations", { method: "POST", body: JSON.stringify(data) }),
+  listOfficeLocations: () => request<OfficeLocation[]>("/api/tenant/office-locations"),
+  updateOfficeLocation: (id: string, data: Partial<OfficeLocation>) =>
+    request<OfficeLocation>(`/api/tenant/office-locations/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+
+  // Org change proposals — the formal path once an entity is governance-locked.
+  createProposal: (data: { entityId: string; title: string; description?: string; officialLetterNumber?: string; changes: OrgChangeProposal["changes"] }) =>
+    request<OrgChangeProposal>("/api/tenant/org-change-proposals", { method: "POST", body: JSON.stringify(data) }),
+  listProposals: (entityId?: string) => request<OrgChangeProposal[]>(`/api/tenant/org-change-proposals${entityId ? `?entityId=${entityId}` : ""}`),
+  getProposal: (id: string) => request<OrgChangeProposal>(`/api/tenant/org-change-proposals/${id}`),
+  updateProposal: (id: string, data: Partial<Pick<OrgChangeProposal, "title" | "description" | "officialLetterNumber" | "changes">>) =>
+    request<OrgChangeProposal>(`/api/tenant/org-change-proposals/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  submitProposal: (id: string) => request<OrgChangeProposal>(`/api/tenant/org-change-proposals/${id}/submit`, { method: "POST" }),
+  approveProposal: (id: string) => request<OrgChangeProposal>(`/api/tenant/org-change-proposals/${id}/approve`, { method: "POST" }),
+  rejectProposal: (id: string, rejectionReason: string) =>
+    request<OrgChangeProposal>(`/api/tenant/org-change-proposals/${id}/reject`, { method: "POST", body: JSON.stringify({ rejectionReason }) }),
+};

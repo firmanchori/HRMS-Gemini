@@ -1,4 +1,5 @@
-const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:4000";
+// Relative by default — see src/tenant/api.ts for why (same-site cookie via the dev proxy).
+const API_BASE = import.meta.env.VITE_API_BASE || "";
 
 export class ApiError extends Error {
   constructor(message: string, public status: number, public details?: unknown) {
@@ -32,8 +33,10 @@ export interface TenantRow {
   subdomain: string;
   status: "PendingPayment" | "Active" | "Suspended" | "Expired" | "Cancelled";
   planName: string | null;
+  maxEntities: number | null;
   expiresAt: string | null;
   userCount: string;
+  entityCount: string;
 }
 
 export type PlanChangeDirection = "upgrade" | "downgrade" | "same";

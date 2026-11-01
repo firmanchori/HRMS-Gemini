@@ -693,6 +693,31 @@ export const OfficeLocationManagement: React.FC = () => {
                     <strong className="font-mono text-indigo-900 text-xs">{loc.radiusMeters} Meter</strong>
                   </div>
                 </div>
+
+                {/* Visualisasi Titik Lokasi di Peta */}
+                {loc.latitude && loc.longitude ? (
+                  <div className="rounded-lg border border-slate-200 overflow-hidden relative">
+                    <iframe
+                      title={`Peta ${loc.name}`}
+                      className="w-full h-36 pointer-events-none"
+                      loading="lazy"
+                      src={`https://www.openstreetmap.org/export/embed.html?bbox=${loc.longitude - 0.006}%2C${loc.latitude - 0.004}%2C${loc.longitude + 0.006}%2C${loc.latitude + 0.004}&layer=mapnik&marker=${loc.latitude}%2C${loc.longitude}`}
+                    />
+                    <a
+                      href={`https://www.google.com/maps?q=${loc.latitude},${loc.longitude}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="absolute bottom-1.5 right-1.5 px-2 py-1 bg-white/95 hover:bg-white text-slate-700 text-[10px] font-semibold rounded shadow-xs border border-slate-200 flex items-center gap-1"
+                    >
+                      <MapPin className="w-3 h-3 text-rose-500" />
+                      Buka di Google Maps
+                    </a>
+                  </div>
+                ) : (
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-center text-[11px] text-slate-400">
+                    Koordinat belum diisi — peta tidak dapat ditampilkan.
+                  </div>
+                )}
               </div>
 
               {/* Footer: Assigned Employees */}

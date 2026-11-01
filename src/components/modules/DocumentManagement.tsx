@@ -137,6 +137,7 @@ export const DocumentManagement: React.FC = () => {
     employees,
     createOfficialDocument,
     currentTenant,
+    currentEntity,
     currentUser,
     documentTemplates,
     addDocumentTemplate,
@@ -145,7 +146,6 @@ export const DocumentManagement: React.FC = () => {
     moduleSettings,
     updateModuleSettings,
     updateTenant,
-    updateTenantBranding,
   } = useHrms();
 
   const [activeTab, setActiveTab] = useState<'arsip' | 'studio' | 'templates' | 'daftar_tag' | 'pengaturan'>('arsip');
@@ -645,8 +645,6 @@ export const DocumentManagement: React.FC = () => {
 
 
   // Branding states for Kop Surat Logo & App Favicon
-  const [docLogoInput, setDocLogoInput] = useState(currentTenant.documentLogoUrl || '');
-  const [appFaviconInput, setAppFaviconInput] = useState(currentTenant.appFaviconUrl || '');
   const [brandingSaved, setBrandingSaved] = useState(false);
 
   // Simulator states for Tab Daftar Tag
@@ -4030,7 +4028,7 @@ export const DocumentManagement: React.FC = () => {
                       letterheadLogoAlign={studioLetterheadLogoAlign}
                       letterheadMode={studioLetterheadMode}
                       letterheadFreeText={studioLetterheadFreeText}
-                      letterheadCustomLogoUrl={studioCustomLogoUrl}
+                      letterheadCustomLogoUrl={studioCustomLogoUrl || currentEntity?.documentLogoUrl}
                       runningHeaderText={studioRunningHeaderText}
                       pageNumberFormat={studioPageNumFormat}
                       footerAlign={studioFooterAlign}
@@ -5177,174 +5175,12 @@ PIHAK PERTAMA memberikan upah pokok sebesar {{gaji_pokok}} ({{gaji_terbilang}}) 
       {/* TAB 5: PENGATURAN LEGAL, LOGO DOKUMEN & APP FAVICON */}
       {activeTab === 'pengaturan' && (
         <div className="space-y-6 max-w-3xl">
-          {/* Section 1: Logo Kop Dokumen & App Favicon */}
-          <div className="bg-white p-6 border border-slate-200 rounded-xl space-y-5 text-xs shadow-xs">
-            <div className="border-b border-slate-200 pb-3">
-              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                <Building className="w-4 h-4 text-indigo-600" />
-                <span>Pengaturan Logo Dokumen Resmi & App Favicon</span>
-              </h3>
-              <p className="text-xs text-slate-500">
-                Kelola logo yang tercetak pada Kop Surat Resmi (SK, Surat Promosi/Demosi, Kontrak Kerja, Slip Gaji) dan icon browser favicon.
-              </p>
-            </div>
-
-            {/* Sub-section: Logo Dokumen Resmi */}
-            <div className="space-y-3 p-4 bg-slate-50/80 rounded-lg border border-slate-200">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <label className="font-bold text-slate-800 block text-xs">
-                    Logo Kop Dokumen Resmi (Untuk SK, Kontrak & Slip Gaji)
-                  </label>
-                  <p className="text-[11px] text-slate-500 mt-0.5">
-                    Rekomendasi format PNG transparan atau SVG resolusi tinggi minimal 200x200 px.
-                  </p>
-                </div>
-                {docLogoInput ? (
-                  <img
-                    src={docLogoInput}
-                    alt="Preview Logo Dokumen"
-                    className="w-14 h-14 rounded-lg object-contain bg-white border border-slate-200 p-1 shadow-2xs shrink-0"
-                  />
-                ) : (
-                  <div className="w-14 h-14 rounded-lg bg-indigo-700 text-white font-bold text-xl flex items-center justify-center shrink-0 shadow-2xs">
-                    {currentTenant.logoText || 'N'}
-                  </div>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <input
-                  type="text"
-                  placeholder="Masukkan URL gambar logo (https://... atau data:image/...)"
-                  value={docLogoInput}
-                  onChange={(e) => setDocLogoInput(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded font-mono text-xs bg-white text-slate-900"
-                />
-
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[11px] text-slate-500 font-medium">Pilih Preset Logo:</span>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setDocLogoInput('https://images.unsplash.com/photo-1599305445671-ac291c95aaa9?w=200&h=200&fit=crop')
-                    }
-                    className="px-2 py-0.5 rounded border border-slate-200 bg-white hover:bg-slate-100 text-[11px] text-slate-700"
-                  >
-                    Tech Corporate (Blue)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setDocLogoInput('https://images.unsplash.com/photo-1516876437184-593fda40c7ce?w=200&h=200&fit=crop')
-                    }
-                    className="px-2 py-0.5 rounded border border-slate-200 bg-white hover:bg-slate-100 text-[11px] text-slate-700"
-                  >
-                    Logistics Holding (Navy)
-                  </button>
-                  <label className="cursor-pointer px-2.5 py-0.5 rounded border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-[11px] text-indigo-700 font-semibold">
-                    <span>Unggah File Gambar...</span>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          const reader = new FileReader();
-                          reader.onload = () => {
-                            if (reader.result) setDocLogoInput(reader.result as string);
-                          };
-                          reader.readAsDataURL(file);
-                        }
-                      }}
-                    />
-                  </label>
-                </div>
-              </div>
-
-              {/* Preview Kop Surat Mini */}
-              <div className="p-3 bg-white border border-slate-200 rounded-lg">
-                <span className="text-[10px] font-bold text-slate-400 block uppercase tracking-wider mb-2">
-                  Preview Tampilan Kop Surat Resmi
-                </span>
-                <div className="border-b-2 border-slate-900 pb-2.5 flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2.5">
-                    {docLogoInput ? (
-                      <img
-                        src={docLogoInput}
-                        alt="Logo Preview"
-                        className="w-10 h-10 rounded object-contain border border-slate-200 p-0.5"
-                      />
-                    ) : (
-                      <div className="w-10 h-10 rounded bg-indigo-700 text-white font-bold text-sm flex items-center justify-center">
-                        {currentTenant.logoText || 'N'}
-                      </div>
-                    )}
-                    <div>
-                      <div className="font-bold text-xs uppercase tracking-wide text-slate-900">
-                        {currentTenant.name}
-                      </div>
-                      <div className="text-[10px] text-slate-500">
-                        Gedung Menara Palma Lantai 18, {currentTenant.city} · NPWP: {currentTenant.npwp}
-                      </div>
-                    </div>
-                  </div>
-                  <span className="text-[10px] font-mono text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
-                    Kop Resmi Sah
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Sub-section: App Favicon */}
-            <div className="space-y-3 p-4 bg-slate-50/80 rounded-lg border border-slate-200">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <label className="font-bold text-slate-800 block text-xs">
-                    App Favicon (Icon Tab Browser & PWA)
-                  </label>
-                  <p className="text-[11px] text-slate-500 mt-0.5">
-                    Icon ukuran persegi (32x32 atau 64x64 px) yang muncul di samping judul tab browser.
-                  </p>
-                </div>
-                {appFaviconInput ? (
-                  <img
-                    src={appFaviconInput}
-                    alt="Favicon Preview"
-                    className="w-8 h-8 rounded-md object-contain bg-white border border-slate-200 p-0.5 shadow-2xs shrink-0"
-                  />
-                ) : (
-                  <div className="w-8 h-8 rounded-md bg-indigo-600 text-white font-bold text-xs flex items-center justify-center shrink-0">
-                    {currentTenant.code[0] || 'N'}
-                  </div>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <input
-                  type="text"
-                  placeholder="Masukkan URL favicon browser (https://... atau data:image/...)"
-                  value={appFaviconInput}
-                  onChange={(e) => setAppFaviconInput(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded font-mono text-xs bg-white text-slate-900"
-                />
-
-                {/* Simulated Browser Tab */}
-                <div className="p-2.5 bg-slate-900 rounded-lg flex items-center gap-2">
-                  <span className="text-[10px] text-slate-400 font-mono">Simulasi Tab Browser:</span>
-                  <div className="flex items-center gap-1.5 px-3 py-1 bg-white rounded-t-md text-slate-800 text-[11px] font-medium shadow-xs">
-                    {appFaviconInput ? (
-                      <img src={appFaviconInput} alt="" className="w-4 h-4 rounded-xs object-contain" />
-                    ) : (
-                      <div className="w-4 h-4 rounded-xs bg-indigo-600 text-white text-[9px] font-bold flex items-center justify-center">
-                        N
-                      </div>
-                    )}
-                    <span>{currentTenant.name} - NusaHR Portal</span>
-                  </div>
-                </div>
-              </div>
+          {/* Logo dokumen & favicon sekarang diatur PER ENTITAS di menu "Branding Perusahaan" (Administrasi & Keamanan) — tidak lagi di sini, supaya anak/cucu perusahaan bisa punya logo berbeda dari induknya. */}
+          <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 text-xs text-indigo-900 flex items-start gap-2.5">
+            <Building className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+            <div>
+              <span className="font-bold block">Logo Dokumen & Favicon Pindah Menu</span>
+              Diatur per entitas (tiap anak/cucu perusahaan bisa beda logo) di menu <b>Branding Perusahaan</b>, bukan di sini lagi.
             </div>
           </div>
 
@@ -5388,21 +5224,20 @@ PIHAK PERTAMA memberikan upah pokok sebesar {{gaji_pokok}} ({{gaji_terbilang}}) 
             <div className="flex items-center justify-between pt-4 border-t border-slate-200">
               {brandingSaved && (
                 <span className="text-emerald-700 font-semibold text-xs animate-in zoom-in-50">
-                  ✓ Pengaturan legal, logo dokumen resmi, dan favicon berhasil disimpan!
+                  ✓ Pengaturan legal berhasil disimpan!
                 </span>
               )}
               <div className="ml-auto">
                 <button
                   type="button"
                   onClick={() => {
-                    updateTenantBranding(docLogoInput, appFaviconInput);
                     handleSaveSettings();
                     setBrandingSaved(true);
                     setTimeout(() => setBrandingSaved(false), 3000);
                   }}
                   className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold shadow-xs text-xs transition-colors"
                 >
-                  Simpan Seluruh Pengaturan & Branding
+                  Simpan Pengaturan Legal
                 </button>
               </div>
             </div>
@@ -5742,6 +5577,7 @@ PIHAK PERTAMA memberikan upah pokok sebesar {{gaji_pokok}} ({{gaji_terbilang}}) 
                     documentNumber={selectedDoc.documentNumber}
                     content={selectedDoc.contentPreview}
                     tenant={currentTenant}
+                    letterheadCustomLogoUrl={currentEntity?.documentLogoUrl}
                     employee={targetEmp}
                     signeeName={selectedDoc.signeeName}
                     signeeRole={selectedDoc.signeeRole}

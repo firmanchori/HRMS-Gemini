@@ -23,7 +23,9 @@ import { openWhatsAppChat } from '../../utils/whatsappHelper';
 import { printPagesDirectly } from '../../utils/documentPdfExporter';
 
 export const UniversalFilePreviewModal: React.FC = () => {
-  const { activePreviewItem, closeFilePreview, currentTenant } = useHrms();
+  const { activePreviewItem, closeFilePreview, currentTenant, currentEntity } = useHrms();
+  // Branding adalah per entitas, bukan per tenant — pakai logo entitas yang sedang aktif, baru fallback ke tenant.
+  const brandLogoUrl = currentEntity?.documentLogoUrl || currentTenant.documentLogoUrl;
   const sheetRef = useRef<HTMLDivElement>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [isPrinting, setIsPrinting] = useState(false);
@@ -273,9 +275,9 @@ ${currentTenant.name}`;
             <div className="border-b-2 border-slate-900 pb-3 mb-6">
               <div className="flex items-start justify-between gap-4">
                 <div className="flex items-center gap-3">
-                  {currentTenant.documentLogoUrl ? (
+                  {brandLogoUrl ? (
                     <img
-                      src={currentTenant.documentLogoUrl}
+                      src={brandLogoUrl}
                       alt={currentTenant.name}
                       className="w-12 h-12 rounded-lg object-contain border border-slate-200 p-0.5 bg-white shadow-xs shrink-0"
                     />

@@ -5,7 +5,8 @@
  * automatically, so these calls don't need to know or care which context
  * they're running in.
  */
-const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:4000";
+// Relative by default — see src/tenant/api.ts for why (same-site cookie via the dev proxy).
+const API_BASE = import.meta.env.VITE_API_BASE || "";
 
 export class AuthApiError extends Error {
   constructor(message: string, public status: number) {
@@ -55,4 +56,6 @@ export const authApi = {
   confirmEmail: (token: string) => post<{ ok: true }>(`/api/auth/confirm-email/${token}`),
   // Dev/test convenience only — the backend hides this (404) outside development.
   listDevAccounts: () => get<DevAccount[]>("/api/auth/dev-accounts"),
+  /** Checks the httpOnly session cookie against the current subdomain; rejects (throws) if there's no valid session. */
+  me: () => get<AuthUser>("/api/auth/me"),
 };

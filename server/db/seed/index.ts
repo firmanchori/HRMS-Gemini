@@ -7,6 +7,7 @@ import { db, pool } from "../client.ts";
 import { subscriptionPlans, users, modules, discountSchemes } from "../schema.ts";
 import { seedModules } from "./modules.ts";
 import { seedExamples } from "./examples.ts";
+import { seedTenantOrgExamples } from "./tenantOrgExamples.ts";
 import { computeMonthlyReference } from "../../lib/pricing.ts";
 
 const PRESET_TIERS = [
@@ -97,6 +98,7 @@ async function main() {
   await seedPresetPlans();
   await seedAppOwner();
   await seedExamples();
+  await seedTenantOrgExamples();
   await pool.end();
 }
 
