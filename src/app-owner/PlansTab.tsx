@@ -46,6 +46,7 @@ function PlanForm({
   const [referencePreview, setReferencePreview] = useState(existing?.referenceMonthlyPriceIdr ?? 0);
   const [breakdown, setBreakdown] = useState<{ baseTotal: number; perUserTotal: number; perEntityTotal: number }[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -83,10 +84,16 @@ function PlanForm({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (form.enabledModules.length === 0) return setError("Pilih minimal satu modul");
+    const errs: Record<string, string> = {};
+    if (form.enabledModules.length === 0) errs.enabledModules = "Pilih minimal satu modul.";
     if (form.permanentDiscountPercent > 0 && !form.permanentDiscountReason.trim()) {
-      return setError("Alasan diskon permanen wajib diisi jika persentase > 0");
+      errs.permanentDiscountReason = "Alasan wajib diisi jika diskon > 0.";
     }
+    if (Object.keys(errs).length > 0) {
+      setFieldErrors(errs);
+      return;
+    }
+    setFieldErrors({});
     setError(null);
     setSaving(true);
     try {
@@ -104,6 +111,9 @@ function PlanForm({
 
   const inputClass = "w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-medium focus:outline-indigo-600";
   const labelClass = "font-semibold text-slate-700 block mb-1 text-xs";
+  function FieldError({ field }: { field: string }) {
+    return fieldErrors[field] ? <p className="text-[11px] text-rose-600 mt-1">{fieldErrors[field]}</p> : null;
+  }
 
   return (
     <form onSubmit={handleSubmit} className="bg-white border border-slate-200 rounded-xl p-5 mb-4 space-y-3">
@@ -146,6 +156,7 @@ function PlanForm({
             </label>
           ))}
         </div>
+        <FieldError field="enabledModules" />
       </div>
 
       <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs space-y-1">
@@ -210,6 +221,7 @@ function PlanForm({
             placeholder="Instruksi marketing Q4 2026"
             className={inputClass}
           />
+          <FieldError field="permanentDiscountReason" />
         </div>
       </div>
       <p className="text-[10px] text-slate-400">

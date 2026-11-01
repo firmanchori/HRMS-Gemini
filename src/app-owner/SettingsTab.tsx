@@ -8,12 +8,30 @@ type FormState = EmailConfigInput;
 function BankAccountForm({ onCreated, onClose }: { onCreated: () => void; onClose: () => void }) {
   const [form, setForm] = useState({ bankName: "", accountNumber: "", accountHolderName: "", isActive: true });
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const inputClass = "w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-medium focus:outline-indigo-600";
   const labelClass = "font-semibold text-slate-700 block mb-1 text-xs";
+  function FieldError({ field }: { field: string }) {
+    return fieldErrors[field] ? <p className="text-[11px] text-rose-600 mt-1">{fieldErrors[field]}</p> : null;
+  }
+
+  function validate(): Record<string, string> {
+    const errs: Record<string, string> = {};
+    if (!form.bankName.trim()) errs.bankName = "Nama bank wajib diisi.";
+    if (!form.accountNumber.trim()) errs.accountNumber = "Nomor rekening wajib diisi.";
+    if (!form.accountHolderName.trim()) errs.accountHolderName = "Nama pemilik rekening wajib diisi.";
+    return errs;
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    const errs = validate();
+    if (Object.keys(errs).length > 0) {
+      setFieldErrors(errs);
+      return;
+    }
+    setFieldErrors({});
     setError(null);
     setSaving(true);
     try {
@@ -33,15 +51,18 @@ function BankAccountForm({ onCreated, onClose }: { onCreated: () => void; onClos
       <div className="grid grid-cols-3 gap-3">
         <div>
           <label className={labelClass}>Nama Bank</label>
-          <input required value={form.bankName} onChange={(e) => setForm((f) => ({ ...f, bankName: e.target.value }))} placeholder="BCA" className={inputClass} />
+          <input value={form.bankName} onChange={(e) => setForm((f) => ({ ...f, bankName: e.target.value }))} placeholder="BCA" className={inputClass} />
+          <FieldError field="bankName" />
         </div>
         <div>
           <label className={labelClass}>No. Rekening</label>
-          <input required value={form.accountNumber} onChange={(e) => setForm((f) => ({ ...f, accountNumber: e.target.value }))} className={`${inputClass} font-mono`} />
+          <input value={form.accountNumber} onChange={(e) => setForm((f) => ({ ...f, accountNumber: e.target.value }))} className={`${inputClass} font-mono`} />
+          <FieldError field="accountNumber" />
         </div>
         <div>
           <label className={labelClass}>Nama Pemilik Rekening</label>
-          <input required value={form.accountHolderName} onChange={(e) => setForm((f) => ({ ...f, accountHolderName: e.target.value }))} className={inputClass} />
+          <input value={form.accountHolderName} onChange={(e) => setForm((f) => ({ ...f, accountHolderName: e.target.value }))} className={inputClass} />
+          <FieldError field="accountHolderName" />
         </div>
       </div>
       <div className="flex gap-2">
@@ -143,6 +164,7 @@ export function SettingsTab() {
   const [form, setForm] = useState<FormState | null>(null);
   const [showSecret, setShowSecret] = useState(false);
   const [notice, setNotice] = useState<{ type: "ok" | "error"; text: string } | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
 
   async function load() {
@@ -170,9 +192,29 @@ export function SettingsTab() {
     setForm((f) => (f ? { ...f, [key]: value } : f));
   }
 
+  function validate(): Record<string, string> {
+    const errs: Record<string, string> = {};
+    if (!form!.fromName.trim()) errs.fromName = "Nama pengirim wajib diisi.";
+    if (!form!.fromEmail.trim()) errs.fromEmail = "Alamat email pengirim wajib diisi.";
+    if (form!.provider === "resend") {
+      if (!current!.hasResendKey && !form!.resendApiKey) errs.resendApiKey = "API Key Resend wajib diisi.";
+    } else {
+      if (!form!.smtpHost) errs.smtpHost = "SMTP host wajib diisi.";
+      if (!form!.smtpUsername) errs.smtpUsername = "Username SMTP wajib diisi.";
+      if (!current!.hasSmtpPassword && !form!.smtpPassword) errs.smtpPassword = "Password SMTP wajib diisi.";
+    }
+    return errs;
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form) return;
+    const errs = validate();
+    if (Object.keys(errs).length > 0) {
+      setFieldErrors(errs);
+      return;
+    }
+    setFieldErrors({});
     setNotice(null);
     setSaving(true);
     try {
@@ -188,6 +230,9 @@ export function SettingsTab() {
 
   const inputClass = "w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-medium focus:outline-indigo-600";
   const labelClass = "font-semibold text-slate-700 block mb-1 text-xs";
+  function FieldError({ field }: { field: string }) {
+    return fieldErrors[field] ? <p className="text-[11px] text-rose-600 mt-1">{fieldErrors[field]}</p> : null;
+  }
 
   return (
     <div className="max-w-3xl mx-auto">
@@ -258,6 +303,7 @@ export function SettingsTab() {
               placeholder="NusaHR"
               className={inputClass}
             />
+            <FieldError field="fromName" />
           </div>
           <div>
             <label className={labelClass}>Alamat Email Pengirim</label>
@@ -269,6 +315,7 @@ export function SettingsTab() {
               placeholder="noreply@perusahaan.com"
               className={inputClass}
             />
+            <FieldError field="fromEmail" />
           </div>
         </div>
 
@@ -289,6 +336,7 @@ export function SettingsTab() {
                 {showSecret ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
               </button>
             </div>
+            <FieldError field="resendApiKey" />
           </div>
         ) : (
           <div className="space-y-3 border-t border-slate-100 pt-3">
@@ -302,6 +350,7 @@ export function SettingsTab() {
                   placeholder="smtp.gmail.com"
                   className={inputClass}
                 />
+                <FieldError field="smtpHost" />
               </div>
               <div>
                 <label className={labelClass}>Port</label>
@@ -323,6 +372,7 @@ export function SettingsTab() {
                 placeholder="hr@perusahaan.com"
                 className={inputClass}
               />
+              <FieldError field="smtpUsername" />
             </div>
             <div>
               <label className={labelClass}>
@@ -341,6 +391,7 @@ export function SettingsTab() {
                   {showSecret ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                 </button>
               </div>
+              <FieldError field="smtpPassword" />
               <p className="text-[10px] text-slate-400 mt-1">
                 Untuk Gmail/Google Workspace &amp; Office 365, gunakan App Password, bukan password login biasa.
               </p>
