@@ -977,7 +977,12 @@ const jobRequisitionSchema = z.object({
   knockoutCriteria: z.array(z.unknown()).optional(),
   scoredCriteria: z.array(z.unknown()).optional(),
   signatories: z.array(z.unknown()).optional(),
-  status: z.enum(["Draft", "PendingApproval", "Approved", "Rejected", "Closed"]).optional(),
+  status: z.enum(["Draft", "Menunggu Approval", "Disetujui", "Ditolak", "Dibatalkan", "Dicabut (Retracted)"]).optional(),
+  // Descriptive/free-text fields the frontend's rich FPTK form captures
+  // (reqNumber, position title, grade labels, justification, reporting
+  // line, skills, requester/approver names, retraction info, ...) — see
+  // server/db/schema.ts jobRequisitions.details.
+  details: z.record(z.string(), z.unknown()).optional(),
 });
 
 tenantRouter.post("/job-requisitions", validateBody(jobRequisitionSchema), async (req, res) => {

@@ -199,7 +199,7 @@ export interface DocumentSignatoryConfig {
   sortOrder: number;
 }
 
-export type JobRequisitionStatus = "Draft" | "PendingApproval" | "Approved" | "Rejected" | "Closed";
+export type JobRequisitionStatus = "Draft" | "Menunggu Approval" | "Disetujui" | "Ditolak" | "Dibatalkan" | "Dicabut (Retracted)";
 export type JobRequisitionType = "Baru" | "Penggantian";
 
 export interface JobRequisition {
@@ -221,6 +221,8 @@ export interface JobRequisition {
   scoredCriteria: unknown[];
   signatories: unknown[];
   status: JobRequisitionStatus;
+  /** Free-text/descriptive FPTK fields not worth a dedicated column — reqNumber, position title, grade labels, requester/approver names, etc. */
+  details: Record<string, unknown>;
   createdAt: string;
 }
 

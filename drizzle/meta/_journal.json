@@ -127,6 +127,13 @@
       "when": 1793553340891,
       "tag": "0017_pink_stingray",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1793556238055,
+      "tag": "0018_broken_warstar",
+      "breakpoints": true
     }
   ]
 }

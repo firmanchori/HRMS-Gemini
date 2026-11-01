@@ -151,7 +151,19 @@ export async function seedRecruitmentSamplesForContoh() {
       minExperienceYears: 1,
       knockoutCriteria: [{ category: "Pendidikan", label: "Minimal S1 segala jurusan", matchMode: "contains" }],
       scoredCriteria: [{ label: "Pengalaman rekrutmen", weight: 40 }, { label: "Kemampuan komunikasi", weight: 30 }],
-      status: "PendingApproval",
+      status: "Menunggu Approval",
+      details: {
+        reqNumber: `FPTK/HR-RECRUIT/${tenant.subdomain.toUpperCase()}/XI/2026`,
+        position: "HR Staff",
+        department: "Human Resources",
+        grade: "Grade 4 s/d Grade 5",
+        gradeMin: "Grade 4 - Senior Staff",
+        gradeMax: "Grade 5 - Staff",
+        targetJoinDate: "2026-12-01",
+        requesterName: adminUser.name,
+        requesterTitle: "HR Manager",
+        requirements: "Minimal S1 segala jurusan, pengalaman 1 tahun di bidang rekrutmen.",
+      },
     });
   }
 

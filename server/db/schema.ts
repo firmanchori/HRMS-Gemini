@@ -689,7 +689,17 @@ export const employees = pgTable("employees", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-export const jobRequisitionStatusEnum = pgEnum("job_requisition_status", ["Draft", "PendingApproval", "Approved", "Rejected", "Closed"]);
+// Matches the frontend's own status labels (src/types/hrms.ts JobRequisition)
+// verbatim — kept as one enum instead of a second English enum + translation
+// layer, since this status is filtered/displayed directly by the FPTK UI.
+export const jobRequisitionStatusEnum = pgEnum("job_requisition_status", [
+  "Draft",
+  "Menunggu Approval",
+  "Disetujui",
+  "Ditolak",
+  "Dibatalkan",
+  "Dicabut (Retracted)",
+]);
 export const jobRequisitionTypeEnum = pgEnum("job_requisition_type", ["Baru", "Penggantian"]);
 
 /**
@@ -730,6 +740,13 @@ export const jobRequisitions = pgTable("job_requisitions", {
   // more up to that config's maxSignatories (enforced in the route).
   signatories: jsonb("signatories").notNull().default([]).$type<unknown[]>(),
   status: jobRequisitionStatusEnum("status").notNull().default("Draft"),
+  // The rest of the FPTK form's descriptive/free-text fields (reqNumber,
+  // position title, grade labels, justification, reporting-line labels,
+  // skills, requester/approver display names, retraction info, ...) —
+  // real persisted data, just not worth a dedicated column each since
+  // they're display/document text, not queried or joined on. See
+  // server/lib/jobRequisitionMapping.ts for the exact shape.
+  details: jsonb("details").notNull().default({}).$type<Record<string, unknown>>(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 

@@ -67,6 +67,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { OfficialDocument, DocumentType, DocumentTemplateConfig, Employee } from '../../types/hrms';
+import { tenantApi, type DocumentSignatoryConfig } from '../../tenant/api';
 import { QRCodeView } from '../common/QRCodeView';
 import { OfficialMultiPageDocumentSheet, DocumentSignatory } from '../common/OfficialMultiPageDocumentSheet';
 import { ModuleDocumentModal } from '../common/ModuleDocumentModal';
@@ -750,6 +751,44 @@ export const DocumentManagement: React.FC = () => {
   // Settings State
   const [defaultSigneeRole, setDefaultSigneeRole] = useState(moduleSettings.documents?.defaultSigneeRole || 'VP of Human Capital');
   const [enableWatermark, setEnableWatermark] = useState(moduleSettings.documents?.showQrSignature ?? true);
+
+  // Konfigurasi penanda tangan per jenis dokumen (real backend) — dibaca
+  // oleh setiap form yang menghasilkan dokumen (FPTK dan seterusnya), bukan
+  // daftar yang ditulis ulang di masing-masing form (user, 2026-11-02).
+  const SIGNATORY_DOCUMENT_TYPES: { value: string; label: string }[] = [
+    { value: 'FPTK', label: 'FPTK (Formulir Permintaan Tenaga Kerja)' },
+    { value: 'OfferLetter', label: 'Offering Letter' },
+    { value: 'SK', label: 'SK Pengangkatan/Pemutusan' },
+    { value: 'Kontrak', label: 'Kontrak Kerja (PKWT/PKWTT)' },
+  ];
+  const [signatoryConfigDocType, setSignatoryConfigDocType] = useState('FPTK');
+  const [signatoryConfigs, setSignatoryConfigs] = useState<DocumentSignatoryConfig[]>([]);
+  const [newSignatoryRoleLabel, setNewSignatoryRoleLabel] = useState('');
+  const loadSignatoryConfigs = (docType: string) => {
+    tenantApi.listDocumentSignatoryConfigs(docType).then(setSignatoryConfigs).catch(() => setSignatoryConfigs([]));
+  };
+  useEffect(() => {
+    loadSignatoryConfigs(signatoryConfigDocType);
+  }, [signatoryConfigDocType]);
+  const handleAddSignatoryConfig = async () => {
+    if (!newSignatoryRoleLabel.trim()) return;
+    await tenantApi.createDocumentSignatoryConfig({
+      documentType: signatoryConfigDocType,
+      roleLabel: newSignatoryRoleLabel.trim(),
+      isRequired: true,
+      sortOrder: signatoryConfigs.length,
+    });
+    setNewSignatoryRoleLabel('');
+    loadSignatoryConfigs(signatoryConfigDocType);
+  };
+  const handleToggleSignatoryRequired = async (cfg: DocumentSignatoryConfig) => {
+    await tenantApi.updateDocumentSignatoryConfig(cfg.id, { isRequired: !cfg.isRequired });
+    loadSignatoryConfigs(signatoryConfigDocType);
+  };
+  const handleDeleteSignatoryConfig = async (id: string) => {
+    await tenantApi.deleteDocumentSignatoryConfig(id);
+    loadSignatoryConfigs(signatoryConfigDocType);
+  };
 
   // Handle Drag & Drop / File Select for DOCX
   const handleFileUpload = async (file: File) => {
@@ -5241,6 +5280,77 @@ PIHAK PERTAMA memberikan upah pokok sebesar {{gaji_pokok}} ({{gaji_terbilang}}) 
                 </button>
               </div>
             </div>
+          </div>
+
+          {/* Section 3: Konfigurasi Penandatangan per Jenis Dokumen — dibaca oleh semua form yang menghasilkan dokumen tersebut (FPTK dan seterusnya), tidak lagi diatur per form. */}
+          <div className="bg-white p-6 border border-slate-200 rounded-xl space-y-4 text-xs shadow-xs">
+            <div className="border-b border-slate-200 pb-3">
+              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                <span>Konfigurasi Penandatangan per Jenis Dokumen</span>
+              </h3>
+              <p className="text-xs text-slate-500">
+                Tentukan siapa saja yang wajib/opsional menandatangani setiap jenis dokumen di sini — setiap form
+                yang menghasilkan dokumen ini (contoh: Formulir FPTK) akan otomatis mengikuti jumlah dan peran yang
+                diatur di sini, bukan daftar yang ditulis ulang di masing-masing form.
+              </p>
+            </div>
+
+            <div>
+              <label className="font-semibold text-slate-700 block mb-1">Jenis Dokumen</label>
+              <select
+                value={signatoryConfigDocType}
+                onChange={(e) => setSignatoryConfigDocType(e.target.value)}
+                className="w-full p-2 border border-slate-300 rounded font-semibold text-slate-900"
+              >
+                {SIGNATORY_DOCUMENT_TYPES.map((t) => (
+                  <option key={t.value} value={t.value}>{t.label}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-2">
+              {signatoryConfigs.length === 0 && (
+                <p className="text-slate-400 text-[11px] py-2">Belum ada penanda tangan yang diatur untuk jenis dokumen ini.</p>
+              )}
+              {signatoryConfigs.map((cfg, idx) => (
+                <div key={cfg.id} className="flex items-center justify-between gap-2 p-2.5 bg-slate-50 border border-slate-200 rounded-lg">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-slate-400 font-mono text-[11px] shrink-0">#{idx + 1}</span>
+                    <span className="font-semibold text-slate-800 truncate">{cfg.roleLabel}</span>
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <label className="flex items-center gap-1.5 cursor-pointer text-[11px] text-slate-600">
+                      <input type="checkbox" checked={cfg.isRequired} onChange={() => handleToggleSignatoryRequired(cfg)} className="w-3.5 h-3.5 text-indigo-600 rounded" />
+                      Wajib
+                    </label>
+                    <button type="button" onClick={() => handleDeleteSignatoryConfig(cfg.id)} className="text-rose-500 hover:text-rose-700 text-[11px] font-semibold">
+                      Hapus
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-2 pt-2">
+              <input
+                type="text"
+                placeholder="Contoh: Direktur Keuangan"
+                value={newSignatoryRoleLabel}
+                onChange={(e) => setNewSignatoryRoleLabel(e.target.value)}
+                className="flex-1 p-2 border border-slate-300 rounded text-slate-900"
+              />
+              <button
+                type="button"
+                onClick={handleAddSignatoryConfig}
+                className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-xs shrink-0"
+              >
+                + Tambah Peran
+              </button>
+            </div>
+            <p className="text-[10px] text-slate-400">
+              Maksimal penanda tangan untuk jenis dokumen ini = jumlah peran yang terdaftar di atas ({signatoryConfigs.length}).
+            </p>
           </div>
         </div>
       )}

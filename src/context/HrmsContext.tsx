@@ -9,6 +9,7 @@ import {
   type OrgStructureNode as ApiOrgStructureNode,
   type GradeSalaryRange as ApiGradeSalaryRange,
   type TenantUser as ApiTenantUser,
+  type JobRequisition as ApiJobRequisition,
 } from '../tenant/api';
 import { ORG_STRUCTURE_TEMPLATES } from '../utils/orgStructureTemplates';
 import {
@@ -239,8 +240,8 @@ interface HrmsContextType {
 
   // 7. Recruitment & Onboarding
   jobRequisitions: JobRequisition[];
-  addJobRequisition: (req: Omit<JobRequisition, 'id' | 'tenantId' | 'createdAt'>) => void;
-  updateJobRequisition: (id: string, updates: Partial<JobRequisition>) => void;
+  addJobRequisition: (req: Omit<JobRequisition, 'id' | 'tenantId' | 'createdAt'>) => Promise<void>;
+  updateJobRequisition: (id: string, updates: Partial<JobRequisition>) => Promise<void>;
   deleteJobRequisition: (id: string) => void;
   vacancies: JobVacancy[];
   candidates: Candidate[];
@@ -876,10 +877,56 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return saved ? JSON.parse(saved) : INITIAL_COMPLIANCE;
   });
 
-  const [jobRequisitions, setJobRequisitions] = useState<JobRequisition[]>(() => {
-    const saved = localStorage.getItem('nusahr_job_requisitions_v2');
-    return saved ? JSON.parse(saved) : INITIAL_JOB_REQUISITIONS;
+  // Real backend data, loaded via loadTenantOrgData(). FPTK is no longer
+  // mock-only (user, 2026-11-02: "kenapa semua masih mockup form nya bukan
+  // real dari database" / "Aku tidak mau ada lagi data mock"). Descriptive
+  // fields that don't have a dedicated DB column live in `details` — see
+  // mapApiJobRequisitionToMock below.
+  const [apiJobRequisitions, setApiJobRequisitions] = useState<ApiJobRequisition[]>([]);
+  const mapApiJobRequisitionToMock = (r: ApiJobRequisition): JobRequisition => ({
+    id: r.id,
+    tenantId: r.tenantId,
+    reqNumber: (r.details.reqNumber as string) || '',
+    position: (r.details.position as string) || '',
+    department: (r.details.department as string) || '',
+    officeLocationId: r.officeLocationId || undefined,
+    grade: (r.details.grade as string) || '',
+    gradeMin: r.details.gradeMin as string | undefined,
+    gradeMax: r.details.gradeMax as string | undefined,
+    headcount: r.headcount,
+    reason: (r.details.reason as string) || (r.requisitionType === 'Penggantian' ? 'Penggantian Karyawan (Replacement)' : 'Posisi Baru (New Position)'),
+    replacementFor: r.details.replacementFor as string | undefined,
+    isBudgeted: r.details.isBudgeted as boolean | undefined,
+    justification: r.details.justification as string | undefined,
+    targetJoinDate: (r.details.targetJoinDate as string) || '',
+    reportingToDepartment: r.details.reportingToDepartment as string | undefined,
+    reportingToTitle: r.details.reportingToTitle as string | undefined,
+    reportingToEmployeeId: r.details.reportingToEmployeeId as string | undefined,
+    supervisedStaffCount: r.details.supervisedStaffCount as number | undefined,
+    mainResponsibilities: r.details.mainResponsibilities as string | undefined,
+    educationLevel: r.details.educationLevel as string | undefined,
+    educationMajor: r.details.educationMajor as string | undefined,
+    educationMin: r.details.educationMin as string | undefined,
+    minExperience: (r.details.minExperience as string) || '',
+    skills: r.details.skills as string | undefined,
+    otherRequirements: r.details.otherRequirements as string | undefined,
+    requirements: (r.details.requirements as string) || '',
+    knockoutCriteria: r.knockoutCriteria as JobRequisition['knockoutCriteria'],
+    scoredCriteria: r.scoredCriteria as JobRequisition['scoredCriteria'],
+    requesterName: (r.details.requesterName as string) || '',
+    requesterTitle: r.details.requesterTitle as string | undefined,
+    approvedBy: r.details.approvedBy as string | undefined,
+    approverTitle: r.details.approverTitle as string | undefined,
+    approvalDate: r.details.approvalDate as string | undefined,
+    approvalNotes: r.details.approvalNotes as string | undefined,
+    signatories: r.signatories as JobRequisition['signatories'],
+    retractedAt: r.details.retractedAt as string | undefined,
+    retractedReason: r.details.retractedReason as string | undefined,
+    retractedBy: r.details.retractedBy as string | undefined,
+    status: r.status,
+    createdAt: r.createdAt,
   });
+  const jobRequisitions = useMemo(() => apiJobRequisitions.map(mapApiJobRequisitionToMock), [apiJobRequisitions]);
 
   const [vacancies, setVacancies] = useState<JobVacancy[]>(() => {
     const saved = localStorage.getItem('nusahr_vacancies');
@@ -1357,7 +1404,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const loadTenantOrgData = async () => {
-    const [realEntities, realOfficeLocations, realDivisions, realDepartments, realPositions, realOrgNodes, realGrades, realUsers] = await Promise.all([
+    const [realEntities, realOfficeLocations, realDivisions, realDepartments, realPositions, realOrgNodes, realGrades, realUsers, realJobRequisitions] = await Promise.all([
       tenantApi.listEntities(),
       tenantApi.listOfficeLocations(),
       tenantApi.listDivisions(),
@@ -1366,6 +1413,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       tenantApi.listOrgNodes(),
       tenantApi.listGrades(),
       tenantApi.listUsers(),
+      tenantApi.listJobRequisitions(),
     ]);
     setApiEntities(realEntities);
     setApiOfficeLocations(realOfficeLocations);
@@ -1375,6 +1423,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setApiOrgNodes(realOrgNodes);
     setApiGrades(realGrades);
     setApiUsers(realUsers);
+    setApiJobRequisitions(realJobRequisitions);
   };
 
   // 34. Vendor Invoices (AP)
@@ -2107,24 +2156,57 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // 7. Recruitment & Onboarding
-  const addJobRequisition = (req: Omit<JobRequisition, 'id' | 'tenantId' | 'createdAt'>) => {
-    const newReq: JobRequisition = {
-      ...req,
-      id: `req-${Date.now()}`,
-      tenantId: currentTenant.id,
-      createdAt: new Date().toISOString().split('T')[0],
+  // Splits a (partial) mock JobRequisition into the real columns the
+  // backend actually queries on vs. the descriptive text that just rides
+  // along in `details` — see mapApiJobRequisitionToMock above for the
+  // inverse direction.
+  const buildJobRequisitionApiPayload = (req: Partial<JobRequisition>): Partial<ApiJobRequisition> & { entityId?: string } => {
+    const {
+      officeLocationId, headcount, replacementFor, reason, knockoutCriteria, scoredCriteria, signatories, status,
+      reqNumber, position, department, grade, gradeMin, gradeMax, isBudgeted, justification, targetJoinDate,
+      reportingToDepartment, reportingToTitle, reportingToEmployeeId, supervisedStaffCount, mainResponsibilities,
+      educationLevel, educationMajor, educationMin, minExperience, skills, otherRequirements, requirements,
+      requesterName, requesterTitle, approvedBy, approverTitle, approvalDate, approvalNotes,
+      retractedAt, retractedReason, retractedBy,
+      ...rest
+    } = req;
+    void rest;
+    const details: Record<string, unknown> = {
+      reqNumber, position, department, grade, gradeMin, gradeMax, replacementFor, reason, isBudgeted, justification,
+      targetJoinDate, reportingToDepartment, reportingToTitle, reportingToEmployeeId, supervisedStaffCount,
+      mainResponsibilities, educationLevel, educationMajor, educationMin, minExperience, skills, otherRequirements,
+      requirements, requesterName, requesterTitle, approvedBy, approverTitle, approvalDate, approvalNotes,
+      retractedAt, retractedReason, retractedBy,
     };
-    setJobRequisitions((prev) => [newReq, ...prev]);
+    Object.keys(details).forEach((k) => details[k] === undefined && delete details[k]);
+    return {
+      officeLocationId,
+      headcount,
+      knockoutCriteria,
+      scoredCriteria,
+      signatories,
+      status,
+      requisitionType: (reason || '').includes('Penggantian') ? 'Penggantian' : 'Baru',
+      details,
+    };
   };
 
-  const updateJobRequisition = (id: string, updates: Partial<JobRequisition>) => {
-    setJobRequisitions((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, ...updates } : r))
-    );
+  const addJobRequisition = async (req: Omit<JobRequisition, 'id' | 'tenantId' | 'createdAt'>) => {
+    const payload = buildJobRequisitionApiPayload(req);
+    const created = await tenantApi.createJobRequisition({ ...payload, entityId: currentEntity?.id || '' } as Partial<ApiJobRequisition> & { entityId: string });
+    setApiJobRequisitions((prev) => [created, ...prev]);
   };
 
-  const deleteJobRequisition = (id: string) => {
-    setJobRequisitions((prev) => prev.filter((r) => r.id !== id));
+  const updateJobRequisition = async (id: string, updates: Partial<JobRequisition>) => {
+    const payload = buildJobRequisitionApiPayload(updates);
+    const updated = await tenantApi.updateJobRequisition(id, payload);
+    setApiJobRequisitions((prev) => prev.map((r) => (r.id === id ? updated : r)));
+  };
+
+  const deleteJobRequisition = (_id: string) => {
+    // No DELETE endpoint for job_requisitions — a real FPTK is retracted
+    // (status: 'Dicabut (Retracted)'), never hard-deleted, matching how the
+    // rest of this module already treats a submitted requisition.
   };
 
   const addVacancy = (v: Omit<JobVacancy, 'id' | 'tenantId' | 'postedDate'>) => {
@@ -4973,7 +5055,6 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setApprovalItems(INITIAL_APPROVALS);
     setAssets(INITIAL_ASSETS);
     setCandidates(INITIAL_CANDIDATES);
-    setJobRequisitions(INITIAL_JOB_REQUISITIONS);
     setBusinessTrips(INITIAL_BUSINESS_TRIPS);
     setContractReviews(INITIAL_CONTRACT_REVIEWS);
     setProbationEvaluations(INITIAL_PROBATION_EVALUATIONS);

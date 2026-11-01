@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useHrms } from '../../context/HrmsContext';
 import { NumberInput } from '../common/NumberInput';
 import { SearchableSelect } from '../common/SearchableSelect';
-import { tenantApi, type EducationLevel, type FieldOfStudy, type Employee as TenantEmployee } from '../../tenant/api';
+import { tenantApi, type EducationLevel, type FieldOfStudy, type Employee as TenantEmployee, type DocumentSignatoryConfig } from '../../tenant/api';
 import {
   ClipboardCheck,
   UserPlus,
@@ -1891,10 +1891,16 @@ export const RecruitmentManagement: React.FC = () => {
   const [realEducationLevels, setRealEducationLevels] = useState<EducationLevel[]>([]);
   const [realFieldsOfStudy, setRealFieldsOfStudy] = useState<FieldOfStudy[]>([]);
   const [inactiveEmployees, setInactiveEmployees] = useState<TenantEmployee[]>([]);
+  // Signatory roles/required-vs-optional/max count for FPTK come from
+  // Document Management's per-document-type config (user, 2026-11-02: "di
+  // management pengaturan dokumen disana juga mengatur ada ttd apa saja" —
+  // this must never be a form-specific invented list).
+  const [fptkSignatoryConfigs, setFptkSignatoryConfigs] = useState<DocumentSignatoryConfig[]>([]);
   useEffect(() => {
     tenantApi.listEducationLevels().then(setRealEducationLevels).catch(() => setRealEducationLevels([]));
     tenantApi.listFieldsOfStudy().then(setRealFieldsOfStudy).catch(() => setRealFieldsOfStudy([]));
     tenantApi.listInactiveEmployees().then(setInactiveEmployees).catch(() => setInactiveEmployees([]));
+    tenantApi.listDocumentSignatoryConfigs('FPTK').then(setFptkSignatoryConfigs).catch(() => setFptkSignatoryConfigs([]));
   }, []);
   const [fptkSkills, setFptkSkills] = useState('TypeScript, React, Node.js, PostgreSQL, Docker, CI/CD');
   const [fptkOtherRequirements, setFptkOtherRequirements] = useState('Komunikasi proaktif, problem-solving analitis, mampu bekerja mandiri & tim.');
@@ -1909,7 +1915,9 @@ export const RecruitmentManagement: React.FC = () => {
     ? `${currentUser.name} (${(currentUser.role || 'HR').replace('_', ' ').toUpperCase()})`
     : 'Firman Pratama (HR Manager)';
 
-  // Yang Menyetujui atas Pengajuan (Fleksibel Multi-Approver)
+  // Yang Menyetujui atas Pengajuan (Fleksibel Multi-Approver) — default
+  // roles & max count come from Document Management's FPTK signatory
+  // config (fptkSignatoryConfigs), not an invented per-form list.
   const [fptkSignatories, setFptkSignatories] = useState<FptkSignatory[]>(() => {
     const firstEmp = employees[0];
     return [
@@ -1926,17 +1934,46 @@ export const RecruitmentManagement: React.FC = () => {
     ];
   });
 
+  const fptkSignatoriesInitializedFromConfig = React.useRef(false);
+  useEffect(() => {
+    if (fptkSignatoriesInitializedFromConfig.current || fptkSignatoryConfigs.length === 0) return;
+    fptkSignatoriesInitializedFromConfig.current = true;
+    const requiredRoles = fptkSignatoryConfigs.filter((c) => c.isRequired);
+    if (requiredRoles.length === 0) return;
+    const firstEmp = employees[0];
+    setFptkSignatories(
+      requiredRoles.map((cfg, idx) => ({
+        id: `sig-${cfg.id}`,
+        role: cfg.roleLabel,
+        employeeId: idx === 0 ? firstEmp?.id || '' : '',
+        name: idx === 0 && firstEmp ? firstEmp.fullName : '',
+        title: cfg.roleLabel,
+        nik: idx === 0 ? firstEmp?.nik : undefined,
+        withDegree: true,
+        status: 'Menunggu Approval' as const,
+      }))
+    );
+  }, [fptkSignatoryConfigs, employees]);
+
   const handleAddSignatory = () => {
+    // Boleh menambah penanda tangan sampai jumlah maksimal yang sudah
+    // diatur di Document Management untuk dokumen FPTK (user, 2026-11-02).
+    const maxSignatories = fptkSignatoryConfigs.length;
+    if (maxSignatories > 0 && fptkSignatories.length >= maxSignatories) {
+      setToastFeedback(`Maksimal ${maxSignatories} penanda tangan untuk FPTK (diatur di Manajemen Dokumen).`);
+      return;
+    }
     const newId = `sig-${Date.now()}`;
     const defaultEmp = companyEmployees[0];
+    const nextConfig = fptkSignatoryConfigs[fptkSignatories.length];
     setFptkSignatories((prev) => [
       ...prev,
       {
         id: newId,
-        role: 'Mengetahui',
+        role: nextConfig?.roleLabel || 'Mengetahui',
         employeeId: defaultEmp?.id || '',
         name: defaultEmp ? defaultEmp.fullName : 'Manager Terkait',
-        title: defaultEmp?.position || 'Departemen Manager',
+        title: nextConfig?.roleLabel || defaultEmp?.position || 'Departemen Manager',
         nik: defaultEmp?.nik,
         avatar: defaultEmp?.avatar,
         withDegree: true,
@@ -10978,11 +11015,18 @@ PT Nusantara Multi Talenta Tbk`);
                       <p className="text-[11px] text-slate-500">
                         Pilih karyawan penyetuju. Foto, nama, NIK, dan jabatan langsung terpasang dari sistem.
                       </p>
+                      {fptkSignatoryConfigs.length > 0 && (
+                        <p className="text-[10px] text-slate-400 mt-0.5">
+                          Jumlah & peran penanda tangan mengikuti pengaturan dokumen FPTK di menu Manajemen Dokumen
+                          ({fptkSignatories.length}/{fptkSignatoryConfigs.length} terisi).
+                        </p>
+                      )}
                     </div>
                     <button
                       type="button"
                       onClick={handleAddSignatory}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-200 transition-colors shrink-0"
+                      disabled={fptkSignatoryConfigs.length > 0 && fptkSignatories.length >= fptkSignatoryConfigs.length}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-200 transition-colors shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       <Plus className="w-3.5 h-3.5" />
                       <span>Tambah Penanda Tangan</span>
