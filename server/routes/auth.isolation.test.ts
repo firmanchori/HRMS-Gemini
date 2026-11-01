@@ -1,9 +1,12 @@
 import { config } from "dotenv";
 config({ path: ".env.local" });
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
+import { eq } from "drizzle-orm";
 import { createApp } from "../app.ts";
+import { db, pool } from "../db/client.ts";
+import { tenants } from "../db/schema.ts";
 
 /**
  * Regression test for the subdomain isolation rule (testing-standards.md
@@ -72,5 +75,36 @@ describe("login subdomain isolation", () => {
       .set("Origin", originFor(TENANT_SUBDOMAIN))
       .send({ email: APP_OWNER_EMAIL, password: APP_OWNER_PASSWORD });
     expect(res.status).toBe(401);
+  });
+});
+
+describe("login blocks non-Active tenants even with correct credentials", () => {
+  const PENDING_SUBDOMAIN = "contoh-pending";
+  const PENDING_ADMIN_EMAIL = `admin@${PENDING_SUBDOMAIN}.contoh.local`;
+
+  it("a tenant stuck at PendingPayment cannot log in", async () => {
+    const res = await request(app)
+      .post("/api/auth/login")
+      .set("Origin", originFor(PENDING_SUBDOMAIN))
+      .send({ email: PENDING_ADMIN_EMAIL, password: TENANT_ADMIN_PASSWORD });
+    expect(res.status).toBe(403);
+  });
+
+  describe("a Suspended tenant", () => {
+    beforeAll(async () => {
+      await db.update(tenants).set({ status: "Suspended" }).where(eq(tenants.subdomain, TENANT_SUBDOMAIN));
+    });
+    afterAll(async () => {
+      await db.update(tenants).set({ status: "Active" }).where(eq(tenants.subdomain, TENANT_SUBDOMAIN));
+      await pool.end();
+    });
+
+    it("cannot log in even with the correct password", async () => {
+      const res = await request(app)
+        .post("/api/auth/login")
+        .set("Origin", originFor(TENANT_SUBDOMAIN))
+        .send({ email: TENANT_ADMIN_EMAIL, password: TENANT_ADMIN_PASSWORD });
+      expect(res.status).toBe(403);
+    });
   });
 });

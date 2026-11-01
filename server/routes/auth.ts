@@ -31,6 +31,20 @@ authRouter.post("/login", authLimiter, validateBody(loginSchema), async (req, re
     return res.status(401).json({ error: "Email atau password salah" });
   }
 
+  // Correct credentials alone aren't enough — a tenant that isn't Active
+  // (still PendingPayment, Suspended, Expired, or Cancelled) must never be
+  // able to log in, checked AFTER the password so a wrong-password attempt
+  // never leaks the tenant's status to someone without valid credentials.
+  if (req.tenant && req.tenant.status !== "Active") {
+    const statusMessages: Record<string, string> = {
+      PendingPayment: "Akun perusahaan Anda masih menunggu verifikasi pembayaran.",
+      Suspended: "Akun perusahaan Anda sedang ditangguhkan. Hubungi App Owner untuk informasi lebih lanjut.",
+      Expired: "Masa aktif langganan perusahaan Anda sudah berakhir.",
+      Cancelled: "Akun perusahaan Anda sudah tidak aktif.",
+    };
+    return res.status(403).json({ error: statusMessages[req.tenant.status] ?? "Akun perusahaan Anda tidak aktif." });
+  }
+
   issueSession(res, { userId: user.id, role: user.role, tenantId: user.tenantId });
   res.json({ id: user.id, name: user.name, email: user.email, role: user.role });
 });
