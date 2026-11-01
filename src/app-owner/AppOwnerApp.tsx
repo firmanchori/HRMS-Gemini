@@ -564,6 +564,7 @@ function TenantDetailModal({ tenant, onClose, onChanged }: { tenant: TenantRow; 
 function TenantsTab() {
   const [tenants, setTenants] = useState<TenantRow[]>([]);
   const [detailTenant, setDetailTenant] = useState<TenantRow | null>(null);
+  const [showRegister, setShowRegister] = useState(false);
 
   async function load() {
     const rows = await api.listTenants();
@@ -578,6 +579,15 @@ function TenantsTab() {
 
   return (
     <div>
+      <div className="flex items-center justify-end mb-4">
+        <button
+          onClick={() => setShowRegister(true)}
+          className="text-xs font-semibold flex items-center gap-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg px-3 py-2 shrink-0"
+        >
+          <UserPlus className="w-3.5 h-3.5" />
+          Daftarkan Tenant
+        </button>
+      </div>
       <div className="overflow-x-auto border border-slate-200 rounded-xl bg-white shadow-xs">
         <table className="w-full text-sm">
           <thead className="bg-slate-50 text-slate-500 text-[11px] uppercase tracking-wide">
@@ -625,6 +635,19 @@ function TenantsTab() {
       </div>
 
       {detailTenant && <TenantDetailModal tenant={detailTenant} onClose={() => setDetailTenant(null)} onChanged={load} />}
+
+      {showRegister && (
+        <div className="fixed inset-0 bg-slate-950/60 flex items-center justify-center p-4 z-50" onClick={() => setShowRegister(false)}>
+          <div className="w-full max-w-4xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-end mb-2">
+              <button onClick={() => setShowRegister(false)} className="text-white bg-slate-900/80 hover:bg-slate-900 rounded-full p-1.5">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <RegisterTenantTab onCreated={load} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -882,7 +905,6 @@ function AuditLogTab() {
 type TabKey =
   | "dashboard"
   | "tenants"
-  | "register"
   | "verifications"
   | "modules"
   | "plans"
@@ -902,7 +924,6 @@ export function AppOwnerApp() {
   const TABS: { key: TabKey; label: string; icon: typeof Building2 }[] = [
     { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
     { key: "tenants", label: "Tenant", icon: Building2 },
-    { key: "register", label: "Daftarkan Tenant", icon: UserPlus },
     { key: "verifications", label: "Verifikasi Pembayaran", icon: BadgeCheck },
     { key: "plans", label: "Kelola Paket", icon: Package },
     { key: "modules", label: "Modul & Harga", icon: SettingsIcon },
@@ -961,7 +982,6 @@ export function AppOwnerApp() {
       <main className="p-4 sm:p-6">
         {tab === "dashboard" && <DashboardTab />}
         {tab === "tenants" && <TenantsTab />}
-        {tab === "register" && <RegisterTenantTab />}
         {tab === "verifications" && <PaymentVerificationTab />}
         {tab === "plans" && <PlansTab />}
         {tab === "modules" && <ModulesTab />}

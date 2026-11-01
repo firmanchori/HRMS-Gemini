@@ -9,7 +9,7 @@ const inputClass = "w-full px-3 py-2 border border-slate-300 rounded-lg text-xs 
 const labelClass = "block text-xs font-semibold text-slate-700 mb-1";
 const selectAllOnFocus = (e: React.FocusEvent<HTMLInputElement>) => e.target.select();
 
-export function RegisterTenantTab() {
+export function RegisterTenantTab({ onCreated }: { onCreated?: () => void } = {}) {
   const [mode, setMode] = useState<"preset" | "custom">("preset");
   const [plans, setPlans] = useState<Plan[]>([]);
   const [modules, setModules] = useState<ModuleRow[]>([]);
@@ -108,6 +108,7 @@ export function RegisterTenantTab() {
               ...common,
             });
       setSuccess(`Tenant "${common.tenantName}" (${res.subdomain}) berhasil dibuat & langsung aktif.`);
+      onCreated?.();
       setCommon({ tenantName: "", subdomain: "", adminName: "", adminEmail: "", adminPassword: "" });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Gagal membuat tenant");
