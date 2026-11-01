@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
-import { eq, sql, isNull, and } from "drizzle-orm";
+import { eq, sql, isNull, and, or, ilike } from "drizzle-orm";
 import { db } from "../db/client.ts";
 import {
   tenants,
@@ -29,7 +29,7 @@ import { generateToken } from "../lib/token.ts";
 import { sendTenantActivatedEmail, sendPasswordResetEmail, sendContactReplyEmail, sendSafe } from "../lib/email.ts";
 import { createEmailChangeRequest } from "./auth.ts";
 import { resolveEffectiveMonthlyPrice } from "./public.ts";
-import { validateBody, validateParams, uuidParam } from "../lib/validate.ts";
+import { validateBody, validateParams, validateQuery, uuidParam } from "../lib/validate.ts";
 import { calculatePricing, computeMonthlyReference, computeDisplayReference, type ModulePricing } from "../lib/pricing.ts";
 import { proratedAddonCharge } from "../lib/proration.ts";
 import { getModuleCatalog } from "../lib/moduleCatalog.ts";
@@ -1002,8 +1002,23 @@ appOwnerRouter.put("/bank-accounts/:id", validateParams(uuidParam("id")), valida
   res.json(updated);
 });
 
-appOwnerRouter.get("/audit-log", async (_req, res) => {
-  const rows = await db
+const auditLogQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(500).default(25),
+  search: z.string().trim().max(200).optional(),
+  action: z.string().trim().max(200).optional(),
+});
+
+appOwnerRouter.get("/audit-log", validateQuery(auditLogQuerySchema), async (req, res) => {
+  const { page, pageSize, search, action } = req.query as unknown as z.infer<typeof auditLogQuerySchema>;
+
+  const conditions = [
+    action ? eq(auditLogEntries.action, action) : undefined,
+    search ? or(ilike(auditLogEntries.action, `%${search}%`), ilike(tenants.name, `%${search}%`), ilike(users.name, `%${search}%`)) : undefined,
+  ].filter((c): c is NonNullable<typeof c> => c !== undefined);
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
+
+  const baseQuery = db
     .select({
       id: auditLogEntries.id,
       action: auditLogEntries.action,
@@ -1014,10 +1029,27 @@ appOwnerRouter.get("/audit-log", async (_req, res) => {
     })
     .from(auditLogEntries)
     .leftJoin(tenants, eq(auditLogEntries.tenantId, tenants.id))
-    .leftJoin(users, eq(auditLogEntries.actorUserId, users.id))
+    .leftJoin(users, eq(auditLogEntries.actorUserId, users.id));
+
+  const rows = await (where ? baseQuery.where(where) : baseQuery)
     .orderBy(sql`${auditLogEntries.createdAt} desc`)
-    .limit(100);
-  res.json(rows);
+    .limit(pageSize)
+    .offset((page - 1) * pageSize);
+
+  const countQuery = db
+    .select({ total: sql<number>`count(*)` })
+    .from(auditLogEntries)
+    .leftJoin(tenants, eq(auditLogEntries.tenantId, tenants.id))
+    .leftJoin(users, eq(auditLogEntries.actorUserId, users.id));
+  const [{ total }] = await (where ? countQuery.where(where) : countQuery);
+
+  res.json({ rows, total: Number(total), page, pageSize });
+});
+
+/** Distinct action values seen so far — powers the audit log's "Filter" dropdown without hardcoding the list. */
+appOwnerRouter.get("/audit-log/actions", async (_req, res) => {
+  const rows = await db.selectDistinct({ action: auditLogEntries.action }).from(auditLogEntries).orderBy(auditLogEntries.action);
+  res.json(rows.map((r) => r.action));
 });
 
 appOwnerRouter.get("/inbox", async (_req, res) => {

@@ -714,42 +714,165 @@ function InboxTab() {
   );
 }
 
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
+
 function AuditLogTab() {
   const [rows, setRows] = useState<AuditLogRow[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [customPageSize, setCustomPageSize] = useState("");
+  const [search, setSearch] = useState("");
+  const [action, setAction] = useState("");
+  const [actions, setActions] = useState<string[]>([]);
 
   useEffect(() => {
-    api.getAuditLog().then(setRows);
+    api.getAuditLogActions().then(setActions);
   }, []);
 
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      api.getAuditLog({ page, pageSize, search: search || undefined, action: action || undefined }).then((res) => {
+        setRows(res.rows);
+        setTotal(res.total);
+      });
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [page, pageSize, search, action]);
+
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
+  function changePageSize(value: string) {
+    if (value === "custom") {
+      const n = Number(customPageSize);
+      if (n > 0) {
+        setPageSize(n);
+        setPage(1);
+      }
+      return;
+    }
+    setPageSize(Number(value));
+    setPage(1);
+  }
+
   return (
-    <div className="overflow-x-auto border border-slate-200 rounded-xl bg-white shadow-xs">
-      <table className="w-full text-sm">
-        <thead className="bg-slate-50 text-slate-500 text-[11px] uppercase tracking-wide">
-          <tr>
-            <th className="text-left px-3 py-2.5">Waktu</th>
-            <th className="text-left px-3 py-2.5">Aksi</th>
-            <th className="text-left px-3 py-2.5">Tenant</th>
-            <th className="text-left px-3 py-2.5">Oleh</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => (
-            <tr key={r.id} className="border-t border-slate-100">
-              <td className="px-3 py-2 text-slate-500 text-xs">{new Date(r.createdAt).toLocaleString("id-ID")}</td>
-              <td className="px-3 py-2 font-mono text-xs text-indigo-700">{r.action}</td>
-              <td className="px-3 py-2 text-xs text-slate-600">{r.tenantName ?? "-"}</td>
-              <td className="px-3 py-2 text-xs text-slate-600">{r.actorName ?? "Sistem"}</td>
-            </tr>
+    <div>
+      <div className="flex flex-wrap items-center gap-2 mb-3">
+        <input
+          value={search}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setPage(1);
+          }}
+          placeholder="Cari aksi, tenant, atau pelaku..."
+          className="flex-1 min-w-[200px] px-3 py-2 border border-slate-300 rounded-lg text-xs font-medium focus:outline-indigo-600"
+        />
+        <select
+          value={action}
+          onChange={(e) => {
+            setAction(e.target.value);
+            setPage(1);
+          }}
+          className="px-3 py-2 border border-slate-300 rounded-lg text-xs font-medium bg-white focus:outline-indigo-600"
+        >
+          <option value="">Semua Aksi</option>
+          {actions.map((a) => (
+            <option key={a} value={a}>
+              {a}
+            </option>
           ))}
-          {rows.length === 0 && (
+        </select>
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-slate-500">Tampilkan</span>
+          <select
+            value={PAGE_SIZE_OPTIONS.includes(pageSize) ? String(pageSize) : "custom"}
+            onChange={(e) => changePageSize(e.target.value)}
+            className="px-2.5 py-2 border border-slate-300 rounded-lg text-xs font-medium bg-white focus:outline-indigo-600"
+          >
+            {PAGE_SIZE_OPTIONS.map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+            <option value="custom">Custom</option>
+          </select>
+          {!PAGE_SIZE_OPTIONS.includes(pageSize) || customPageSize ? (
+            <input
+              type="number"
+              min={1}
+              value={customPageSize}
+              onFocus={(e) => e.target.select()}
+              onChange={(e) => {
+                setCustomPageSize(e.target.value);
+                const n = Number(e.target.value);
+                if (n > 0) {
+                  setPageSize(n);
+                  setPage(1);
+                }
+              }}
+              placeholder="Jumlah"
+              className="w-20 px-2.5 py-2 border border-slate-300 rounded-lg text-xs font-medium focus:outline-indigo-600"
+            />
+          ) : null}
+        </div>
+      </div>
+
+      <div className="overflow-x-auto border border-slate-200 rounded-xl bg-white shadow-xs">
+        <table className="w-full text-sm">
+          <thead className="bg-slate-50 text-slate-500 text-[11px] uppercase tracking-wide">
             <tr>
-              <td colSpan={4} className="px-3 py-6 text-center text-xs text-slate-400">
-                Belum ada aktivitas tercatat.
-              </td>
+              <th className="text-left px-3 py-2.5">Waktu</th>
+              <th className="text-left px-3 py-2.5">Aksi</th>
+              <th className="text-left px-3 py-2.5">Tenant</th>
+              <th className="text-left px-3 py-2.5">Oleh</th>
             </tr>
-          )}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.id} className="border-t border-slate-100">
+                <td className="px-3 py-2 text-slate-500 text-xs">{new Date(r.createdAt).toLocaleString("id-ID")}</td>
+                <td className="px-3 py-2 font-mono text-xs text-indigo-700">{r.action}</td>
+                <td className="px-3 py-2 text-xs text-slate-600">{r.tenantName ?? "-"}</td>
+                <td className="px-3 py-2 text-xs text-slate-600">{r.actorName ?? "Sistem"}</td>
+              </tr>
+            ))}
+            {rows.length === 0 && (
+              <tr>
+                <td colSpan={4} className="px-3 py-6 text-center text-xs text-slate-400">
+                  Tidak ada aktivitas yang cocok.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {total > 0 && (
+        <div className="flex items-center justify-between mt-3 text-xs text-slate-500">
+          <span>
+            Menampilkan {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)} dari {total}
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              disabled={page <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              className="px-2.5 py-1.5 border border-slate-300 rounded-md font-semibold disabled:opacity-40"
+            >
+              Sebelumnya
+            </button>
+            <span>
+              Halaman {page} dari {totalPages}
+            </span>
+            <button
+              disabled={page >= totalPages}
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              className="px-2.5 py-1.5 border border-slate-300 rounded-md font-semibold disabled:opacity-40"
+            >
+              Berikutnya
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

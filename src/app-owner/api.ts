@@ -166,6 +166,13 @@ export interface AuditLogRow {
   actorName: string | null;
 }
 
+export interface AuditLogPage {
+  rows: AuditLogRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 export interface EmailConfig {
   provider: "resend" | "smtp";
   fromName: string;
@@ -348,7 +355,13 @@ export const api = {
   replyInquiry: (id: string, body: string) =>
     request<{ ok: true }>(`/api/app-owner/inbox/${id}/reply`, { method: "POST", body: JSON.stringify({ body }) }),
 
-  getAuditLog: () => request<AuditLogRow[]>("/api/app-owner/audit-log"),
+  getAuditLog: (params: { page: number; pageSize: number; search?: string; action?: string }) => {
+    const qs = new URLSearchParams({ page: String(params.page), pageSize: String(params.pageSize) });
+    if (params.search) qs.set("search", params.search);
+    if (params.action) qs.set("action", params.action);
+    return request<AuditLogPage>(`/api/app-owner/audit-log?${qs.toString()}`);
+  },
+  getAuditLogActions: () => request<string[]>("/api/app-owner/audit-log/actions"),
 
   getDashboard: () => request<DashboardSummary>("/api/app-owner/dashboard"),
 

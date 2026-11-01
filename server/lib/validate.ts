@@ -24,4 +24,16 @@ export function validateParams(schema: ZodSchema) {
   };
 }
 
+/** Same idea for querystring params (pagination/search/filter) — req.query values arrive as strings, so the schema should coerce (e.g. z.coerce.number()). */
+export function validateQuery(schema: ZodSchema) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const result = schema.safeParse(req.query);
+    if (!result.success) {
+      return res.status(400).json({ error: "Parameter tidak valid", details: result.error.flatten() });
+    }
+    req.query = result.data as unknown as Request["query"];
+    next();
+  };
+}
+
 export const uuidParam = (name: string) => z.object({ [name]: z.string().uuid() });
