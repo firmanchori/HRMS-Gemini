@@ -3,6 +3,7 @@ import { Plus, X } from "lucide-react";
 import { ValidatedDateInput } from "../components/common/ValidatedDateInput";
 import { api, ApiError, type Promotion, type Plan } from "./api";
 import { ConfirmButton } from "./ConfirmButton";
+import { NumberInput, maskLeadingZero } from "./NumberInput";
 
 function PromoForm({ plans, onCreated, onClose }: { plans: Plan[]; onCreated: () => void; onClose: () => void }) {
   const today = new Date().toISOString().split("T")[0];
@@ -97,15 +98,7 @@ function PromoForm({ plans, onCreated, onClose }: { plans: Plan[]; onCreated: ()
       <div className="grid grid-cols-3 gap-3">
         <div>
           <label className={labelClass}>Diskon (%)</label>
-          <input
-            type="number"
-            min={1}
-            max={100}
-            value={form.discountPercent}
-            onFocus={(e) => e.target.select()}
-            onChange={(e) => setForm((f) => ({ ...f, discountPercent: Number(e.target.value) }))}
-            className={inputClass}
-          />
+          <NumberInput min={1} max={100} value={form.discountPercent} onChange={(v) => setForm((f) => ({ ...f, discountPercent: v }))} className={inputClass} />
           <FieldError field="discountPercent" />
         </div>
         <div>
@@ -116,7 +109,11 @@ function PromoForm({ plans, onCreated, onClose }: { plans: Plan[]; onCreated: ()
             placeholder="Tanpa batas"
             value={form.maxUses}
             onFocus={(e) => e.target.select()}
-            onChange={(e) => setForm((f) => ({ ...f, maxUses: e.target.value }))}
+            onChange={(e) => {
+              const cleaned = maskLeadingZero(e.target.value);
+              if (cleaned !== e.target.value) e.target.value = cleaned;
+              setForm((f) => ({ ...f, maxUses: cleaned }));
+            }}
             className={inputClass}
           />
         </div>

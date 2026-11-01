@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Eye, EyeOff, CheckCircle2, AlertCircle, Mail, Server } from "lucide-react";
 import { api, ApiError, type EmailConfig, type EmailConfigInput } from "./api";
+import { NumberInput } from "./NumberInput";
 
 type FormState = EmailConfigInput;
 
@@ -198,13 +199,7 @@ export function SettingsTab() {
               </div>
               <div>
                 <label className={labelClass}>Port</label>
-                <input
-                  required
-                  type="number"
-                  value={form.smtpPort ?? 587}
-                  onChange={(e) => update("smtpPort", Number(e.target.value))}
-                  className={inputClass}
-                />
+                <NumberInput required value={form.smtpPort ?? 587} onChange={(v) => update("smtpPort", v)} className={inputClass} />
               </div>
             </div>
             <div>

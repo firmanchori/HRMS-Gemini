@@ -2,12 +2,12 @@ import React, { useEffect, useState } from "react";
 import { CheckCircle2 } from "lucide-react";
 import { api, ApiError, type ModuleRow, type Plan, type PricingBreakdown, type SubscriptionTotal } from "./api";
 import { PlanDetailModal } from "./PlanDetailModal";
+import { NumberInput } from "./NumberInput";
 
 const APP_BASE_DOMAIN = import.meta.env.VITE_APP_BASE_DOMAIN || "localhost:3000";
 
 const inputClass = "w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-medium focus:outline-indigo-600";
 const labelClass = "block text-xs font-semibold text-slate-700 mb-1";
-const selectAllOnFocus = (e: React.FocusEvent<HTMLInputElement>) => e.target.select();
 
 export function RegisterTenantTab({ onCreated }: { onCreated?: () => void } = {}) {
   const [mode, setMode] = useState<"preset" | "custom">("preset");
@@ -122,7 +122,7 @@ export function RegisterTenantTab({ onCreated }: { onCreated?: () => void } = {}
   }
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div>
       {success && (
         <div className="mb-4 flex items-start gap-2 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg p-3">
           <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
@@ -199,7 +199,7 @@ export function RegisterTenantTab({ onCreated }: { onCreated?: () => void } = {}
               </div>
               <div>
                 <label className={labelClass}>Total Bulan Berlangganan</label>
-                <input type="number" min={1} max={120} value={presetMonths} onFocus={selectAllOnFocus} onChange={(e) => setPresetMonths(Number(e.target.value))} className={inputClass} />
+                <NumberInput min={1} max={120} value={presetMonths} onChange={setPresetMonths} className={inputClass} />
               </div>
             </div>
 
@@ -224,29 +224,13 @@ export function RegisterTenantTab({ onCreated }: { onCreated?: () => void } = {}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className={labelClass}>Jumlah Karyawan</label>
-                <input
-                  type="number"
-                  min={1}
-                  max={selectedPlan?.maxEmployees}
-                  value={presetUsers}
-                  onFocus={selectAllOnFocus}
-                  onChange={(e) => setPresetUsers(Number(e.target.value))}
-                  className={inputClass}
-                />
+                <NumberInput min={1} max={selectedPlan?.maxEmployees} value={presetUsers} onChange={setPresetUsers} className={inputClass} />
                 {selectedPlan && <p className="text-[10px] text-slate-400 mt-1">Maks. {selectedPlan.maxEmployees} untuk paket ini.</p>}
                 <FieldError field="presetUsers" />
               </div>
               <div>
                 <label className={labelClass}>Jumlah Entitas/Cabang</label>
-                <input
-                  type="number"
-                  min={1}
-                  max={selectedPlan?.maxEntities}
-                  value={presetEntities}
-                  onFocus={selectAllOnFocus}
-                  onChange={(e) => setPresetEntities(Number(e.target.value))}
-                  className={inputClass}
-                />
+                <NumberInput min={1} max={selectedPlan?.maxEntities} value={presetEntities} onChange={setPresetEntities} className={inputClass} />
                 {selectedPlan && <p className="text-[10px] text-slate-400 mt-1">Maks. {selectedPlan.maxEntities} untuk paket ini.</p>}
                 <FieldError field="presetEntities" />
               </div>
@@ -293,48 +277,19 @@ export function RegisterTenantTab({ onCreated }: { onCreated?: () => void } = {}
             <div className="grid grid-cols-4 gap-3">
               <div>
                 <label className={labelClass}>Maks. Entitas</label>
-                <input
-                  type="number"
-                  min={1}
-                  value={custom.maxEntities}
-                  onFocus={selectAllOnFocus}
-                  onChange={(e) => setCustom((c) => ({ ...c, maxEntities: Number(e.target.value) }))}
-                  className={inputClass}
-                />
+                <NumberInput min={1} value={custom.maxEntities} onChange={(v) => setCustom((c) => ({ ...c, maxEntities: v }))} className={inputClass} />
               </div>
               <div>
                 <label className={labelClass}>Maks. User</label>
-                <input
-                  type="number"
-                  min={1}
-                  value={custom.maxUsers}
-                  onFocus={selectAllOnFocus}
-                  onChange={(e) => setCustom((c) => ({ ...c, maxUsers: Number(e.target.value) }))}
-                  className={inputClass}
-                />
+                <NumberInput min={1} value={custom.maxUsers} onChange={(v) => setCustom((c) => ({ ...c, maxUsers: v }))} className={inputClass} />
               </div>
               <div>
                 <label className={labelClass}>Durasi (bulan)</label>
-                <input
-                  type="number"
-                  min={1}
-                  value={custom.durationMonths}
-                  onFocus={selectAllOnFocus}
-                  onChange={(e) => setCustom((c) => ({ ...c, durationMonths: Number(e.target.value) }))}
-                  className={inputClass}
-                />
+                <NumberInput min={1} value={custom.durationMonths} onChange={(v) => setCustom((c) => ({ ...c, durationMonths: v }))} className={inputClass} />
               </div>
               <div>
                 <label className={labelClass}>Diskon Manual (%)</label>
-                <input
-                  type="number"
-                  min={0}
-                  max={100}
-                  value={custom.discountPercent}
-                  onFocus={selectAllOnFocus}
-                  onChange={(e) => setCustom((c) => ({ ...c, discountPercent: Number(e.target.value) }))}
-                  className={inputClass}
-                />
+                <NumberInput min={0} max={100} value={custom.discountPercent} onChange={(v) => setCustom((c) => ({ ...c, discountPercent: v }))} className={inputClass} />
               </div>
             </div>
             <p className="text-[10px] text-slate-400">

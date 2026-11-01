@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Plus, X, Eye, Pencil, Trash2 } from "lucide-react";
 import { api, ApiError, type Plan, type ModuleCatalogEntry, type PlanDetail, type DiscountScheme, type DiscountTier } from "./api";
 import { ConfirmButton } from "./ConfirmButton";
+import { NumberInput } from "./NumberInput";
 
 const EMPTY_FORM = {
   name: "",
@@ -125,25 +126,11 @@ function PlanForm({
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className={labelClass}>Maks. Karyawan</label>
-          <input
-            type="number"
-            min={1}
-            required
-            value={form.maxEmployees}
-            onChange={(e) => setForm((f) => ({ ...f, maxEmployees: Number(e.target.value) }))}
-            className={inputClass}
-          />
+          <NumberInput required min={1} value={form.maxEmployees} onChange={(v) => setForm((f) => ({ ...f, maxEmployees: v }))} className={inputClass} />
         </div>
         <div>
           <label className={labelClass}>Maks. Entitas</label>
-          <input
-            type="number"
-            min={1}
-            required
-            value={form.maxEntities}
-            onChange={(e) => setForm((f) => ({ ...f, maxEntities: Number(e.target.value) }))}
-            className={inputClass}
-          />
+          <NumberInput required min={1} value={form.maxEntities} onChange={(v) => setForm((f) => ({ ...f, maxEntities: v }))} className={inputClass} />
         </div>
       </div>
       <div>
@@ -204,14 +191,7 @@ function PlanForm({
       <div className="grid grid-cols-2 gap-3 border-t border-slate-100 pt-3">
         <div>
           <label className={labelClass}>Diskon Permanen (%)</label>
-          <input
-            type="number"
-            min={0}
-            max={100}
-            value={form.permanentDiscountPercent}
-            onChange={(e) => setForm((f) => ({ ...f, permanentDiscountPercent: Number(e.target.value) }))}
-            className={inputClass}
-          />
+          <NumberInput min={0} max={100} value={form.permanentDiscountPercent} onChange={(v) => setForm((f) => ({ ...f, permanentDiscountPercent: v }))} className={inputClass} />
         </div>
         <div>
           <label className={labelClass}>Alasan (wajib jika diskon &gt; 0)</label>
@@ -329,19 +309,9 @@ function SchemeEditor({ planId, schemes, onChanged }: { planId: string; schemes:
           {newScheme.tiers.map((t, i) => (
             <div key={i} className="flex items-center gap-2">
               <span className="text-[11px] text-slate-500">Minimal</span>
-              <input
-                type="number"
-                value={t.minValue}
-                onChange={(e) => updateTier(i, "minValue", Number(e.target.value))}
-                className="w-20 text-xs border border-slate-300 rounded-md px-2 py-1"
-              />
+              <NumberInput value={t.minValue} onChange={(v) => updateTier(i, "minValue", v)} className="w-20 text-xs border border-slate-300 rounded-md px-2 py-1" />
               <span className="text-[11px] text-slate-500">→ diskon</span>
-              <input
-                type="number"
-                value={t.discountPercent}
-                onChange={(e) => updateTier(i, "discountPercent", Number(e.target.value))}
-                className="w-16 text-xs border border-slate-300 rounded-md px-2 py-1"
-              />
+              <NumberInput value={t.discountPercent} onChange={(v) => updateTier(i, "discountPercent", v)} className="w-16 text-xs border border-slate-300 rounded-md px-2 py-1" />
               <span className="text-[11px] text-slate-500">%</span>
               {newScheme.tiers.length > 1 && (
                 <button type="button" onClick={() => setNewScheme((s) => ({ ...s, tiers: s.tiers.filter((_, idx) => idx !== i) }))}>

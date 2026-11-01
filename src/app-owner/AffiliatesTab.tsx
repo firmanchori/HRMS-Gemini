@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Plus, X } from "lucide-react";
 import { api, ApiError, type Affiliate, type Plan, type AffiliateUsage } from "./api";
 import { ConfirmButton } from "./ConfirmButton";
+import { NumberInput } from "./NumberInput";
 
 function AffiliateForm({ plans, onCreated, onClose }: { plans: Plan[]; onCreated: () => void; onClose: () => void }) {
   const [form, setForm] = useState({ planId: plans[0]?.id ?? "", code: "", affiliateName: "", customerDiscountPercent: 10, commissionPercent: 5 });
@@ -78,28 +79,12 @@ function AffiliateForm({ plans, onCreated, onClose }: { plans: Plan[]; onCreated
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className={labelClass}>Diskon untuk Pelanggan (%)</label>
-          <input
-            type="number"
-            min={0}
-            max={100}
-            value={form.customerDiscountPercent}
-            onFocus={(e) => e.target.select()}
-            onChange={(e) => setForm((f) => ({ ...f, customerDiscountPercent: Number(e.target.value) }))}
-            className={inputClass}
-          />
+          <NumberInput min={0} max={100} value={form.customerDiscountPercent} onChange={(v) => setForm((f) => ({ ...f, customerDiscountPercent: v }))} className={inputClass} />
           <FieldError field="customerDiscountPercent" />
         </div>
         <div>
           <label className={labelClass}>Komisi untuk Affiliate (%)</label>
-          <input
-            type="number"
-            min={0}
-            max={100}
-            value={form.commissionPercent}
-            onFocus={(e) => e.target.select()}
-            onChange={(e) => setForm((f) => ({ ...f, commissionPercent: Number(e.target.value) }))}
-            className={inputClass}
-          />
+          <NumberInput min={0} max={100} value={form.commissionPercent} onChange={(v) => setForm((f) => ({ ...f, commissionPercent: v }))} className={inputClass} />
           <FieldError field="commissionPercent" />
         </div>
       </div>

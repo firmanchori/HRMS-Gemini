@@ -34,6 +34,7 @@ import { RegisterTenantTab } from "./RegisterTenantTab";
 import { SettingsTab } from "./SettingsTab";
 import { BankAccountsTab } from "./BankAccountsTab";
 import { InvoicesTab, InvoiceDetailModal } from "./InvoicesTab";
+import { NumberInput, maskLeadingZero } from "./NumberInput";
 import { ConfirmButton } from "./ConfirmButton";
 
 function ForgotPasswordForm({ onBack }: { onBack: () => void }) {
@@ -329,26 +330,22 @@ function PlanChangeSection({ tenant, onChanged }: { tenant: TenantRow; onChanged
         </select>
         <div />
         <div>
-          <input
-            type="number"
+          <NumberInput
             min={1}
             max={selectedPlan?.maxEmployees}
             value={actualUsers}
-            onFocus={(e) => e.target.select()}
-            onChange={(e) => setActualUsers(Number(e.target.value))}
+            onChange={setActualUsers}
             className="w-full px-3 py-1.5 border border-slate-300 rounded-md text-xs font-medium focus:outline-indigo-600"
             placeholder="Jumlah karyawan"
           />
           {selectedPlan && <p className="text-[10px] text-slate-400 mt-1">Maks. {selectedPlan.maxEmployees} karyawan.</p>}
         </div>
         <div>
-          <input
-            type="number"
+          <NumberInput
             min={1}
             max={selectedPlan?.maxEntities}
             value={actualEntities}
-            onFocus={(e) => e.target.select()}
-            onChange={(e) => setActualEntities(Number(e.target.value))}
+            onChange={setActualEntities}
             className="w-full px-3 py-1.5 border border-slate-300 rounded-md text-xs font-medium focus:outline-indigo-600"
             placeholder="Jumlah entitas"
           />
@@ -702,13 +699,16 @@ function TenantsTab() {
 
       {showRegister && (
         <div className="fixed inset-0 bg-slate-950/60 flex items-center justify-center p-4 z-50" onClick={() => setShowRegister(false)}>
-          <div className="w-full max-w-4xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <div className="flex justify-end mb-2">
-              <button onClick={() => setShowRegister(false)} className="text-white bg-slate-900/80 hover:bg-slate-900 rounded-full p-1.5">
-                <X className="w-4 h-4" />
+          <div className="w-full max-w-4xl max-h-[90vh] overflow-y-auto bg-white rounded-2xl shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="px-5 py-4 bg-slate-900 text-white flex items-center justify-between sticky top-0">
+              <h3 className="font-bold text-sm">Daftarkan Tenant</h3>
+              <button onClick={() => setShowRegister(false)} className="text-slate-400 hover:text-white">
+                <X className="w-5 h-5" />
               </button>
             </div>
-            <RegisterTenantTab onCreated={load} />
+            <div className="p-5">
+              <RegisterTenantTab onCreated={load} />
+            </div>
           </div>
         </div>
       )}
@@ -892,8 +892,10 @@ function AuditLogTab() {
               value={customPageSize}
               onFocus={(e) => e.target.select()}
               onChange={(e) => {
-                setCustomPageSize(e.target.value);
-                const n = Number(e.target.value);
+                const cleaned = maskLeadingZero(e.target.value);
+                if (cleaned !== e.target.value) e.target.value = cleaned;
+                setCustomPageSize(cleaned);
+                const n = Number(cleaned);
                 if (n > 0) {
                   setPageSize(n);
                   setPage(1);

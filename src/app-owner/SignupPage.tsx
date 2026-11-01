@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { CheckCircle2, AlertCircle, ArrowRight, ArrowLeft, Copy } from "lucide-react";
 import { api, ApiError, type Plan, type SubscriptionTotal, type BankAccount } from "./api";
+import { NumberInput } from "./NumberInput";
 
 const APP_BASE_DOMAIN = import.meta.env.VITE_APP_BASE_DOMAIN || "localhost:3000";
 const STEPS = ["Data Perusahaan", "Paket & Kebutuhan", "Pembayaran"];
@@ -171,7 +172,6 @@ export function SignupPage() {
 
   const inputClass = "w-full rounded-md border border-slate-300 py-2 px-3 text-sm focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600 focus:outline-none";
   const labelClass = "block text-xs font-semibold text-slate-700 mb-1";
-  const selectAllOnFocus = (e: React.FocusEvent<HTMLInputElement>) => e.target.select();
   function FieldError({ field }: { field: string }) {
     return fieldErrors[field] ? <p className="text-[11px] text-rose-600 mt-1">{fieldErrors[field]}</p> : null;
   }
@@ -262,7 +262,7 @@ export function SignupPage() {
                 </div>
                 <div>
                   <label className={labelClass}>Total Bulan Berlangganan</label>
-                  <input required type="number" min={1} max={120} value={form.totalMonths} onFocus={selectAllOnFocus} onChange={(e) => update("totalMonths", Number(e.target.value))} className={inputClass} />
+                  <NumberInput required min={1} max={120} value={form.totalMonths} onChange={(v) => update("totalMonths", v)} className={inputClass} />
                 </div>
               </div>
 
@@ -282,13 +282,13 @@ export function SignupPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className={labelClass}>Jumlah Karyawan Saat Ini</label>
-                  <input required type="number" min={1} max={selectedPlan?.maxEmployees} value={form.actualUsers} onFocus={selectAllOnFocus} onChange={(e) => update("actualUsers", Number(e.target.value))} className={inputClass} />
+                  <NumberInput required min={1} max={selectedPlan?.maxEmployees} value={form.actualUsers} onChange={(v) => update("actualUsers", v)} className={inputClass} />
                   {selectedPlan && <p className="text-[10px] text-slate-400 mt-1">Maks. {selectedPlan.maxEmployees} karyawan untuk paket ini.</p>}
                   <FieldError field="actualUsers" />
                 </div>
                 <div>
                   <label className={labelClass}>Jumlah Entitas/Cabang</label>
-                  <input required type="number" min={1} max={selectedPlan?.maxEntities} value={form.actualEntities} onFocus={selectAllOnFocus} onChange={(e) => update("actualEntities", Number(e.target.value))} className={inputClass} />
+                  <NumberInput required min={1} max={selectedPlan?.maxEntities} value={form.actualEntities} onChange={(v) => update("actualEntities", v)} className={inputClass} />
                   {selectedPlan && <p className="text-[10px] text-slate-400 mt-1">Maks. {selectedPlan.maxEntities} entitas untuk paket ini.</p>}
                   <FieldError field="actualEntities" />
                 </div>
