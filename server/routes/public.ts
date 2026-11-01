@@ -15,7 +15,6 @@ import {
   subscriptionUsageEvents,
   bankAccounts,
 } from "../db/schema.ts";
-import { inArray } from "drizzle-orm";
 import { sendSignupPendingEmail } from "../lib/email.ts";
 import { logAudit } from "../lib/audit.ts";
 import { validateBody } from "../lib/validate.ts";
@@ -28,7 +27,7 @@ import {
   recordAffiliateUsage,
   InvalidAffiliateError,
 } from "../lib/promotions.ts";
-import { bestTierDiscount, computeSubscriptionTotal, computeMonthlyReference } from "../lib/pricing.ts";
+import { bestTierDiscount, computeSubscriptionTotal, computeMonthlyReference, expandModuleCodes, expandModuleRows } from "../lib/pricing.ts";
 import { getModuleFeatures } from "../lib/moduleCatalog.ts";
 
 export const publicRouter = Router();
@@ -57,9 +56,8 @@ export async function resolveEffectiveMonthlyPrice(
   if (entities_ > plan.maxEntities) return { monthlyPriceIdr: 0, error: `Jumlah entitas melebihi batas paket ini (maks ${plan.maxEntities})` };
   if (users_ < 1 || entities_ < 1) return { monthlyPriceIdr: 0, error: "Jumlah karyawan dan entitas minimal 1" };
 
-  const moduleRows = plan.enabledModules.includes("*")
-    ? await db.select().from(modules)
-    : await db.select().from(modules).where(inArray(modules.code, plan.enabledModules));
+  const allModules = await db.select().from(modules);
+  const moduleRows = expandModuleRows(plan.enabledModules, allModules);
   const reference = computeMonthlyReference(moduleRows, users_, entities_);
   const markdownRatio = plan.referenceMonthlyPriceIdr > 0 ? plan.priceIdr / plan.referenceMonthlyPriceIdr : 1;
   return { monthlyPriceIdr: Math.round(reference * markdownRatio) };
@@ -69,10 +67,8 @@ export async function resolveEffectiveMonthlyPrice(
 publicRouter.get("/plans", async (_req, res) => {
   const plans = await db.select().from(subscriptionPlans).where(eq(subscriptionPlans.isCustom, false));
   const allModuleCodes = (await db.select({ code: modules.code }).from(modules)).map((m) => m.code);
-  // "*" (Enterprise-style "semua modul") is an internal shorthand — a
-  // prospective tenant has no idea what "*" means, so expand it to the
-  // real module list before it ever reaches the UI.
-  res.json(plans.map((p) => ({ ...p, enabledModules: p.enabledModules.includes("*") ? allModuleCodes : p.enabledModules })));
+  // A prospective tenant has no idea what "*" means, so expand it to the real module list before it ever reaches the UI.
+  res.json(plans.map((p) => ({ ...p, enabledModules: expandModuleCodes(p.enabledModules, allModuleCodes) })));
 });
 
 /** A plan's duration/volume discount tiers — shown on the signup page so "diskon 12 bulan: 10%" is visible before checkout, not a surprise. */

@@ -1,8 +1,9 @@
 # Testing Standards — NusaHR Enterprise HRMS
 
-Status: no test framework is installed yet (`package.json` only has
-`tsc --noEmit` as `lint`). This file defines what to set up and the rules to
-follow once a module is touched for the backend/API integration phase.
+Status: Vitest is installed (`npm run test` / `npm run test:watch`). Backend
+pure-function business logic (`server/lib/pricing.test.ts`,
+`server/lib/proration.test.ts`) is covered as of the App Owner billing work.
+Component/E2E coverage for the tenant-side app below is still pending.
 
 ## Required stack (install when the first test is written, not before)
 

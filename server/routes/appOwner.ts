@@ -30,7 +30,7 @@ import { sendTenantActivatedEmail, sendPasswordResetEmail, sendContactReplyEmail
 import { createEmailChangeRequest } from "./auth.ts";
 import { resolveEffectiveMonthlyPrice } from "./public.ts";
 import { validateBody, validateParams, validateQuery, uuidParam } from "../lib/validate.ts";
-import { calculatePricing, computeMonthlyReference, computeDisplayReference, type ModulePricing } from "../lib/pricing.ts";
+import { calculatePricing, computeMonthlyReference, computeDisplayReference, expandModuleCodes, expandModuleRows, type ModulePricing } from "../lib/pricing.ts";
 import { proratedAddonCharge } from "../lib/proration.ts";
 import { getModuleCatalog } from "../lib/moduleCatalog.ts";
 import { encryptSecret } from "../lib/crypto.ts";
@@ -550,9 +550,7 @@ appOwnerRouter.put("/modules/:id", moduleIdParams, validateBody(moduleUpdateSche
 appOwnerRouter.get("/plans", async (_req, res) => {
   const plans = await db.select().from(subscriptionPlans).orderBy(subscriptionPlans.priceIdr);
   const allModuleCodes = (await db.select({ code: modules.code }).from(modules)).map((m) => m.code);
-  // "*" ("semua modul") is internal shorthand — expand it so the UI always
-  // has real module codes to look names up by, not a literal "*".
-  res.json(plans.map((p) => ({ ...p, enabledModules: p.enabledModules.includes("*") ? allModuleCodes : p.enabledModules })));
+  res.json(plans.map((p) => ({ ...p, enabledModules: expandModuleCodes(p.enabledModules, allModuleCodes) })));
 });
 
 /** Full module breakdown for a plan — "lihat detail modulnya apa saja" — plus its discount schemes. */
@@ -561,7 +559,7 @@ appOwnerRouter.get("/plans/:id/detail", validateParams(uuidParam("id")), async (
   if (!plan) return res.status(404).json({ error: "Paket tidak ditemukan" });
 
   const allModules = await db.select().from(modules);
-  const planModules = plan.enabledModules.includes("*") ? allModules : allModules.filter((m) => plan.enabledModules.includes(m.code));
+  const planModules = expandModuleRows(plan.enabledModules, allModules);
   const breakdown = calculatePricing({
     selectedModules: planModules,
     maxEntities: plan.maxEntities,
@@ -599,7 +597,7 @@ const planSchema = z.object({
 
 async function resolvePlanPricing(body: z.infer<typeof planSchema>) {
   const allModules = await db.select().from(modules);
-  const selected = body.enabledModules.includes("*") ? allModules : allModules.filter((m) => body.enabledModules.includes(m.code));
+  const selected = expandModuleRows(body.enabledModules, allModules);
   const referenceMonthlyPriceIdr = computeMonthlyReference(selected, body.maxEmployees, body.maxEntities);
   const priceIdr = Math.round(referenceMonthlyPriceIdr * (1 - body.permanentDiscountPercent / 100));
   const markdownRatio = referenceMonthlyPriceIdr > 0 ? priceIdr / referenceMonthlyPriceIdr : 1;

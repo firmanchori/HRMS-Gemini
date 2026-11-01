@@ -5,6 +5,22 @@ export interface ModulePricing {
   pricePerEntityIdr: number;
 }
 
+/**
+ * "*" ("semua modul", used by Enterprise-style plans) is internal shorthand
+ * that must be expanded before any price or display calculation — a plan
+ * stored with enabledModules=["*"] otherwise matches zero real module codes
+ * and silently prices out at Rp 0 (the exact bug this was extracted to
+ * prevent from recurring; see pricing.test.ts).
+ */
+export function expandModuleCodes(enabledModules: string[], allCodes: string[]): string[] {
+  return enabledModules.includes("*") ? allCodes : enabledModules;
+}
+
+/** Same expansion, but filtering full module rows instead of bare codes. */
+export function expandModuleRows<T extends { code: string }>(enabledModules: string[], allRows: T[]): T[] {
+  return enabledModules.includes("*") ? allRows : allRows.filter((r) => enabledModules.includes(r.code));
+}
+
 export interface PricingInput {
   selectedModules: ModulePricing[];
   maxEntities: number;
