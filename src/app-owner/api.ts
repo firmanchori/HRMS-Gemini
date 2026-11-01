@@ -173,6 +173,24 @@ export interface AuditLogPage {
   pageSize: number;
 }
 
+export interface InvoiceLineItem {
+  description: string;
+  amountIdr: number;
+}
+
+export interface Invoice {
+  id: string;
+  tenantId: string;
+  tenantName?: string | null;
+  periodStart: string;
+  periodEnd: string;
+  lineItems: InvoiceLineItem[];
+  totalAmountIdr: number;
+  status: "Pending" | "Paid" | "Cancelled";
+  paidAt: string | null;
+  createdAt: string;
+}
+
 export interface EmailConfig {
   provider: "resend" | "smtp";
   fromName: string;
@@ -348,6 +366,11 @@ export const api = {
     body: JSON.stringify(data),
   }),
   getTenantCredits: (id: string) => request<AccountCredit[]>(`/api/app-owner/tenants/${id}/credits`),
+
+  generateInvoice: (tenantId: string) => request<Invoice>(`/api/app-owner/tenants/${tenantId}/invoices/generate`, { method: "POST" }),
+  listTenantInvoices: (tenantId: string) => request<Invoice[]>(`/api/app-owner/tenants/${tenantId}/invoices`),
+  listAllInvoices: () => request<Invoice[]>("/api/app-owner/invoices"),
+  markInvoicePaid: (id: string) => request<{ ok: true }>(`/api/app-owner/invoices/${id}/mark-paid`, { method: "POST" }),
 
   listInbox: () => request<Inquiry[]>("/api/app-owner/inbox"),
   getInquiry: (id: string) =>

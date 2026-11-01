@@ -192,6 +192,28 @@ export const accountCredits = pgTable("account_credits", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+export const invoiceStatusEnum = pgEnum("invoice_status", ["Pending", "Paid", "Cancelled"]);
+
+/**
+ * A real billing-period invoice — base subscription cost for the period
+ * minus any unconsumed account_credits, as a proper document instead of
+ * the ad-hoc payment_verifications row used for signup/upgrade top-ups.
+ * `lineItems` is the readable breakdown (base charge, each credit applied);
+ * marking Paid is still a manual App Owner action (no payment gateway),
+ * but it's now its own trackable record per billing period per tenant.
+ */
+export const invoices = pgTable("invoices", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  periodStart: timestamp("period_start", { withTimezone: true }).notNull(),
+  periodEnd: timestamp("period_end", { withTimezone: true }).notNull(),
+  lineItems: jsonb("line_items").notNull().$type<{ description: string; amountIdr: number }[]>(),
+  totalAmountIdr: integer("total_amount_idr").notNull(),
+  status: invoiceStatusEnum("status").notNull().default("Pending"),
+  paidAt: timestamp("paid_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 export const users = pgTable("users", {
   id: uuid("id").defaultRandom().primaryKey(),
   tenantId: uuid("tenant_id").references(() => tenants.id),

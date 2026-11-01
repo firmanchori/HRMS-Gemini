@@ -22,6 +22,7 @@ import {
   bankAccounts,
   subscriptionUsageEvents,
   accountCredits,
+  invoices,
 } from "../db/schema.ts";
 import { requireAppOwner } from "../middleware/auth.ts";
 import { logAudit } from "../lib/audit.ts";
@@ -32,6 +33,7 @@ import { resolveEffectiveMonthlyPrice } from "./public.ts";
 import { validateBody, validateParams, validateQuery, uuidParam } from "../lib/validate.ts";
 import { calculatePricing, computeMonthlyReference, computeDisplayReference, expandModuleCodes, expandModuleRows, type ModulePricing } from "../lib/pricing.ts";
 import { proratedAddonCharge } from "../lib/proration.ts";
+import { buildInvoice } from "../lib/invoicing.ts";
 import { getModuleCatalog } from "../lib/moduleCatalog.ts";
 import { encryptSecret } from "../lib/crypto.ts";
 
@@ -385,10 +387,92 @@ appOwnerRouter.post("/tenants/:id/change-plan", tenantIdParams, validateBody(cha
   res.json({ ok: true, direction, proratedAmountIdr });
 });
 
-/** Credit ledger for a tenant — the running balance App Owner manually nets off their next payment verification until real invoicing exists. */
+/** Credit ledger for a tenant — unconsumed rows (consumedAt IS NULL) get applied the next time an invoice is generated for them. */
 appOwnerRouter.get("/tenants/:id/credits", tenantIdParams, async (req, res) => {
   const rows = await db.select().from(accountCredits).where(eq(accountCredits.tenantId, req.params.id)).orderBy(accountCredits.createdAt);
   res.json(rows);
+});
+
+// ---------------------------------------------------------------------------
+// Invoices — a real per-billing-period document (base subscription charge
+// minus unconsumed account_credits), replacing the previous "just net it
+// off by hand" workaround. Still no payment gateway: marking Paid is a
+// manual App Owner action, same trust model as payment verification.
+// ---------------------------------------------------------------------------
+
+function currentCycleBounds(startedAt: Date | null): { periodStart: Date; periodEnd: Date } {
+  const now = new Date();
+  if (!startedAt) return { periodStart: new Date(now.getTime() - BILLING_CYCLE_DAYS * 24 * 60 * 60 * 1000), periodEnd: now };
+  const daysSinceStart = Math.floor((now.getTime() - startedAt.getTime()) / (24 * 60 * 60 * 1000));
+  const dayInCycle = ((daysSinceStart % BILLING_CYCLE_DAYS) + BILLING_CYCLE_DAYS) % BILLING_CYCLE_DAYS;
+  const periodStart = new Date(now.getTime() - dayInCycle * 24 * 60 * 60 * 1000);
+  const periodEnd = new Date(periodStart.getTime() + BILLING_CYCLE_DAYS * 24 * 60 * 60 * 1000);
+  return { periodStart, periodEnd };
+}
+
+appOwnerRouter.post("/tenants/:id/invoices/generate", tenantIdParams, async (req, res) => {
+  const tenantId = req.params.id;
+  const [tenant] = await db.select().from(tenants).where(eq(tenants.id, tenantId)).limit(1);
+  if (!tenant || !tenant.planId) return res.status(404).json({ error: "Tenant atau paket tidak ditemukan" });
+  const [sub] = await db.select().from(tenantSubscriptions).where(eq(tenantSubscriptions.tenantId, tenantId)).limit(1);
+  if (!sub) return res.status(404).json({ error: "Subscription tidak ditemukan" });
+  const [plan] = await db.select().from(subscriptionPlans).where(eq(subscriptionPlans.id, tenant.planId)).limit(1);
+
+  const { monthlyPriceIdr: baseAmountIdr, error } = await resolveEffectiveMonthlyPrice(plan, sub.actualUsers ?? plan.maxEmployees, sub.actualEntities ?? plan.maxEntities);
+  if (error) return res.status(400).json({ error });
+
+  const pendingCredits = await db
+    .select()
+    .from(accountCredits)
+    .where(and(eq(accountCredits.tenantId, tenantId), isNull(accountCredits.consumedAt)))
+    .orderBy(accountCredits.createdAt);
+
+  const { lineItems, totalAmountIdr, consumedCreditIds } = buildInvoice(plan.name, baseAmountIdr, pendingCredits);
+  const { periodStart, periodEnd } = currentCycleBounds(sub.startedAt);
+
+  const [invoice] = await db.insert(invoices).values({ tenantId, periodStart, periodEnd, lineItems, totalAmountIdr }).returning();
+
+  for (const creditId of consumedCreditIds) {
+    await db.update(accountCredits).set({ consumedAt: new Date() }).where(eq(accountCredits.id, creditId));
+  }
+
+  await logAudit({ actorUserId: req.session!.userId, tenantId, action: "invoice.generate", details: { invoiceId: invoice.id, totalAmountIdr, creditsApplied: consumedCreditIds.length } });
+  res.status(201).json(invoice);
+});
+
+appOwnerRouter.get("/tenants/:id/invoices", tenantIdParams, async (req, res) => {
+  const rows = await db.select().from(invoices).where(eq(invoices.tenantId, req.params.id)).orderBy(sql`${invoices.createdAt} desc`);
+  res.json(rows);
+});
+
+appOwnerRouter.get("/invoices", async (_req, res) => {
+  const rows = await db
+    .select({
+      id: invoices.id,
+      tenantId: invoices.tenantId,
+      tenantName: tenants.name,
+      periodStart: invoices.periodStart,
+      periodEnd: invoices.periodEnd,
+      lineItems: invoices.lineItems,
+      totalAmountIdr: invoices.totalAmountIdr,
+      status: invoices.status,
+      paidAt: invoices.paidAt,
+      createdAt: invoices.createdAt,
+    })
+    .from(invoices)
+    .leftJoin(tenants, eq(invoices.tenantId, tenants.id))
+    .orderBy(sql`${invoices.createdAt} desc`);
+  res.json(rows);
+});
+
+appOwnerRouter.post("/invoices/:id/mark-paid", validateParams(uuidParam("id")), async (req, res) => {
+  const [invoice] = await db.select().from(invoices).where(eq(invoices.id, req.params.id)).limit(1);
+  if (!invoice) return res.status(404).json({ error: "Invoice tidak ditemukan" });
+  if (invoice.status === "Paid") return res.status(400).json({ error: "Invoice ini sudah ditandai lunas" });
+
+  await db.update(invoices).set({ status: "Paid", paidAt: new Date() }).where(eq(invoices.id, invoice.id));
+  await logAudit({ actorUserId: req.session!.userId, tenantId: invoice.tenantId, action: "invoice.mark_paid", details: { invoiceId: invoice.id, totalAmountIdr: invoice.totalAmountIdr } });
+  res.json({ ok: true });
 });
 
 // ---------------------------------------------------------------------------

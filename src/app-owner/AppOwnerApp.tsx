@@ -20,9 +20,10 @@ import {
   X,
   ExternalLink,
   Landmark,
+  Receipt,
 } from "lucide-react";
 import { ScrollableTabNav } from "../components/common/ScrollableTabNav";
-import { api, ApiError, type Me, type TenantRow, type Inquiry, type AuditLogRow, type Plan, type BankAccount, type PlanChangePreview, type PlanChangeDirection } from "./api";
+import { api, ApiError, type Me, type TenantRow, type Inquiry, type AuditLogRow, type Plan, type BankAccount, type PlanChangePreview, type PlanChangeDirection, type Invoice } from "./api";
 import { DashboardTab } from "./DashboardTab";
 import { PaymentVerificationTab } from "./PaymentVerificationTab";
 import { ModulesTab } from "./ModulesTab";
@@ -32,6 +33,7 @@ import { AffiliatesTab } from "./AffiliatesTab";
 import { RegisterTenantTab } from "./RegisterTenantTab";
 import { SettingsTab } from "./SettingsTab";
 import { BankAccountsTab } from "./BankAccountsTab";
+import { InvoicesTab, InvoiceDetailModal } from "./InvoicesTab";
 import { ConfirmButton } from "./ConfirmButton";
 
 function ForgotPasswordForm({ onBack }: { onBack: () => void }) {
@@ -411,6 +413,66 @@ function PlanChangeSection({ tenant, onChanged }: { tenant: TenantRow; onChanged
   );
 }
 
+function InvoiceSection({ tenant }: { tenant: TenantRow }) {
+  const [invoiceRows, setInvoiceRows] = useState<Invoice[]>([]);
+  const [detailInvoice, setDetailInvoice] = useState<Invoice | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  async function load() {
+    const rows = await api.listTenantInvoices(tenant.id);
+    setInvoiceRows(rows);
+    if (detailInvoice) setDetailInvoice(rows.find((i) => i.id === detailInvoice.id) ?? null);
+  }
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function generate() {
+    setNotice(null);
+    const invoice = await api.generateInvoice(tenant.id);
+    setNotice(`Invoice Rp ${invoice.totalAmountIdr.toLocaleString("id-ID")} dibuat untuk periode ini.`);
+    await load();
+  }
+
+  return (
+    <div className="border-t border-slate-100 pt-3">
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-xs font-semibold text-slate-700">Invoice</p>
+        <ConfirmButton
+          label="Buat Invoice Bulan Ini"
+          confirmTitle="Buat Invoice untuk Periode Ini?"
+          confirmMessage={`Invoice akan dihitung dari harga paket ${tenant.planName ?? "saat ini"}, dikurangi kredit yang belum terpakai (jika ada).`}
+          onConfirm={generate}
+          className="text-[11px] font-semibold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-md px-2.5 py-1.5"
+        />
+      </div>
+      {notice && <div className="text-xs bg-indigo-50 border border-indigo-200 text-indigo-800 rounded-lg p-2.5 mb-2">{notice}</div>}
+      <div className="space-y-1.5">
+        {invoiceRows.map((inv) => (
+          <button
+            key={inv.id}
+            onClick={() => setDetailInvoice(inv)}
+            className="w-full flex items-center justify-between text-xs border border-slate-200 rounded-md px-3 py-2 hover:bg-slate-50"
+          >
+            <span className="text-slate-500">
+              {new Date(inv.periodStart).toLocaleDateString("id-ID")} – {new Date(inv.periodEnd).toLocaleDateString("id-ID")}
+            </span>
+            <span className="font-mono text-slate-700">Rp {inv.totalAmountIdr.toLocaleString("id-ID")}</span>
+            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${inv.status === "Paid" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-700 border-amber-200"}`}>
+              {inv.status === "Paid" ? "Lunas" : "Belum Lunas"}
+            </span>
+          </button>
+        ))}
+        {invoiceRows.length === 0 && <p className="text-[11px] text-slate-400">Belum ada invoice untuk tenant ini.</p>}
+      </div>
+
+      {detailInvoice && <InvoiceDetailModal invoice={detailInvoice} onClose={() => setDetailInvoice(null)} onChanged={load} />}
+    </div>
+  );
+}
+
 function TenantDetailModal({ tenant, onClose, onChanged }: { tenant: TenantRow; onClose: () => void; onChanged: () => void }) {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -553,6 +615,8 @@ function TenantDetailModal({ tenant, onClose, onChanged }: { tenant: TenantRow; 
               />
             </div>
           </div>
+
+          <InvoiceSection tenant={tenant} />
 
           <PlanChangeSection tenant={tenant} onChanged={onChanged} />
         </div>
@@ -906,6 +970,7 @@ type TabKey =
   | "dashboard"
   | "tenants"
   | "verifications"
+  | "invoices"
   | "modules"
   | "plans"
   | "promotions"
@@ -925,6 +990,7 @@ export function AppOwnerApp() {
     { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
     { key: "tenants", label: "Tenant", icon: Building2 },
     { key: "verifications", label: "Verifikasi Pembayaran", icon: BadgeCheck },
+    { key: "invoices", label: "Invoice", icon: Receipt },
     { key: "plans", label: "Kelola Paket", icon: Package },
     { key: "modules", label: "Modul & Harga", icon: SettingsIcon },
     { key: "promotions", label: "Promo & Diskon", icon: Tag },
@@ -983,6 +1049,7 @@ export function AppOwnerApp() {
         {tab === "dashboard" && <DashboardTab />}
         {tab === "tenants" && <TenantsTab />}
         {tab === "verifications" && <PaymentVerificationTab />}
+        {tab === "invoices" && <InvoicesTab />}
         {tab === "plans" && <PlansTab />}
         {tab === "modules" && <ModulesTab />}
         {tab === "promotions" && <PromotionsTab />}
