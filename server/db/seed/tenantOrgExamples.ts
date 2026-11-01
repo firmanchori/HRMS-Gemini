@@ -59,9 +59,9 @@ async function seedForTenant(subdomain: string) {
     return created;
   }
 
-  const holding = await createEntity("PT Contoh Sejahtera", "HOLD");
-  const anakTeknologi = await createEntity("PT Contoh Teknologi", "TECH", holding);
-  await createEntity("PT Contoh Retail", "RETAIL", holding);
+  const holding = await createEntity(tenant.name, "HOLD");
+  const anakTeknologi = await createEntity(`${tenant.name} Teknologi`, "TECH", holding);
+  await createEntity(`${tenant.name} Retail`, "RETAIL", holding);
 
   // The tenant's registration admin was seeded before entity-scoping existed — link it to
   // the holding now, matching what a real signup does automatically on first entity creation.
