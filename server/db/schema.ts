@@ -7,6 +7,7 @@ import {
   jsonb,
   uuid,
   pgEnum,
+  primaryKey,
 } from "drizzle-orm/pg-core";
 
 export const tenantStatusEnum = pgEnum("tenant_status", [
@@ -377,5 +378,209 @@ export const contactReplies = pgTable("contact_replies", {
   inquiryId: uuid("inquiry_id").references(() => contactInquiries.id).notNull(),
   body: text("body").notNull(),
   sentByUserId: uuid("sent_by_user_id").references(() => users.id).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+// ---------------------------------------------------------------------------
+// Tenant-side company structure (docs/ERD.md §4.4a/§4.4) — entities form an
+// UNLIMITED-DEPTH tree (not the old fixed holding/anak/cucu 3-level enum),
+// with visibility and settings-delegation rules that are asymmetric and
+// hierarchical, not just tenant-scoped:
+//   - An ancestor entity sees ALL of its descendants' data.
+//   - A child entity sees only itself + its own descendants.
+//   - Sibling entities (two children of the same parent) NEVER see each
+//     other, even though their shared parent sees both.
+// entity_closure makes "which entities can X see" an O(1) indexed lookup
+// instead of a recursive query, and is maintained by server/lib/orgStructure.ts
+// whenever a new entity is created (copy the parent's own closure rows,
+// each one depth+1, plus a self row at depth 0).
+// ---------------------------------------------------------------------------
+
+export const entityRelationTypeEnum = pgEnum("entity_relation_type", ["resmi", "administratif"]);
+export const entityStatusEnum = pgEnum("entity_status", ["Aktif", "Nonaktif"]);
+
+export const companyEntities = pgTable("company_entities", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  // NULL = this tenant's root entity. A tenant may have more than one root
+  // only in edge cases (e.g. migrating two formerly-separate companies into
+  // one tenant) — the common case is exactly one root per tenant.
+  parentEntityId: uuid("parent_entity_id").references((): any => companyEntities.id),
+  name: text("name").notNull(),
+  code: text("code").notNull(),
+  // Deliberately NOT globally unique — sibling/child entities are allowed to
+  // reuse their parent's email domain (see docs/PRD.md §1.1 poin 4).
+  emailDomain: text("email_domain"),
+  relationType: entityRelationTypeEnum("relation_type").notNull().default("resmi"),
+  // Lean entities can skip the Department layer and go straight Divisi -> Jabatan.
+  useDepartmentLevel: boolean("use_department_level").notNull().default(true),
+  npwp: text("npwp"),
+  address: text("address"),
+  city: text("city"),
+  nikPattern: text("nik_pattern"),
+  docPrefix: text("doc_prefix"),
+  status: entityStatusEnum("status").notNull().default("Aktif"),
+  createdByEntityId: uuid("created_by_entity_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const entityClosure = pgTable(
+  "entity_closure",
+  {
+    ancestorEntityId: uuid("ancestor_entity_id").references(() => companyEntities.id).notNull(),
+    descendantEntityId: uuid("descendant_entity_id").references(() => companyEntities.id).notNull(),
+    // 0 = self row (every entity is its own descendant at depth 0).
+    depth: integer("depth").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.ancestorEntityId, table.descendantEntityId] })]
+);
+
+/**
+ * Settings inheritance (user correction, 2026-11-01): a child entity "membawa
+ * pengaturan dari parent" as a ONE-TIME DEAD COPY at creation time — never a
+ * live link. Changing the parent's settings later must NOT retroactively
+ * change a child that already copied them. For company_entities itself this
+ * just means: when creating a child with a parentEntityId, any of
+ * nikPattern/docPrefix/useDepartmentLevel/relationType the request omits are
+ * copied from the parent's CURRENT column values at that instant (plain
+ * column defaults set once on INSERT — see resolveEntityDefaults in
+ * server/routes/tenant.ts), not a separate overrides/delegation table.
+ * Covers every module's settings going forward ("semua modul", not a fixed
+ * list) the same way: copy the current value once, store it as the child's
+ * own independent value.
+ */
+
+export const companyDivisions = pgTable("company_divisions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  entityId: uuid("entity_id").references(() => companyEntities.id).notNull(),
+  code: text("code").notNull(),
+  name: text("name").notNull(),
+  headTitle: text("head_title"),
+  description: text("description"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const companyDepartments = pgTable("company_departments", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  entityId: uuid("entity_id").references(() => companyEntities.id).notNull(),
+  divisionId: uuid("division_id").references(() => companyDivisions.id),
+  code: text("code").notNull(),
+  name: text("name").notNull(),
+  headTitle: text("head_title"),
+  description: text("description"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const gradingSchemeEnum = pgEnum("grading_scheme", ["single", "broadbanding"]);
+
+/** Jabatan catalog/dictionary per entity — not itself an org-chart node (see orgStructureNodes below, which references this). */
+export const masterJobPositions = pgTable("master_job_positions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  entityId: uuid("entity_id").references(() => companyEntities.id).notNull(),
+  code: text("code").notNull(),
+  title: text("title").notNull(),
+  defaultLevel: integer("default_level").notNull().default(5), // 1 Direksi .. 5 Staff
+  divisionId: uuid("division_id").references(() => companyDivisions.id),
+  departmentId: uuid("department_id").references(() => companyDepartments.id),
+  jobFamily: text("job_family"),
+  jobGrade: text("job_grade"),
+  minGrade: text("min_grade"),
+  maxGrade: text("max_grade"),
+  gradingScheme: gradingSchemeEnum("grading_scheme").notNull().default("single"),
+  description: text("description"),
+  requirements: text("requirements"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const gradeSalaryRanges = pgTable("grade_salary_ranges", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  entityId: uuid("entity_id").references(() => companyEntities.id), // NULL = tenant-wide grade (shared across entities)
+  gradeCode: text("grade_code").notNull(),
+  gradeName: text("grade_name").notNull(),
+  minSalary: integer("min_salary"),
+  midSalary: integer("mid_salary"),
+  maxSalary: integer("max_salary"),
+  singleValueSalary: integer("single_value_salary"),
+  effectiveDate: timestamp("effective_date", { withTimezone: true }).defaultNow().notNull(),
+  version: integer("version").notNull().default(1),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const orgNodeRelationTypeEnum = pgEnum("org_node_relation_type", ["struktural", "administratif"]);
+
+/**
+ * Formal structure-change workflow (user correction, 2026-11-01): editing
+ * divisions/departments/positions/org-nodes is NEVER a direct silent edit —
+ * HR drafts a proposal, it only becomes real once approved AND carries an
+ * official letter reference ("surat resmi"), matching the existing frontend
+ * concept (OrgChangeProposal / "restructure draft" in OrganizationManagement.tsx).
+ * This is deliberately separate from personnel mutation (promosi/demosi/
+ * mutasi of a specific employee) — struktur is the skeleton (who reports to
+ * whom, what positions exist); personalia is who currently occupies it.
+ * Personnel-mutation history is out of scope until the employees table
+ * exists (next phase) and must never be logged in this table.
+ */
+export const orgChangeProposalStatusEnum = pgEnum("org_change_proposal_status", ["Draft", "PendingApproval", "Approved", "Rejected"]);
+
+export const orgChangeProposals = pgTable("org_change_proposals", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  entityId: uuid("entity_id").references(() => companyEntities.id).notNull(),
+  title: text("title").notNull(),
+  description: text("description"),
+  // Required before a proposal may move to Approved — "bukan hanya sekedar
+  // asal ubah". Validated in server/routes/tenant.ts, not just a UI hint.
+  officialLetterNumber: text("official_letter_number"),
+  // The proposed diff: { divisions: {create:[], update:[], delete:[]}, departments: {...}, positions: {...}, orgNodes: {...} }
+  changes: jsonb("changes").notNull().$type<Record<string, unknown>>(),
+  status: orgChangeProposalStatusEnum("status").notNull().default("Draft"),
+  proposedByUserId: uuid("proposed_by_user_id").references(() => users.id).notNull(),
+  approvedByUserId: uuid("approved_by_user_id").references(() => users.id),
+  approvedAt: timestamp("approved_at", { withTimezone: true }),
+  rejectionReason: text("rejection_reason"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+/** A full snapshot of one entity's structure, taken automatically right before a proposal is applied — the "riwayat perubahan struktur". */
+export const orgStructureSnapshots = pgTable("org_structure_snapshots", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  entityId: uuid("entity_id").references(() => companyEntities.id).notNull(),
+  proposalId: uuid("proposal_id").references(() => orgChangeProposals.id),
+  divisions: jsonb("divisions").notNull().$type<unknown[]>(),
+  departments: jsonb("departments").notNull().$type<unknown[]>(),
+  orgNodes: jsonb("org_nodes").notNull().$type<unknown[]>(),
+  takenAt: timestamp("taken_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+/**
+ * The actual org chart node (self-referencing via reportsToId) — distinct
+ * from masterJobPositions, which is just the position catalog/dictionary.
+ * currentEmployeeId is deliberately NOT a column yet: there is no employees
+ * table in this phase (struktur organisasi first, data karyawan next) — it
+ * will be added as a real FK once that table exists, per docs/ERD.md §4.4
+ * ("setiap aksi Personalia WAJIB meng-update org_structure_nodes.current_employee_id
+ * ... dalam satu transaksi").
+ */
+export const orgStructureNodes = pgTable("org_structure_nodes", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  entityId: uuid("entity_id").references(() => companyEntities.id).notNull(),
+  title: text("title").notNull(),
+  divisionId: uuid("division_id").references(() => companyDivisions.id),
+  departmentId: uuid("department_id").references(() => companyDepartments.id),
+  code: text("code"),
+  jobGrade: text("job_grade"),
+  description: text("description"),
+  reportsToId: uuid("reports_to_id").references((): any => orgStructureNodes.id),
+  relationType: orgNodeRelationTypeEnum("relation_type").notNull().default("struktural"),
+  isVacant: boolean("is_vacant").notNull().default(true),
+  level: integer("level").notNull().default(1),
+  masterJobPositionId: uuid("master_job_position_id").references(() => masterJobPositions.id),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });

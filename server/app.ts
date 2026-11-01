@@ -7,6 +7,7 @@ import { resolveTenant } from "./middleware/tenant.ts";
 import { authRouter } from "./routes/auth.ts";
 import { publicRouter } from "./routes/public.ts";
 import { appOwnerRouter } from "./routes/appOwner.ts";
+import { tenantRouter } from "./routes/tenant.ts";
 import { globalLimiter } from "./lib/rateLimit.ts";
 
 /**
@@ -44,6 +45,7 @@ export function createApp() {
   app.use("/api/auth", authRouter);
   app.use("/api", publicRouter);
   app.use("/api/app-owner", appOwnerRouter);
+  app.use("/api/tenant", tenantRouter);
 
   app.get("/api/health", (_req, res) => {
     res.json({ ok: true, tenant: _req.tenant?.subdomain ?? "app-owner" });
