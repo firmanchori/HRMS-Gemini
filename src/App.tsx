@@ -30,6 +30,7 @@ import { UniversalFilePreviewModal } from './components/common/UniversalFilePrev
 import { CommandPaletteModal } from './components/common/CommandPaletteModal';
 import { CandidateOnlineTestPortal } from './components/modules/CandidateOnlineTestPortal';
 import { LoginScreen } from './components/auth/LoginScreen';
+import { authApi } from './shared/authApi';
 import { UserRole } from './types/hrms';
 
 const MainLayout: React.FC = () => {
@@ -41,9 +42,11 @@ const MainLayout: React.FC = () => {
     return params.get('testToken') || params.get('token');
   });
 
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    return localStorage.getItem('nusahr_is_logged_out') !== 'true';
-  });
+  // Real session: the httpOnly cookie from a successful login persists
+  // server-side, but there's no "am I already logged in" check on mount yet
+  // (matching the App Owner console's current behavior) — every fresh page
+  // load requires logging in again via the real backend.
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isMigrationWizardOpen, setIsMigrationWizardOpen] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isDesktopCollapsed, setIsDesktopCollapsed] = useState(false);
@@ -190,7 +193,6 @@ const MainLayout: React.FC = () => {
     return (
       <LoginScreen
         onLoginSuccess={(email, role) => {
-          localStorage.removeItem('nusahr_is_logged_out');
           if (role) {
             setCurrentUserRole(role as UserRole);
           }
@@ -225,7 +227,7 @@ const MainLayout: React.FC = () => {
           }}
           isDesktopCollapsed={isDesktopCollapsed}
           onLogout={() => {
-            localStorage.setItem('nusahr_is_logged_out', 'true');
+            authApi.logout().catch(() => {});
             setIsAuthenticated(false);
           }}
         />

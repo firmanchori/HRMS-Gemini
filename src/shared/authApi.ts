@@ -25,7 +25,16 @@ async function post<T>(path: string, body?: unknown): Promise<T> {
   return json as T;
 }
 
+export interface AuthUser {
+  id: string;
+  name: string;
+  email: string;
+  role: "app_owner" | "tenant_admin";
+}
+
 export const authApi = {
+  login: (email: string, password: string) => post<AuthUser>("/api/auth/login", { email, password }),
+  logout: () => post<{ ok: true }>("/api/auth/logout"),
   forgotPassword: (email: string) => post<{ ok: true }>("/api/auth/forgot-password", { email }),
   resetPassword: (token: string, newPassword: string) =>
     post<{ ok: true }>(`/api/auth/reset-password/${token}`, { newPassword }),
