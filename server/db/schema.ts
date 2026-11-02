@@ -659,8 +659,6 @@ export const fieldsOfStudy = pgTable("fields_of_study", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-export const employmentStatusEnum = pgEnum("employment_status", ["Aktif", "Cuti Panjang", "Resign", "Diberhentikan", "Pensiun"]);
-
 /**
  * The actual headcount — distinct from orgStructureNodes (the skeleton
  * position/slot) and masterJobPositions (the position dictionary). An
@@ -669,23 +667,39 @@ export const employmentStatusEnum = pgEnum("employment_status", ["Aktif", "Cuti 
  * separate lookup for now to avoid a cross-cutting change to the org
  * module's own transactions).
  */
+/**
+ * The full employee record — core queryable/joinable columns here, every
+ * other field (identity docs, BPJS, bank, allowances, education, family,
+ * emergency contacts, ...) in `details` jsonb, same pattern as
+ * candidates/jobVacancies/onboardingProcesses. `status` is plain text, not
+ * an enum: it must accept the frontend's own value set (user-facing
+ * 'Aktif'/'Cuti Panjang'/'Resign'/'PHK'), which doesn't fully overlap with
+ * what this table originally shipped with for the recruitment-only
+ * "replacement employee" dropdown (Resign/Diberhentikan/Pensiun) — a rigid
+ * enum would just force another migration the next time these drift.
+ */
 export const employees = pgTable("employees", {
   id: uuid("id").defaultRandom().primaryKey(),
   tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
   entityId: uuid("entity_id").references(() => companyEntities.id).notNull(),
   nik: text("nik").notNull(),
-  name: text("name").notNull(),
+  fullName: text("full_name").notNull(),
   email: text("email"),
   phone: text("phone"),
-  photoUrl: text("photo_url"),
+  avatar: text("avatar"),
+  employmentType: text("employment_type").notNull().default("Kontrak"),
   positionId: uuid("position_id").references(() => masterJobPositions.id),
   divisionId: uuid("division_id").references(() => companyDivisions.id),
   departmentId: uuid("department_id").references(() => companyDepartments.id),
   orgNodeId: uuid("org_node_id").references(() => orgStructureNodes.id),
-  employmentStatus: employmentStatusEnum("employment_status").notNull().default("Aktif"),
+  managerId: uuid("manager_id").references((): any => employees.id),
+  candidateId: uuid("candidate_id").references((): any => candidates.id),
+  status: text("status").notNull().default("Aktif"),
+  basicSalary: integer("basic_salary").notNull().default(0),
   joinDate: timestamp("join_date", { withTimezone: true }),
   resignDate: timestamp("resign_date", { withTimezone: true }),
   resignReason: text("resign_reason"),
+  details: jsonb("details").notNull().default({}).$type<Record<string, unknown>>(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
@@ -885,3 +899,63 @@ export const onboardingChecklistTemplates = pgTable("onboarding_checklist_templa
   subItems: jsonb("sub_items").notNull().default([]).$type<string[]>(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+export const probationRecommendationEnum = pgEnum("probation_recommendation", ["Lulus", "Perpanjang Probation", "Tidak Lulus"]);
+export const probationStatusEnum = pgEnum("probation_status", ["Draft", "Menunggu Approval", "Disetujui", "Ditolak"]);
+
+/** Probation (masa percobaan) evaluation — Manajemen Karyawan sub-menu. */
+export const probationEvaluations = pgTable("probation_evaluations", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  employeeId: uuid("employee_id").references(() => employees.id).notNull(),
+  supervisorId: uuid("supervisor_id").references(() => employees.id),
+  evaluationDate: timestamp("evaluation_date", { withTimezone: true }).defaultNow().notNull(),
+  technicalSkillScore: integer("technical_skill_score").notNull(),
+  disciplineScore: integer("discipline_score").notNull(),
+  teamworkScore: integer("teamwork_score").notNull(),
+  initiativeScore: integer("initiative_score").notNull(),
+  overallScore: integer("overall_score").notNull(),
+  recommendation: probationRecommendationEnum("recommendation").notNull(),
+  extensionDurationMonths: integer("extension_duration_months"),
+  notes: text("notes"),
+  status: probationStatusEnum("status").notNull().default("Draft"),
+  approvedBy: text("approved_by"),
+  skDocNumber: text("sk_doc_number"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const contractRecommendationEnum = pgEnum("contract_recommendation", ["Perpanjang PKWT", "Alih Status PKWTT (Tetap)", "Tidak Diperpanjang"]);
+export const contractReviewStatusEnum = pgEnum("contract_review_status", ["Menunggu Approval", "Disetujui", "Ditolak"]);
+
+/** Contract renewal (PKWT) review — Manajemen Karyawan sub-menu. */
+export const contractRenewalReviews = pgTable("contract_renewal_reviews", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  employeeId: uuid("employee_id").references(() => employees.id).notNull(),
+  currentContractEnd: timestamp("current_contract_end", { withTimezone: true }).notNull(),
+  recommendation: contractRecommendationEnum("recommendation").notNull(),
+  newDurationMonths: integer("new_duration_months"),
+  notes: text("notes"),
+  status: contractReviewStatusEnum("status").notNull().default("Menunggu Approval"),
+  approvedBy: text("approved_by"),
+  newContractDocNumber: text("new_contract_doc_number"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+/**
+ * Generic per-module settings blob (src/types/hrms.ts ModuleSettingsConfig)
+ * — one jsonb row per tenant per module key (employee/attendance/payroll/
+ * ...). Lets each module's "Pengaturan" tab persist for real without a
+ * dedicated table per module; moduleKey values are whatever the frontend
+ * already uses (not enumerated here).
+ */
+export const tenantModuleSettings = pgTable(
+  "tenant_module_settings",
+  {
+    tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+    moduleKey: text("module_key").notNull(),
+    settings: jsonb("settings").notNull().default({}).$type<Record<string, unknown>>(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.tenantId, table.moduleKey] })]
+);

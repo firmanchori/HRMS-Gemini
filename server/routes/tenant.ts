@@ -26,6 +26,9 @@ import {
   competencyTestTypeSettings,
   interviewTypeSettings,
   onboardingChecklistTemplates,
+  probationEvaluations,
+  contractRenewalReviews,
+  tenantModuleSettings,
 } from "../db/schema.ts";
 import { requireTenantAdmin } from "../middleware/auth.ts";
 import { validateBody, validateParams, uuidParam } from "../lib/validate.ts";
@@ -869,24 +872,36 @@ tenantRouter.get("/employees/inactive", async (req, res) => {
   const visibleEntityIds = visibleRows.map((r) => r.id);
   if (visibleEntityIds.length === 0) return res.json([]);
   const rows = await db.select().from(employees).where(and(eq(employees.tenantId, tenantId), inArray(employees.entityId, visibleEntityIds)));
-  res.json(rows.filter((e) => e.employmentStatus !== "Aktif"));
+  res.json(rows.filter((e) => e.status !== "Aktif"));
 });
 
+/**
+ * The full employee record (src/types/hrms.ts Employee, ~90 fields). Only
+ * the columns this route/other modules actually query or join on are
+ * first-class (see schema.ts); every other field (identity docs, BPJS,
+ * bank, allowances, education, family, emergency contacts, ...) rides in
+ * `details`, same pattern as candidates/jobVacancies/onboardingProcesses.
+ */
 const employeeSchema = z.object({
   entityId: z.string().uuid(),
   nik: z.string().trim().min(1).max(50),
-  name: z.string().trim().min(2).max(200),
+  fullName: z.string().trim().min(2).max(200),
   email: z.string().trim().email().optional(),
   phone: z.string().trim().max(50).optional(),
-  photoUrl: z.string().trim().max(2000).optional(),
+  avatar: z.string().trim().max(2000).optional(),
+  employmentType: z.string().trim().max(50).optional(),
   positionId: z.string().uuid().optional(),
   divisionId: z.string().uuid().optional(),
   departmentId: z.string().uuid().optional(),
   orgNodeId: z.string().uuid().optional(),
-  employmentStatus: z.enum(["Aktif", "Cuti Panjang", "Resign", "Diberhentikan", "Pensiun"]).optional(),
+  managerId: z.string().uuid().optional(),
+  candidateId: z.string().uuid().optional(),
+  status: z.string().trim().max(50).optional(),
+  basicSalary: z.number().int().min(0).optional(),
   joinDate: z.string().datetime().optional(),
   resignDate: z.string().datetime().optional(),
   resignReason: z.string().trim().max(500).optional(),
+  details: z.record(z.string(), z.unknown()).optional(),
 });
 
 tenantRouter.post("/employees", validateBody(employeeSchema), async (req, res) => {
@@ -906,6 +921,14 @@ tenantRouter.put("/employees/:id", validateParams(uuidParam("id")), validateBody
   if (!updated) return res.status(404).json({ error: "Karyawan tidak ditemukan" });
   await logAudit({ actorUserId: req.session!.userId, tenantId, action: "employee.update", details: { employeeId: updated.id } });
   res.json(updated);
+});
+
+tenantRouter.delete("/employees/:id", validateParams(uuidParam("id")), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [deleted] = await db.delete(employees).where(and(eq(employees.id, req.params.id), eq(employees.tenantId, tenantId))).returning();
+  if (!deleted) return res.status(404).json({ error: "Karyawan tidak ditemukan" });
+  await logAudit({ actorUserId: req.session!.userId, tenantId, action: "employee.delete", details: { employeeId: deleted.id } });
+  res.json({ ok: true });
 });
 
 // ---------------------------------------------------------------------------
@@ -1000,7 +1023,7 @@ tenantRouter.post("/job-requisitions", validateBody(jobRequisitionSchema), async
   if (req.body.requisitionType === "Penggantian" && req.body.replacementEmployeeId) {
     const [replacement] = await db.select().from(employees).where(eq(employees.id, req.body.replacementEmployeeId)).limit(1);
     if (!replacement || replacement.tenantId !== tenantId) return res.status(404).json({ error: "Karyawan pengganti tidak ditemukan" });
-    if (replacement.employmentStatus === "Aktif") {
+    if (replacement.status === "Aktif") {
       return res.status(400).json({ error: "Karyawan yang dipilih sebagai 'Nama Karyawan Sebelumnya' masih berstatus Aktif" });
     }
   }
@@ -1298,4 +1321,115 @@ tenantRouter.delete("/onboarding-checklist-templates/:id", validateParams(uuidPa
   const [deleted] = await db.delete(onboardingChecklistTemplates).where(and(eq(onboardingChecklistTemplates.id, req.params.id), eq(onboardingChecklistTemplates.tenantId, tenantId))).returning();
   if (!deleted) return res.status(404).json({ error: "Template checklist tidak ditemukan" });
   res.json({ ok: true });
+});
+
+// ---------------------------------------------------------------------------
+// Probation Evaluations & Contract Renewal Reviews — Manajemen Karyawan sub-menus.
+// ---------------------------------------------------------------------------
+
+tenantRouter.get("/probation-evaluations", async (req, res) => {
+  res.json(await db.select().from(probationEvaluations).where(eq(probationEvaluations.tenantId, req.session!.tenantId!)));
+});
+
+const probationEvaluationSchema = z.object({
+  employeeId: z.string().uuid(),
+  supervisorId: z.string().uuid().optional(),
+  evaluationDate: z.string().datetime().optional(),
+  technicalSkillScore: z.number().int().min(0).max(100),
+  disciplineScore: z.number().int().min(0).max(100),
+  teamworkScore: z.number().int().min(0).max(100),
+  initiativeScore: z.number().int().min(0).max(100),
+  overallScore: z.number().int().min(0).max(100),
+  recommendation: z.enum(["Lulus", "Perpanjang Probation", "Tidak Lulus"]),
+  extensionDurationMonths: z.number().int().min(0).optional(),
+  notes: z.string().trim().max(2000).optional(),
+  status: z.enum(["Draft", "Menunggu Approval", "Disetujui", "Ditolak"]).optional(),
+  approvedBy: z.string().trim().max(200).optional(),
+  skDocNumber: z.string().trim().max(100).optional(),
+});
+
+tenantRouter.post("/probation-evaluations", validateBody(probationEvaluationSchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [created] = await db.insert(probationEvaluations).values({ ...req.body, tenantId }).returning();
+  await logAudit({ actorUserId: req.session!.userId, tenantId, action: "probation_evaluation.create", details: { probationEvaluationId: created.id } });
+  res.status(201).json(created);
+});
+
+tenantRouter.put("/probation-evaluations/:id", validateParams(uuidParam("id")), validateBody(probationEvaluationSchema.partial()), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [updated] = await db
+    .update(probationEvaluations)
+    .set(req.body)
+    .where(and(eq(probationEvaluations.id, req.params.id), eq(probationEvaluations.tenantId, tenantId)))
+    .returning();
+  if (!updated) return res.status(404).json({ error: "Evaluasi probation tidak ditemukan" });
+  await logAudit({ actorUserId: req.session!.userId, tenantId, action: "probation_evaluation.update", details: { probationEvaluationId: updated.id } });
+  res.json(updated);
+});
+
+tenantRouter.get("/contract-renewal-reviews", async (req, res) => {
+  res.json(await db.select().from(contractRenewalReviews).where(eq(contractRenewalReviews.tenantId, req.session!.tenantId!)));
+});
+
+const contractRenewalReviewSchema = z.object({
+  employeeId: z.string().uuid(),
+  currentContractEnd: z.string().datetime(),
+  recommendation: z.enum(["Perpanjang PKWT", "Alih Status PKWTT (Tetap)", "Tidak Diperpanjang"]),
+  newDurationMonths: z.number().int().min(0).optional(),
+  notes: z.string().trim().max(2000).optional(),
+  status: z.enum(["Menunggu Approval", "Disetujui", "Ditolak"]).optional(),
+  approvedBy: z.string().trim().max(200).optional(),
+  newContractDocNumber: z.string().trim().max(100).optional(),
+});
+
+tenantRouter.post("/contract-renewal-reviews", validateBody(contractRenewalReviewSchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [created] = await db.insert(contractRenewalReviews).values({ ...req.body, tenantId }).returning();
+  await logAudit({ actorUserId: req.session!.userId, tenantId, action: "contract_renewal_review.create", details: { contractRenewalReviewId: created.id } });
+  res.status(201).json(created);
+});
+
+tenantRouter.put("/contract-renewal-reviews/:id", validateParams(uuidParam("id")), validateBody(contractRenewalReviewSchema.partial()), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [updated] = await db
+    .update(contractRenewalReviews)
+    .set(req.body)
+    .where(and(eq(contractRenewalReviews.id, req.params.id), eq(contractRenewalReviews.tenantId, tenantId)))
+    .returning();
+  if (!updated) return res.status(404).json({ error: "Review kontrak tidak ditemukan" });
+  await logAudit({ actorUserId: req.session!.userId, tenantId, action: "contract_renewal_review.update", details: { contractRenewalReviewId: updated.id } });
+  res.json(updated);
+});
+
+// ---------------------------------------------------------------------------
+// Generic per-module settings blob — every module's "Pengaturan" tab.
+// ---------------------------------------------------------------------------
+
+tenantRouter.get("/module-settings", async (req, res) => {
+  const rows = await db.select().from(tenantModuleSettings).where(eq(tenantModuleSettings.tenantId, req.session!.tenantId!));
+  const map: Record<string, Record<string, unknown>> = {};
+  for (const row of rows) map[row.moduleKey] = row.settings;
+  res.json(map);
+});
+
+const moduleSettingsSchema = z.object({ settings: z.record(z.string(), z.unknown()) });
+
+tenantRouter.put("/module-settings/:moduleKey", validateBody(moduleSettingsSchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const moduleKey = req.params.moduleKey;
+  const [existing] = await db
+    .select()
+    .from(tenantModuleSettings)
+    .where(and(eq(tenantModuleSettings.tenantId, tenantId), eq(tenantModuleSettings.moduleKey, moduleKey)))
+    .limit(1);
+  if (existing) {
+    const [updated] = await db
+      .update(tenantModuleSettings)
+      .set({ settings: req.body.settings, updatedAt: new Date() })
+      .where(and(eq(tenantModuleSettings.tenantId, tenantId), eq(tenantModuleSettings.moduleKey, moduleKey)))
+      .returning();
+    return res.json(updated);
+  }
+  const [created] = await db.insert(tenantModuleSettings).values({ tenantId, moduleKey, settings: req.body.settings }).returning();
+  res.status(201).json(created);
 });

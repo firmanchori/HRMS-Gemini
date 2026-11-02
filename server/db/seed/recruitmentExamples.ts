@@ -257,24 +257,24 @@ export async function seedRecruitmentSamplesForContoh() {
         tenantId: tenant.id,
         entityId: holding.id,
         nik: "202601.0001",
-        name: "Siti Rahma",
+        fullName: "Siti Rahma",
         email: "siti.rahma@contoh.local",
         positionId: hrmPosition?.id,
         divisionId: hrDivision?.id,
         departmentId: recruitDept?.id,
-        employmentStatus: "Aktif",
+        status: "Aktif",
         joinDate: new Date("2023-02-01"),
       },
       {
         tenantId: tenant.id,
         entityId: holding.id,
         nik: "202401.0002",
-        name: "Budi Santoso",
+        fullName: "Budi Santoso",
         email: "budi.santoso@contoh.local",
         positionId: hrsPosition?.id,
         divisionId: hrDivision?.id,
         departmentId: recruitDept?.id,
-        employmentStatus: "Resign",
+        status: "Resign",
         joinDate: new Date("2022-05-01"),
         resignDate: new Date("2026-09-15"),
         resignReason: "Mengundurkan diri — melanjutkan studi",
@@ -283,12 +283,12 @@ export async function seedRecruitmentSamplesForContoh() {
         tenantId: tenant.id,
         entityId: holding.id,
         nik: "202401.0003",
-        name: "Dewi Kartika",
+        fullName: "Dewi Kartika",
         email: "dewi.kartika@contoh.local",
         positionId: hrsPosition?.id,
         divisionId: hrDivision?.id,
         departmentId: recruitDept?.id,
-        employmentStatus: "Diberhentikan",
+        status: "PHK",
         joinDate: new Date("2021-08-01"),
         resignDate: new Date("2026-06-30"),
         resignReason: "Pemutusan hubungan kerja — restrukturisasi",
@@ -296,7 +296,7 @@ export async function seedRecruitmentSamplesForContoh() {
     ])
     .returning();
 
-  const replacementCandidate = seededEmployees.find((e) => e.name === "Budi Santoso")!;
+  const replacementCandidate = seededEmployees.find((e) => e.fullName === "Budi Santoso")!;
 
   const [levelS1] = await db.select().from(educationLevels).where(and(eq(educationLevels.tenantId, tenant.id), eq(educationLevels.name, "S1"))).limit(1);
   const studyFields = await db.select().from(fieldsOfStudy).where(and(eq(fieldsOfStudy.tenantId, tenant.id))).limit(2);

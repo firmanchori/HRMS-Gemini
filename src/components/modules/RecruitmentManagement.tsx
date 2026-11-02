@@ -2077,7 +2077,7 @@ export const RecruitmentManagement: React.FC = () => {
     setFptkMinExp(req.minExperience || fptkMinExp);
     const expMatch = /(\d+)/.exec(req.minExperience || '');
     setFptkMinExpYears(expMatch ? parseInt(expMatch[1], 10) : 0);
-    setFptkReplacementEmployeeId(inactiveEmployees.find((e) => (req.replacementFor || '').startsWith(e.name))?.id || '');
+    setFptkReplacementEmployeeId(inactiveEmployees.find((e) => (req.replacementFor || '').startsWith(e.fullName))?.id || '');
     setFptkSkills(req.skills || '');
     setFptkOtherRequirements(req.otherRequirements || '');
     setFptkRequirements('');
@@ -9895,12 +9895,12 @@ PT Nusantara Multi Talenta Tbk`);
                       {!isFinalized ? (
                         <button
                           type="button"
-                          onClick={() => {
+                          onClick={async () => {
                             if (!isAllMandatoryDone) {
                               alert(`Masih ada ${mandatoryRemaining} tugas wajib yang belum diselesaikan oleh departemen terkait!`);
                               return;
                             }
-                            const createdEmp = completeOnboardingProcess(process.id);
+                            const createdEmp = await completeOnboardingProcess(process.id);
                             if (createdEmp) {
                               const empName = createdEmp.fullName || (createdEmp as any).name || process.employeeName;
                               setToastFeedback(`Selamat! NIK resmi ${createdEmp.nik} telah diterbitkan untuk ${empName}. Data resmi masuk ke Modul Personalia.`);
@@ -10537,14 +10537,14 @@ PT Nusantara Multi Talenta Tbk`);
                     <SearchableSelect
                       options={inactiveEmployees.map((emp) => ({
                         value: emp.id,
-                        label: emp.name,
-                        sublabel: `${emp.nik} · ${emp.employmentStatus}`,
+                        label: emp.fullName,
+                        sublabel: `${emp.nik} · ${emp.status}`,
                       }))}
                       value={fptkReplacementEmployeeId}
                       onChange={(id) => {
                         setFptkReplacementEmployeeId(id);
                         const emp = inactiveEmployees.find((e) => e.id === id);
-                        setFptkReplacementFor(emp ? `${emp.name} (${emp.employmentStatus})` : '');
+                        setFptkReplacementFor(emp ? `${emp.fullName} (${emp.status})` : '');
                       }}
                       placeholder="-- Pilih karyawan yang sudah keluar/non-aktif --"
                       disabled={!fptkReason.includes('Penggantian')}

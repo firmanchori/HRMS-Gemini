@@ -169,25 +169,36 @@ export interface FieldOfStudy {
   isActive: boolean;
 }
 
-export type EmploymentStatus = "Aktif" | "Cuti Panjang" | "Resign" | "Diberhentikan" | "Pensiun";
-
+/**
+ * Full employee record (src/types/hrms.ts Employee, ~90 fields). Core
+ * queryable/joinable columns are first-class; everything else (identity
+ * docs, BPJS, bank, allowances, education, family, emergency contacts,
+ * contract info, probation, ...) lives in `details`, same pattern as
+ * Candidate/JobVacancy/OnboardingProcess.
+ */
 export interface Employee {
   id: string;
   tenantId: string;
   entityId: string;
   nik: string;
-  name: string;
+  fullName: string;
   email: string | null;
   phone: string | null;
-  photoUrl: string | null;
+  avatar: string | null;
+  employmentType: string;
   positionId: string | null;
   divisionId: string | null;
   departmentId: string | null;
   orgNodeId: string | null;
-  employmentStatus: EmploymentStatus;
+  managerId: string | null;
+  candidateId: string | null;
+  status: string;
+  basicSalary: number;
   joinDate: string | null;
   resignDate: string | null;
   resignReason: string | null;
+  details: Record<string, unknown>;
+  createdAt: string;
 }
 
 export interface DocumentSignatoryConfig {
@@ -320,6 +331,38 @@ export interface OnboardingChecklistTemplateItem {
   subItems: string[];
 }
 
+export interface ProbationEvaluation {
+  id: string;
+  tenantId: string;
+  employeeId: string;
+  supervisorId: string | null;
+  evaluationDate: string;
+  technicalSkillScore: number;
+  disciplineScore: number;
+  teamworkScore: number;
+  initiativeScore: number;
+  overallScore: number;
+  recommendation: "Lulus" | "Perpanjang Probation" | "Tidak Lulus";
+  extensionDurationMonths: number | null;
+  notes: string | null;
+  status: "Draft" | "Menunggu Approval" | "Disetujui" | "Ditolak";
+  approvedBy: string | null;
+  skDocNumber: string | null;
+}
+
+export interface ContractRenewalReview {
+  id: string;
+  tenantId: string;
+  employeeId: string;
+  currentContractEnd: string;
+  recommendation: "Perpanjang PKWT" | "Alih Status PKWTT (Tetap)" | "Tidak Diperpanjang";
+  newDurationMonths: number | null;
+  notes: string | null;
+  status: "Menunggu Approval" | "Disetujui" | "Ditolak";
+  approvedBy: string | null;
+  newContractDocNumber: string | null;
+}
+
 export type OrgChangeSet = { create?: Record<string, unknown>[]; update?: { id: string; data: Record<string, unknown> }[]; delete?: string[] };
 
 export interface OrgChangeProposal {
@@ -422,8 +465,10 @@ export const tenantApi = {
   // Employees — real headcount; the "inactive" list is what the FPTK "Nama Karyawan Sebelumnya (Jika Penggantian)" dropdown uses.
   listEmployees: () => request<Employee[]>("/api/tenant/employees"),
   listInactiveEmployees: () => request<Employee[]>("/api/tenant/employees/inactive"),
-  createEmployee: (data: Omit<Employee, "id" | "tenantId">) => request<Employee>("/api/tenant/employees", { method: "POST", body: JSON.stringify(data) }),
+  createEmployee: (data: Partial<Employee> & { entityId: string; nik: string; fullName: string }) =>
+    request<Employee>("/api/tenant/employees", { method: "POST", body: JSON.stringify(data) }),
   updateEmployee: (id: string, data: Partial<Employee>) => request<Employee>(`/api/tenant/employees/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteEmployee: (id: string) => request<{ ok: true }>(`/api/tenant/employees/${id}`, { method: "DELETE" }),
 
   // Document signatory config — set once per document type in Document Management, read by every document-generating flow (FPTK first).
   listDocumentSignatoryConfigs: (documentType?: string) =>
@@ -484,4 +529,20 @@ export const tenantApi = {
   updateOnboardingChecklistTemplate: (id: string, data: Partial<OnboardingChecklistTemplateItem>) =>
     request<OnboardingChecklistTemplateItem>(`/api/tenant/onboarding-checklist-templates/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   deleteOnboardingChecklistTemplate: (id: string) => request<{ ok: true }>(`/api/tenant/onboarding-checklist-templates/${id}`, { method: "DELETE" }),
+
+  listProbationEvaluations: () => request<ProbationEvaluation[]>("/api/tenant/probation-evaluations"),
+  createProbationEvaluation: (data: Omit<ProbationEvaluation, "id" | "tenantId">) =>
+    request<ProbationEvaluation>("/api/tenant/probation-evaluations", { method: "POST", body: JSON.stringify(data) }),
+  updateProbationEvaluation: (id: string, data: Partial<ProbationEvaluation>) =>
+    request<ProbationEvaluation>(`/api/tenant/probation-evaluations/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+
+  listContractRenewalReviews: () => request<ContractRenewalReview[]>("/api/tenant/contract-renewal-reviews"),
+  createContractRenewalReview: (data: Omit<ContractRenewalReview, "id" | "tenantId">) =>
+    request<ContractRenewalReview>("/api/tenant/contract-renewal-reviews", { method: "POST", body: JSON.stringify(data) }),
+  updateContractRenewalReview: (id: string, data: Partial<ContractRenewalReview>) =>
+    request<ContractRenewalReview>(`/api/tenant/contract-renewal-reviews/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+
+  getModuleSettings: () => request<Record<string, Record<string, unknown>>>("/api/tenant/module-settings"),
+  updateModuleSettings: (moduleKey: string, settings: Record<string, unknown>) =>
+    request<{ moduleKey: string; settings: Record<string, unknown> }>(`/api/tenant/module-settings/${moduleKey}`, { method: "PUT", body: JSON.stringify({ settings }) }),
 };

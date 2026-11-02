@@ -16,6 +16,9 @@ import {
   type CompetencyTestTypeSetting as ApiCompetencyTestTypeSetting,
   type InterviewTypeSetting as ApiInterviewTypeSetting,
   type OnboardingChecklistTemplateItem as ApiOnboardingChecklistTemplateItem,
+  type Employee as ApiEmployee,
+  type ProbationEvaluation as ApiProbationEvaluation,
+  type ContractRenewalReview as ApiContractRenewalReview,
 } from '../tenant/api';
 import { ORG_STRUCTURE_TEMPLATES } from '../utils/orgStructureTemplates';
 import {
@@ -185,7 +188,7 @@ interface HrmsContextType {
   // 1. Employees & Personalia
   employees: Employee[];
   personaliaLogs: PersonaliaLog[];
-  addEmployee: (emp: Omit<Employee, 'id' | 'tenantId'>) => Employee;
+  addEmployee: (emp: Omit<Employee, 'id' | 'tenantId'>) => Promise<Employee>;
   updateEmployee: (id: string, updates: Partial<Employee>) => void;
   deleteEmployee: (id: string) => void;
   processPersonaliaAction: (action: {
@@ -259,7 +262,7 @@ interface HrmsContextType {
     stage: Candidate['stage'],
     extra?: Partial<Candidate>
   ) => void;
-  convertCandidateToEmployee: (candidateId: string, joinDate: string) => void;
+  convertCandidateToEmployee: (candidateId: string, joinDate: string) => Promise<void>;
   competencyTestTypes: CompetencyTestTypeSetting[];
   addCompetencyTestType: (testType: Omit<CompetencyTestTypeSetting, 'id'>) => void;
   updateCompetencyTestType: (id: string, updates: Partial<CompetencyTestTypeSetting>) => void;
@@ -329,7 +332,7 @@ interface HrmsContextType {
   addOnboardingProcess: (process: Omit<OnboardingProcess, 'id' | 'tenantId' | 'status'>) => OnboardingProcess;
   updateOnboardingTask: (processId: string, taskId: string, isCompleted: boolean, actionPayload?: any, subItems?: OnboardingSubItem[]) => void;
   toggleOnboardingSubItem?: (processId: string, taskId: string, subItemId: string) => void;
-  completeOnboardingProcess: (processId: string) => Employee | null;
+  completeOnboardingProcess: (processId: string) => Promise<Employee | null>;
   updateOnboardingProcess: (processId: string, updates: Partial<OnboardingProcess>) => void;
   cancelOnboardingProcess: (processId: string, reason: string, actionType: 'talent_pool' | 'delete_all') => void;
   updateOnboardingChecklistTemplates: (templates: OnboardingChecklistTemplateItem[]) => void;
@@ -429,7 +432,7 @@ interface HrmsContextType {
   employeeStaging: EmployeeStaging[];
   addEmployeeStaging: (staging: Omit<EmployeeStaging, 'id' | 'tenantId' | 'tempNik' | 'status'>) => void;
   updateEmployeeStagingTask: (stagingId: string, taskId: string, isCompleted: boolean) => void;
-  completeOnboarding: (stagingId: string) => Employee | null;
+  completeOnboarding: (stagingId: string) => Promise<Employee | null>;
 
   // 24. Overtime Request & Approval Flow
   overtimeRequests: OvertimeRequest[];
@@ -702,6 +705,19 @@ function mapApiGradeToMock(apiGrade: ApiGradeSalaryRange): GradeSalaryRange {
   };
 }
 
+/**
+ * Merges a backend row's `details` jsonb blob with its first-class columns
+ * into one flat mock-shaped object — used for Employee/Candidate/
+ * JobVacancy/OnboardingProcess, which each have dozens of mostly-optional
+ * fields not worth a dedicated DB column. Module-level (not a closure
+ * inside HrmsProvider) so it has no declaration-order dependency on where
+ * each `apiXxx` state is declared.
+ */
+function mergeRowIntoMock(row: any): Record<string, unknown> {
+  const { details, ...columns } = row;
+  return { ...(details as object), ...columns };
+}
+
 const HrmsContext = createContext<HrmsContextType | null>(null);
 
 export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -820,25 +836,14 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [activeModule, setActiveModule] = useState<string>('dashboard');
 
   // Master Data Stores
-  const [employees, setEmployees] = useState<Employee[]>(() => {
-    const saved = localStorage.getItem('nusahr_employees');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved) as Employee[];
-        const existingIds = new Set(parsed.map((e) => e.id));
-        const merged = [...parsed];
-        for (const initEmp of INITIAL_EMPLOYEES) {
-          if (!existingIds.has(initEmp.id)) {
-            merged.push(initEmp);
-          }
-        }
-        return merged;
-      } catch {
-        // fallback
-      }
-    }
-    return INITIAL_EMPLOYEES;
-  });
+  // Real backend data, hydrated via loadTenantOrgData() — the core
+  // employee record (user, 2026-11-02: "selesaikan semua yang ada di menu
+  // Management Karyawan"). ~90 mostly-optional fields; core
+  // queryable/joinable columns are first-class, the rest rides in
+  // `details` (see buildEmployeeApiPayload below), same pattern already
+  // proven for candidates/jobVacancies/onboardingProcesses.
+  const [apiEmployees, setApiEmployees] = useState<ApiEmployee[]>([]);
+  const employees = useMemo(() => apiEmployees.map((r) => mergeRowIntoMock(r) as unknown as Employee), [apiEmployees]);
 
   const [personaliaLogs, setPersonaliaLogs] = useState<PersonaliaLog[]>(() => {
     const saved = localStorage.getItem('nusahr_personalia');
@@ -942,10 +947,6 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // jsonb holds the whole object, and a handful of columns (stage, scores,
   // status) are promoted for querying. See persistVacancy/persistCandidate/
   // persistOnboardingProcess below for the write side.
-  const mergeRowIntoMock = (row: any): Record<string, unknown> => {
-    const { details, ...columns } = row;
-    return { ...(details as object), ...columns };
-  };
   const [apiVacancies, setApiVacancies] = useState<ApiJobVacancy[]>([]);
   const vacancies = useMemo(() => apiVacancies.map((r) => mergeRowIntoMock(r) as unknown as JobVacancy), [apiVacancies]);
   const [apiCandidates, setApiCandidates] = useState<ApiCandidate[]>([]);
@@ -1129,10 +1130,10 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return INITIAL_DOCUMENT_TEMPLATES;
   });
 
-  const [moduleSettings, setModuleSettings] = useState<ModuleSettingsConfig>(() => {
-    const saved = localStorage.getItem('nusahr_settings');
-    return saved ? JSON.parse(saved) : INITIAL_MODULE_SETTINGS;
-  });
+  // Real backend data (per-module settings blob), hydrated via
+  // loadTenantOrgData() and merged onto INITIAL_MODULE_SETTINGS so any
+  // module key the tenant hasn't customized yet still has sane defaults.
+  const [moduleSettings, setModuleSettings] = useState<ModuleSettingsConfig>(INITIAL_MODULE_SETTINGS);
 
   // 22. Entities & Holding — real backend data, loaded via loadTenantOrgData() right after login.
   const [apiEntities, setApiEntities] = useState<ApiCompanyEntity[]>([]);
@@ -1291,17 +1292,10 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     updateEntity(currentEntityId, { isGovernanceLocked: locked });
   };
 
-  // 28. Probation Evaluations
-  const [probationEvaluations, setProbationEvaluations] = useState<ProbationEvaluation[]>(() => {
-    const saved = localStorage.getItem('nusahr_probation');
-    return saved ? JSON.parse(saved) : INITIAL_PROBATION_EVALUATIONS;
-  });
-
-  // 29. Contract Reviews
-  const [contractReviews, setContractReviews] = useState<ContractRenewalReview[]>(() => {
-    const saved = localStorage.getItem('nusahr_contracts');
-    return saved ? JSON.parse(saved) : INITIAL_CONTRACT_REVIEWS;
-  });
+  // 28. Probation Evaluations & 29. Contract Reviews — real backend data,
+  // hydrated via loadTenantOrgData() (Manajemen Karyawan sub-menus).
+  const [probationEvaluations, setProbationEvaluations] = useState<ProbationEvaluation[]>([]);
+  const [contractReviews, setContractReviews] = useState<ContractRenewalReview[]>([]);
 
   // 30. Calendar Events
   const [calendarEvents, setCalendarEvents] = useState<CompanyCalendarEvent[]>(() => {
@@ -1406,7 +1400,8 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [
       realEntities, realOfficeLocations, realDivisions, realDepartments, realPositions, realOrgNodes, realGrades,
       realUsers, realJobRequisitions, realVacancies, realCandidates, realOnboardingProcesses,
-      realCompetencyTestTypes, realInterviewTypes, realOnboardingChecklistTemplates,
+      realCompetencyTestTypes, realInterviewTypes, realOnboardingChecklistTemplates, realEmployees,
+      realProbationEvaluations, realContractReviews, realModuleSettings,
     ] = await Promise.all([
       tenantApi.listEntities(),
       tenantApi.listOfficeLocations(),
@@ -1423,6 +1418,10 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       tenantApi.listCompetencyTestTypes(),
       tenantApi.listInterviewTypes(),
       tenantApi.listOnboardingChecklistTemplates(),
+      tenantApi.listEmployees(),
+      tenantApi.listProbationEvaluations(),
+      tenantApi.listContractRenewalReviews(),
+      tenantApi.getModuleSettings(),
     ]);
     setApiEntities(realEntities);
     setApiOfficeLocations(realOfficeLocations);
@@ -1439,6 +1438,16 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setCompetencyTestTypes(realCompetencyTestTypes.map(toMockCompetencyTestType));
     setInterviewTypeSettings(realInterviewTypes.map(toMockInterviewType));
     setOnboardingChecklistTemplates(realOnboardingChecklistTemplates.map(toMockChecklistTemplate));
+    setApiEmployees(realEmployees);
+    setProbationEvaluations(realProbationEvaluations.map(toMockProbationEvaluation));
+    setContractReviews(realContractReviews.map(toMockContractReview));
+    setModuleSettings((prev) => {
+      const merged = { ...prev };
+      for (const key of Object.keys(realModuleSettings)) {
+        (merged as any)[key] = { ...(merged as any)[key], ...realModuleSettings[key] };
+      }
+      return merged;
+    });
   };
 
   // 34. Vendor Invoices (AP)
@@ -1472,10 +1481,6 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     localStorage.setItem('nusahr_active_tenant', currentTenantId);
   }, [currentTenantId]);
-
-  useEffect(() => {
-    localStorage.setItem('nusahr_employees', JSON.stringify(employees));
-  }, [employees]);
 
   useEffect(() => {
     localStorage.setItem('nusahr_attendance', JSON.stringify(attendance));
@@ -1520,22 +1525,44 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 
   // 1. Employee & Personalia Functions
-  const addEmployee = (empData: Omit<Employee, 'id' | 'tenantId'>): Employee => {
-    const newEmp: Employee = {
-      ...empData,
-      id: `emp-${Date.now()}`,
-      tenantId: currentTenant.id,
-    };
-    setEmployees((prev) => [newEmp, ...prev]);
+  // Splits a (partial) mock Employee into the real columns the backend
+  // actually queries on vs. the ~80 other descriptive fields that just
+  // ride along in `details` — mirrors buildCandidateApiPayload.
+  const buildEmployeeApiPayload = (e: Partial<Employee>) => ({
+    entityId: currentEntity?.id || e.entityId,
+    nik: e.nik,
+    fullName: e.fullName,
+    email: e.email,
+    phone: e.phone,
+    avatar: e.avatar,
+    employmentType: e.employmentType,
+    managerId: e.managerId,
+    candidateId: e.candidateId,
+    status: e.status,
+    basicSalary: typeof e.basicSalary === 'number' ? e.basicSalary : undefined,
+    joinDate: e.joinDate,
+    details: e,
+  });
+
+  const addEmployee = async (empData: Omit<Employee, 'id' | 'tenantId'>): Promise<Employee> => {
+    const payload = buildEmployeeApiPayload(empData);
+    const created = await tenantApi.createEmployee(payload as Partial<ApiEmployee> & { entityId: string; nik: string; fullName: string });
+    const newEmp = mergeRowIntoMock(created) as unknown as Employee;
+    setApiEmployees((prev) => [created, ...prev]);
     return newEmp;
   };
 
   const updateEmployee = (id: string, updates: Partial<Employee>) => {
-    setEmployees((prev) => prev.map((e) => (e.id === id ? { ...e, ...updates } : e)));
+    const current = employees.find((e) => e.id === id);
+    if (!current) return;
+    const merged = { ...current, ...updates };
+    tenantApi
+      .updateEmployee(id, buildEmployeeApiPayload(merged) as Partial<ApiEmployee>)
+      .then((updated) => setApiEmployees((prev) => prev.map((r) => (r.id === id ? updated : r))));
   };
 
   const deleteEmployee = (id: string) => {
-    setEmployees((prev) => prev.filter((e) => e.id !== id));
+    tenantApi.deleteEmployee(id).then(() => setApiEmployees((prev) => prev.filter((e) => e.id !== id)));
   };
 
   const processPersonaliaAction = (action: {
@@ -1838,19 +1865,10 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // If approved, deduct leave days from employee
     if (approved) {
-      setEmployees((prev) =>
-        prev.map((e) =>
-          e.id === req.employeeId
-            ? {
-                ...e,
-                remainingLeaveDays:
-                  req.leaveType === 'Cuti Tahunan'
-                    ? Math.max(0, (e.remainingLeaveDays ?? 12) - req.totalDays)
-                    : e.remainingLeaveDays,
-              }
-            : e
-        )
-      );
+      const emp = employees.find((e) => e.id === req.employeeId);
+      if (emp && req.leaveType === 'Cuti Tahunan') {
+        updateEmployee(emp.id, { remainingLeaveDays: Math.max(0, (emp.remainingLeaveDays ?? 12) - req.totalDays) });
+      }
     }
   };
 
@@ -2270,7 +2288,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     persistCandidateMerge(id, { ...current, stage, ...extra });
   };
 
-  const convertCandidateToEmployee = (candidateId: string, joinDate: string) => {
+  const convertCandidateToEmployee = async (candidateId: string, joinDate: string) => {
     const cand = candidates.find((c) => c.id === candidateId);
     if (!cand) return;
 
@@ -2285,9 +2303,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       currentTenant.code
     );
 
-    const newEmp: Employee = {
-      id: `emp-${Date.now()}`,
-      tenantId: currentTenant.id,
+    const newEmp = await addEmployee({
       nik: `${currentTenant.code}-${new Date().getFullYear()}-${String(tenantEmployees.length + 1).padStart(3, '0')}`,
       fullName: cand.name,
       email: cand.email,
@@ -2344,9 +2360,8 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
           address: 'Jakarta',
         },
       ],
-    };
+    });
 
-    setEmployees((prev) => [newEmp, ...prev]);
     updateCandidateStage(candidateId, 'Hired', { joinedDate: joinDate });
 
     // Generate PKWT/PKWTT document
@@ -2762,7 +2777,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let successCount = 0;
     let errorCount = 0;
 
-    const newEmps: Employee[] = [];
+    const newEmps: Omit<Employee, 'id' | 'tenantId'>[] = [];
     rows.forEach((r) => {
       if (!r.isValid) {
         errorCount++;
@@ -2779,8 +2794,6 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const today = new Date().toISOString().split('T')[0];
 
       newEmps.push({
-        id: `emp-mig-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        tenantId: currentTenant.id,
         nik: r.nik,
         fullName: r.nama,
         email: r.email,
@@ -2841,7 +2854,9 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     if (newEmps.length > 0) {
-      setEmployees((prev) => [...newEmps, ...prev]);
+      // Fired in the background — successCount/errorCount below is pure
+      // row validation and can be reported to the wizard immediately.
+      Promise.all(newEmps.map((e) => addEmployee(e)));
     }
 
     return { successCount, errorCount };
@@ -3008,7 +3023,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   };
 
-  const completeOnboardingProcess = (processId: string): Employee | null => {
+  const completeOnboardingProcess = async (processId: string): Promise<Employee | null> => {
     const process = onboardingProcesses.find((p) => p.id === processId);
     if (!process) return null;
 
@@ -3036,7 +3051,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       process.contractDocNumber ||
       `${String(seq).padStart(3, '0')}/HRD-${isTetap ? 'SK-TETAP' : 'PKWT'}/${code}/X/2026`;
 
-    const newEmp = addEmployee({
+    const newEmp = await addEmployee({
       nik: `${code}-${new Date().getFullYear()}-${String(seq).padStart(3, '0')}`,
       fullName: process.employeeName,
       email: process.email,
@@ -3115,17 +3130,16 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // 1. Bersihkan seluruh data karyawan di Management Karyawan jika sudah terbuat/tertaut
     if (process.createdEmployeeId) {
-      setEmployees((prev) => prev.filter((e) => e.id !== process.createdEmployeeId));
+      deleteEmployee(process.createdEmployeeId);
     }
-    setEmployees((prev) =>
-      prev.filter(
+    employees
+      .filter(
         (e) =>
-          !(
-            e.fullName.toLowerCase() === process.employeeName.toLowerCase() &&
-            (e.email.toLowerCase() === process.email.toLowerCase() || e.position === process.position)
-          )
+          e.id !== process.createdEmployeeId &&
+          e.fullName.toLowerCase() === process.employeeName.toLowerCase() &&
+          (e.email.toLowerCase() === process.email.toLowerCase() || e.position === process.position)
       )
-    );
+      .forEach((e) => deleteEmployee(e.id));
 
     // 2. Tindak lanjut data pelamar / Talent Pool
     const cand = process.candidateId ? candidates.find((c) => c.id === process.candidateId) : undefined;
@@ -3578,13 +3592,9 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // 21. Module Settings
   const updateModuleSettings = (moduleKey: keyof ModuleSettingsConfig, updates: any) => {
-    setModuleSettings((prev) => ({
-      ...prev,
-      [moduleKey]: {
-        ...prev[moduleKey],
-        ...updates,
-      },
-    }));
+    const merged = { ...moduleSettings[moduleKey], ...updates };
+    setModuleSettings((prev) => ({ ...prev, [moduleKey]: merged }));
+    tenantApi.updateModuleSettings(moduleKey as string, merged);
   };
 
   // 35. Audit Log Action
@@ -4012,11 +4022,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (employeeId) {
       const targetNode = orgNodes.find((n) => n.id === positionId);
       if (targetNode) {
-        setEmployees((prev) =>
-          prev.map((emp) =>
-            emp.id === employeeId ? { ...emp, position: targetNode.title, department: targetNode.department } : emp
-          )
-        );
+        updateEmployee(employeeId, { position: targetNode.title, department: targetNode.department });
       }
     }
     logAuditAction(
@@ -4099,7 +4105,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
   };
 
-  const completeOnboarding = (stagingId: string): Employee | null => {
+  const completeOnboarding = async (stagingId: string): Promise<Employee | null> => {
     const stg = employeeStaging.find((s) => s.id === stagingId);
     if (!stg) return null;
 
@@ -4109,9 +4115,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const finalNik = `${ent.code}-${new Date().getFullYear()}-${String(seq).padStart(3, '0')}`;
     const docNumber = stg.contractDocNumber || `${String(seq).padStart(3, '0')}/${ent.docPrefix}/${new Date().getFullYear()}`;
 
-    const newEmp: Employee = {
-      id: `emp-${Date.now()}`,
-      tenantId: currentTenant.id,
+    const newEmp = await addEmployee({
       entityId: ent.id,
       nik: finalNik,
       fullName: stg.fullName,
@@ -4170,9 +4174,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         },
       ],
       sourceOfTruth: 'native',
-    };
-
-    setEmployees((prev) => [newEmp, ...prev]);
+    });
 
     setEmployeeStaging((prev) =>
       prev.map((s) => (s.id === stagingId ? { ...s, status: 'Completed' } : s))
@@ -4721,18 +4723,22 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       .catch((err) => console.error('Gagal menghapus posisi jabatan:', err));
   };
 
-  // 28. Probation Evaluations
-  const submitProbationEvaluation = (evaluation: Omit<ProbationEvaluation, 'id' | 'tenantId' | 'status'>) => {
-    const newEval: ProbationEvaluation = {
-      ...evaluation,
-      id: `prb-${Date.now()}`,
-      tenantId: currentTenant.id,
-      status: 'Menunggu Approval',
-    };
-    setProbationEvaluations((prev) => [newEval, ...prev]);
+  // 28. Probation Evaluations — real backend.
+  const toMockProbationEvaluation = (r: ApiProbationEvaluation): ProbationEvaluation => ({
+    ...r,
+    supervisorId: r.supervisorId || '',
+    extensionDurationMonths: r.extensionDurationMonths ?? undefined,
+    notes: r.notes || '',
+    approvedBy: r.approvedBy || undefined,
+    skDocNumber: r.skDocNumber || undefined,
+  });
 
-    const emp = employees.find((e) => e.id === evaluation.employeeId);
-    logAuditAction('Evaluasi Probation', 'SUBMIT_EVALUATION', newEval.id, `Evaluasi masa percobaan untuk ${emp?.fullName}: Rekomendasi ${evaluation.recommendation}`);
+  const submitProbationEvaluation = (evaluation: Omit<ProbationEvaluation, 'id' | 'tenantId' | 'status'>) => {
+    tenantApi.createProbationEvaluation({ ...evaluation, status: 'Menunggu Approval' } as Omit<ApiProbationEvaluation, 'id' | 'tenantId'>).then((created) => {
+      setProbationEvaluations((prev) => [toMockProbationEvaluation(created), ...prev]);
+      const emp = employees.find((e) => e.id === evaluation.employeeId);
+      logAuditAction('Evaluasi Probation', 'SUBMIT_EVALUATION', created.id, `Evaluasi masa percobaan untuk ${emp?.fullName}: Rekomendasi ${evaluation.recommendation}`);
+    });
   };
 
   const reviewProbationEvaluation = (id: string, approved: boolean) => {
@@ -4760,21 +4766,25 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       initiateOffboarding(ev.employeeId, 'PHK Efisiensi', new Date().toISOString().split('T')[0], 'Tidak memenuhi standar kelulusan probation 3 bulan.');
     }
 
-    setProbationEvaluations((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, status: approved ? 'Disetujui' : 'Ditolak', approvedBy: currentUser.name } : p))
-    );
+    tenantApi
+      .updateProbationEvaluation(id, { status: approved ? 'Disetujui' : 'Ditolak', approvedBy: currentUser.name })
+      .then((updated) => setProbationEvaluations((prev) => prev.map((p) => (p.id === id ? toMockProbationEvaluation(updated) : p))));
   };
 
-  // 29. Contract Reviews
+  // 29. Contract Reviews — real backend.
+  const toMockContractReview = (r: ApiContractRenewalReview): ContractRenewalReview => ({
+    ...r,
+    newDurationMonths: r.newDurationMonths ?? undefined,
+    notes: r.notes || '',
+    approvedBy: r.approvedBy || undefined,
+    newContractDocNumber: r.newContractDocNumber || undefined,
+  });
+
   const submitContractReview = (rev: Omit<ContractRenewalReview, 'id' | 'tenantId' | 'status'>) => {
-    const newRev: ContractRenewalReview = {
-      ...rev,
-      id: `cnt-rev-${Date.now()}`,
-      tenantId: currentTenant.id,
-      status: 'Menunggu Approval',
-    };
-    setContractReviews((prev) => [newRev, ...prev]);
-    logAuditAction('Perpanjangan Kontrak', 'SUBMIT_REVIEW', newRev.id, `Review perpanjangan kontrak: Rekomendasi ${rev.recommendation}`);
+    tenantApi.createContractRenewalReview({ ...rev, status: 'Menunggu Approval' } as Omit<ApiContractRenewalReview, 'id' | 'tenantId'>).then((created) => {
+      setContractReviews((prev) => [toMockContractReview(created), ...prev]);
+      logAuditAction('Perpanjangan Kontrak', 'SUBMIT_REVIEW', created.id, `Review perpanjangan kontrak: Rekomendasi ${rev.recommendation}`);
+    });
   };
 
   const reviewContractReview = (id: string, approved: boolean) => {
@@ -4811,9 +4821,9 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    setContractReviews((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, status: approved ? 'Disetujui' : 'Ditolak', approvedBy: currentUser.name } : r))
-    );
+    tenantApi
+      .updateContractRenewalReview(id, { status: approved ? 'Disetujui' : 'Ditolak', approvedBy: currentUser.name })
+      .then((updated) => setContractReviews((prev) => prev.map((r) => (r.id === id ? toMockContractReview(updated) : r))));
   };
 
   // 30. Calendar Events
@@ -5107,7 +5117,6 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // storage unavailable
     }
 
-    setEmployees(INITIAL_EMPLOYEES);
     setAttendance(INITIAL_ATTENDANCE);
     setPayrollRecords(INITIAL_PAYROLL_RECORDS);
     setLoans(INITIAL_LOANS);
@@ -5118,8 +5127,6 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setApprovalItems(INITIAL_APPROVALS);
     setAssets(INITIAL_ASSETS);
     setBusinessTrips(INITIAL_BUSINESS_TRIPS);
-    setContractReviews(INITIAL_CONTRACT_REVIEWS);
-    setProbationEvaluations(INITIAL_PROBATION_EVALUATIONS);
     setPersonaliaLogs(INITIAL_PERSONALIA_LOGS);
   };
 

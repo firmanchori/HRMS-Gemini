@@ -815,7 +815,7 @@ export const EmployeeManagement: React.FC = () => {
   };
 
   // Submit Handler: Simpan & Proses Tambah Data Karyawan Dosir Lengkap
-  const handleSubmitDossierForm = (e?: React.FormEvent) => {
+  const handleSubmitDossierForm = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     setFormError(null);
     setShowValidationErrors(false);
@@ -878,7 +878,7 @@ export const EmployeeManagement: React.FC = () => {
       newContractDoc ||
       `${String(seq).padStart(3, '0')}/HRD-${newType === 'Tetap' ? 'SK-TETAP' : 'PKWT'}/${currentTenant.code}/X/${new Date().getFullYear()}`;
 
-    const createdEmp = addEmployee({
+    const createdEmp = await addEmployee({
       nik: newNik || generateNextNik(newType, currentEntity?.id),
       fullName: newName.trim(),
       avatar: newAvatar,

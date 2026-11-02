@@ -162,6 +162,20 @@
       "when": 1793585805285,
       "tag": "0022_woozy_lenny_balinger",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1793588245163,
+      "tag": "0023_happy_slayback",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1793590679076,
+      "tag": "0024_nebulous_crusher_hogan",
+      "breakpoints": true
     }
   ]
 }
