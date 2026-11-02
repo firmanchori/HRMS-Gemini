@@ -19,6 +19,8 @@ import {
   type Employee as ApiEmployee,
   type ProbationEvaluation as ApiProbationEvaluation,
   type ContractRenewalReview as ApiContractRenewalReview,
+  type ApprovalWorkflowItem as ApiApprovalWorkflowItem,
+  type ApprovalDelegation as ApiApprovalDelegation,
 } from '../tenant/api';
 import { ORG_STRUCTURE_TEMPLATES } from '../utils/orgStructureTemplates';
 import {
@@ -1072,28 +1074,35 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return INITIAL_BUSINESS_TRIPS;
   });
 
-  const [approvalItems, setApprovalItems] = useState<ApprovalWorkflowItem[]>(() => {
-    const saved = localStorage.getItem('nusahr_approvals');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved) as ApprovalWorkflowItem[];
-        const existingIds = new Set(parsed.map((a) => a.id));
-        const merged = [...parsed];
-        for (const initApp of INITIAL_APPROVALS) {
-          if (!existingIds.has(initApp.id)) merged.push(initApp);
-        }
-        return merged;
-      } catch {
-        return INITIAL_APPROVALS;
-      }
-    }
-    return INITIAL_APPROVALS;
-  });
+  // Real backend data, hydrated via loadTenantOrgData() — the Approval
+  // Engine (user, 2026-11-02: fix this before the modules that depend on
+  // it). createApprovalItem/persistApprovalItemUpdate below replace the
+  // old setApprovalItems local-only setter everywhere it was used to add
+  // or change a row.
+  const [approvalItems, setApprovalItems] = useState<ApprovalWorkflowItem[]>([]);
+  const [approvalDelegations, setApprovalDelegations] = useState<ApprovalDelegation[]>([]);
 
-  const [approvalDelegations, setApprovalDelegations] = useState<ApprovalDelegation[]>(() => {
-    const saved = localStorage.getItem('nusahr_delegations');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const createApprovalItem = (item: Omit<ApprovalWorkflowItem, 'id' | 'tenantId'>) => {
+    tenantApi.createApprovalItem(item as unknown as Omit<ApiApprovalWorkflowItem, 'id' | 'tenantId'>).then((created) => {
+      setApprovalItems((prev) => [created as unknown as ApprovalWorkflowItem, ...prev]);
+    });
+  };
+
+  const persistApprovalItemUpdate = (id: string, updates: Partial<ApprovalWorkflowItem>) => {
+    const current = approvalItems.find((a) => a.id === id);
+    if (!current) return;
+    const merged = { ...current, ...updates };
+    tenantApi.updateApprovalItem(id, merged as unknown as Partial<ApiApprovalWorkflowItem>).then((updated) => {
+      setApprovalItems((prev) => prev.map((a) => (a.id === id ? (updated as unknown as ApprovalWorkflowItem) : a)));
+    });
+  };
+
+  /** Most review actions sync the hub by referenceId+category, not by the approval item's own id (that's only known inside this module). */
+  const persistApprovalItemByReference = (referenceId: string, category: string, updates: Partial<ApprovalWorkflowItem>) => {
+    const current = approvalItems.find((a) => a.referenceId === referenceId && a.category === category);
+    if (!current) return;
+    persistApprovalItemUpdate(current.id, updates);
+  };
 
   const [vendors, setVendors] = useState<Vendor[]>(() => {
     const saved = localStorage.getItem('nusahr_vendors');
@@ -1402,6 +1411,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       realUsers, realJobRequisitions, realVacancies, realCandidates, realOnboardingProcesses,
       realCompetencyTestTypes, realInterviewTypes, realOnboardingChecklistTemplates, realEmployees,
       realProbationEvaluations, realContractReviews, realModuleSettings,
+      realApprovalItems, realApprovalDelegations,
     ] = await Promise.all([
       tenantApi.listEntities(),
       tenantApi.listOfficeLocations(),
@@ -1422,6 +1432,8 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       tenantApi.listProbationEvaluations(),
       tenantApi.listContractRenewalReviews(),
       tenantApi.getModuleSettings(),
+      tenantApi.listApprovalItems(),
+      tenantApi.listApprovalDelegations(),
     ]);
     setApiEntities(realEntities);
     setApiOfficeLocations(realOfficeLocations);
@@ -1448,6 +1460,8 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       return merged;
     });
+    setApprovalItems(realApprovalItems as unknown as ApprovalWorkflowItem[]);
+    setApprovalDelegations(realApprovalDelegations as unknown as ApprovalDelegation[]);
   };
 
   // 34. Vendor Invoices (AP)
@@ -1514,9 +1528,6 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem('nusahr_reimbursements_v3', JSON.stringify(reimbursementClaims));
   }, [reimbursementClaims]);
 
-  useEffect(() => {
-    localStorage.setItem('nusahr_approvals', JSON.stringify(approvalItems));
-  }, [approvalItems]);
 
   // Filtered scoped items for active tenant
   const tenantEmployees = useMemo(
@@ -1643,25 +1654,20 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     if (finalStatus === 'Menunggu Approval') {
       // Add to Approval Center queue
-      setApprovalItems((prev) => [
-        {
-          id: `appr-pers-${Date.now()}`,
-          tenantId: currentTenant.id,
-          category: 'Promosi/Personalia',
-          referenceId: log.id,
-          title: `Personalia: ${action.type} - ${emp.fullName}`,
-          requesterId: action.employeeId,
-          department: emp.department || 'Operasional',
-          submittedAt: new Date().toISOString().replace('T', ' ').slice(0, 16),
-          deadlineAt: new Date(Date.now() + 72 * 3600 * 1000).toISOString().replace('T', ' ').slice(0, 16),
-          level: 1,
-          totalLevels: action.signatories?.length || 2,
-          assignedApproverRole: 'manager',
-          status: 'Menunggu',
-          notes: action.reason,
-        },
-        ...prev,
-      ]);
+      createApprovalItem({
+        category: 'Promosi/Personalia',
+        referenceId: log.id,
+        title: `Personalia: ${action.type} - ${emp.fullName}`,
+        requesterId: action.employeeId,
+        department: emp.department || 'Operasional',
+        submittedAt: new Date().toISOString().replace('T', ' ').slice(0, 16),
+        deadlineAt: new Date(Date.now() + 72 * 3600 * 1000).toISOString().replace('T', ' ').slice(0, 16),
+        level: 1,
+        totalLevels: action.signatories?.length || 2,
+        assignedApproverRole: 'manager',
+        status: 'Menunggu',
+        notes: action.reason,
+      });
       logAuditAction('Personalia', 'SUBMIT_FOR_APPROVAL', log.id, `Pengajuan persetujuan SK ${action.type} untuk ${emp.fullName}`);
       return;
     }
@@ -1785,36 +1791,25 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
     setLeaveRequests((prev) => [newReq, ...prev]);
     const emp = employees.find((e) => e.id === newReq.employeeId);
-    setApprovalItems((prev) => [
-      {
-        id: `appr-lv-${Date.now()}`,
-        tenantId: currentTenant.id,
-        category: 'Cuti',
-        referenceId: newReq.id,
-        title: `Permohonan ${newReq.leaveType} (${newReq.totalDays} Hari) - ${emp?.fullName || 'Karyawan'}`,
-        requesterId: newReq.employeeId,
-        department: emp?.department || 'Operasional',
-        submittedAt: new Date().toISOString().replace('T', ' ').slice(0, 16),
-        deadlineAt: new Date(Date.now() + 48 * 3600 * 1000).toISOString().replace('T', ' ').slice(0, 16),
-        level: 1,
-        totalLevels: 2,
-        assignedApproverRole: 'manager',
-        status: 'Menunggu',
-        notes: `${newReq.startDate} s/d ${newReq.endDate}: ${newReq.reason}`,
-      },
-      ...prev,
-    ]);
+    createApprovalItem({
+      category: 'Cuti',
+      referenceId: newReq.id,
+      title: `Permohonan ${newReq.leaveType} (${newReq.totalDays} Hari) - ${emp?.fullName || 'Karyawan'}`,
+      requesterId: newReq.employeeId,
+      department: emp?.department || 'Operasional',
+      submittedAt: new Date().toISOString().replace('T', ' ').slice(0, 16),
+      deadlineAt: new Date(Date.now() + 48 * 3600 * 1000).toISOString().replace('T', ' ').slice(0, 16),
+      level: 1,
+      totalLevels: 2,
+      assignedApproverRole: 'manager',
+      status: 'Menunggu',
+      notes: `${newReq.startDate} s/d ${newReq.endDate}: ${newReq.reason}`,
+    });
   };
 
   const reviewLeaveRequest = (id: string, approved: boolean) => {
     const req = leaveRequests.find((l) => l.id === id);
-    setApprovalItems((prev) =>
-      prev.map((a) =>
-        a.referenceId === id && a.category === 'Cuti'
-          ? { ...a, status: approved ? 'Disetujui' : 'Ditolak' }
-          : a
-      )
-    );
+    persistApprovalItemByReference(id, 'Cuti', { status: approved ? 'Disetujui' : 'Ditolak' });
     if (req && approved) {
       const attStatus: AttendanceRecord['status'] = req.leaveType.includes('Sakit')
         ? 'Sakit'
@@ -2065,39 +2060,27 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
     setLoans((prev) => [newLoan, ...prev]);
     const emp = employees.find((e) => e.id === newLoan.employeeId);
-    setApprovalItems((prev) => [
-      {
-        id: `appr-ln-${Date.now()}`,
-        tenantId: currentTenant.id,
-        category: 'Pinjaman',
-        referenceId: newLoan.id,
-        title: `Pengajuan ${newLoan.loanType}: ${emp?.fullName || 'Karyawan'} (Tenor ${newLoan.tenorMonths} Bln)`,
-        requesterId: newLoan.employeeId,
-        department: emp?.department || 'Operasional',
-        amount: newLoan.totalAmount,
-        submittedAt: new Date().toISOString().replace('T', ' ').slice(0, 16),
-        deadlineAt: new Date(Date.now() + 48 * 3600 * 1000).toISOString().replace('T', ' ').slice(0, 16),
-        level: 1,
-        totalLevels: 2,
-        assignedApproverRole: 'payroll_admin',
-        status: 'Menunggu',
-        notes: newLoan.reason,
-      },
-      ...prev,
-    ]);
+    createApprovalItem({
+      category: 'Pinjaman',
+      referenceId: newLoan.id,
+      title: `Pengajuan ${newLoan.loanType}: ${emp?.fullName || 'Karyawan'} (Tenor ${newLoan.tenorMonths} Bln)`,
+      requesterId: newLoan.employeeId,
+      department: emp?.department || 'Operasional',
+      amount: newLoan.totalAmount,
+      submittedAt: new Date().toISOString().replace('T', ' ').slice(0, 16),
+      deadlineAt: new Date(Date.now() + 48 * 3600 * 1000).toISOString().replace('T', ' ').slice(0, 16),
+      level: 1,
+      totalLevels: 2,
+      assignedApproverRole: 'payroll_admin',
+      status: 'Menunggu',
+      notes: newLoan.reason,
+    });
   };
 
   const updateLoanStatus = (id: string, status: 'Aktif' | 'Lunas' | 'Menunggu Approval' | 'Ditolak') => {
-    setApprovalItems((prev) =>
-      prev.map((a) =>
-        a.referenceId === id && a.category === 'Pinjaman'
-          ? {
-              ...a,
-              status: status === 'Aktif' || status === 'Lunas' ? 'Disetujui' : status === 'Ditolak' ? 'Ditolak' : 'Menunggu',
-            }
-          : a
-      )
-    );
+    persistApprovalItemByReference(id, 'Pinjaman', {
+      status: status === 'Aktif' || status === 'Lunas' ? 'Disetujui' : status === 'Ditolak' ? 'Ditolak' : 'Menunggu',
+    });
     setLoans((prev) => prev.map((l) => (l.id === id ? { ...l, status } : l)));
   };
 
@@ -3180,25 +3163,20 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // Add to approval hub
     const requester = employees.find((e) => e.id === swap.requesterId);
-    setApprovalItems((prev) => [
-      {
-        id: `appr-sw-${Date.now()}`,
-        tenantId: currentTenant.id,
-        category: 'Tukar Shift',
-        referenceId: newSwap.id,
-        title: `Pengajuan Tukar Shift: ${requester?.fullName || 'Karyawan'}`,
-        requesterId: swap.requesterId,
-        department: requester?.department || 'Operasional',
-        submittedAt: new Date().toISOString().replace('T', ' ').slice(0, 16),
-        deadlineAt: new Date(Date.now() + 48 * 3600 * 1000).toISOString().replace('T', ' ').slice(0, 16),
-        level: 1,
-        totalLevels: 1,
-        assignedApproverRole: 'manager',
-        status: 'Menunggu',
-        notes: swap.reason,
-      },
-      ...prev,
-    ]);
+    createApprovalItem({
+      category: 'Tukar Shift',
+      referenceId: newSwap.id,
+      title: `Pengajuan Tukar Shift: ${requester?.fullName || 'Karyawan'}`,
+      requesterId: swap.requesterId,
+      department: requester?.department || 'Operasional',
+      submittedAt: new Date().toISOString().replace('T', ' ').slice(0, 16),
+      deadlineAt: new Date(Date.now() + 48 * 3600 * 1000).toISOString().replace('T', ' ').slice(0, 16),
+      level: 1,
+      totalLevels: 1,
+      assignedApproverRole: 'manager',
+      status: 'Menunggu',
+      notes: swap.reason,
+    });
   };
 
   const reviewShiftSwapRequest = (id: string, approved: boolean) => {
@@ -3206,9 +3184,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setShiftSwaps((prev) =>
       prev.map((s) => (s.id === id ? { ...s, status: approved ? 'Disetujui' : 'Ditolak', approvedBy: currentUser.name } : s))
     );
-    setApprovalItems((prev) =>
-      prev.map((a) => (a.referenceId === id ? { ...a, status: approved ? 'Disetujui' : 'Ditolak' } : a))
-    );
+    persistApprovalItemByReference(id, 'Tukar Shift', { status: approved ? 'Disetujui' : 'Ditolak' });
     // Tukar shift disetujui -> roster kedua karyawan ikut ditukar
     if (approved && swap && swap.status === 'Menunggu') {
       setSchedules((prev) => {
@@ -3275,25 +3251,20 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setAttendanceCorrections((prev) => [newReq, ...prev]);
 
     const requester = employees.find((e) => e.id === req.employeeId);
-    setApprovalItems((prev) => [
-      {
-        id: `appr-cor-${Date.now()}`,
-        tenantId: currentTenant.id,
-        category: 'Perbaikan Presensi',
-        referenceId: newReq.id,
-        title: `Koreksi Presensi (${req.type}) - ${requester?.fullName || 'Karyawan'}`,
-        requesterId: req.employeeId,
-        department: requester?.department || 'Operasional',
-        submittedAt: new Date().toISOString().replace('T', ' ').slice(0, 16),
-        deadlineAt: new Date(Date.now() + 48 * 3600 * 1000).toISOString().replace('T', ' ').slice(0, 16),
-        level: 1,
-        totalLevels: 1,
-        assignedApproverRole: 'hr_admin',
-        status: 'Menunggu',
-        notes: req.reason,
-      },
-      ...prev,
-    ]);
+    createApprovalItem({
+      category: 'Perbaikan Presensi',
+      referenceId: newReq.id,
+      title: `Koreksi Presensi (${req.type}) - ${requester?.fullName || 'Karyawan'}`,
+      requesterId: req.employeeId,
+      department: requester?.department || 'Operasional',
+      submittedAt: new Date().toISOString().replace('T', ' ').slice(0, 16),
+      deadlineAt: new Date(Date.now() + 48 * 3600 * 1000).toISOString().replace('T', ' ').slice(0, 16),
+      level: 1,
+      totalLevels: 1,
+      assignedApproverRole: 'hr_admin',
+      status: 'Menunggu',
+      notes: req.reason,
+    });
   };
 
   const reviewAttendanceCorrection = (id: string, approved: boolean) => {
@@ -3335,9 +3306,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setAttendanceCorrections((prev) =>
       prev.map((c) => (c.id === id ? { ...c, status: approved ? 'Disetujui' : 'Ditolak', approvedBy: currentUser.name } : c))
     );
-    setApprovalItems((prev) =>
-      prev.map((a) => (a.referenceId === id ? { ...a, status: approved ? 'Disetujui' : 'Ditolak' } : a))
-    );
+    persistApprovalItemByReference(id, 'Perbaikan Presensi', { status: approved ? 'Disetujui' : 'Ditolak' });
   };
 
   // 16. Business Trips Actions
@@ -3354,35 +3323,28 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setBusinessTrips((prev) => [newTrip, ...prev]);
 
     const requester = employees.find((e) => e.id === trip.employeeId);
-    setApprovalItems((prev) => [
-      {
-        id: `appr-tr-${Date.now()}`,
-        tenantId: currentTenant.id,
-        category: 'Perjalanan Dinas',
-        referenceId: newTrip.id,
-        title: `SPPD ke ${trip.destinationCity} (${trip.totalDays} Hari) - ${requester?.fullName || 'Karyawan'}`,
-        requesterId: trip.employeeId,
-        department: requester?.department || 'General',
-        submittedAt: new Date().toISOString().replace('T', ' ').slice(0, 16),
-        deadlineAt: new Date(Date.now() + 48 * 3600 * 1000).toISOString().replace('T', ' ').slice(0, 16),
-        level: 1,
-        totalLevels: 2,
-        assignedApproverRole: 'manager',
-        status: 'Menunggu',
-        amount: trip.estimatedCost,
-        notes: trip.purpose,
-      },
-      ...prev,
-    ]);
+    createApprovalItem({
+      category: 'Perjalanan Dinas',
+      referenceId: newTrip.id,
+      title: `SPPD ke ${trip.destinationCity} (${trip.totalDays} Hari) - ${requester?.fullName || 'Karyawan'}`,
+      requesterId: trip.employeeId,
+      department: requester?.department || 'General',
+      submittedAt: new Date().toISOString().replace('T', ' ').slice(0, 16),
+      deadlineAt: new Date(Date.now() + 48 * 3600 * 1000).toISOString().replace('T', ' ').slice(0, 16),
+      level: 1,
+      totalLevels: 2,
+      assignedApproverRole: 'manager',
+      status: 'Menunggu',
+      amount: trip.estimatedCost,
+      notes: trip.purpose,
+    });
   };
 
   const reviewBusinessTrip = (id: string, status: BusinessTripRequest['status']) => {
     setBusinessTrips((prev) =>
       prev.map((t) => (t.id === id ? { ...t, status, approvedBy: currentUser.name } : t))
     );
-    setApprovalItems((prev) =>
-      prev.map((a) => (a.referenceId === id ? { ...a, status: status === 'Disetujui Atasan' || status === 'Disetujui Finance' ? 'Disetujui' : 'Ditolak' } : a))
-    );
+    persistApprovalItemByReference(id, 'Perjalanan Dinas', { status: status === 'Disetujui Atasan' || status === 'Disetujui Finance' ? 'Disetujui' : 'Ditolak' });
   };
 
   // 17. Multi-tier Approval Center Actions
@@ -3395,30 +3357,17 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Advance to next level! (FR-2.4 & Catalog Bug #7)
         const nextLevel = item.level + 1;
         const nextRole = nextLevel === 2 ? 'director' : 'super_admin';
-        setApprovalItems((prev) =>
-          prev.map((a) =>
-            a.id === id
-              ? {
-                  ...a,
-                  level: nextLevel,
-                  assignedApproverRole: nextRole,
-                  notes: notes ? `${a.notes || ''} [L${item.level}: ${notes}]` : a.notes,
-                }
-              : a
-          )
-        );
+        persistApprovalItemUpdate(id, {
+          level: nextLevel,
+          assignedApproverRole: nextRole,
+          notes: notes ? `${item.notes || ''} [L${item.level}: ${notes}]` : item.notes,
+        });
         logAuditAction('Approval Center', 'LEVEL_UP', id, `Approval level ${item.level} disetujui, lanjut ke level ${nextLevel}`);
         return;
       }
 
       // Final Level Approved!
-      setApprovalItems((prev) =>
-        prev.map((a) =>
-          a.id === id
-            ? { ...a, status: 'Disetujui', notes: notes ? `${a.notes || ''} [Final: ${notes}]` : a.notes }
-            : a
-        )
-      );
+      persistApprovalItemUpdate(id, { status: 'Disetujui', notes: notes ? `${item.notes || ''} [Final: ${notes}]` : item.notes });
 
       // Category Handler Registry
       if (item.category === 'Cuti') {
@@ -3453,11 +3402,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       logAuditAction('Approval Center', 'APPROVE_FINAL', id, `Persetujuan final selesai untuk kategori ${item.category}`);
     } else {
-      setApprovalItems((prev) =>
-        prev.map((a) =>
-          a.id === id ? { ...a, status: 'Ditolak', notes: notes || a.notes } : a
-        )
-      );
+      persistApprovalItemUpdate(id, { status: 'Ditolak', notes: notes || item.notes });
       if (item.category === 'Cuti') {
         reviewLeaveRequest(item.referenceId, false);
       } else if (item.category === 'Pinjaman') {
@@ -3482,12 +3427,9 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const setApprovalDelegation = (delegation: Omit<ApprovalDelegation, 'id' | 'tenantId'>) => {
-    const newDelegation: ApprovalDelegation = {
-      ...delegation,
-      id: `del-${Date.now()}`,
-      tenantId: currentTenant.id,
-    };
-    setApprovalDelegations((prev) => [newDelegation, ...prev]);
+    tenantApi.createApprovalDelegation(delegation as unknown as Omit<ApiApprovalDelegation, 'id' | 'tenantId'>).then((created) => {
+      setApprovalDelegations((prev) => [created as unknown as ApprovalDelegation, ...prev]);
+    });
   };
 
   // 18. Vendors Actions
@@ -4204,25 +4146,20 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setOvertimeRequests((prev) => [newReq, ...prev]);
 
     const emp = employees.find((e) => e.id === req.employeeId);
-    setApprovalItems((prev) => [
-      {
-        id: `appr-ovt-${Date.now()}`,
-        tenantId: currentTenant.id,
-        category: 'Lembur',
-        referenceId: newReq.id,
-        title: `Lembur: ${emp?.fullName || 'Karyawan'} (${req.hours} jam - ${req.date})`,
-        requesterId: req.employeeId,
-        department: emp?.department || 'Operasional',
-        submittedAt: new Date().toISOString().replace('T', ' ').slice(0, 16),
-        deadlineAt: new Date(Date.now() + 48 * 3600 * 1000).toISOString().replace('T', ' ').slice(0, 16),
-        level: 1,
-        totalLevels: 1,
-        assignedApproverRole: 'manager',
-        status: 'Menunggu',
-        notes: req.reason,
-      },
-      ...prev,
-    ]);
+    createApprovalItem({
+      category: 'Lembur',
+      referenceId: newReq.id,
+      title: `Lembur: ${emp?.fullName || 'Karyawan'} (${req.hours} jam - ${req.date})`,
+      requesterId: req.employeeId,
+      department: emp?.department || 'Operasional',
+      submittedAt: new Date().toISOString().replace('T', ' ').slice(0, 16),
+      deadlineAt: new Date(Date.now() + 48 * 3600 * 1000).toISOString().replace('T', ' ').slice(0, 16),
+      level: 1,
+      totalLevels: 1,
+      assignedApproverRole: 'manager',
+      status: 'Menunggu',
+      notes: req.reason,
+    });
 
     logAuditAction('Presensi', 'SUBMIT_LEMBUR', newReq.id, `Pengajuan lembur ${req.hours} jam oleh ${emp?.fullName}`);
   };
@@ -4241,9 +4178,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : o
       )
     );
-    setApprovalItems((prev) =>
-      prev.map((a) => (a.referenceId === id ? { ...a, status: approved ? 'Disetujui' : 'Ditolak' } : a))
-    );
+    persistApprovalItemByReference(id, 'Lembur', { status: approved ? 'Disetujui' : 'Ditolak' });
   };
 
   // 25. Reimbursement Handlers
@@ -4259,37 +4194,27 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
     setReimbursementClaims((prev) => [newClaim, ...prev]);
     const emp = employees.find((e) => e.id === newClaim.employeeId);
-    setApprovalItems((prev) => [
-      {
-        id: `appr-clm-${Date.now()}`,
-        tenantId: currentTenant.id,
-        category: 'Reimbursement',
-        referenceId: newClaim.id,
-        title: `Klaim ${newClaim.category}: ${emp?.fullName || newClaim.employeeId} (${newClaim.claimNumber})`,
-        requesterId: newClaim.employeeId,
-        department: emp?.department || 'Operasional',
-        amount: newClaim.amount,
-        submittedAt: new Date().toISOString().replace('T', ' ').slice(0, 16),
-        deadlineAt: new Date(Date.now() + 48 * 3600 * 1000).toISOString().replace('T', ' ').slice(0, 16),
-        level: 1,
-        totalLevels: 2,
-        assignedApproverRole: 'manager',
-        status: 'Menunggu',
-        notes: newClaim.description,
-      },
-      ...prev,
-    ]);
+    createApprovalItem({
+      category: 'Reimbursement',
+      referenceId: newClaim.id,
+      title: `Klaim ${newClaim.category}: ${emp?.fullName || newClaim.employeeId} (${newClaim.claimNumber})`,
+      requesterId: newClaim.employeeId,
+      department: emp?.department || 'Operasional',
+      amount: newClaim.amount,
+      submittedAt: new Date().toISOString().replace('T', ' ').slice(0, 16),
+      deadlineAt: new Date(Date.now() + 48 * 3600 * 1000).toISOString().replace('T', ' ').slice(0, 16),
+      level: 1,
+      totalLevels: 2,
+      assignedApproverRole: 'manager',
+      status: 'Menunggu',
+      notes: newClaim.description,
+    });
     logAuditAction('Reimbursement', 'SUBMIT_CLAIM', newClaim.id, `Pengajuan klaim ${newClaim.category} Rp ${newClaim.amount.toLocaleString('id-ID')}`);
   };
 
   const reviewReimbursementClaim = (id: string, approved: boolean, notes?: string) => {
-    setApprovalItems((prev) =>
-      prev.map((a) =>
-        a.referenceId === id && a.category === 'Reimbursement'
-          ? { ...a, status: approved ? 'Disetujui' : 'Ditolak', notes: notes || a.notes }
-          : a
-      )
-    );
+    const current = approvalItems.find((a) => a.referenceId === id && a.category === 'Reimbursement');
+    persistApprovalItemByReference(id, 'Reimbursement', { status: approved ? 'Disetujui' : 'Ditolak', notes: notes || current?.notes });
     logAuditAction('Reimbursement', approved ? 'APPROVE_CLAIM' : 'REJECT_CLAIM', id, `Klaim biaya ${approved ? 'disetujui' : 'ditolak'}`);
     setReimbursementClaims((prev) =>
       prev.map((c) =>
@@ -4324,25 +4249,20 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setPersonaliaRequests((prev) => [newReq, ...prev]);
 
     const emp = employees.find((e) => e.id === req.employeeId);
-    setApprovalItems((prev) => [
-      {
-        id: `appr-pers-${Date.now()}`,
-        tenantId: currentTenant.id,
-        category: 'Promosi/Personalia',
-        referenceId: newReq.id,
-        title: `Personalia: ${req.type} - ${emp?.fullName || 'Karyawan'}`,
-        requesterId: req.employeeId,
-        department: emp?.department || 'Operasional',
-        submittedAt: new Date().toISOString().replace('T', ' ').slice(0, 16),
-        deadlineAt: new Date(Date.now() + 72 * 3600 * 1000).toISOString().replace('T', ' ').slice(0, 16),
-        level: 1,
-        totalLevels: 2,
-        assignedApproverRole: 'manager',
-        status: 'Menunggu',
-        notes: req.reason,
-      },
-      ...prev,
-    ]);
+    createApprovalItem({
+      category: 'Promosi/Personalia',
+      referenceId: newReq.id,
+      title: `Personalia: ${req.type} - ${emp?.fullName || 'Karyawan'}`,
+      requesterId: req.employeeId,
+      department: emp?.department || 'Operasional',
+      submittedAt: new Date().toISOString().replace('T', ' ').slice(0, 16),
+      deadlineAt: new Date(Date.now() + 72 * 3600 * 1000).toISOString().replace('T', ' ').slice(0, 16),
+      level: 1,
+      totalLevels: 2,
+      assignedApproverRole: 'manager',
+      status: 'Menunggu',
+      notes: req.reason,
+    });
 
     logAuditAction('Personalia', 'SUBMIT_REQUEST', newReq.id, `Pengajuan perubahan status ${req.type} untuk ${emp?.fullName}`);
   };
@@ -4370,9 +4290,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setPersonaliaLogs((prev) =>
         prev.map((l) => (l.id === id ? { ...l, status: 'Disetujui', approvedBy: currentUser.name } : l))
       );
-      setApprovalItems((prev) =>
-        prev.map((a) => (a.referenceId === id ? { ...a, status: 'Disetujui' } : a))
-      );
+      persistApprovalItemByReference(id, 'Promosi/Personalia', { status: 'Disetujui' });
       logAuditAction('Personalia', 'APPROVE_LOG', id, `Persetujuan ${existingLog.type} untuk ${emp?.fullName || existingLog.employeeId}`);
       return;
     }
@@ -4434,9 +4352,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setPersonaliaLogs((prev) =>
       prev.map((l) => (l.id === id ? { ...l, status: 'Ditolak', approvedBy: currentUser.name } : l))
     );
-    setApprovalItems((prev) =>
-      prev.map((a) => (a.referenceId === id ? { ...a, status: 'Ditolak' } : a))
-    );
+    persistApprovalItemByReference(id, 'Promosi/Personalia', { status: 'Ditolak' });
     setPersonaliaRequests((prev) =>
       prev.map((p) => (p.id === id ? { ...p, status: 'Ditolak', approvedBy: currentUser.name } : p))
     );
@@ -5124,7 +5040,6 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setComplianceRecords(INITIAL_COMPLIANCE);
     setOffboardingRecords(INITIAL_OFFBOARDING);
     setProcurementOrders(INITIAL_PROCUREMENT);
-    setApprovalItems(INITIAL_APPROVALS);
     setAssets(INITIAL_ASSETS);
     setBusinessTrips(INITIAL_BUSINESS_TRIPS);
     setPersonaliaLogs(INITIAL_PERSONALIA_LOGS);

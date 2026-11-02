@@ -1,5 +1,17 @@
 import { Router, type Request } from "express";
 import { z } from "zod";
+
+/**
+ * An ISO datetime string that gets transformed into a real Date before it
+ * reaches drizzle — a bare `zDateTime()` validates the string's
+ * shape but still hands drizzle a string for a `timestamp` column, and
+ * drizzle's own serialization always calls `.toISOString()` on the value,
+ * which only exists on Date. Every notNull/explicit timestamp field hit
+ * this once a request actually supplied the field (several hadn't been
+ * exercised yet, which is how this stayed latent) — user, 2026-11-02 bug
+ * audit, found while live-testing approval-delegations.
+ */
+const zDateTime = () => z.string().datetime().transform((s) => new Date(s));
 import bcrypt from "bcryptjs";
 import { eq, inArray, and, isNull } from "drizzle-orm";
 import { db } from "../db/client.ts";
@@ -29,6 +41,8 @@ import {
   probationEvaluations,
   contractRenewalReviews,
   tenantModuleSettings,
+  approvalItems,
+  approvalDelegations,
 } from "../db/schema.ts";
 import { requireTenantAdmin } from "../middleware/auth.ts";
 import { validateBody, validateParams, uuidParam } from "../lib/validate.ts";
@@ -1015,8 +1029,8 @@ const employeeSchema = z.object({
   candidateId: z.string().uuid().optional(),
   status: z.string().trim().max(50).optional(),
   basicSalary: z.number().int().min(0).optional(),
-  joinDate: z.string().datetime().optional(),
-  resignDate: z.string().datetime().optional(),
+  joinDate: zDateTime().optional(),
+  resignDate: zDateTime().optional(),
   resignReason: z.string().trim().max(500).optional(),
   details: z.record(z.string(), z.unknown()).optional(),
 });
@@ -1200,7 +1214,7 @@ const jobVacancySchema = z.object({
   title: z.string().trim().min(1).max(200),
   openings: z.number().int().min(1).optional(),
   status: z.enum(["Buka", "Ditutup"]).optional(),
-  targetCloseDate: z.string().datetime().optional(),
+  targetCloseDate: zDateTime().optional(),
   details: z.record(z.string(), z.unknown()).optional(),
 });
 
@@ -1313,7 +1327,7 @@ const onboardingProcessSchema = z.object({
   phone: z.string().trim().max(50).optional(),
   position: z.string().trim().max(200).optional(),
   departmentId: z.string().uuid().optional(),
-  joinDate: z.string().datetime().optional(),
+  joinDate: zDateTime().optional(),
   basicSalary: z.number().int().min(0).optional(),
   contractDocNumber: z.string().trim().max(100).optional(),
   status: z.enum(["In Progress", "Completed", "Cancelled"]).optional(),
@@ -1517,7 +1531,7 @@ tenantRouter.get("/probation-evaluations", async (req, res) => {
 const probationEvaluationSchema = z.object({
   employeeId: z.string().uuid(),
   supervisorId: z.string().uuid().optional(),
-  evaluationDate: z.string().datetime().optional(),
+  evaluationDate: zDateTime().optional(),
   technicalSkillScore: z.number().int().min(0).max(100),
   disciplineScore: z.number().int().min(0).max(100),
   teamworkScore: z.number().int().min(0).max(100),
@@ -1568,7 +1582,7 @@ tenantRouter.get("/contract-renewal-reviews", async (req, res) => {
 
 const contractRenewalReviewSchema = z.object({
   employeeId: z.string().uuid(),
-  currentContractEnd: z.string().datetime(),
+  currentContractEnd: zDateTime(),
   recommendation: z.enum(["Perpanjang PKWT", "Alih Status PKWTT (Tetap)", "Tidak Diperpanjang"]),
   newDurationMonths: z.number().int().min(0).optional(),
   notes: z.string().trim().max(2000).optional(),
@@ -1636,4 +1650,84 @@ tenantRouter.put("/module-settings/:moduleKey", validateBody(moduleSettingsSchem
   }
   const [created] = await db.insert(tenantModuleSettings).values({ tenantId, moduleKey, settings: req.body.settings }).returning();
   res.status(201).json(created);
+});
+
+// ---------------------------------------------------------------------------
+// Approval Engine — the central cross-module queue. Tenant-wide for now
+// (not entity-scoped): requesterId/assignedApproverId are plain text
+// because several source modules (Leave, Attendance, Loans, ...) aren't
+// migrated to real tables yet, so there's no real employee->entity lookup
+// to scope through yet. Tighten this once those modules land.
+// ---------------------------------------------------------------------------
+
+tenantRouter.get("/approval-items", async (req, res) => {
+  res.json(await db.select().from(approvalItems).where(eq(approvalItems.tenantId, req.session!.tenantId!)));
+});
+
+const approvalItemSchema = z.object({
+  category: z.string().trim().min(1).max(100),
+  referenceId: z.string().trim().min(1).max(100),
+  title: z.string().trim().min(1).max(300),
+  requesterId: z.string().trim().min(1).max(100),
+  department: z.string().trim().max(200).optional(),
+  submittedAt: zDateTime().optional(),
+  deadlineAt: zDateTime().optional(),
+  level: z.number().int().min(1).optional(),
+  totalLevels: z.number().int().min(1).optional(),
+  assignedApproverRole: z.string().trim().min(1).max(50),
+  assignedApproverId: z.string().trim().max(100).optional(),
+  substituteApproverId: z.string().trim().max(100).optional(),
+  status: z.enum(["Menunggu", "Disetujui", "Ditolak", "Eskalasi Terlambat"]).optional(),
+  amount: z.number().int().optional(),
+  notes: z.string().trim().max(2000).optional(),
+});
+
+tenantRouter.post("/approval-items", validateBody(approvalItemSchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [created] = await db.insert(approvalItems).values({ ...req.body, tenantId }).returning();
+  await logAudit({ actorUserId: req.session!.userId, tenantId, action: "approval_item.create", details: { approvalItemId: created.id, category: created.category } });
+  res.status(201).json(created);
+});
+
+tenantRouter.put("/approval-items/:id", validateParams(uuidParam("id")), validateBody(approvalItemSchema.partial()), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [updated] = await db
+    .update(approvalItems)
+    .set(req.body)
+    .where(and(eq(approvalItems.id, req.params.id), eq(approvalItems.tenantId, tenantId)))
+    .returning();
+  if (!updated) return res.status(404).json({ error: "Item approval tidak ditemukan" });
+  await logAudit({ actorUserId: req.session!.userId, tenantId, action: "approval_item.update", details: { approvalItemId: updated.id, status: updated.status } });
+  res.json(updated);
+});
+
+tenantRouter.get("/approval-delegations", async (req, res) => {
+  res.json(await db.select().from(approvalDelegations).where(eq(approvalDelegations.tenantId, req.session!.tenantId!)));
+});
+
+const approvalDelegationSchema = z.object({
+  principalId: z.string().trim().min(1).max(100),
+  substituteId: z.string().trim().min(1).max(100),
+  startDate: zDateTime(),
+  endDate: zDateTime(),
+  reason: z.string().trim().max(1000).optional(),
+  isActive: z.boolean().optional(),
+});
+
+tenantRouter.post("/approval-delegations", validateBody(approvalDelegationSchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [created] = await db.insert(approvalDelegations).values({ ...req.body, tenantId }).returning();
+  await logAudit({ actorUserId: req.session!.userId, tenantId, action: "approval_delegation.create", details: { approvalDelegationId: created.id } });
+  res.status(201).json(created);
+});
+
+tenantRouter.put("/approval-delegations/:id", validateParams(uuidParam("id")), validateBody(approvalDelegationSchema.partial()), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [updated] = await db
+    .update(approvalDelegations)
+    .set(req.body)
+    .where(and(eq(approvalDelegations.id, req.params.id), eq(approvalDelegations.tenantId, tenantId)))
+    .returning();
+  if (!updated) return res.status(404).json({ error: "Delegasi tidak ditemukan" });
+  res.json(updated);
 });

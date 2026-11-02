@@ -959,3 +959,49 @@ export const tenantModuleSettings = pgTable(
   },
   (table) => [primaryKey({ columns: [table.tenantId, table.moduleKey] })]
 );
+
+/**
+ * Approval Engine — the central cross-module queue (src/types/hrms.ts
+ * ApprovalWorkflowItem). Every other module (Cuti, Perbaikan Presensi,
+ * Tukar Shift, Lembur, Pinjaman, Reimbursement, Promosi/Personalia,
+ * Perjalanan Dinas, Procurement PR, Offboarding) creates one row here as a
+ * side effect of its own submit action and keeps it in sync when reviewed
+ * from that module's own screen — this table is the single source of
+ * truth either way reads from. referenceId/requesterId/assignedApproverId/
+ * substituteApproverId are deliberately plain text, not FKs: several of
+ * the modules that create these rows aren't migrated to real tables yet,
+ * so a strict FK would reject rows referencing a still-mock id.
+ */
+export const approvalItems = pgTable("approval_items", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  category: text("category").notNull(),
+  referenceId: text("reference_id").notNull(),
+  title: text("title").notNull(),
+  requesterId: text("requester_id").notNull(),
+  department: text("department"),
+  submittedAt: timestamp("submitted_at", { withTimezone: true }).defaultNow().notNull(),
+  deadlineAt: timestamp("deadline_at", { withTimezone: true }),
+  level: integer("level").notNull().default(1),
+  totalLevels: integer("total_levels").notNull().default(1),
+  assignedApproverRole: text("assigned_approver_role").notNull(),
+  assignedApproverId: text("assigned_approver_id"),
+  substituteApproverId: text("substitute_approver_id"),
+  status: text("status").notNull().default("Menunggu"),
+  amount: integer("amount"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+/** Who can approve on behalf of whom, for a date range — same plain-text-id rationale as approvalItems. */
+export const approvalDelegations = pgTable("approval_delegations", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  principalId: text("principal_id").notNull(),
+  substituteId: text("substitute_id").notNull(),
+  startDate: timestamp("start_date", { withTimezone: true }).notNull(),
+  endDate: timestamp("end_date", { withTimezone: true }).notNull(),
+  reason: text("reason"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});

@@ -363,6 +363,37 @@ export interface ContractRenewalReview {
   newContractDocNumber: string | null;
 }
 
+export interface ApprovalWorkflowItem {
+  id: string;
+  tenantId: string;
+  category: string;
+  referenceId: string;
+  title: string;
+  requesterId: string;
+  department: string | null;
+  submittedAt: string;
+  deadlineAt: string | null;
+  level: number;
+  totalLevels: number;
+  assignedApproverRole: string;
+  assignedApproverId: string | null;
+  substituteApproverId: string | null;
+  status: "Menunggu" | "Disetujui" | "Ditolak" | "Eskalasi Terlambat";
+  amount: number | null;
+  notes: string | null;
+}
+
+export interface ApprovalDelegation {
+  id: string;
+  tenantId: string;
+  principalId: string;
+  substituteId: string;
+  startDate: string;
+  endDate: string;
+  reason: string | null;
+  isActive: boolean;
+}
+
 export type OrgChangeSet = { create?: Record<string, unknown>[]; update?: { id: string; data: Record<string, unknown> }[]; delete?: string[] };
 
 export interface OrgChangeProposal {
@@ -545,4 +576,16 @@ export const tenantApi = {
   getModuleSettings: () => request<Record<string, Record<string, unknown>>>("/api/tenant/module-settings"),
   updateModuleSettings: (moduleKey: string, settings: Record<string, unknown>) =>
     request<{ moduleKey: string; settings: Record<string, unknown> }>(`/api/tenant/module-settings/${moduleKey}`, { method: "PUT", body: JSON.stringify({ settings }) }),
+
+  listApprovalItems: () => request<ApprovalWorkflowItem[]>("/api/tenant/approval-items"),
+  createApprovalItem: (data: Omit<ApprovalWorkflowItem, "id" | "tenantId">) =>
+    request<ApprovalWorkflowItem>("/api/tenant/approval-items", { method: "POST", body: JSON.stringify(data) }),
+  updateApprovalItem: (id: string, data: Partial<ApprovalWorkflowItem>) =>
+    request<ApprovalWorkflowItem>(`/api/tenant/approval-items/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+
+  listApprovalDelegations: () => request<ApprovalDelegation[]>("/api/tenant/approval-delegations"),
+  createApprovalDelegation: (data: Omit<ApprovalDelegation, "id" | "tenantId">) =>
+    request<ApprovalDelegation>("/api/tenant/approval-delegations", { method: "POST", body: JSON.stringify(data) }),
+  updateApprovalDelegation: (id: string, data: Partial<ApprovalDelegation>) =>
+    request<ApprovalDelegation>(`/api/tenant/approval-delegations/${id}`, { method: "PUT", body: JSON.stringify(data) }),
 };
