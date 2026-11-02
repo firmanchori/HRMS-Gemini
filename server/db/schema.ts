@@ -870,3 +870,18 @@ export const interviewTypeSettings = pgTable("interview_type_settings", {
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+/** Template tasks auto-copied onto every new onboarding_processes.tasks — tenant-scoped admin config. */
+export const onboardingChecklistTemplates = pgTable("onboarding_checklist_templates", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  title: text("title").notNull(),
+  category: text("category").notNull(),
+  targetDepartment: text("target_department").notNull(),
+  verificationType: text("verification_type").notNull(),
+  actionType: text("action_type"),
+  isMandatory: boolean("is_mandatory").notNull().default(true),
+  description: text("description"),
+  subItems: jsonb("sub_items").notNull().default([]).$type<string[]>(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});

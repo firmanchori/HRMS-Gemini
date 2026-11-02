@@ -25,6 +25,7 @@ import {
   onboardingProcesses,
   competencyTestTypeSettings,
   interviewTypeSettings,
+  onboardingChecklistTemplates,
 } from "../db/schema.ts";
 import { requireTenantAdmin } from "../middleware/auth.ts";
 import { validateBody, validateParams, uuidParam } from "../lib/validate.ts";
@@ -1253,5 +1254,48 @@ tenantRouter.delete("/interview-types/:id", validateParams(uuidParam("id")), asy
   const tenantId = req.session!.tenantId!;
   const [deleted] = await db.delete(interviewTypeSettings).where(and(eq(interviewTypeSettings.id, req.params.id), eq(interviewTypeSettings.tenantId, tenantId))).returning();
   if (!deleted) return res.status(404).json({ error: "Jenis interview tidak ditemukan" });
+  res.json({ ok: true });
+});
+
+// ---------------------------------------------------------------------------
+// Onboarding checklist templates — tenant-wide, copied onto every new onboarding process's tasks.
+// ---------------------------------------------------------------------------
+
+tenantRouter.get("/onboarding-checklist-templates", async (req, res) => {
+  res.json(await db.select().from(onboardingChecklistTemplates).where(eq(onboardingChecklistTemplates.tenantId, req.session!.tenantId!)));
+});
+
+const onboardingChecklistTemplateSchema = z.object({
+  title: z.string().trim().min(1).max(200),
+  category: z.string().trim().min(1).max(100),
+  targetDepartment: z.string().trim().min(1).max(50),
+  verificationType: z.string().trim().min(1).max(50),
+  actionType: z.string().trim().max(50).optional(),
+  isMandatory: z.boolean().optional(),
+  description: z.string().trim().max(1000).optional(),
+  subItems: z.array(z.string()).optional(),
+});
+
+tenantRouter.post("/onboarding-checklist-templates", validateBody(onboardingChecklistTemplateSchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [created] = await db.insert(onboardingChecklistTemplates).values({ ...req.body, tenantId }).returning();
+  res.status(201).json(created);
+});
+
+tenantRouter.put("/onboarding-checklist-templates/:id", validateParams(uuidParam("id")), validateBody(onboardingChecklistTemplateSchema.partial()), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [updated] = await db
+    .update(onboardingChecklistTemplates)
+    .set(req.body)
+    .where(and(eq(onboardingChecklistTemplates.id, req.params.id), eq(onboardingChecklistTemplates.tenantId, tenantId)))
+    .returning();
+  if (!updated) return res.status(404).json({ error: "Template checklist tidak ditemukan" });
+  res.json(updated);
+});
+
+tenantRouter.delete("/onboarding-checklist-templates/:id", validateParams(uuidParam("id")), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [deleted] = await db.delete(onboardingChecklistTemplates).where(and(eq(onboardingChecklistTemplates.id, req.params.id), eq(onboardingChecklistTemplates.tenantId, tenantId))).returning();
+  if (!deleted) return res.status(404).json({ error: "Template checklist tidak ditemukan" });
   res.json({ ok: true });
 });

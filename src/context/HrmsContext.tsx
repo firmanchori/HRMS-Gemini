@@ -15,6 +15,7 @@ import {
   type OnboardingProcess as ApiOnboardingProcess,
   type CompetencyTestTypeSetting as ApiCompetencyTestTypeSetting,
   type InterviewTypeSetting as ApiInterviewTypeSetting,
+  type OnboardingChecklistTemplateItem as ApiOnboardingChecklistTemplateItem,
 } from '../tenant/api';
 import { ORG_STRUCTURE_TEMPLATES } from '../utils/orgStructureTemplates';
 import {
@@ -1008,14 +1009,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [apiOnboardingProcesses, setApiOnboardingProcesses] = useState<ApiOnboardingProcess[]>([]);
   const onboardingProcesses = useMemo(() => apiOnboardingProcesses.map((r) => mergeRowIntoMock(r) as unknown as OnboardingProcess), [apiOnboardingProcesses]);
 
-  const [onboardingChecklistTemplates, setOnboardingChecklistTemplates] = useState<OnboardingChecklistTemplateItem[]>(() => {
-    const saved = localStorage.getItem('nusahr_onboarding_templates_v2');
-    return saved ? JSON.parse(saved) : DEFAULT_ONBOARDING_CHECKLIST_TEMPLATES;
-  });
-
-  useEffect(() => {
-    localStorage.setItem('nusahr_onboarding_templates_v2', JSON.stringify(onboardingChecklistTemplates));
-  }, [onboardingChecklistTemplates]);
+  const [onboardingChecklistTemplates, setOnboardingChecklistTemplates] = useState<OnboardingChecklistTemplateItem[]>([]);
 
   const [shifts, setShifts] = useState<WorkShift[]>(() => {
     const saved = localStorage.getItem('nusahr_shifts');
@@ -1412,7 +1406,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [
       realEntities, realOfficeLocations, realDivisions, realDepartments, realPositions, realOrgNodes, realGrades,
       realUsers, realJobRequisitions, realVacancies, realCandidates, realOnboardingProcesses,
-      realCompetencyTestTypes, realInterviewTypes,
+      realCompetencyTestTypes, realInterviewTypes, realOnboardingChecklistTemplates,
     ] = await Promise.all([
       tenantApi.listEntities(),
       tenantApi.listOfficeLocations(),
@@ -1428,6 +1422,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       tenantApi.listOnboardingProcesses(),
       tenantApi.listCompetencyTestTypes(),
       tenantApi.listInterviewTypes(),
+      tenantApi.listOnboardingChecklistTemplates(),
     ]);
     setApiEntities(realEntities);
     setApiOfficeLocations(realOfficeLocations);
@@ -1443,6 +1438,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setApiOnboardingProcesses(realOnboardingProcesses);
     setCompetencyTestTypes(realCompetencyTestTypes.map(toMockCompetencyTestType));
     setInterviewTypeSettings(realInterviewTypes.map(toMockInterviewType));
+    setOnboardingChecklistTemplates(realOnboardingChecklistTemplates.map(toMockChecklistTemplate));
   };
 
   // 34. Vendor Invoices (AP)
@@ -2851,22 +2847,41 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { successCount, errorCount };
   };
 
-  // 13. Onboarding Actions & Checklist Templates
-  const updateOnboardingChecklistTemplates = (templates: OnboardingChecklistTemplateItem[]) => {
-    setOnboardingChecklistTemplates(templates);
+  // 13. Onboarding Actions & Checklist Templates — real backend.
+  const toMockChecklistTemplate = (r: ApiOnboardingChecklistTemplateItem): OnboardingChecklistTemplateItem => ({
+    id: r.id,
+    title: r.title,
+    category: r.category,
+    targetDepartment: r.targetDepartment as OnboardingChecklistTemplateItem['targetDepartment'],
+    verificationType: r.verificationType as OnboardingChecklistTemplateItem['verificationType'],
+    actionType: (r.actionType || undefined) as OnboardingChecklistTemplateItem['actionType'],
+    isMandatory: r.isMandatory,
+    description: r.description || undefined,
+    subItems: r.subItems,
+  });
+
+  const updateOnboardingChecklistTemplates = async (templates: OnboardingChecklistTemplateItem[]) => {
+    await Promise.all(onboardingChecklistTemplates.map((t) => tenantApi.deleteOnboardingChecklistTemplate(t.id)));
+    const created = await Promise.all(
+      templates.map((t) => {
+        const { id, ...rest } = t;
+        void id;
+        return tenantApi.createOnboardingChecklistTemplate(rest as Omit<ApiOnboardingChecklistTemplateItem, 'id' | 'tenantId'>);
+      })
+    );
+    setOnboardingChecklistTemplates(created.map(toMockChecklistTemplate));
     logAuditAction('Onboarding Settings', 'UPDATE_TEMPLATES', 'templates', `Memperbarui ${templates.length} template checklist onboarding`);
   };
 
-  const addChecklistTemplateItem = (item: Omit<OnboardingChecklistTemplateItem, 'id'>) => {
-    const newItem: OnboardingChecklistTemplateItem = {
-      ...item,
-      id: `tmpl-${Date.now()}`,
-    };
+  const addChecklistTemplateItem = async (item: Omit<OnboardingChecklistTemplateItem, 'id'>) => {
+    const created = await tenantApi.createOnboardingChecklistTemplate(item as Omit<ApiOnboardingChecklistTemplateItem, 'id' | 'tenantId'>);
+    const newItem = toMockChecklistTemplate(created);
     setOnboardingChecklistTemplates((prev) => [...prev, newItem]);
     logAuditAction('Onboarding Settings', 'ADD_TEMPLATE_ITEM', newItem.id, `Menambahkan checklist: ${newItem.title}`);
   };
 
-  const removeChecklistTemplateItem = (id: string) => {
+  const removeChecklistTemplateItem = async (id: string) => {
+    await tenantApi.deleteOnboardingChecklistTemplate(id);
     setOnboardingChecklistTemplates((prev) => prev.filter((t) => t.id !== id));
     logAuditAction('Onboarding Settings', 'DELETE_TEMPLATE_ITEM', id, `Menghapus template checklist ID: ${id}`);
   };

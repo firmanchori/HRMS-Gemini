@@ -307,6 +307,19 @@ export interface InterviewTypeSetting {
   isActive: boolean;
 }
 
+export interface OnboardingChecklistTemplateItem {
+  id: string;
+  tenantId: string;
+  title: string;
+  category: string;
+  targetDepartment: string;
+  verificationType: string;
+  actionType: string | null;
+  isMandatory: boolean;
+  description: string | null;
+  subItems: string[];
+}
+
 export type OrgChangeSet = { create?: Record<string, unknown>[]; update?: { id: string; data: Record<string, unknown> }[]; delete?: string[] };
 
 export interface OrgChangeProposal {
@@ -464,4 +477,11 @@ export const tenantApi = {
   updateInterviewType: (id: string, data: Partial<InterviewTypeSetting>) =>
     request<InterviewTypeSetting>(`/api/tenant/interview-types/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   deleteInterviewType: (id: string) => request<{ ok: true }>(`/api/tenant/interview-types/${id}`, { method: "DELETE" }),
+
+  listOnboardingChecklistTemplates: () => request<OnboardingChecklistTemplateItem[]>("/api/tenant/onboarding-checklist-templates"),
+  createOnboardingChecklistTemplate: (data: Omit<OnboardingChecklistTemplateItem, "id" | "tenantId">) =>
+    request<OnboardingChecklistTemplateItem>("/api/tenant/onboarding-checklist-templates", { method: "POST", body: JSON.stringify(data) }),
+  updateOnboardingChecklistTemplate: (id: string, data: Partial<OnboardingChecklistTemplateItem>) =>
+    request<OnboardingChecklistTemplateItem>(`/api/tenant/onboarding-checklist-templates/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteOnboardingChecklistTemplate: (id: string) => request<{ ok: true }>(`/api/tenant/onboarding-checklist-templates/${id}`, { method: "DELETE" }),
 };

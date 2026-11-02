@@ -16,6 +16,7 @@ import {
   onboardingProcesses,
   competencyTestTypeSettings,
   interviewTypeSettings,
+  onboardingChecklistTemplates,
   users,
 } from "../schema.ts";
 
@@ -42,6 +43,119 @@ const FPTK_SIGNATORY_SEED = [
   { roleLabel: "HR Manager", isRequired: true, sortOrder: 1 },
   { roleLabel: "Direktur/Kepala Entitas", isRequired: true, sortOrder: 2 },
   { roleLabel: "Direktur Keuangan", isRequired: false, sortOrder: 3 },
+];
+
+/** Default onboarding checklist — mirrors src/data/initialData.ts DEFAULT_ONBOARDING_CHECKLIST_TEMPLATES (kept as a plain literal here since server seeds can't import frontend modules). */
+const ONBOARDING_CHECKLIST_TEMPLATE_SEED = [
+  {
+    title: "Pemeriksaan Dokumen",
+    category: "Legalitas & Dokumen",
+    targetDepartment: "HR",
+    verificationType: "manual",
+    isMandatory: true,
+    description: "Pemeriksaan dan verifikasi kelengkapan berkas fisik & digital dokumen persyaratan karyawan.",
+    subItems: [
+      "KTP Elektronik Asli / Salinan Terverifikasi",
+      "Kartu NPWP Terverifikasi DJP",
+      "Kartu Keluarga (KK) Terbaru",
+      "Ijazah Asli & Transkrip Nilai Akademik",
+      "Buku Rekening Bank untuk Payroll Gaji",
+      "Surat Keterangan Catatan Kepolisian (SKCK)",
+      "Surat Keterangan Sehat / Hasil Medical Check-Up (MCU)",
+    ],
+  },
+  {
+    title: "Kelengkapan Data Di System",
+    category: "Legalitas & Dokumen",
+    targetDepartment: "HR",
+    verificationType: "manual",
+    isMandatory: true,
+    description: "Perekaman dan validasi data profil karyawan ke dalam database Sistem Informasi SDM NusaHR.",
+    subItems: [
+      "Input NIK KTP 16-Digit & Nomor Kartu Keluarga ke Sistem",
+      "Pendaftaran Nomor NPWP & Status PTKP TER Pajak",
+      "Pendaftaran Nomor Kepesertaan BPJS Ketenagakerjaan (KPJ)",
+      "Pendaftaran Nomor Kartu BPJS Kesehatan",
+      "Input Nomor Rekening Bank Payroll & Nama Pemilik Rekening",
+      "Input Kontak Darurat (Nama, Nomor Telepon & Hubungan Keluarga)",
+      "Alamat Domisili Karyawan & Nomor Kontak WhatsApp Aktif",
+    ],
+  },
+  {
+    title: "Tanda Tangan Kontrak Digital QR (PKWT/PKWTT) & NDA",
+    category: "Legalitas & Dokumen",
+    targetDepartment: "HR",
+    verificationType: "manual",
+    isMandatory: true,
+    description: "Penandatanganan digital kontrak kerja resmi dan Non-Disclosure Agreement (NDA).",
+    subItems: [
+      "Review Draf Surat Perjanjian Kerja Waktu Tertentu/Tidak Tertentu",
+      "Penandatanganan Digital Dokumen Kontrak via QR Code Validasi",
+      "Penandatanganan Non-Disclosure Agreement (NDA)",
+      "Penandatanganan Pakta Integritas & Kode Etik Perusahaan",
+      "Pengarsipan Salinan Dokumen Kontrak Kerja Karyawan",
+    ],
+  },
+  {
+    title: "Pengajuan ID Card & Akses Fasilitas",
+    category: "Fasilitas & GA",
+    targetDepartment: "GA",
+    verificationType: "manual",
+    isMandatory: true,
+    description: "Pembuatan ID Card resmi dan aktivasi hak akses gedung kantor oleh General Affairs (GA).",
+    subItems: [
+      "Pengambilan / Upload Pas Foto Formal untuk ID Card",
+      "Pencetakan Kartu ID Card Fisik & Lanyard",
+      "Aktivasi Sensor RFID Turnstile Gate Lobby Gedung",
+      "Registrasi Hak Akses Pintu Ruang Kerja Departemen",
+      "Penyerahan Fisik ID Card & Tanda Terima Fasilitas ke Karyawan",
+    ],
+  },
+  {
+    title: "Pengajuan/Permintaan Perangkat",
+    category: "Inventaris & IT",
+    targetDepartment: "IT",
+    verificationType: "manual",
+    isMandatory: true,
+    description: "Penyediaan unit laptop kerja dan kelengkapan perangkat penunjang oleh IT Support.",
+    subItems: [
+      "Penyiapan Unit Laptop Kerja Sesuai Standar Formasi Jabatan",
+      "Pemasangan Stiker Label Aset (IT Asset Tag & Barcode)",
+      "Penyiapan Kelengkapan (Charger Adaptor, Mouse & Tas Laptop)",
+      "Pemeriksaan Kelayakan Fisik & Uji Performa Perangkat",
+      "Penandatanganan Berita Acara Serah Terima (BAST) Perangkat",
+    ],
+  },
+  {
+    title: "Penyediaan Akun-Akun Sistem & Email Korporat",
+    category: "Inventaris & IT",
+    targetDepartment: "IT",
+    verificationType: "manual",
+    isMandatory: true,
+    description: "Penerbitan akun email perusahaan dan hak akses sistem kerja oleh IT Support.",
+    subItems: [
+      "Pembuatan Akun Email Korporat Resmi",
+      "Pembuatan Akun NusaHR Employee Portal & Absensi Mobile",
+      "Provisioning Akses Workspace Komunikasi (Slack / Discord / Teams)",
+      "Pemberian Hak Akses Sistem Kerja Departemen (Jira, GitHub, ERP, dsb.)",
+      "Pengiriman Kredensial & Panduan Setup Password Pertama Kali",
+    ],
+  },
+  {
+    title: "Orientasi Budaya Perusahaan & Office Tour",
+    category: "Pengenalan & HR",
+    targetDepartment: "HR",
+    verificationType: "manual",
+    isMandatory: false,
+    description: "Sesi perkenalan nilai-nilai perusahaan, tur kantor, dan penunjukan buddy kerja.",
+    subItems: [
+      "Office Tour & Pengenalan Denah Fasilitas Gedung Kantor",
+      "Perkenalan dengan Rekan Tim Kerja, Manager & Head of Dept",
+      "Penjelasan Jam Kerja, Presensi Mobile & Peraturan Perusahaan",
+      "Sosialisasi Benefit Karyawan, Asuransi & Kebijakan HR",
+      "Penunjukan Mentor / Buddy Kerja Selama Masa Orientasi",
+    ],
+  },
 ];
 
 /** A reasonable starter catalog of assessment/interview types — tenants edit or add their own via the Recruitment settings UI. */
@@ -111,8 +225,13 @@ export async function seedRecruitmentMasterData() {
     if (!existingInterviewType) {
       await db.insert(interviewTypeSettings).values(INTERVIEW_TYPE_SEED.map((t) => ({ tenantId: tenant.id, ...t })));
     }
+
+    const [existingChecklistTemplate] = await db.select().from(onboardingChecklistTemplates).where(eq(onboardingChecklistTemplates.tenantId, tenant.id)).limit(1);
+    if (!existingChecklistTemplate) {
+      await db.insert(onboardingChecklistTemplates).values(ONBOARDING_CHECKLIST_TEMPLATE_SEED.map((t) => ({ tenantId: tenant.id, ...t })));
+    }
   }
-  console.log(`Master data pendidikan/jurusan, konfigurasi penandatangan FPTK, jenis tes & interview disiapkan untuk ${allTenants.length} tenant.`);
+  console.log(`Master data pendidikan/jurusan, konfigurasi penandatangan FPTK, jenis tes, interview & template onboarding disiapkan untuk ${allTenants.length} tenant.`);
 }
 
 /** Sample employees + one FPTK for the "contoh" demo tenant (PT Contoh) — real seeded rows, not frontend mock arrays. */
