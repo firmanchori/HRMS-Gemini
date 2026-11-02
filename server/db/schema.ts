@@ -842,3 +842,31 @@ export const onboardingProcesses = pgTable("onboarding_processes", {
   details: jsonb("details").notNull().default({}).$type<Record<string, unknown>>(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+/** Master data for assessment methods offered to candidates — tenant-scoped admin config, not hardcoded. */
+export const competencyTestTypeSettings = pgTable("competency_test_type_settings", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  name: text("name").notNull(),
+  category: text("category").notNull(),
+  passingGrade: integer("passing_grade").notNull().default(70),
+  durationMinutes: integer("duration_minutes").notNull().default(60),
+  method: text("method").notNull(),
+  description: text("description"),
+  weightPercent: integer("weight_percent"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+/** Master data for interview types/scorecards — tenant-scoped admin config. criteria is a small nested array ([{id,name,description?,weightPercent?}]), not worth its own table. */
+export const interviewTypeSettings = pgTable("interview_type_settings", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  name: text("name").notNull(),
+  targetRole: text("target_role"),
+  description: text("description"),
+  interviewerRoles: text("interviewer_roles"),
+  criteria: jsonb("criteria").notNull().default([]).$type<unknown[]>(),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});

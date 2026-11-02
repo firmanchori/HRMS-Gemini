@@ -13,6 +13,8 @@ import {
   type JobVacancy as ApiJobVacancy,
   type Candidate as ApiCandidate,
   type OnboardingProcess as ApiOnboardingProcess,
+  type CompetencyTestTypeSetting as ApiCompetencyTestTypeSetting,
+  type InterviewTypeSetting as ApiInterviewTypeSetting,
 } from '../tenant/api';
 import { ORG_STRUCTURE_TEMPLATES } from '../utils/orgStructureTemplates';
 import {
@@ -948,15 +950,10 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [apiCandidates, setApiCandidates] = useState<ApiCandidate[]>([]);
   const candidates = useMemo(() => apiCandidates.map((r) => mergeRowIntoMock(r) as unknown as Candidate), [apiCandidates]);
 
-  const [competencyTestTypes, setCompetencyTestTypes] = useState<CompetencyTestTypeSetting[]>(() => {
-    const saved = localStorage.getItem('nusahr_competency_test_types_v1');
-    return saved ? JSON.parse(saved) : INITIAL_COMPETENCY_TEST_TYPES;
-  });
-
-  const [interviewTypeSettings, setInterviewTypeSettings] = useState<InterviewTypeSetting[]>(() => {
-    const saved = localStorage.getItem('nusahr_interview_types_v1');
-    return saved ? JSON.parse(saved) : INITIAL_INTERVIEW_TYPES;
-  });
+  // Real backend data, hydrated via loadTenantOrgData() — recruitment
+  // master config (user, 2026-11-02: "Selesaikan untuk modul rekrutmen").
+  const [competencyTestTypes, setCompetencyTestTypes] = useState<CompetencyTestTypeSetting[]>([]);
+  const [interviewTypeSettings, setInterviewTypeSettings] = useState<InterviewTypeSetting[]>([]);
 
   const [offboardingRecords, setOffboardingRecords] = useState<OffboardingRecord[]>(() => {
     const saved = localStorage.getItem('nusahr_offboarding');
@@ -1415,6 +1412,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [
       realEntities, realOfficeLocations, realDivisions, realDepartments, realPositions, realOrgNodes, realGrades,
       realUsers, realJobRequisitions, realVacancies, realCandidates, realOnboardingProcesses,
+      realCompetencyTestTypes, realInterviewTypes,
     ] = await Promise.all([
       tenantApi.listEntities(),
       tenantApi.listOfficeLocations(),
@@ -1428,6 +1426,8 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       tenantApi.listJobVacancies(),
       tenantApi.listCandidates(),
       tenantApi.listOnboardingProcesses(),
+      tenantApi.listCompetencyTestTypes(),
+      tenantApi.listInterviewTypes(),
     ]);
     setApiEntities(realEntities);
     setApiOfficeLocations(realOfficeLocations);
@@ -1441,6 +1441,8 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setApiVacancies(realVacancies);
     setApiCandidates(realCandidates);
     setApiOnboardingProcesses(realOnboardingProcesses);
+    setCompetencyTestTypes(realCompetencyTestTypes.map(toMockCompetencyTestType));
+    setInterviewTypeSettings(realInterviewTypes.map(toMockInterviewType));
   };
 
   // 34. Vendor Invoices (AP)
@@ -1506,18 +1508,6 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     localStorage.setItem('nusahr_job_grading_scheme', jobGradingScheme);
   }, [jobGradingScheme]);
-
-  useEffect(() => {
-    localStorage.setItem('nusahr_candidates_v4', JSON.stringify(candidates));
-  }, [candidates]);
-
-  useEffect(() => {
-    localStorage.setItem('nusahr_competency_test_types_v1', JSON.stringify(competencyTestTypes));
-  }, [competencyTestTypes]);
-
-  useEffect(() => {
-    localStorage.setItem('nusahr_interview_types_v1', JSON.stringify(interviewTypeSettings));
-  }, [interviewTypeSettings]);
 
   useEffect(() => {
     localStorage.setItem('nusahr_reimbursements_v3', JSON.stringify(reimbursementClaims));
@@ -2374,27 +2364,43 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   };
 
-  const addCompetencyTestType = (testType: Omit<CompetencyTestTypeSetting, 'id'>) => {
-    const newTest: CompetencyTestTypeSetting = {
-      ...testType,
-      id: `test-${Date.now()}`,
-    };
-    setCompetencyTestTypes((prev) => [newTest, ...prev]);
+  const toMockCompetencyTestType = (r: ApiCompetencyTestTypeSetting): CompetencyTestTypeSetting => ({
+    id: r.id,
+    name: r.name,
+    category: r.category,
+    passingGrade: r.passingGrade,
+    durationMinutes: r.durationMinutes,
+    method: r.method,
+    description: r.description || '',
+    weightPercent: r.weightPercent ?? undefined,
+    isActive: r.isActive,
+  });
+
+  const addCompetencyTestType = async (testType: Omit<CompetencyTestTypeSetting, 'id'>) => {
+    const created = await tenantApi.createCompetencyTestType(testType as Omit<ApiCompetencyTestTypeSetting, 'id' | 'tenantId'>);
+    setCompetencyTestTypes((prev) => [toMockCompetencyTestType(created), ...prev]);
   };
 
-  const updateCompetencyTestType = (id: string, updates: Partial<CompetencyTestTypeSetting>) => {
-    setCompetencyTestTypes((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, ...updates } : t))
-    );
+  const updateCompetencyTestType = async (id: string, updates: Partial<CompetencyTestTypeSetting>) => {
+    const updated = await tenantApi.updateCompetencyTestType(id, updates);
+    setCompetencyTestTypes((prev) => prev.map((t) => (t.id === id ? toMockCompetencyTestType(updated) : t)));
   };
 
-  const deleteCompetencyTestType = (id: string) => {
+  const deleteCompetencyTestType = async (id: string) => {
+    await tenantApi.deleteCompetencyTestType(id);
     setCompetencyTestTypes((prev) => prev.filter((t) => t.id !== id));
   };
 
-  const resetCompetencyTestTypes = () => {
-    setCompetencyTestTypes(INITIAL_COMPETENCY_TEST_TYPES);
-    localStorage.setItem('nusahr_competency_test_types_v1', JSON.stringify(INITIAL_COMPETENCY_TEST_TYPES));
+  const resetCompetencyTestTypes = async () => {
+    await Promise.all(competencyTestTypes.map((t) => tenantApi.deleteCompetencyTestType(t.id)));
+    const created = await Promise.all(
+      INITIAL_COMPETENCY_TEST_TYPES.map((t) => {
+        const { id, ...rest } = t;
+        void id;
+        return tenantApi.createCompetencyTestType(rest as Omit<ApiCompetencyTestTypeSetting, 'id' | 'tenantId'>);
+      })
+    );
+    setCompetencyTestTypes(created.map(toMockCompetencyTestType));
   };
 
   const saveCandidateCompetencyScore = (
@@ -2454,27 +2460,41 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   };
 
-  const addInterviewType = (type: Omit<InterviewTypeSetting, 'id'>) => {
-    const newType: InterviewTypeSetting = {
-      ...type,
-      id: `int-${Date.now()}`,
-    };
-    setInterviewTypeSettings((prev) => [newType, ...prev]);
+  const toMockInterviewType = (r: ApiInterviewTypeSetting): InterviewTypeSetting => ({
+    id: r.id,
+    name: r.name,
+    targetRole: r.targetRole || undefined,
+    description: r.description || '',
+    interviewerRoles: r.interviewerRoles || undefined,
+    criteria: r.criteria as InterviewTypeSetting['criteria'],
+    isActive: r.isActive,
+  });
+
+  const addInterviewType = async (type: Omit<InterviewTypeSetting, 'id'>) => {
+    const created = await tenantApi.createInterviewType(type as Omit<ApiInterviewTypeSetting, 'id' | 'tenantId'>);
+    setInterviewTypeSettings((prev) => [toMockInterviewType(created), ...prev]);
   };
 
-  const updateInterviewType = (id: string, updates: Partial<InterviewTypeSetting>) => {
-    setInterviewTypeSettings((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, ...updates } : t))
-    );
+  const updateInterviewType = async (id: string, updates: Partial<InterviewTypeSetting>) => {
+    const updated = await tenantApi.updateInterviewType(id, updates as Partial<ApiInterviewTypeSetting>);
+    setInterviewTypeSettings((prev) => prev.map((t) => (t.id === id ? toMockInterviewType(updated) : t)));
   };
 
-  const deleteInterviewType = (id: string) => {
+  const deleteInterviewType = async (id: string) => {
+    await tenantApi.deleteInterviewType(id);
     setInterviewTypeSettings((prev) => prev.filter((t) => t.id !== id));
   };
 
-  const resetInterviewTypes = () => {
-    setInterviewTypeSettings(INITIAL_INTERVIEW_TYPES);
-    localStorage.setItem('nusahr_interview_types_v1', JSON.stringify(INITIAL_INTERVIEW_TYPES));
+  const resetInterviewTypes = async () => {
+    await Promise.all(interviewTypeSettings.map((t) => tenantApi.deleteInterviewType(t.id)));
+    const created = await Promise.all(
+      INITIAL_INTERVIEW_TYPES.map((t) => {
+        const { id, ...rest } = t;
+        void id;
+        return tenantApi.createInterviewType(rest as Omit<ApiInterviewTypeSetting, 'id' | 'tenantId'>);
+      })
+    );
+    setInterviewTypeSettings(created.map(toMockInterviewType));
   };
 
   const saveCandidateInterviewEvaluation = (

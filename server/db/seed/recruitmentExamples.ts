@@ -14,6 +14,8 @@ import {
   jobVacancies,
   candidates,
   onboardingProcesses,
+  competencyTestTypeSettings,
+  interviewTypeSettings,
   users,
 } from "../schema.ts";
 
@@ -42,6 +44,39 @@ const FPTK_SIGNATORY_SEED = [
   { roleLabel: "Direktur Keuangan", isRequired: false, sortOrder: 3 },
 ];
 
+/** A reasonable starter catalog of assessment/interview types — tenants edit or add their own via the Recruitment settings UI. */
+const COMPETENCY_TEST_TYPE_SEED = [
+  { name: "Tes Teknis / Coding & Arsitektur", category: "Hard Skill", passingGrade: 75, durationMinutes: 90, method: "Live Coding", description: "Evaluasi algoritma, arsitektur kode, dan problem solving.", weightPercent: 35 },
+  { name: "Psikotes (DISC / MBTI / Karakter)", category: "Soft Skill", passingGrade: 70, durationMinutes: 60, method: "Online Test", description: "Analisis profil kepribadian kerja dan stabilitas emosi.", weightPercent: 20 },
+  { name: "Tes Logika & Numerik (GMA / TPA)", category: "Kognitif & Logika", passingGrade: 75, durationMinutes: 45, method: "Online Test", description: "Uji penalaran logis abstrak dan analisis data numerik.", weightPercent: 15 },
+  { name: "Kemahiran Bahasa Inggris Bisnis", category: "Bahasa", passingGrade: 70, durationMinutes: 60, method: "Online Test", description: "Pengujian listening, reading, dan korespondensi profesional.", weightPercent: 15 },
+  { name: "Case Study & Presentasi Bisnis", category: "Studi Kasus", passingGrade: 80, durationMinutes: 120, method: "Presentasi", description: "Simulasi penyelesaian masalah riil dan presentasi dewan penguji.", weightPercent: 15 },
+];
+
+const INTERVIEW_TYPE_SEED = [
+  {
+    name: "Wawancara Teknis & User (Technical Deep-Dive)",
+    targetRole: "Engineering & Product Teams",
+    description: "Evaluasi kompetensi keahlian teknis, arsitektur sistem, dan problem solving.",
+    interviewerRoles: "Tech Lead / Principal Engineer / User Manager",
+    criteria: [
+      { id: "crit-tech-1", name: "Arsitektur Sistem & Perancangan Solusi", weightPercent: 30 },
+      { id: "crit-tech-2", name: "Problem Solving & Analisis Akar Masalah (RCA)", weightPercent: 30 },
+      { id: "crit-tech-3", name: "Kualitas Kode, Testing & Security Standards", weightPercent: 20 },
+    ],
+  },
+  {
+    name: "Wawancara HR & Culture Fit",
+    targetRole: "Semua Posisi",
+    description: "Evaluasi kesesuaian nilai, motivasi, dan budaya kerja kandidat.",
+    interviewerRoles: "HR Manager / HR Business Partner",
+    criteria: [
+      { id: "crit-hr-1", name: "Motivasi & Kesesuaian Nilai Perusahaan", weightPercent: 50 },
+      { id: "crit-hr-2", name: "Komunikasi & Kolaborasi Tim", weightPercent: 50 },
+    ],
+  },
+];
+
 /** Master data every tenant needs, plus the default signatory config for FPTK — seeded once per tenant, never a hardcoded frontend list. */
 export async function seedRecruitmentMasterData() {
   const allTenants = await db.select().from(tenants);
@@ -66,8 +101,18 @@ export async function seedRecruitmentMasterData() {
     if (!existingSignatory) {
       await db.insert(documentSignatoryConfigs).values(FPTK_SIGNATORY_SEED.map((s) => ({ tenantId: tenant.id, documentType: "FPTK", ...s })));
     }
+
+    const [existingTestType] = await db.select().from(competencyTestTypeSettings).where(eq(competencyTestTypeSettings.tenantId, tenant.id)).limit(1);
+    if (!existingTestType) {
+      await db.insert(competencyTestTypeSettings).values(COMPETENCY_TEST_TYPE_SEED.map((t) => ({ tenantId: tenant.id, ...t })));
+    }
+
+    const [existingInterviewType] = await db.select().from(interviewTypeSettings).where(eq(interviewTypeSettings.tenantId, tenant.id)).limit(1);
+    if (!existingInterviewType) {
+      await db.insert(interviewTypeSettings).values(INTERVIEW_TYPE_SEED.map((t) => ({ tenantId: tenant.id, ...t })));
+    }
   }
-  console.log(`Master data pendidikan/jurusan & konfigurasi penandatangan FPTK disiapkan untuk ${allTenants.length} tenant.`);
+  console.log(`Master data pendidikan/jurusan, konfigurasi penandatangan FPTK, jenis tes & interview disiapkan untuk ${allTenants.length} tenant.`);
 }
 
 /** Sample employees + one FPTK for the "contoh" demo tenant (PT Contoh) — real seeded rows, not frontend mock arrays. */

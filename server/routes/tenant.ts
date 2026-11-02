@@ -23,6 +23,8 @@ import {
   jobVacancies,
   candidates,
   onboardingProcesses,
+  competencyTestTypeSettings,
+  interviewTypeSettings,
 } from "../db/schema.ts";
 import { requireTenantAdmin } from "../middleware/auth.ts";
 import { validateBody, validateParams, uuidParam } from "../lib/validate.ts";
@@ -1169,5 +1171,87 @@ tenantRouter.delete("/onboarding-processes/:id", validateParams(uuidParam("id"))
   const [deleted] = await db.delete(onboardingProcesses).where(and(eq(onboardingProcesses.id, req.params.id), eq(onboardingProcesses.tenantId, tenantId))).returning();
   if (!deleted) return res.status(404).json({ error: "Proses onboarding tidak ditemukan" });
   await logAudit({ actorUserId: req.session!.userId, tenantId, action: "onboarding_process.delete", details: { onboardingProcessId: deleted.id } });
+  res.json({ ok: true });
+});
+
+// ---------------------------------------------------------------------------
+// Competency Test Type Settings & Interview Type Settings — tenant-wide
+// master config for the assessment/interview pipeline (not entity-scoped,
+// same pattern as education-levels/fields-of-study).
+// ---------------------------------------------------------------------------
+
+tenantRouter.get("/competency-test-types", async (req, res) => {
+  res.json(await db.select().from(competencyTestTypeSettings).where(eq(competencyTestTypeSettings.tenantId, req.session!.tenantId!)));
+});
+
+const competencyTestTypeSchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  category: z.enum(["Hard Skill", "Soft Skill", "Kognitif & Logika", "Bahasa", "Studi Kasus", "Praktik Kerja"]),
+  passingGrade: z.number().int().min(0).max(100).optional(),
+  durationMinutes: z.number().int().min(1).optional(),
+  method: z.enum(["Online Test", "Live Coding", "Presentasi", "Tatap Muka", "Studi Kasus Mandiri"]),
+  description: z.string().trim().max(1000).optional(),
+  weightPercent: z.number().int().min(0).max(100).optional(),
+  isActive: z.boolean().optional(),
+});
+
+tenantRouter.post("/competency-test-types", validateBody(competencyTestTypeSchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [created] = await db.insert(competencyTestTypeSettings).values({ ...req.body, tenantId }).returning();
+  res.status(201).json(created);
+});
+
+tenantRouter.put("/competency-test-types/:id", validateParams(uuidParam("id")), validateBody(competencyTestTypeSchema.partial()), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [updated] = await db
+    .update(competencyTestTypeSettings)
+    .set(req.body)
+    .where(and(eq(competencyTestTypeSettings.id, req.params.id), eq(competencyTestTypeSettings.tenantId, tenantId)))
+    .returning();
+  if (!updated) return res.status(404).json({ error: "Jenis tes kompetensi tidak ditemukan" });
+  res.json(updated);
+});
+
+tenantRouter.delete("/competency-test-types/:id", validateParams(uuidParam("id")), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [deleted] = await db.delete(competencyTestTypeSettings).where(and(eq(competencyTestTypeSettings.id, req.params.id), eq(competencyTestTypeSettings.tenantId, tenantId))).returning();
+  if (!deleted) return res.status(404).json({ error: "Jenis tes kompetensi tidak ditemukan" });
+  res.json({ ok: true });
+});
+
+tenantRouter.get("/interview-types", async (req, res) => {
+  res.json(await db.select().from(interviewTypeSettings).where(eq(interviewTypeSettings.tenantId, req.session!.tenantId!)));
+});
+
+const interviewTypeSchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  targetRole: z.string().trim().max(200).optional(),
+  description: z.string().trim().max(1000).optional(),
+  interviewerRoles: z.string().trim().max(500).optional(),
+  criteria: z.array(z.unknown()).optional(),
+  isActive: z.boolean().optional(),
+});
+
+tenantRouter.post("/interview-types", validateBody(interviewTypeSchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [created] = await db.insert(interviewTypeSettings).values({ ...req.body, tenantId }).returning();
+  res.status(201).json(created);
+});
+
+tenantRouter.put("/interview-types/:id", validateParams(uuidParam("id")), validateBody(interviewTypeSchema.partial()), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [updated] = await db
+    .update(interviewTypeSettings)
+    .set(req.body)
+    .where(and(eq(interviewTypeSettings.id, req.params.id), eq(interviewTypeSettings.tenantId, tenantId)))
+    .returning();
+  if (!updated) return res.status(404).json({ error: "Jenis interview tidak ditemukan" });
+  res.json(updated);
+});
+
+tenantRouter.delete("/interview-types/:id", validateParams(uuidParam("id")), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [deleted] = await db.delete(interviewTypeSettings).where(and(eq(interviewTypeSettings.id, req.params.id), eq(interviewTypeSettings.tenantId, tenantId))).returning();
+  if (!deleted) return res.status(404).json({ error: "Jenis interview tidak ditemukan" });
   res.json({ ok: true });
 });

@@ -283,6 +283,30 @@ export interface OnboardingProcess {
   createdAt: string;
 }
 
+export interface CompetencyTestTypeSetting {
+  id: string;
+  tenantId: string;
+  name: string;
+  category: "Hard Skill" | "Soft Skill" | "Kognitif & Logika" | "Bahasa" | "Studi Kasus" | "Praktik Kerja";
+  passingGrade: number;
+  durationMinutes: number;
+  method: "Online Test" | "Live Coding" | "Presentasi" | "Tatap Muka" | "Studi Kasus Mandiri";
+  description: string | null;
+  weightPercent: number | null;
+  isActive: boolean;
+}
+
+export interface InterviewTypeSetting {
+  id: string;
+  tenantId: string;
+  name: string;
+  targetRole: string | null;
+  description: string | null;
+  interviewerRoles: string | null;
+  criteria: unknown[];
+  isActive: boolean;
+}
+
 export type OrgChangeSet = { create?: Record<string, unknown>[]; update?: { id: string; data: Record<string, unknown> }[]; delete?: string[] };
 
 export interface OrgChangeProposal {
@@ -425,4 +449,19 @@ export const tenantApi = {
   updateOnboardingProcess: (id: string, data: Partial<OnboardingProcess>) =>
     request<OnboardingProcess>(`/api/tenant/onboarding-processes/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   deleteOnboardingProcess: (id: string) => request<{ ok: true }>(`/api/tenant/onboarding-processes/${id}`, { method: "DELETE" }),
+
+  // Competency test types & interview types — recruitment master config.
+  listCompetencyTestTypes: () => request<CompetencyTestTypeSetting[]>("/api/tenant/competency-test-types"),
+  createCompetencyTestType: (data: Omit<CompetencyTestTypeSetting, "id" | "tenantId">) =>
+    request<CompetencyTestTypeSetting>("/api/tenant/competency-test-types", { method: "POST", body: JSON.stringify(data) }),
+  updateCompetencyTestType: (id: string, data: Partial<CompetencyTestTypeSetting>) =>
+    request<CompetencyTestTypeSetting>(`/api/tenant/competency-test-types/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteCompetencyTestType: (id: string) => request<{ ok: true }>(`/api/tenant/competency-test-types/${id}`, { method: "DELETE" }),
+
+  listInterviewTypes: () => request<InterviewTypeSetting[]>("/api/tenant/interview-types"),
+  createInterviewType: (data: Omit<InterviewTypeSetting, "id" | "tenantId">) =>
+    request<InterviewTypeSetting>("/api/tenant/interview-types", { method: "POST", body: JSON.stringify(data) }),
+  updateInterviewType: (id: string, data: Partial<InterviewTypeSetting>) =>
+    request<InterviewTypeSetting>(`/api/tenant/interview-types/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteInterviewType: (id: string) => request<{ ok: true }>(`/api/tenant/interview-types/${id}`, { method: "DELETE" }),
 };

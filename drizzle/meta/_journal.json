@@ -148,6 +148,13 @@
       "when": 1793584538326,
       "tag": "0020_plain_sentinels",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1793585460924,
+      "tag": "0021_chief_quasar",
+      "breakpoints": true
     }
   ]
 }
