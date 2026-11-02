@@ -10402,21 +10402,16 @@ PT Nusantara Multi Talenta Tbk`);
                     <label className="font-semibold text-slate-700 block mb-1">
                       Departemen / Divisi Pemohon *
                     </label>
-                    <select
+                    <SearchableSelect
                       required
+                      options={companyDepartments.map((dept) => ({ value: dept, label: dept }))}
                       value={fptkDept}
-                      onChange={(e) => {
-                        setFptkDept(e.target.value);
-                        setFptkReportingDept(e.target.value);
+                      onChange={(val) => {
+                        setFptkDept(val);
+                        setFptkReportingDept(val);
                       }}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-900 font-medium bg-white focus:ring-1 focus:ring-blue-600 focus:outline-none"
-                    >
-                      {companyDepartments.map((dept) => (
-                        <option key={dept} value={dept}>
-                          {dept}
-                        </option>
-                      ))}
-                    </select>
+                      placeholder="-- Pilih Departemen / Divisi --"
+                    />
                   </div>
                 </div>
 
@@ -10425,19 +10420,13 @@ PT Nusantara Multi Talenta Tbk`);
                     <label className="font-semibold text-slate-700 block mb-1">
                       Lokasi Penempatan *
                     </label>
-                    <select
+                    <SearchableSelect
                       required
+                      options={officeLocations.filter((loc) => loc.isActive).map((loc) => ({ value: loc.id, label: `${loc.name} (${loc.city})` }))}
                       value={fptkLocationId}
-                      onChange={(e) => setFptkLocationId(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-900 font-medium bg-white focus:ring-1 focus:ring-blue-600 focus:outline-none"
-                    >
-                      <option value="">Pilih Lokasi Kantor...</option>
-                      {officeLocations.filter((loc) => loc.isActive).map((loc) => (
-                        <option key={loc.id} value={loc.id}>
-                          {loc.name} ({loc.city})
-                        </option>
-                      ))}
-                    </select>
+                      onChange={setFptkLocationId}
+                      placeholder="Pilih Lokasi Kantor..."
+                    />
                   </div>
                 </div>
 
@@ -10448,34 +10437,22 @@ PT Nusantara Multi Talenta Tbk`);
                       <span>Jenjang Grade (Dari) *</span>
                       <span className="text-[10px] text-slate-400 font-normal">Level minimum</span>
                     </label>
-                    <select
+                    <SearchableSelect
+                      options={COMPANY_GRADES.map((g) => ({ value: g, label: g }))}
                       value={fptkGradeMin}
-                      onChange={(e) => setFptkGradeMin(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white text-slate-900 focus:ring-1 focus:ring-blue-600 focus:outline-none"
-                    >
-                      {COMPANY_GRADES.map((g) => (
-                        <option key={g} value={g}>
-                          {g}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={setFptkGradeMin}
+                    />
                   </div>
                   <div>
                     <label className="font-semibold text-slate-700 block mb-1 flex items-center justify-between">
                       <span>Jenjang Grade (Sampai) *</span>
                       <span className="text-[10px] text-slate-400 font-normal">Level maksimum</span>
                     </label>
-                    <select
+                    <SearchableSelect
+                      options={COMPANY_GRADES.map((g) => ({ value: g, label: g }))}
                       value={fptkGradeMax}
-                      onChange={(e) => setFptkGradeMax(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white text-slate-900 focus:ring-1 focus:ring-blue-600 focus:outline-none"
-                    >
-                      {COMPANY_GRADES.map((g) => (
-                        <option key={g} value={g}>
-                          {g}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={setFptkGradeMax}
+                    />
                   </div>
                 </div>
 
@@ -10606,17 +10583,12 @@ PT Nusantara Multi Talenta Tbk`);
                     <label className="font-semibold text-slate-700 block mb-1">
                       Bertanggung Jawab ke Divisi *
                     </label>
-                    <select
+                    <SearchableSelect
+                      options={companyDepartments.map((dept) => ({ value: dept, label: dept }))}
                       value={fptkReportingDept}
-                      onChange={(e) => setFptkReportingDept(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-900 bg-white focus:ring-1 focus:ring-blue-600 focus:outline-none"
-                    >
-                      {companyDepartments.map((dept) => (
-                        <option key={dept} value={dept}>
-                          {dept}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={setFptkReportingDept}
+                      placeholder="-- Pilih Divisi --"
+                    />
                   </div>
 
                   <div>
@@ -10642,20 +10614,12 @@ PT Nusantara Multi Talenta Tbk`);
                     <label className="font-semibold text-slate-700 block text-xs mb-1.5">
                       Bertanggung Jawab ke Atasan (Jabatan / Posisi) *
                     </label>
-                    <div className="relative">
-                      <select
-                        value={fptkReportingTitle}
-                        onChange={(e) => setFptkReportingTitle(e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-900 bg-white font-medium focus:ring-1 focus:ring-blue-600 focus:outline-none"
-                      >
-                        <option value="">-- Pilih Jabatan / Posisi Atasan Langsung --</option>
-                        {companyPositions.map((pos) => (
-                          <option key={pos} value={pos}>
-                            {pos}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                    <SearchableSelect
+                      options={companyPositions.map((pos) => ({ value: pos, label: pos }))}
+                      value={fptkReportingTitle}
+                      onChange={setFptkReportingTitle}
+                      placeholder="-- Pilih Jabatan / Posisi Atasan Langsung --"
+                    />
                     <p className="text-[10px] text-slate-500 mt-1">
                       * Garis pelaporan organisasi mengacu pada jabatan/posisi struktural (bukan nama personal karyawan).
                     </p>
