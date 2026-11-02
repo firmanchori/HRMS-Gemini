@@ -212,12 +212,15 @@ tenantRouter.get("/entities/tree", async (req, res) => {
 });
 
 tenantRouter.get("/entities/:id", validateParams(uuidParam("id")), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
   const [entity] = await db
     .select()
     .from(companyEntities)
-    .where(and(eq(companyEntities.id, req.params.id), eq(companyEntities.tenantId, req.session!.tenantId!)))
+    .where(and(eq(companyEntities.id, req.params.id), eq(companyEntities.tenantId, tenantId)))
     .limit(1);
   if (!entity) return res.status(404).json({ error: "Entitas tidak ditemukan" });
+  const visibleEntityIds = await resolveVisibleEntityIds(req, tenantId);
+  if (!visibleEntityIds.includes(entity.id)) return res.status(404).json({ error: "Entitas tidak ditemukan" });
   res.json(entity);
 });
 
@@ -253,7 +256,16 @@ tenantRouter.put("/entities/:id", validateParams(uuidParam("id")), validateBody(
 
 /** Current structure snapshot (not historical) for one entity — divisions/departments/positions/org chart as they stand right now. */
 tenantRouter.get("/entities/:id/org-structure", validateParams(uuidParam("id")), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
   const entityId = req.params.id;
+  // This previously queried by entityId alone, with no tenantId filter at
+  // all — any tenant_admin on any tenant could read any other tenant's
+  // (and any sibling entity's) org structure just by guessing a UUID. Real
+  // cross-tenant data leak, not just cross-entity (user, 2026-11-02 bug audit).
+  const [entity] = await db.select().from(companyEntities).where(and(eq(companyEntities.id, entityId), eq(companyEntities.tenantId, tenantId))).limit(1);
+  if (!entity) return res.status(404).json({ error: "Entitas tidak ditemukan" });
+  const visibleEntityIds = await resolveVisibleEntityIds(req, tenantId);
+  if (!visibleEntityIds.includes(entityId)) return res.status(404).json({ error: "Entitas tidak ditemukan" });
   const [divisions, departments, positions, orgNodes] = await Promise.all([
     db.select().from(companyDivisions).where(eq(companyDivisions.entityId, entityId)),
     db.select().from(companyDepartments).where(eq(companyDepartments.entityId, entityId)),
@@ -643,6 +655,8 @@ const createProposalSchema = z.object({
 
 tenantRouter.post("/org-change-proposals", validateBody(createProposalSchema), async (req, res) => {
   const tenantId = req.session!.tenantId!;
+  const visibleEntityIds = await resolveVisibleEntityIds(req, tenantId);
+  if (!visibleEntityIds.includes(req.body.entityId)) return res.status(403).json({ error: "Entitas di luar ruang lingkup Anda" });
   const [created] = await db
     .insert(orgChangeProposals)
     .values({ ...req.body, tenantId, proposedByUserId: req.session!.userId, status: "Draft" })
@@ -651,24 +665,30 @@ tenantRouter.post("/org-change-proposals", validateBody(createProposalSchema), a
   res.status(201).json(created);
 });
 
-/** Riwayat perubahan struktur (history) — list, optionally filtered by entity. */
+/** Riwayat perubahan struktur (history) — list, optionally filtered by entity, always scoped to the caller's visible entities. */
 tenantRouter.get("/org-change-proposals", async (req, res) => {
   const tenantId = req.session!.tenantId!;
+  const visibleEntityIds = await resolveVisibleEntityIds(req, tenantId);
+  if (visibleEntityIds.length === 0) return res.json([]);
   const entityId = typeof req.query.entityId === "string" ? req.query.entityId : undefined;
+  if (entityId && !visibleEntityIds.includes(entityId)) return res.json([]);
   const rows = await db
     .select()
     .from(orgChangeProposals)
-    .where(entityId ? and(eq(orgChangeProposals.tenantId, tenantId), eq(orgChangeProposals.entityId, entityId)) : eq(orgChangeProposals.tenantId, tenantId));
+    .where(and(eq(orgChangeProposals.tenantId, tenantId), inArray(orgChangeProposals.entityId, entityId ? [entityId] : visibleEntityIds)));
   res.json(rows);
 });
 
 tenantRouter.get("/org-change-proposals/:id", validateParams(uuidParam("id")), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
   const [proposal] = await db
     .select()
     .from(orgChangeProposals)
-    .where(and(eq(orgChangeProposals.id, req.params.id), eq(orgChangeProposals.tenantId, req.session!.tenantId!)))
+    .where(and(eq(orgChangeProposals.id, req.params.id), eq(orgChangeProposals.tenantId, tenantId)))
     .limit(1);
   if (!proposal) return res.status(404).json({ error: "Proposal tidak ditemukan" });
+  const visibleEntityIds = await resolveVisibleEntityIds(req, tenantId);
+  if (!visibleEntityIds.includes(proposal.entityId)) return res.status(404).json({ error: "Proposal tidak ditemukan" });
   res.json(proposal);
 });
 
@@ -683,6 +703,8 @@ tenantRouter.put("/org-change-proposals/:id", validateParams(uuidParam("id")), v
   const tenantId = req.session!.tenantId!;
   const [existing] = await db.select().from(orgChangeProposals).where(and(eq(orgChangeProposals.id, req.params.id), eq(orgChangeProposals.tenantId, tenantId))).limit(1);
   if (!existing) return res.status(404).json({ error: "Proposal tidak ditemukan" });
+  const visibleEntityIds = await resolveVisibleEntityIds(req, tenantId);
+  if (!visibleEntityIds.includes(existing.entityId)) return res.status(404).json({ error: "Proposal tidak ditemukan" });
   if (existing.status !== "Draft") return res.status(400).json({ error: "Hanya proposal berstatus Draft yang bisa diubah" });
 
   const [updated] = await db.update(orgChangeProposals).set(req.body).where(eq(orgChangeProposals.id, existing.id)).returning();
@@ -693,6 +715,8 @@ tenantRouter.post("/org-change-proposals/:id/submit", validateParams(uuidParam("
   const tenantId = req.session!.tenantId!;
   const [existing] = await db.select().from(orgChangeProposals).where(and(eq(orgChangeProposals.id, req.params.id), eq(orgChangeProposals.tenantId, tenantId))).limit(1);
   if (!existing) return res.status(404).json({ error: "Proposal tidak ditemukan" });
+  const visibleEntityIdsSubmit = await resolveVisibleEntityIds(req, tenantId);
+  if (!visibleEntityIdsSubmit.includes(existing.entityId)) return res.status(404).json({ error: "Proposal tidak ditemukan" });
   if (existing.status !== "Draft") return res.status(400).json({ error: "Hanya proposal berstatus Draft yang bisa diajukan" });
 
   const [updated] = await db.update(orgChangeProposals).set({ status: "PendingApproval" }).where(eq(orgChangeProposals.id, existing.id)).returning();
@@ -704,6 +728,8 @@ tenantRouter.post("/org-change-proposals/:id/approve", validateParams(uuidParam(
   const tenantId = req.session!.tenantId!;
   const [proposal] = await db.select().from(orgChangeProposals).where(and(eq(orgChangeProposals.id, req.params.id), eq(orgChangeProposals.tenantId, tenantId))).limit(1);
   if (!proposal) return res.status(404).json({ error: "Proposal tidak ditemukan" });
+  const visibleEntityIdsApprove = await resolveVisibleEntityIds(req, tenantId);
+  if (!visibleEntityIdsApprove.includes(proposal.entityId)) return res.status(404).json({ error: "Proposal tidak ditemukan" });
   if (proposal.status !== "PendingApproval") return res.status(400).json({ error: "Hanya proposal berstatus PendingApproval yang bisa disetujui" });
   if (!proposal.officialLetterNumber) return res.status(400).json({ error: "Nomor surat resmi wajib diisi sebelum proposal disetujui" });
 
@@ -764,6 +790,8 @@ tenantRouter.post("/org-change-proposals/:id/reject", validateParams(uuidParam("
   const tenantId = req.session!.tenantId!;
   const [existing] = await db.select().from(orgChangeProposals).where(and(eq(orgChangeProposals.id, req.params.id), eq(orgChangeProposals.tenantId, tenantId))).limit(1);
   if (!existing) return res.status(404).json({ error: "Proposal tidak ditemukan" });
+  const visibleEntityIdsReject = await resolveVisibleEntityIds(req, tenantId);
+  if (!visibleEntityIdsReject.includes(existing.entityId)) return res.status(404).json({ error: "Proposal tidak ditemukan" });
   if (existing.status !== "PendingApproval") return res.status(400).json({ error: "Hanya proposal berstatus PendingApproval yang bisa ditolak" });
 
   const [updated] = await db
