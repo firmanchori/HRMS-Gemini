@@ -188,14 +188,27 @@ tenantRouter.post("/entities", validateBody(createEntitySchema), async (req, res
 });
 
 /** Lists entities visible from `viewAsEntityId` (itself + all descendants, never a sibling or ancestor) — or every entity in the tenant when omitted. */
+/**
+ * Default (no viewAsEntityId) used to return every entity in the whole
+ * tenant, ignoring the caller's own scope entirely — a sibling admin would
+ * see every other sibling's full entity record. And viewAsEntityId, when
+ * given, was used as the closure ancestor with no check that it was even
+ * within the CALLER's own visible scope, letting anyone "view as" an
+ * entity they don't actually have access to. Fixed: default to the
+ * caller's own visible scope, and viewAsEntityId must itself be inside
+ * that scope (user, 2026-11-02 bug audit).
+ */
 tenantRouter.get("/entities", async (req, res) => {
   const tenantId = req.session!.tenantId!;
-  const viewAsEntityId = typeof req.query.viewAsEntityId === "string" ? req.query.viewAsEntityId : undefined;
+  const callerVisibleIds = await resolveVisibleEntityIds(req, tenantId);
+  if (callerVisibleIds.length === 0) return res.json([]);
 
+  const viewAsEntityId = typeof req.query.viewAsEntityId === "string" ? req.query.viewAsEntityId : undefined;
   if (!viewAsEntityId) {
-    const rows = await db.select().from(companyEntities).where(eq(companyEntities.tenantId, tenantId));
+    const rows = await db.select().from(companyEntities).where(and(eq(companyEntities.tenantId, tenantId), inArray(companyEntities.id, callerVisibleIds)));
     return res.json(rows);
   }
+  if (!callerVisibleIds.includes(viewAsEntityId)) return res.status(403).json({ error: "Entitas di luar ruang lingkup Anda" });
 
   const visibleRows = await db.select({ id: entityClosure.descendantEntityId }).from(entityClosure).where(eq(entityClosure.ancestorEntityId, viewAsEntityId));
   const visibleIds = visibleRows.map((r) => r.id);
@@ -207,7 +220,9 @@ tenantRouter.get("/entities", async (req, res) => {
 /** Same visibility rule as above, nested into a nested tree for the "lihat bertingkat" view. */
 tenantRouter.get("/entities/tree", async (req, res) => {
   const tenantId = req.session!.tenantId!;
-  const rows = await db.select().from(companyEntities).where(eq(companyEntities.tenantId, tenantId));
+  const callerVisibleIds = await resolveVisibleEntityIds(req, tenantId);
+  if (callerVisibleIds.length === 0) return res.json([]);
+  const rows = await db.select().from(companyEntities).where(and(eq(companyEntities.tenantId, tenantId), inArray(companyEntities.id, callerVisibleIds)));
   res.json(buildEntityTree(rows));
 });
 
@@ -379,7 +394,10 @@ const divisionSchema = z.object({
 
 /** Tenant-wide listing (every entity's divisions) — the frontend filters by entity client-side, same pattern as grades/office-locations below. */
 tenantRouter.get("/divisions", async (req, res) => {
-  res.json(await db.select().from(companyDivisions).where(eq(companyDivisions.tenantId, req.session!.tenantId!)));
+  const tenantId = req.session!.tenantId!;
+  const visibleEntityIds = await resolveVisibleEntityIds(req, tenantId);
+  if (visibleEntityIds.length === 0) return res.json([]);
+  res.json(await db.select().from(companyDivisions).where(and(eq(companyDivisions.tenantId, tenantId), inArray(companyDivisions.entityId, visibleEntityIds))));
 });
 
 tenantRouter.post("/divisions", validateBody(divisionSchema), async (req, res) => {
@@ -423,7 +441,10 @@ const departmentSchema = z.object({
 });
 
 tenantRouter.get("/departments", async (req, res) => {
-  res.json(await db.select().from(companyDepartments).where(eq(companyDepartments.tenantId, req.session!.tenantId!)));
+  const tenantId = req.session!.tenantId!;
+  const visibleEntityIds = await resolveVisibleEntityIds(req, tenantId);
+  if (visibleEntityIds.length === 0) return res.json([]);
+  res.json(await db.select().from(companyDepartments).where(and(eq(companyDepartments.tenantId, tenantId), inArray(companyDepartments.entityId, visibleEntityIds))));
 });
 
 tenantRouter.post("/departments", validateBody(departmentSchema), async (req, res) => {
@@ -474,7 +495,10 @@ const positionSchema = z.object({
 });
 
 tenantRouter.get("/positions", async (req, res) => {
-  res.json(await db.select().from(masterJobPositions).where(eq(masterJobPositions.tenantId, req.session!.tenantId!)));
+  const tenantId = req.session!.tenantId!;
+  const visibleEntityIds = await resolveVisibleEntityIds(req, tenantId);
+  if (visibleEntityIds.length === 0) return res.json([]);
+  res.json(await db.select().from(masterJobPositions).where(and(eq(masterJobPositions.tenantId, tenantId), inArray(masterJobPositions.entityId, visibleEntityIds))));
 });
 
 tenantRouter.post("/positions", validateBody(positionSchema), async (req, res) => {
@@ -524,7 +548,10 @@ const orgNodeSchema = z.object({
 });
 
 tenantRouter.get("/org-nodes", async (req, res) => {
-  res.json(await db.select().from(orgStructureNodes).where(eq(orgStructureNodes.tenantId, req.session!.tenantId!)));
+  const tenantId = req.session!.tenantId!;
+  const visibleEntityIds = await resolveVisibleEntityIds(req, tenantId);
+  if (visibleEntityIds.length === 0) return res.json([]);
+  res.json(await db.select().from(orgStructureNodes).where(and(eq(orgStructureNodes.tenantId, tenantId), inArray(orgStructureNodes.entityId, visibleEntityIds))));
 });
 
 tenantRouter.post("/org-nodes", validateBody(orgNodeSchema), async (req, res) => {
@@ -589,8 +616,12 @@ tenantRouter.post("/grades", validateBody(gradeSchema), async (req, res) => {
   res.status(201).json(created);
 });
 
+/** Tenant-wide grades (entityId null) stay visible to everyone by design; entity-specific grades are scoped to the caller's visible entities. */
 tenantRouter.get("/grades", async (req, res) => {
-  res.json(await db.select().from(gradeSalaryRanges).where(eq(gradeSalaryRanges.tenantId, req.session!.tenantId!)));
+  const tenantId = req.session!.tenantId!;
+  const visibleEntityIds = await resolveVisibleEntityIds(req, tenantId);
+  const rows = await db.select().from(gradeSalaryRanges).where(eq(gradeSalaryRanges.tenantId, tenantId));
+  res.json(rows.filter((r) => !r.entityId || visibleEntityIds.includes(r.entityId)));
 });
 
 tenantRouter.put("/grades/:id", validateParams(uuidParam("id")), validateBody(gradeSchema.partial()), async (req, res) => {
@@ -832,8 +863,12 @@ tenantRouter.post("/office-locations", validateBody(officeLocationSchema), async
   res.status(201).json(created);
 });
 
+/** Tenant-wide locations (entityId null) stay visible to everyone by design; entity-specific ones are scoped to the caller's visible entities. */
 tenantRouter.get("/office-locations", async (req, res) => {
-  res.json(await db.select().from(officeLocations).where(eq(officeLocations.tenantId, req.session!.tenantId!)));
+  const tenantId = req.session!.tenantId!;
+  const visibleEntityIds = await resolveVisibleEntityIds(req, tenantId);
+  const rows = await db.select().from(officeLocations).where(eq(officeLocations.tenantId, tenantId));
+  res.json(rows.filter((r) => !r.entityId || visibleEntityIds.includes(r.entityId)));
 });
 
 const updateOfficeLocationSchema = officeLocationSchema.partial().extend({ isActive: z.boolean().optional() });
