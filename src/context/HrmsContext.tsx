@@ -10,6 +10,9 @@ import {
   type GradeSalaryRange as ApiGradeSalaryRange,
   type TenantUser as ApiTenantUser,
   type JobRequisition as ApiJobRequisition,
+  type JobVacancy as ApiJobVacancy,
+  type Candidate as ApiCandidate,
+  type OnboardingProcess as ApiOnboardingProcess,
 } from '../tenant/api';
 import { ORG_STRUCTURE_TEMPLATES } from '../utils/orgStructureTemplates';
 import {
@@ -928,15 +931,22 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
   const jobRequisitions = useMemo(() => apiJobRequisitions.map(mapApiJobRequisitionToMock), [apiJobRequisitions]);
 
-  const [vacancies, setVacancies] = useState<JobVacancy[]>(() => {
-    const saved = localStorage.getItem('nusahr_vacancies');
-    return saved ? JSON.parse(saved) : INITIAL_JOB_VACANCIES;
-  });
-
-  const [candidates, setCandidates] = useState<Candidate[]>(() => {
-    const saved = localStorage.getItem('nusahr_candidates_v4');
-    return saved ? JSON.parse(saved) : INITIAL_CANDIDATES;
-  });
+  // Real backend data, hydrated via loadTenantOrgData() — no more mock/
+  // localStorage (user, 2026-11-02: "Aku tidak mau ada lagi data mock").
+  // Vacancy/Candidate/OnboardingProcess each have dozens of mostly-optional
+  // fields (sourcing, screening, testing, interview, MCU, offering, ...)
+  // that aren't worth a dedicated DB column each — the row's `details`
+  // jsonb holds the whole object, and a handful of columns (stage, scores,
+  // status) are promoted for querying. See persistVacancy/persistCandidate/
+  // persistOnboardingProcess below for the write side.
+  const mergeRowIntoMock = (row: any): Record<string, unknown> => {
+    const { details, ...columns } = row;
+    return { ...(details as object), ...columns };
+  };
+  const [apiVacancies, setApiVacancies] = useState<ApiJobVacancy[]>([]);
+  const vacancies = useMemo(() => apiVacancies.map((r) => mergeRowIntoMock(r) as unknown as JobVacancy), [apiVacancies]);
+  const [apiCandidates, setApiCandidates] = useState<ApiCandidate[]>([]);
+  const candidates = useMemo(() => apiCandidates.map((r) => mergeRowIntoMock(r) as unknown as Candidate), [apiCandidates]);
 
   const [competencyTestTypes, setCompetencyTestTypes] = useState<CompetencyTestTypeSetting[]>(() => {
     const saved = localStorage.getItem('nusahr_competency_test_types_v1');
@@ -998,10 +1008,8 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return INITIAL_DOCUMENTS;
   });
 
-  const [onboardingProcesses, setOnboardingProcesses] = useState<OnboardingProcess[]>(() => {
-    const saved = localStorage.getItem('nusahr_onboarding');
-    return saved ? JSON.parse(saved) : INITIAL_ONBOARDING;
-  });
+  const [apiOnboardingProcesses, setApiOnboardingProcesses] = useState<ApiOnboardingProcess[]>([]);
+  const onboardingProcesses = useMemo(() => apiOnboardingProcesses.map((r) => mergeRowIntoMock(r) as unknown as OnboardingProcess), [apiOnboardingProcesses]);
 
   const [onboardingChecklistTemplates, setOnboardingChecklistTemplates] = useState<OnboardingChecklistTemplateItem[]>(() => {
     const saved = localStorage.getItem('nusahr_onboarding_templates_v2');
@@ -1404,7 +1412,10 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const loadTenantOrgData = async () => {
-    const [realEntities, realOfficeLocations, realDivisions, realDepartments, realPositions, realOrgNodes, realGrades, realUsers, realJobRequisitions] = await Promise.all([
+    const [
+      realEntities, realOfficeLocations, realDivisions, realDepartments, realPositions, realOrgNodes, realGrades,
+      realUsers, realJobRequisitions, realVacancies, realCandidates, realOnboardingProcesses,
+    ] = await Promise.all([
       tenantApi.listEntities(),
       tenantApi.listOfficeLocations(),
       tenantApi.listDivisions(),
@@ -1414,6 +1425,9 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       tenantApi.listGrades(),
       tenantApi.listUsers(),
       tenantApi.listJobRequisitions(),
+      tenantApi.listJobVacancies(),
+      tenantApi.listCandidates(),
+      tenantApi.listOnboardingProcesses(),
     ]);
     setApiEntities(realEntities);
     setApiOfficeLocations(realOfficeLocations);
@@ -1424,6 +1438,9 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setApiGrades(realGrades);
     setApiUsers(realUsers);
     setApiJobRequisitions(realJobRequisitions);
+    setApiVacancies(realVacancies);
+    setApiCandidates(realCandidates);
+    setApiOnboardingProcesses(realOnboardingProcesses);
   };
 
   // 34. Vendor Invoices (AP)
@@ -2209,28 +2226,52 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // rest of this module already treats a submitted requisition.
   };
 
-  const addVacancy = (v: Omit<JobVacancy, 'id' | 'tenantId' | 'postedDate'>) => {
-    const newVac: JobVacancy = {
-      ...v,
-      id: `job-${Date.now()}`,
-      tenantId: currentTenant.id,
-      postedDate: new Date().toISOString().split('T')[0],
-    };
-    setVacancies((prev) => [newVac, ...prev]);
+  const buildVacancyApiPayload = (v: Partial<JobVacancy>) => ({
+    entityId: currentEntity?.id || '',
+    jobRequisitionId: v.jobRequisitionId || undefined,
+    title: v.title,
+    openings: v.openings,
+    status: v.status,
+    targetCloseDate: v.targetCloseDate,
+    details: v,
+  });
+
+  const addVacancy = async (v: Omit<JobVacancy, 'id' | 'tenantId' | 'postedDate'>) => {
+    const created = await tenantApi.createJobVacancy(buildVacancyApiPayload(v) as Partial<ApiJobVacancy> & { entityId: string; title: string });
+    setApiVacancies((prev) => [created, ...prev]);
   };
 
   const updateVacancy = (id: string, updates: Partial<JobVacancy>) => {
-    setVacancies((prev) => prev.map((v) => (v.id === id ? { ...v, ...updates } : v)));
+    const current = vacancies.find((v) => v.id === id);
+    if (!current) return;
+    const merged = { ...current, ...updates };
+    tenantApi
+      .updateJobVacancy(id, buildVacancyApiPayload(merged) as Partial<ApiJobVacancy>)
+      .then((updated) => setApiVacancies((prev) => prev.map((r) => (r.id === id ? updated : r))));
   };
 
-  const addCandidate = (c: Omit<Candidate, 'id' | 'tenantId' | 'appliedDate'>) => {
-    const newCand: Candidate = {
-      ...c,
-      id: `cand-${Date.now()}`,
-      tenantId: currentTenant.id,
-      appliedDate: new Date().toISOString().split('T')[0],
-    };
-    setCandidates((prev) => [newCand, ...prev]);
+  const buildCandidateApiPayload = (c: Partial<Candidate>) => ({
+    jobVacancyId: c.jobVacancyId,
+    name: c.name,
+    email: c.email,
+    phone: c.phone,
+    stage: c.stage,
+    aiMatchScore: c.aiMatchScore,
+    testScore: c.testScore,
+    interviewScore: c.interviewScore,
+    offeredSalary: c.offeredSalary,
+    details: c,
+  });
+
+  const addCandidate = async (c: Omit<Candidate, 'id' | 'tenantId' | 'appliedDate'>) => {
+    const created = await tenantApi.createCandidate(buildCandidateApiPayload(c) as Partial<ApiCandidate> & { jobVacancyId: string; name: string; email: string });
+    setApiCandidates((prev) => [created, ...prev]);
+  };
+
+  const persistCandidateMerge = (id: string, merged: Candidate) => {
+    tenantApi
+      .updateCandidate(id, buildCandidateApiPayload(merged) as Partial<ApiCandidate>)
+      .then((updated) => setApiCandidates((prev) => prev.map((r) => (r.id === id ? updated : r))));
   };
 
   const updateCandidateStage = (
@@ -2238,9 +2279,9 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     stage: Candidate['stage'],
     extra?: Partial<Candidate>
   ) => {
-    setCandidates((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, stage, ...extra } : c))
-    );
+    const current = candidates.find((c) => c.id === id);
+    if (!current) return;
+    persistCandidateMerge(id, { ...current, stage, ...extra });
   };
 
   const convertCandidateToEmployee = (candidateId: string, joinDate: string) => {
@@ -2360,63 +2401,57 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     candidateId: string,
     scoreData: Omit<CandidateCompetencyScore, 'id' | 'evaluatedAt'>
   ) => {
-    setCandidates((prev) =>
-      prev.map((c) => {
-        if (c.id !== candidateId) return c;
-        const newScore: CandidateCompetencyScore = {
-          ...scoreData,
-          id: `score-${Date.now()}`,
-          evaluatedAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
-        };
-        const existingScores = c.competencyScores ? [...c.competencyScores] : [];
-        const existingIndex = existingScores.findIndex(
-          (s) => s.testTypeId === scoreData.testTypeId || s.testTypeName === scoreData.testTypeName
-        );
-        if (existingIndex >= 0) {
-          existingScores[existingIndex] = newScore;
-        } else {
-          existingScores.push(newScore);
-        }
-
-        // Calculate aggregate / average score
-        const totalScore = existingScores.reduce((acc, s) => acc + s.score, 0);
-        const avgScore = Math.round(totalScore / existingScores.length);
-        const allPassed = existingScores.every((s) => s.score >= s.passingGrade);
-
-        return {
-          ...c,
-          competencyScores: existingScores,
-          testType: scoreData.testTypeName,
-          testScore: avgScore,
-          testPassingGrade: scoreData.passingGrade,
-          testStatus: allPassed ? 'Lulus' : 'Tidak Lulus',
-          testNotes: scoreData.notes || c.testNotes,
-        };
-      })
+    const c = candidates.find((x) => x.id === candidateId);
+    if (!c) return;
+    const newScore: CandidateCompetencyScore = {
+      ...scoreData,
+      id: `score-${Date.now()}`,
+      evaluatedAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
+    };
+    const existingScores = c.competencyScores ? [...c.competencyScores] : [];
+    const existingIndex = existingScores.findIndex(
+      (s) => s.testTypeId === scoreData.testTypeId || s.testTypeName === scoreData.testTypeName
     );
+    if (existingIndex >= 0) {
+      existingScores[existingIndex] = newScore;
+    } else {
+      existingScores.push(newScore);
+    }
+
+    // Calculate aggregate / average score
+    const totalScore = existingScores.reduce((acc, s) => acc + s.score, 0);
+    const avgScore = Math.round(totalScore / existingScores.length);
+    const allPassed = existingScores.every((s) => s.score >= s.passingGrade);
+
+    persistCandidateMerge(candidateId, {
+      ...c,
+      competencyScores: existingScores,
+      testType: scoreData.testTypeName,
+      testScore: avgScore,
+      testPassingGrade: scoreData.passingGrade,
+      testStatus: allPassed ? 'Lulus' : 'Tidak Lulus',
+      testNotes: scoreData.notes || c.testNotes,
+    });
   };
 
   const deleteCandidateCompetencyScore = (candidateId: string, scoreId: string) => {
-    setCandidates((prev) =>
-      prev.map((c) => {
-        if (c.id !== candidateId || !c.competencyScores) return c;
-        const updatedScores = c.competencyScores.filter((s) => s.id !== scoreId);
-        const avgScore =
-          updatedScores.length > 0
-            ? Math.round(updatedScores.reduce((acc, s) => acc + s.score, 0) / updatedScores.length)
-            : 0;
-        const allPassed =
-          updatedScores.length > 0
-            ? updatedScores.every((s) => s.score >= s.passingGrade)
-            : false;
-        return {
-          ...c,
-          competencyScores: updatedScores,
-          testScore: avgScore,
-          testStatus: updatedScores.length > 0 ? (allPassed ? 'Lulus' : 'Tidak Lulus') : 'Belum Ditugaskan',
-        };
-      })
-    );
+    const c = candidates.find((x) => x.id === candidateId);
+    if (!c || !c.competencyScores) return;
+    const updatedScores = c.competencyScores.filter((s) => s.id !== scoreId);
+    const avgScore =
+      updatedScores.length > 0
+        ? Math.round(updatedScores.reduce((acc, s) => acc + s.score, 0) / updatedScores.length)
+        : 0;
+    const allPassed =
+      updatedScores.length > 0
+        ? updatedScores.every((s) => s.score >= s.passingGrade)
+        : false;
+    persistCandidateMerge(candidateId, {
+      ...c,
+      competencyScores: updatedScores,
+      testScore: avgScore,
+      testStatus: updatedScores.length > 0 ? (allPassed ? 'Lulus' : 'Tidak Lulus') : 'Belum Ditugaskan',
+    });
   };
 
   const addInterviewType = (type: Omit<InterviewTypeSetting, 'id'>) => {
@@ -2446,62 +2481,56 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     candidateId: string,
     evalData: Omit<CandidateInterviewEvaluation, 'id' | 'evaluatedAt'>
   ) => {
-    setCandidates((prev) =>
-      prev.map((c) => {
-        if (c.id !== candidateId) return c;
-        const newEval: CandidateInterviewEvaluation = {
-          ...evalData,
-          id: `int-eval-${Date.now()}`,
-          evaluatedAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
-        };
-        const existingEvals = c.interviewEvaluations ? [...c.interviewEvaluations] : [];
-        const existingIdx = existingEvals.findIndex((e) => e.interviewTypeId === evalData.interviewTypeId);
-        if (existingIdx >= 0) {
-          existingEvals[existingIdx] = newEval;
-        } else {
-          existingEvals.push(newEval);
-        }
+    const c = candidates.find((x) => x.id === candidateId);
+    if (!c) return;
+    const newEval: CandidateInterviewEvaluation = {
+      ...evalData,
+      id: `int-eval-${Date.now()}`,
+      evaluatedAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
+    };
+    const existingEvals = c.interviewEvaluations ? [...c.interviewEvaluations] : [];
+    const existingIdx = existingEvals.findIndex((e) => e.interviewTypeId === evalData.interviewTypeId);
+    if (existingIdx >= 0) {
+      existingEvals[existingIdx] = newEval;
+    } else {
+      existingEvals.push(newEval);
+    }
 
-        const totalScore = existingEvals.reduce((acc, e) => acc + e.calculatedScore, 0);
-        const avgScore = Math.round(totalScore / existingEvals.length);
+    const totalScore = existingEvals.reduce((acc, e) => acc + e.calculatedScore, 0);
+    const avgScore = Math.round(totalScore / existingEvals.length);
 
-        return {
-          ...c,
-          interviewEvaluations: existingEvals,
-          interviewTypeId: evalData.interviewTypeId,
-          interviewTypeName: evalData.interviewTypeName,
-          interviewDate: evalData.interviewDate,
-          interviewer: evalData.interviewer,
-          interviewers: evalData.interviewers || c.interviewers,
-          meetingPlatform: evalData.platform as any,
-          meetingLink: evalData.meetingLink,
-          interviewScore: avgScore,
-          interviewNotes: evalData.notes,
-          interviewScorecard: {
-            ratings: evalData.scorecardRatings,
-            recommendation: evalData.recommendation,
-          },
-        };
-      })
-    );
+    persistCandidateMerge(candidateId, {
+      ...c,
+      interviewEvaluations: existingEvals,
+      interviewTypeId: evalData.interviewTypeId,
+      interviewTypeName: evalData.interviewTypeName,
+      interviewDate: evalData.interviewDate,
+      interviewer: evalData.interviewer,
+      interviewers: evalData.interviewers || c.interviewers,
+      meetingPlatform: evalData.platform as any,
+      meetingLink: evalData.meetingLink,
+      interviewScore: avgScore,
+      interviewNotes: evalData.notes,
+      interviewScorecard: {
+        ratings: evalData.scorecardRatings,
+        recommendation: evalData.recommendation,
+      },
+    });
   };
 
   const deleteCandidateInterviewEvaluation = (candidateId: string, evalId: string) => {
-    setCandidates((prev) =>
-      prev.map((c) => {
-        if (c.id !== candidateId || !c.interviewEvaluations) return c;
-        const filtered = c.interviewEvaluations.filter((e) => e.id !== evalId);
-        const avgScore =
-          filtered.length > 0
-            ? Math.round(filtered.reduce((acc, e) => acc + e.calculatedScore, 0) / filtered.length)
-            : undefined;
-        return {
-          ...c,
-          interviewEvaluations: filtered,
-          interviewScore: avgScore,
-        };
-      })
-    );
+    const c = candidates.find((x) => x.id === candidateId);
+    if (!c || !c.interviewEvaluations) return;
+    const filtered = c.interviewEvaluations.filter((e) => e.id !== evalId);
+    const avgScore =
+      filtered.length > 0
+        ? Math.round(filtered.reduce((acc, e) => acc + e.calculatedScore, 0) / filtered.length)
+        : undefined;
+    persistCandidateMerge(candidateId, {
+      ...c,
+      interviewEvaluations: filtered,
+      interviewScore: avgScore,
+    });
   };
 
   // 8. Offboarding
@@ -2822,6 +2851,29 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     logAuditAction('Onboarding Settings', 'DELETE_TEMPLATE_ITEM', id, `Menghapus template checklist ID: ${id}`);
   };
 
+  const buildOnboardingApiPayload = (p: Partial<OnboardingProcess>) => ({
+    entityId: currentEntity?.id || '',
+    type: p.type,
+    candidateId: p.candidateId,
+    employeeName: p.employeeName,
+    email: p.email,
+    phone: p.phone,
+    position: p.position,
+    joinDate: p.joinDate,
+    basicSalary: p.basicSalary,
+    contractDocNumber: p.contractDocNumber,
+    status: p.status,
+    createdEmployeeId: p.createdEmployeeId,
+    tasks: p.tasks,
+    details: p,
+  });
+
+  const persistOnboardingMerge = (id: string, merged: OnboardingProcess) => {
+    tenantApi
+      .updateOnboardingProcess(id, buildOnboardingApiPayload(merged) as Partial<ApiOnboardingProcess>)
+      .then((updated) => setApiOnboardingProcesses((prev) => prev.map((r) => (r.id === id ? updated : r))));
+  };
+
   const addOnboardingProcess = (
     data: Omit<OnboardingProcess, 'id' | 'tenantId' | 'status'>
   ): OnboardingProcess => {
@@ -2851,7 +2903,10 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       tasks,
       status: 'In Progress',
     };
-    setOnboardingProcesses((prev) => [newProcess, ...prev]);
+    const payload = buildOnboardingApiPayload(newProcess);
+    tenantApi.createOnboardingProcess(payload as Partial<ApiOnboardingProcess> & { entityId: string; employeeName: string }).then((created) => {
+      setApiOnboardingProcesses((prev) => [created, ...prev]);
+    });
     return newProcess;
   };
 
@@ -2862,33 +2917,30 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     actionPayload?: any,
     subItems?: OnboardingSubItem[]
   ) => {
-    setOnboardingProcesses((prev) =>
-      prev.map((p) => {
-        if (p.id !== processId) return p;
-        const updatedTasks = p.tasks.map((t) => {
-          if (t.id !== taskId) return t;
-          let finalSubItems = subItems !== undefined ? subItems : t.subItems;
-          if (subItems === undefined && t.subItems && t.subItems.length > 0) {
-            finalSubItems = t.subItems.map((s) => ({ ...s, isCompleted }));
-          }
-          return {
-            ...t,
-            isCompleted,
-            completedAt: isCompleted ? (t.completedAt || new Date().toISOString().split('T')[0]) : undefined,
-            actionPayload: actionPayload ? { ...t.actionPayload, ...actionPayload } : t.actionPayload,
-            subItems: finalSubItems,
-          };
-        });
-        const mandatoryCompleted = updatedTasks
-          .filter((t) => t.isMandatory !== false)
-          .every((t) => t.isCompleted);
-        return {
-          ...p,
-          tasks: updatedTasks,
-          status: mandatoryCompleted ? 'Completed' : 'In Progress',
-        };
-      })
-    );
+    const p = onboardingProcesses.find((x) => x.id === processId);
+    if (!p) return;
+    const updatedTasks = p.tasks.map((t) => {
+      if (t.id !== taskId) return t;
+      let finalSubItems = subItems !== undefined ? subItems : t.subItems;
+      if (subItems === undefined && t.subItems && t.subItems.length > 0) {
+        finalSubItems = t.subItems.map((s) => ({ ...s, isCompleted }));
+      }
+      return {
+        ...t,
+        isCompleted,
+        completedAt: isCompleted ? (t.completedAt || new Date().toISOString().split('T')[0]) : undefined,
+        actionPayload: actionPayload ? { ...t.actionPayload, ...actionPayload } : t.actionPayload,
+        subItems: finalSubItems,
+      };
+    });
+    const mandatoryCompleted = updatedTasks
+      .filter((t) => t.isMandatory !== false)
+      .every((t) => t.isCompleted);
+    persistOnboardingMerge(processId, {
+      ...p,
+      tasks: updatedTasks,
+      status: mandatoryCompleted ? 'Completed' : 'In Progress',
+    });
   };
 
   const toggleOnboardingSubItem = (
@@ -2896,32 +2948,29 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     taskId: string,
     subItemId: string
   ) => {
-    setOnboardingProcesses((prev) =>
-      prev.map((p) => {
-        if (p.id !== processId) return p;
-        const updatedTasks = p.tasks.map((t) => {
-          if (t.id !== taskId || !t.subItems) return t;
-          const updatedSubItems = t.subItems.map((s) =>
-            s.id === subItemId ? { ...s, isCompleted: !s.isCompleted } : s
-          );
-          const allDone = updatedSubItems.length > 0 && updatedSubItems.every((s) => s.isCompleted);
-          return {
-            ...t,
-            subItems: updatedSubItems,
-            isCompleted: allDone,
-            completedAt: allDone ? (t.completedAt || new Date().toISOString().split('T')[0]) : undefined,
-          };
-        });
-        const mandatoryCompleted = updatedTasks
-          .filter((t) => t.isMandatory !== false)
-          .every((t) => t.isCompleted);
-        return {
-          ...p,
-          tasks: updatedTasks,
-          status: mandatoryCompleted ? 'Completed' : 'In Progress',
-        };
-      })
-    );
+    const p = onboardingProcesses.find((x) => x.id === processId);
+    if (!p) return;
+    const updatedTasks = p.tasks.map((t) => {
+      if (t.id !== taskId || !t.subItems) return t;
+      const updatedSubItems = t.subItems.map((s) =>
+        s.id === subItemId ? { ...s, isCompleted: !s.isCompleted } : s
+      );
+      const allDone = updatedSubItems.length > 0 && updatedSubItems.every((s) => s.isCompleted);
+      return {
+        ...t,
+        subItems: updatedSubItems,
+        isCompleted: allDone,
+        completedAt: allDone ? (t.completedAt || new Date().toISOString().split('T')[0]) : undefined,
+      };
+    });
+    const mandatoryCompleted = updatedTasks
+      .filter((t) => t.isMandatory !== false)
+      .every((t) => t.isCompleted);
+    persistOnboardingMerge(processId, {
+      ...p,
+      tasks: updatedTasks,
+      status: mandatoryCompleted ? 'Completed' : 'In Progress',
+    });
   };
 
   const completeOnboardingProcess = (processId: string): Employee | null => {
@@ -2932,9 +2981,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (process.createdEmployeeId) {
       const existing = employees.find((e) => e.id === process.createdEmployeeId);
       if (existing) {
-        setOnboardingProcesses((prev) =>
-          prev.map((p) => (p.id === processId ? { ...p, status: 'Completed', officialNik: existing.nik } : p))
-        );
+        persistOnboardingMerge(processId, { ...process, status: 'Completed', officialNik: existing.nik });
         return existing;
       }
     }
@@ -2943,11 +2990,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       (e) => e.fullName.toLowerCase() === process.employeeName.toLowerCase()
     );
     if (existingByName) {
-      setOnboardingProcesses((prev) =>
-        prev.map((p) =>
-          p.id === processId ? { ...p, status: 'Completed', createdEmployeeId: existingByName.id, officialNik: existingByName.nik } : p
-        )
-      );
+      persistOnboardingMerge(processId, { ...process, status: 'Completed', createdEmployeeId: existingByName.id, officialNik: existingByName.nik });
       return existingByName;
     }
 
@@ -3016,19 +3059,15 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       ],
     });
 
-    setOnboardingProcesses((prev) =>
-      prev.map((p) =>
-        p.id === processId ? { ...p, status: 'Completed', createdEmployeeId: newEmp.id, officialNik: newEmp.nik } : p
-      )
-    );
+    persistOnboardingMerge(processId, { ...process, status: 'Completed', createdEmployeeId: newEmp.id, officialNik: newEmp.nik });
 
     return newEmp;
   };
 
   const updateOnboardingProcess = (processId: string, updates: Partial<OnboardingProcess>) => {
-    setOnboardingProcesses((prev) =>
-      prev.map((p) => (p.id === processId ? { ...p, ...updates } : p))
-    );
+    const p = onboardingProcesses.find((x) => x.id === processId);
+    if (!p) return;
+    persistOnboardingMerge(processId, { ...p, ...updates });
   };
 
   const cancelOnboardingProcess = (
@@ -3054,41 +3093,30 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
 
     // 2. Tindak lanjut data pelamar / Talent Pool
-    if (process.candidateId) {
+    const cand = process.candidateId ? candidates.find((c) => c.id === process.candidateId) : undefined;
+    if (cand) {
       if (actionType === 'talent_pool') {
-        setCandidates((prev) =>
-          prev.map((c) =>
-            c.id === process.candidateId
-              ? {
-                  ...c,
-                  stage: 'Disqualified',
-                  status: 'Disqualified',
-                  disqualificationReason: `Batal Onboarding: ${reason}`,
-                  isTalentPool: true,
-                  talentPoolNotes: `Batal Onboarding: ${reason} (Mulai bertugas awal: ${process.joinDate})`,
-                }
-              : c
-          )
-        );
+        persistCandidateMerge(cand.id, {
+          ...cand,
+          stage: 'Disqualified',
+          disqualificationReason: `Batal Onboarding: ${reason}`,
+          isTalentPool: true,
+          talentPoolNotes: `Batal Onboarding: ${reason} (Mulai bertugas awal: ${process.joinDate})`,
+        } as unknown as Candidate);
       } else {
-        setCandidates((prev) =>
-          prev.map((c) =>
-            c.id === process.candidateId
-              ? {
-                  ...c,
-                  stage: 'Disqualified',
-                  status: 'Disqualified',
-                  disqualificationReason: `Batal Onboarding (Dihapus): ${reason}`,
-                  isTalentPool: false,
-                }
-              : c
-          )
-        );
+        persistCandidateMerge(cand.id, {
+          ...cand,
+          stage: 'Disqualified',
+          disqualificationReason: `Batal Onboarding (Dihapus): ${reason}`,
+          isTalentPool: false,
+        } as unknown as Candidate);
       }
     }
 
     // 3. Hapus proses onboarding dari daftar aktif
-    setOnboardingProcesses((prev) => prev.filter((p) => p.id !== processId));
+    tenantApi.deleteOnboardingProcess(processId).then(() => {
+      setApiOnboardingProcesses((prev) => prev.filter((p) => p.id !== processId));
+    });
   };
 
   // 14. Shifts & Roaster Actions
@@ -5054,11 +5082,9 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setProcurementOrders(INITIAL_PROCUREMENT);
     setApprovalItems(INITIAL_APPROVALS);
     setAssets(INITIAL_ASSETS);
-    setCandidates(INITIAL_CANDIDATES);
     setBusinessTrips(INITIAL_BUSINESS_TRIPS);
     setContractReviews(INITIAL_CONTRACT_REVIEWS);
     setProbationEvaluations(INITIAL_PROBATION_EVALUATIONS);
-    setOnboardingProcesses(INITIAL_ONBOARDING);
     setPersonaliaLogs(INITIAL_PERSONALIA_LOGS);
   };
 

@@ -766,3 +766,79 @@ export const documentSignatoryConfigs = pgTable("document_signatory_configs", {
   sortOrder: integer("sort_order").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+export const jobVacancyStatusEnum = pgEnum("job_vacancy_status", ["Buka", "Ditutup"]);
+
+/**
+ * A posted vacancy — usually created from an Approved job requisition
+ * (jobRequisitionId), but can stand alone. Only the columns the UI
+ * actually filters/sorts on are first-class; everything else (SLA
+ * history, channel broadcast status, salary display flags, ...) lives in
+ * `details`, same pattern as jobRequisitions.
+ */
+export const jobVacancies = pgTable("job_vacancies", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  entityId: uuid("entity_id").references(() => companyEntities.id).notNull(),
+  jobRequisitionId: uuid("job_requisition_id").references(() => jobRequisitions.id),
+  title: text("title").notNull(),
+  openings: integer("openings").notNull().default(1),
+  status: jobVacancyStatusEnum("status").notNull().default("Buka"),
+  postedDate: timestamp("posted_date", { withTimezone: true }).defaultNow().notNull(),
+  targetCloseDate: timestamp("target_close_date", { withTimezone: true }),
+  details: jsonb("details").notNull().default({}).$type<Record<string, unknown>>(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+/**
+ * One applicant against one vacancy. The Candidate concept in this app
+ * spans the entire pipeline (sourcing -> screening -> test -> interview ->
+ * MCU -> offering), with dozens of mostly-optional, deeply-nested fields
+ * per stage. Only the columns that are actually queried/filtered
+ * (stage, scores, status) or referenced by FK are first-class; the rest
+ * rides in `details`, exactly like jobRequisitions/jobVacancies.
+ */
+export const candidates = pgTable("candidates", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  jobVacancyId: uuid("job_vacancy_id").references(() => jobVacancies.id).notNull(),
+  name: text("name").notNull(),
+  email: text("email").notNull(),
+  phone: text("phone"),
+  // Plain text, not an enum — the recruitment pipeline's own stage set has
+  // drifted inconsistently across the frontend (e.g. 'Disqualified' used in
+  // some flows, not others) and a rigid DB enum would reject real data an
+  // enum migration can't realistically chase.
+  stage: text("stage").notNull().default("Lamaran Masuk"),
+  appliedDate: timestamp("applied_date", { withTimezone: true }).defaultNow().notNull(),
+  aiMatchScore: integer("ai_match_score"),
+  testScore: integer("test_score"),
+  interviewScore: integer("interview_score"),
+  offeredSalary: integer("offered_salary"),
+  details: jsonb("details").notNull().default({}).$type<Record<string, unknown>>(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const onboardingStatusEnum = pgEnum("onboarding_status", ["In Progress", "Completed", "Cancelled"]);
+export const onboardingTypeEnum = pgEnum("onboarding_type", ["via_recruitment", "direct"]);
+
+export const onboardingProcesses = pgTable("onboarding_processes", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  entityId: uuid("entity_id").references(() => companyEntities.id).notNull(),
+  type: onboardingTypeEnum("type").notNull().default("direct"),
+  candidateId: uuid("candidate_id").references(() => candidates.id),
+  employeeName: text("employee_name").notNull(),
+  email: text("email"),
+  phone: text("phone"),
+  position: text("position"),
+  departmentId: uuid("department_id").references(() => companyDepartments.id),
+  joinDate: timestamp("join_date", { withTimezone: true }),
+  basicSalary: integer("basic_salary"),
+  contractDocNumber: text("contract_doc_number"),
+  status: onboardingStatusEnum("status").notNull().default("In Progress"),
+  createdEmployeeId: uuid("created_employee_id").references(() => employees.id),
+  tasks: jsonb("tasks").notNull().default([]).$type<unknown[]>(),
+  details: jsonb("details").notNull().default({}).$type<Record<string, unknown>>(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});

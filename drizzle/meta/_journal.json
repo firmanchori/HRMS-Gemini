@@ -134,6 +134,20 @@
       "when": 1793556238055,
       "tag": "0018_broken_warstar",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1793556951079,
+      "tag": "0019_gray_songbird",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1793584538326,
+      "tag": "0020_plain_sentinels",
+      "breakpoints": true
     }
   ]
 }

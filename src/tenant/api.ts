@@ -226,6 +226,63 @@ export interface JobRequisition {
   createdAt: string;
 }
 
+export type JobVacancyStatus = "Buka" | "Ditutup";
+
+export interface JobVacancy {
+  id: string;
+  tenantId: string;
+  entityId: string;
+  jobRequisitionId: string | null;
+  title: string;
+  openings: number;
+  status: JobVacancyStatus;
+  postedDate: string;
+  targetCloseDate: string | null;
+  details: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface Candidate {
+  id: string;
+  tenantId: string;
+  jobVacancyId: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  stage: string;
+  appliedDate: string;
+  aiMatchScore: number | null;
+  testScore: number | null;
+  interviewScore: number | null;
+  offeredSalary: number | null;
+  details: Record<string, unknown>;
+  createdAt: string;
+}
+
+export type OnboardingStatus = "In Progress" | "Completed" | "Cancelled";
+export type OnboardingType = "via_recruitment" | "direct";
+
+export interface OnboardingProcess {
+  id: string;
+  tenantId: string;
+  entityId: string;
+  type: OnboardingType;
+  candidateId: string | null;
+  employeeName: string;
+  email: string | null;
+  phone: string | null;
+  position: string | null;
+  departmentId: string | null;
+  joinDate: string | null;
+  basicSalary: number | null;
+  contractDocNumber: string | null;
+  status: OnboardingStatus;
+  createdEmployeeId: string | null;
+  tasks: unknown[];
+  details: Record<string, unknown>;
+  createdAt: string;
+}
+
 export type OrgChangeSet = { create?: Record<string, unknown>[]; update?: { id: string; data: Record<string, unknown> }[]; delete?: string[] };
 
 export interface OrgChangeProposal {
@@ -346,4 +403,26 @@ export const tenantApi = {
     request<JobRequisition>("/api/tenant/job-requisitions", { method: "POST", body: JSON.stringify(data) }),
   updateJobRequisition: (id: string, data: Partial<JobRequisition>) =>
     request<JobRequisition>(`/api/tenant/job-requisitions/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+
+  // Job vacancies.
+  listJobVacancies: () => request<JobVacancy[]>("/api/tenant/job-vacancies"),
+  createJobVacancy: (data: Partial<JobVacancy> & { entityId: string; title: string }) =>
+    request<JobVacancy>("/api/tenant/job-vacancies", { method: "POST", body: JSON.stringify(data) }),
+  updateJobVacancy: (id: string, data: Partial<JobVacancy>) =>
+    request<JobVacancy>(`/api/tenant/job-vacancies/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+
+  // Candidates.
+  listCandidates: () => request<Candidate[]>("/api/tenant/candidates"),
+  createCandidate: (data: Partial<Candidate> & { jobVacancyId: string; name: string; email: string }) =>
+    request<Candidate>("/api/tenant/candidates", { method: "POST", body: JSON.stringify(data) }),
+  updateCandidate: (id: string, data: Partial<Candidate>) =>
+    request<Candidate>(`/api/tenant/candidates/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+
+  // Onboarding processes.
+  listOnboardingProcesses: () => request<OnboardingProcess[]>("/api/tenant/onboarding-processes"),
+  createOnboardingProcess: (data: Partial<OnboardingProcess> & { entityId: string; employeeName: string }) =>
+    request<OnboardingProcess>("/api/tenant/onboarding-processes", { method: "POST", body: JSON.stringify(data) }),
+  updateOnboardingProcess: (id: string, data: Partial<OnboardingProcess>) =>
+    request<OnboardingProcess>(`/api/tenant/onboarding-processes/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteOnboardingProcess: (id: string) => request<{ ok: true }>(`/api/tenant/onboarding-processes/${id}`, { method: "DELETE" }),
 };

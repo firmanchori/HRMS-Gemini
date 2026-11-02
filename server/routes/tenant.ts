@@ -20,6 +20,9 @@ import {
   employees,
   jobRequisitions,
   documentSignatoryConfigs,
+  jobVacancies,
+  candidates,
+  onboardingProcesses,
 } from "../db/schema.ts";
 import { requireTenantAdmin } from "../middleware/auth.ts";
 import { validateBody, validateParams, uuidParam } from "../lib/validate.ts";
@@ -1014,4 +1017,157 @@ tenantRouter.put("/job-requisitions/:id", validateParams(uuidParam("id")), valid
   if (!updated) return res.status(404).json({ error: "FPTK tidak ditemukan" });
   await logAudit({ actorUserId: req.session!.userId, tenantId, action: "job_requisition.update", details: { jobRequisitionId: updated.id } });
   res.json(updated);
+});
+
+// ---------------------------------------------------------------------------
+// Job Vacancies — real backend, vertically scoped like employees/job-requisitions.
+// ---------------------------------------------------------------------------
+
+tenantRouter.get("/job-vacancies", async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [callerUser] = await db.select().from(users).where(eq(users.id, req.session!.userId)).limit(1);
+  const callerEntityId = await resolveCallerEntityId(callerUser, tenantId);
+  if (!callerEntityId) return res.json([]);
+  const visibleRows = await db.select({ id: entityClosure.descendantEntityId }).from(entityClosure).where(eq(entityClosure.ancestorEntityId, callerEntityId));
+  const visibleEntityIds = visibleRows.map((r) => r.id);
+  if (visibleEntityIds.length === 0) return res.json([]);
+  res.json(await db.select().from(jobVacancies).where(and(eq(jobVacancies.tenantId, tenantId), inArray(jobVacancies.entityId, visibleEntityIds))));
+});
+
+const jobVacancySchema = z.object({
+  entityId: z.string().uuid(),
+  jobRequisitionId: z.string().uuid().optional(),
+  title: z.string().trim().min(1).max(200),
+  openings: z.number().int().min(1).optional(),
+  status: z.enum(["Buka", "Ditutup"]).optional(),
+  targetCloseDate: z.string().datetime().optional(),
+  details: z.record(z.string(), z.unknown()).optional(),
+});
+
+tenantRouter.post("/job-vacancies", validateBody(jobVacancySchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [created] = await db.insert(jobVacancies).values({ ...req.body, tenantId }).returning();
+  await logAudit({ actorUserId: req.session!.userId, tenantId, action: "job_vacancy.create", details: { jobVacancyId: created.id } });
+  res.status(201).json(created);
+});
+
+tenantRouter.put("/job-vacancies/:id", validateParams(uuidParam("id")), validateBody(jobVacancySchema.partial()), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [updated] = await db
+    .update(jobVacancies)
+    .set(req.body)
+    .where(and(eq(jobVacancies.id, req.params.id), eq(jobVacancies.tenantId, tenantId)))
+    .returning();
+  if (!updated) return res.status(404).json({ error: "Lowongan tidak ditemukan" });
+  await logAudit({ actorUserId: req.session!.userId, tenantId, action: "job_vacancy.update", details: { jobVacancyId: updated.id } });
+  res.json(updated);
+});
+
+// ---------------------------------------------------------------------------
+// Candidates — scoped via their vacancy's entity (no direct entityId column).
+// ---------------------------------------------------------------------------
+
+tenantRouter.get("/candidates", async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [callerUser] = await db.select().from(users).where(eq(users.id, req.session!.userId)).limit(1);
+  const callerEntityId = await resolveCallerEntityId(callerUser, tenantId);
+  if (!callerEntityId) return res.json([]);
+  const visibleRows = await db.select({ id: entityClosure.descendantEntityId }).from(entityClosure).where(eq(entityClosure.ancestorEntityId, callerEntityId));
+  const visibleEntityIds = visibleRows.map((r) => r.id);
+  if (visibleEntityIds.length === 0) return res.json([]);
+  const visibleVacancyIds = (await db.select({ id: jobVacancies.id }).from(jobVacancies).where(and(eq(jobVacancies.tenantId, tenantId), inArray(jobVacancies.entityId, visibleEntityIds)))).map((v) => v.id);
+  if (visibleVacancyIds.length === 0) return res.json([]);
+  res.json(await db.select().from(candidates).where(and(eq(candidates.tenantId, tenantId), inArray(candidates.jobVacancyId, visibleVacancyIds))));
+});
+
+const candidateSchema = z.object({
+  jobVacancyId: z.string().uuid(),
+  name: z.string().trim().min(1).max(200),
+  email: z.string().trim().email(),
+  phone: z.string().trim().max(50).optional(),
+  stage: z.string().trim().min(1).max(100).optional(),
+  aiMatchScore: z.number().int().min(0).max(100).optional(),
+  testScore: z.number().int().min(0).max(100).optional(),
+  interviewScore: z.number().int().min(0).max(100).optional(),
+  offeredSalary: z.number().int().min(0).optional(),
+  details: z.record(z.string(), z.unknown()).optional(),
+});
+
+tenantRouter.post("/candidates", validateBody(candidateSchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [created] = await db.insert(candidates).values({ ...req.body, tenantId }).returning();
+  await logAudit({ actorUserId: req.session!.userId, tenantId, action: "candidate.create", details: { candidateId: created.id } });
+  res.status(201).json(created);
+});
+
+tenantRouter.put("/candidates/:id", validateParams(uuidParam("id")), validateBody(candidateSchema.partial()), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [updated] = await db
+    .update(candidates)
+    .set(req.body)
+    .where(and(eq(candidates.id, req.params.id), eq(candidates.tenantId, tenantId)))
+    .returning();
+  if (!updated) return res.status(404).json({ error: "Kandidat tidak ditemukan" });
+  await logAudit({ actorUserId: req.session!.userId, tenantId, action: "candidate.update", details: { candidateId: updated.id } });
+  res.json(updated);
+});
+
+// ---------------------------------------------------------------------------
+// Onboarding Processes — real backend.
+// ---------------------------------------------------------------------------
+
+tenantRouter.get("/onboarding-processes", async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [callerUser] = await db.select().from(users).where(eq(users.id, req.session!.userId)).limit(1);
+  const callerEntityId = await resolveCallerEntityId(callerUser, tenantId);
+  if (!callerEntityId) return res.json([]);
+  const visibleRows = await db.select({ id: entityClosure.descendantEntityId }).from(entityClosure).where(eq(entityClosure.ancestorEntityId, callerEntityId));
+  const visibleEntityIds = visibleRows.map((r) => r.id);
+  if (visibleEntityIds.length === 0) return res.json([]);
+  res.json(await db.select().from(onboardingProcesses).where(and(eq(onboardingProcesses.tenantId, tenantId), inArray(onboardingProcesses.entityId, visibleEntityIds))));
+});
+
+const onboardingProcessSchema = z.object({
+  entityId: z.string().uuid(),
+  type: z.enum(["via_recruitment", "direct"]).optional(),
+  candidateId: z.string().uuid().optional(),
+  employeeName: z.string().trim().min(1).max(200),
+  email: z.string().trim().email().optional(),
+  phone: z.string().trim().max(50).optional(),
+  position: z.string().trim().max(200).optional(),
+  departmentId: z.string().uuid().optional(),
+  joinDate: z.string().datetime().optional(),
+  basicSalary: z.number().int().min(0).optional(),
+  contractDocNumber: z.string().trim().max(100).optional(),
+  status: z.enum(["In Progress", "Completed", "Cancelled"]).optional(),
+  createdEmployeeId: z.string().uuid().optional(),
+  tasks: z.array(z.unknown()).optional(),
+  details: z.record(z.string(), z.unknown()).optional(),
+});
+
+tenantRouter.post("/onboarding-processes", validateBody(onboardingProcessSchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [created] = await db.insert(onboardingProcesses).values({ ...req.body, tenantId }).returning();
+  await logAudit({ actorUserId: req.session!.userId, tenantId, action: "onboarding_process.create", details: { onboardingProcessId: created.id } });
+  res.status(201).json(created);
+});
+
+tenantRouter.put("/onboarding-processes/:id", validateParams(uuidParam("id")), validateBody(onboardingProcessSchema.partial()), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [updated] = await db
+    .update(onboardingProcesses)
+    .set(req.body)
+    .where(and(eq(onboardingProcesses.id, req.params.id), eq(onboardingProcesses.tenantId, tenantId)))
+    .returning();
+  if (!updated) return res.status(404).json({ error: "Proses onboarding tidak ditemukan" });
+  await logAudit({ actorUserId: req.session!.userId, tenantId, action: "onboarding_process.update", details: { onboardingProcessId: updated.id } });
+  res.json(updated);
+});
+
+tenantRouter.delete("/onboarding-processes/:id", validateParams(uuidParam("id")), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [deleted] = await db.delete(onboardingProcesses).where(and(eq(onboardingProcesses.id, req.params.id), eq(onboardingProcesses.tenantId, tenantId))).returning();
+  if (!deleted) return res.status(404).json({ error: "Proses onboarding tidak ditemukan" });
+  await logAudit({ actorUserId: req.session!.userId, tenantId, action: "onboarding_process.delete", details: { onboardingProcessId: deleted.id } });
+  res.json({ ok: true });
 });

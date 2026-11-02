@@ -11,6 +11,9 @@ import {
   employees,
   jobRequisitions,
   documentSignatoryConfigs,
+  jobVacancies,
+  candidates,
+  onboardingProcesses,
   users,
 } from "../schema.ts";
 
@@ -167,5 +170,70 @@ export async function seedRecruitmentSamplesForContoh() {
     });
   }
 
-  console.log(`Contoh data karyawan & FPTK untuk tenant 'contoh' dibuat (${seededEmployees.length} karyawan).`);
+  const [vacancy] = await db
+    .insert(jobVacancies)
+    .values({
+      tenantId: tenant.id,
+      entityId: holding.id,
+      title: "HR Staff - Recruitment",
+      openings: 1,
+      status: "Buka",
+      details: {
+        department: "Human Resources",
+        employmentType: "Kontrak",
+        grade: "Grade 4 s/d Grade 5",
+        minExperience: "Minimal 1 Tahun",
+        salaryRange: "Gaji Kompetitif (Confidential)",
+        rawInternalSalary: "Rp 6.000.000 - Rp 7.500.000",
+        requirements: "Minimal S1 segala jurusan, pengalaman 1 tahun di bidang rekrutmen.",
+        description: "Bertanggung jawab atas proses rekrutmen end-to-end, mulai dari sourcing hingga onboarding.",
+      },
+    })
+    .returning();
+
+  const [candidate] = await db
+    .insert(candidates)
+    .values({
+      tenantId: tenant.id,
+      jobVacancyId: vacancy.id,
+      name: "Rizky Febrian",
+      email: "rizky.febrian@contoh-pelamar.local",
+      phone: "081234567890",
+      stage: "Screening",
+      aiMatchScore: 78,
+      details: {
+        lastCompany: "PT Mitra Solusindo",
+        expectedSalary: 7000000,
+        sourcePortal: "LinkedIn",
+        resumeParsed: true,
+        cvFileName: "CV_Rizky_Febrian.pdf",
+      },
+    })
+    .returning();
+
+  await db.insert(onboardingProcesses).values({
+    tenantId: tenant.id,
+    entityId: holding.id,
+    type: "via_recruitment",
+    candidateId: candidate.id,
+    employeeName: "Dewi Anggraini",
+    email: "dewi.anggraini@contoh-pelamar.local",
+    phone: "081298765432",
+    position: "HR Staff",
+    joinDate: new Date("2026-11-15"),
+    basicSalary: 6500000,
+    contractDocNumber: `001/HRD-PKWT/${tenant.subdomain.toUpperCase()}/XI/2026`,
+    status: "In Progress",
+    tasks: [
+      { id: "t1", title: "Kontrak Kerja (PKWT) Ditandatangani", category: "Legalitas & Dokumen", isCompleted: true, isMandatory: true, assignedRole: "hr_admin" },
+      { id: "t2", title: "Pembuatan Email & Akun Sistem", category: "IT Provisioning", isCompleted: false, isMandatory: true, assignedRole: "it_admin" },
+      { id: "t3", title: "Kartu Akses & ID Card", category: "GA", isCompleted: false, isMandatory: false, assignedRole: "ga_admin" },
+    ],
+    details: {
+      department: "Human Resources",
+      employmentType: "Kontrak",
+    },
+  });
+
+  console.log(`Contoh data karyawan, FPTK, lowongan, kandidat & onboarding untuk tenant 'contoh' dibuat (${seededEmployees.length} karyawan).`);
 }
