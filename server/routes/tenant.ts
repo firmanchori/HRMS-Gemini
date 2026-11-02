@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type Request } from "express";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { eq, inArray, and, isNull } from "drizzle-orm";
@@ -51,6 +51,25 @@ async function resolveCallerEntityId(callerUser: { entityId: string | null } | u
   if (callerUser?.entityId) return callerUser.entityId;
   const [rootEntity] = await db.select().from(companyEntities).where(and(eq(companyEntities.tenantId, tenantId), isNull(companyEntities.parentEntityId))).limit(1);
   return rootEntity?.id ?? null;
+}
+
+/**
+ * The caller's full visible entity set (self + all descendants) — the same
+ * set every GET endpoint in this file already filters reads by. Every
+ * create/update that accepts an entityId (directly, or indirectly via a
+ * referenced row like a vacancy or employee) MUST check the target entity
+ * is in this set too, not just reads: without it, any tenant_admin could
+ * write into a sibling entity's data by passing a different entityId —
+ * a real authorization gap found across job-requisitions, job-vacancies,
+ * candidates, onboarding-processes and employees (user, 2026-11-02 bug
+ * audit).
+ */
+async function resolveVisibleEntityIds(req: Request, tenantId: string): Promise<string[]> {
+  const [callerUser] = await db.select().from(users).where(eq(users.id, req.session!.userId)).limit(1);
+  const callerEntityId = await resolveCallerEntityId(callerUser, tenantId);
+  if (!callerEntityId) return [];
+  const visibleRows = await db.select({ id: entityClosure.descendantEntityId }).from(entityClosure).where(eq(entityClosure.ancestorEntityId, callerEntityId));
+  return visibleRows.map((r) => r.id);
 }
 
 // ---------------------------------------------------------------------------
@@ -321,9 +340,19 @@ tenantRouter.delete("/users/:id", validateParams(uuidParam("id")), async (req, r
 
 type UnlockCheck = { ok: true; entity: typeof companyEntities.$inferSelect } | { ok: false; status: 404 | 403; error: string };
 
-async function requireUnlockedEntity(entityId: string, tenantId: string): Promise<UnlockCheck> {
+/**
+ * Also verifies the entity is within the CALLER's visible scope (self +
+ * descendants) — this was missing entirely before (user, 2026-11-02 bug
+ * audit): any tenant_admin could create/edit a sibling entity's division/
+ * department/position/org-node/grade just by passing its entityId, since
+ * this only ever checked tenantId + governance lock, never who the caller
+ * actually is.
+ */
+async function requireUnlockedEntity(entityId: string, tenantId: string, req: Request): Promise<UnlockCheck> {
   const [entity] = await db.select().from(companyEntities).where(and(eq(companyEntities.id, entityId), eq(companyEntities.tenantId, tenantId))).limit(1);
   if (!entity) return { ok: false, status: 404, error: "Entitas tidak ditemukan" };
+  const visibleEntityIds = await resolveVisibleEntityIds(req, tenantId);
+  if (!visibleEntityIds.includes(entityId)) return { ok: false, status: 403, error: "Entitas di luar ruang lingkup Anda" };
   if (entity.isGovernanceLocked) return { ok: false, status: 403, error: "Entitas ini sudah terkunci — ajukan perubahan lewat proposal restrukturisasi resmi" };
   return { ok: true, entity };
 }
@@ -343,7 +372,7 @@ tenantRouter.get("/divisions", async (req, res) => {
 
 tenantRouter.post("/divisions", validateBody(divisionSchema), async (req, res) => {
   const tenantId = req.session!.tenantId!;
-  const check = await requireUnlockedEntity(req.body.entityId, tenantId);
+  const check = await requireUnlockedEntity(req.body.entityId, tenantId, req);
   if (!check.ok) return res.status(check.status).json({ error: check.error });
   const [created] = await db.insert(companyDivisions).values({ ...req.body, tenantId }).returning();
   await logAudit({ actorUserId: req.session!.userId, tenantId, action: "division.create", details: { divisionId: created.id } });
@@ -354,7 +383,7 @@ tenantRouter.put("/divisions/:id", validateParams(uuidParam("id")), validateBody
   const tenantId = req.session!.tenantId!;
   const [existing] = await db.select().from(companyDivisions).where(and(eq(companyDivisions.id, req.params.id), eq(companyDivisions.tenantId, tenantId))).limit(1);
   if (!existing) return res.status(404).json({ error: "Divisi tidak ditemukan" });
-  const check = await requireUnlockedEntity(existing.entityId, tenantId);
+  const check = await requireUnlockedEntity(existing.entityId, tenantId, req);
   if (!check.ok) return res.status(check.status).json({ error: check.error });
   const [updated] = await db.update(companyDivisions).set(req.body).where(eq(companyDivisions.id, existing.id)).returning();
   await logAudit({ actorUserId: req.session!.userId, tenantId, action: "division.update", details: { divisionId: updated.id } });
@@ -365,7 +394,7 @@ tenantRouter.delete("/divisions/:id", validateParams(uuidParam("id")), async (re
   const tenantId = req.session!.tenantId!;
   const [existing] = await db.select().from(companyDivisions).where(and(eq(companyDivisions.id, req.params.id), eq(companyDivisions.tenantId, tenantId))).limit(1);
   if (!existing) return res.status(404).json({ error: "Divisi tidak ditemukan" });
-  const check = await requireUnlockedEntity(existing.entityId, tenantId);
+  const check = await requireUnlockedEntity(existing.entityId, tenantId, req);
   if (!check.ok) return res.status(check.status).json({ error: check.error });
   await db.delete(companyDivisions).where(eq(companyDivisions.id, existing.id));
   await logAudit({ actorUserId: req.session!.userId, tenantId, action: "division.delete", details: { divisionId: existing.id } });
@@ -387,7 +416,7 @@ tenantRouter.get("/departments", async (req, res) => {
 
 tenantRouter.post("/departments", validateBody(departmentSchema), async (req, res) => {
   const tenantId = req.session!.tenantId!;
-  const check = await requireUnlockedEntity(req.body.entityId, tenantId);
+  const check = await requireUnlockedEntity(req.body.entityId, tenantId, req);
   if (!check.ok) return res.status(check.status).json({ error: check.error });
   const [created] = await db.insert(companyDepartments).values({ ...req.body, tenantId }).returning();
   await logAudit({ actorUserId: req.session!.userId, tenantId, action: "department.create", details: { departmentId: created.id } });
@@ -398,7 +427,7 @@ tenantRouter.put("/departments/:id", validateParams(uuidParam("id")), validateBo
   const tenantId = req.session!.tenantId!;
   const [existing] = await db.select().from(companyDepartments).where(and(eq(companyDepartments.id, req.params.id), eq(companyDepartments.tenantId, tenantId))).limit(1);
   if (!existing) return res.status(404).json({ error: "Departemen tidak ditemukan" });
-  const check = await requireUnlockedEntity(existing.entityId, tenantId);
+  const check = await requireUnlockedEntity(existing.entityId, tenantId, req);
   if (!check.ok) return res.status(check.status).json({ error: check.error });
   const [updated] = await db.update(companyDepartments).set(req.body).where(eq(companyDepartments.id, existing.id)).returning();
   await logAudit({ actorUserId: req.session!.userId, tenantId, action: "department.update", details: { departmentId: updated.id } });
@@ -409,7 +438,7 @@ tenantRouter.delete("/departments/:id", validateParams(uuidParam("id")), async (
   const tenantId = req.session!.tenantId!;
   const [existing] = await db.select().from(companyDepartments).where(and(eq(companyDepartments.id, req.params.id), eq(companyDepartments.tenantId, tenantId))).limit(1);
   if (!existing) return res.status(404).json({ error: "Departemen tidak ditemukan" });
-  const check = await requireUnlockedEntity(existing.entityId, tenantId);
+  const check = await requireUnlockedEntity(existing.entityId, tenantId, req);
   if (!check.ok) return res.status(check.status).json({ error: check.error });
   await db.delete(companyDepartments).where(eq(companyDepartments.id, existing.id));
   await logAudit({ actorUserId: req.session!.userId, tenantId, action: "department.delete", details: { departmentId: existing.id } });
@@ -438,7 +467,7 @@ tenantRouter.get("/positions", async (req, res) => {
 
 tenantRouter.post("/positions", validateBody(positionSchema), async (req, res) => {
   const tenantId = req.session!.tenantId!;
-  const check = await requireUnlockedEntity(req.body.entityId, tenantId);
+  const check = await requireUnlockedEntity(req.body.entityId, tenantId, req);
   if (!check.ok) return res.status(check.status).json({ error: check.error });
   const [created] = await db.insert(masterJobPositions).values({ ...req.body, tenantId }).returning();
   await logAudit({ actorUserId: req.session!.userId, tenantId, action: "position.create", details: { positionId: created.id } });
@@ -449,7 +478,7 @@ tenantRouter.put("/positions/:id", validateParams(uuidParam("id")), validateBody
   const tenantId = req.session!.tenantId!;
   const [existing] = await db.select().from(masterJobPositions).where(and(eq(masterJobPositions.id, req.params.id), eq(masterJobPositions.tenantId, tenantId))).limit(1);
   if (!existing) return res.status(404).json({ error: "Posisi tidak ditemukan" });
-  const check = await requireUnlockedEntity(existing.entityId, tenantId);
+  const check = await requireUnlockedEntity(existing.entityId, tenantId, req);
   if (!check.ok) return res.status(check.status).json({ error: check.error });
   const [updated] = await db.update(masterJobPositions).set(req.body).where(eq(masterJobPositions.id, existing.id)).returning();
   await logAudit({ actorUserId: req.session!.userId, tenantId, action: "position.update", details: { positionId: updated.id } });
@@ -460,7 +489,7 @@ tenantRouter.delete("/positions/:id", validateParams(uuidParam("id")), async (re
   const tenantId = req.session!.tenantId!;
   const [existing] = await db.select().from(masterJobPositions).where(and(eq(masterJobPositions.id, req.params.id), eq(masterJobPositions.tenantId, tenantId))).limit(1);
   if (!existing) return res.status(404).json({ error: "Posisi tidak ditemukan" });
-  const check = await requireUnlockedEntity(existing.entityId, tenantId);
+  const check = await requireUnlockedEntity(existing.entityId, tenantId, req);
   if (!check.ok) return res.status(check.status).json({ error: check.error });
   await db.delete(masterJobPositions).where(eq(masterJobPositions.id, existing.id));
   await logAudit({ actorUserId: req.session!.userId, tenantId, action: "position.delete", details: { positionId: existing.id } });
@@ -488,7 +517,7 @@ tenantRouter.get("/org-nodes", async (req, res) => {
 
 tenantRouter.post("/org-nodes", validateBody(orgNodeSchema), async (req, res) => {
   const tenantId = req.session!.tenantId!;
-  const check = await requireUnlockedEntity(req.body.entityId, tenantId);
+  const check = await requireUnlockedEntity(req.body.entityId, tenantId, req);
   if (!check.ok) return res.status(check.status).json({ error: check.error });
   const [created] = await db.insert(orgStructureNodes).values({ ...req.body, tenantId }).returning();
   await logAudit({ actorUserId: req.session!.userId, tenantId, action: "org_node.create", details: { orgNodeId: created.id } });
@@ -499,7 +528,7 @@ tenantRouter.put("/org-nodes/:id", validateParams(uuidParam("id")), validateBody
   const tenantId = req.session!.tenantId!;
   const [existing] = await db.select().from(orgStructureNodes).where(and(eq(orgStructureNodes.id, req.params.id), eq(orgStructureNodes.tenantId, tenantId))).limit(1);
   if (!existing) return res.status(404).json({ error: "Posisi struktur tidak ditemukan" });
-  const check = await requireUnlockedEntity(existing.entityId, tenantId);
+  const check = await requireUnlockedEntity(existing.entityId, tenantId, req);
   if (!check.ok) return res.status(check.status).json({ error: check.error });
   const [updated] = await db.update(orgStructureNodes).set(req.body).where(eq(orgStructureNodes.id, existing.id)).returning();
   await logAudit({ actorUserId: req.session!.userId, tenantId, action: "org_node.update", details: { orgNodeId: updated.id } });
@@ -510,7 +539,7 @@ tenantRouter.delete("/org-nodes/:id", validateParams(uuidParam("id")), async (re
   const tenantId = req.session!.tenantId!;
   const [existing] = await db.select().from(orgStructureNodes).where(and(eq(orgStructureNodes.id, req.params.id), eq(orgStructureNodes.tenantId, tenantId))).limit(1);
   if (!existing) return res.status(404).json({ error: "Posisi struktur tidak ditemukan" });
-  const check = await requireUnlockedEntity(existing.entityId, tenantId);
+  const check = await requireUnlockedEntity(existing.entityId, tenantId, req);
   if (!check.ok) return res.status(check.status).json({ error: check.error });
   await db.delete(orgStructureNodes).where(eq(orgStructureNodes.id, existing.id));
   await logAudit({ actorUserId: req.session!.userId, tenantId, action: "org_node.delete", details: { orgNodeId: existing.id } });
@@ -536,6 +565,13 @@ const gradeSchema = z.object({
 
 tenantRouter.post("/grades", validateBody(gradeSchema), async (req, res) => {
   const tenantId = req.session!.tenantId!;
+  // entityId is optional (null = tenant-wide shared grade, open to any
+  // entity's admin by design); when an entity-specific grade IS requested,
+  // it must be within the caller's own visible scope.
+  if (req.body.entityId) {
+    const visibleEntityIds = await resolveVisibleEntityIds(req, tenantId);
+    if (!visibleEntityIds.includes(req.body.entityId)) return res.status(403).json({ error: "Entitas di luar ruang lingkup Anda" });
+  }
   const [created] = await db.insert(gradeSalaryRanges).values({ ...req.body, tenantId }).returning();
   await logAudit({ actorUserId: req.session!.userId, tenantId, action: "grade.create", details: { gradeId: created.id } });
   res.status(201).json(created);
@@ -547,10 +583,15 @@ tenantRouter.get("/grades", async (req, res) => {
 
 tenantRouter.put("/grades/:id", validateParams(uuidParam("id")), validateBody(gradeSchema.partial()), async (req, res) => {
   const tenantId = req.session!.tenantId!;
+  const [existing] = await db.select().from(gradeSalaryRanges).where(and(eq(gradeSalaryRanges.id, req.params.id), eq(gradeSalaryRanges.tenantId, tenantId))).limit(1);
+  if (!existing) return res.status(404).json({ error: "Grade tidak ditemukan" });
+  const visibleEntityIds = await resolveVisibleEntityIds(req, tenantId);
+  if (existing.entityId && !visibleEntityIds.includes(existing.entityId)) return res.status(404).json({ error: "Grade tidak ditemukan" });
+  if (req.body.entityId && !visibleEntityIds.includes(req.body.entityId)) return res.status(403).json({ error: "Entitas di luar ruang lingkup Anda" });
   const [updated] = await db
     .update(gradeSalaryRanges)
     .set(req.body)
-    .where(and(eq(gradeSalaryRanges.id, req.params.id), eq(gradeSalaryRanges.tenantId, tenantId)))
+    .where(eq(gradeSalaryRanges.id, req.params.id))
     .returning();
   if (!updated) return res.status(404).json({ error: "Grade tidak ditemukan" });
   await logAudit({ actorUserId: req.session!.userId, tenantId, action: "grade.update", details: { gradeId: updated.id } });
@@ -561,6 +602,10 @@ tenantRouter.delete("/grades/:id", validateParams(uuidParam("id")), async (req, 
   const tenantId = req.session!.tenantId!;
   const [existing] = await db.select().from(gradeSalaryRanges).where(and(eq(gradeSalaryRanges.id, req.params.id), eq(gradeSalaryRanges.tenantId, tenantId))).limit(1);
   if (!existing) return res.status(404).json({ error: "Grade tidak ditemukan" });
+  if (existing.entityId) {
+    const visibleEntityIds = await resolveVisibleEntityIds(req, tenantId);
+    if (!visibleEntityIds.includes(existing.entityId)) return res.status(404).json({ error: "Grade tidak ditemukan" });
+  }
   await db.delete(gradeSalaryRanges).where(eq(gradeSalaryRanges.id, existing.id));
   await logAudit({ actorUserId: req.session!.userId, tenantId, action: "grade.delete", details: { gradeId: existing.id } });
   res.json({ ok: true });
@@ -750,6 +795,10 @@ const officeLocationSchema = z.object({
 
 tenantRouter.post("/office-locations", validateBody(officeLocationSchema), async (req, res) => {
   const tenantId = req.session!.tenantId!;
+  if (req.body.entityId) {
+    const visibleEntityIds = await resolveVisibleEntityIds(req, tenantId);
+    if (!visibleEntityIds.includes(req.body.entityId)) return res.status(403).json({ error: "Entitas di luar ruang lingkup Anda" });
+  }
   const [created] = await db.insert(officeLocations).values({ ...req.body, tenantId }).returning();
   await logAudit({ actorUserId: req.session!.userId, tenantId, action: "office_location.create", details: { officeLocationId: created.id } });
   res.status(201).json(created);
@@ -763,10 +812,15 @@ const updateOfficeLocationSchema = officeLocationSchema.partial().extend({ isAct
 
 tenantRouter.put("/office-locations/:id", validateParams(uuidParam("id")), validateBody(updateOfficeLocationSchema), async (req, res) => {
   const tenantId = req.session!.tenantId!;
+  const [existing] = await db.select().from(officeLocations).where(and(eq(officeLocations.id, req.params.id), eq(officeLocations.tenantId, tenantId))).limit(1);
+  if (!existing) return res.status(404).json({ error: "Lokasi kantor tidak ditemukan" });
+  const visibleEntityIds = await resolveVisibleEntityIds(req, tenantId);
+  if (existing.entityId && !visibleEntityIds.includes(existing.entityId)) return res.status(404).json({ error: "Lokasi kantor tidak ditemukan" });
+  if (req.body.entityId && !visibleEntityIds.includes(req.body.entityId)) return res.status(403).json({ error: "Entitas di luar ruang lingkup Anda" });
   const [updated] = await db
     .update(officeLocations)
     .set(req.body)
-    .where(and(eq(officeLocations.id, req.params.id), eq(officeLocations.tenantId, tenantId)))
+    .where(eq(officeLocations.id, req.params.id))
     .returning();
   if (!updated) return res.status(404).json({ error: "Lokasi kantor tidak ditemukan" });
   await logAudit({ actorUserId: req.session!.userId, tenantId, action: "office_location.update", details: { officeLocationId: updated.id } });
@@ -906,6 +960,8 @@ const employeeSchema = z.object({
 
 tenantRouter.post("/employees", validateBody(employeeSchema), async (req, res) => {
   const tenantId = req.session!.tenantId!;
+  const visibleEntityIds = await resolveVisibleEntityIds(req, tenantId);
+  if (!visibleEntityIds.includes(req.body.entityId)) return res.status(403).json({ error: "Entitas di luar ruang lingkup Anda" });
   const [created] = await db.insert(employees).values({ ...req.body, tenantId }).returning();
   await logAudit({ actorUserId: req.session!.userId, tenantId, action: "employee.create", details: { employeeId: created.id } });
   res.status(201).json(created);
@@ -913,10 +969,14 @@ tenantRouter.post("/employees", validateBody(employeeSchema), async (req, res) =
 
 tenantRouter.put("/employees/:id", validateParams(uuidParam("id")), validateBody(employeeSchema.partial()), async (req, res) => {
   const tenantId = req.session!.tenantId!;
+  const visibleEntityIds = await resolveVisibleEntityIds(req, tenantId);
+  const [existing] = await db.select().from(employees).where(and(eq(employees.id, req.params.id), eq(employees.tenantId, tenantId))).limit(1);
+  if (!existing || !visibleEntityIds.includes(existing.entityId)) return res.status(404).json({ error: "Karyawan tidak ditemukan" });
+  if (req.body.entityId && !visibleEntityIds.includes(req.body.entityId)) return res.status(403).json({ error: "Entitas di luar ruang lingkup Anda" });
   const [updated] = await db
     .update(employees)
     .set(req.body)
-    .where(and(eq(employees.id, req.params.id), eq(employees.tenantId, tenantId)))
+    .where(eq(employees.id, req.params.id))
     .returning();
   if (!updated) return res.status(404).json({ error: "Karyawan tidak ditemukan" });
   await logAudit({ actorUserId: req.session!.userId, tenantId, action: "employee.update", details: { employeeId: updated.id } });
@@ -925,7 +985,10 @@ tenantRouter.put("/employees/:id", validateParams(uuidParam("id")), validateBody
 
 tenantRouter.delete("/employees/:id", validateParams(uuidParam("id")), async (req, res) => {
   const tenantId = req.session!.tenantId!;
-  const [deleted] = await db.delete(employees).where(and(eq(employees.id, req.params.id), eq(employees.tenantId, tenantId))).returning();
+  const visibleEntityIds = await resolveVisibleEntityIds(req, tenantId);
+  const [existing] = await db.select().from(employees).where(and(eq(employees.id, req.params.id), eq(employees.tenantId, tenantId))).limit(1);
+  if (!existing || !visibleEntityIds.includes(existing.entityId)) return res.status(404).json({ error: "Karyawan tidak ditemukan" });
+  const [deleted] = await db.delete(employees).where(eq(employees.id, req.params.id)).returning();
   if (!deleted) return res.status(404).json({ error: "Karyawan tidak ditemukan" });
   await logAudit({ actorUserId: req.session!.userId, tenantId, action: "employee.delete", details: { employeeId: deleted.id } });
   res.json({ ok: true });
@@ -1018,6 +1081,9 @@ tenantRouter.post("/job-requisitions", validateBody(jobRequisitionSchema), async
   const tenantId = req.session!.tenantId!;
   const userId = req.session!.userId;
 
+  const visibleEntityIds = await resolveVisibleEntityIds(req, tenantId);
+  if (!visibleEntityIds.includes(req.body.entityId)) return res.status(403).json({ error: "Entitas di luar ruang lingkup Anda" });
+
   // "Nama Karyawan Sebelumnya (Jika Penggantian)" must be someone who has
   // actually left — never an Aktif employee (user, 2026-11-02).
   if (req.body.requisitionType === "Penggantian" && req.body.replacementEmployeeId) {
@@ -1035,10 +1101,15 @@ tenantRouter.post("/job-requisitions", validateBody(jobRequisitionSchema), async
 
 tenantRouter.put("/job-requisitions/:id", validateParams(uuidParam("id")), validateBody(jobRequisitionSchema.partial()), async (req, res) => {
   const tenantId = req.session!.tenantId!;
+  const visibleEntityIds = await resolveVisibleEntityIds(req, tenantId);
+  const [existing] = await db.select().from(jobRequisitions).where(and(eq(jobRequisitions.id, req.params.id), eq(jobRequisitions.tenantId, tenantId))).limit(1);
+  if (!existing || !visibleEntityIds.includes(existing.entityId)) return res.status(404).json({ error: "FPTK tidak ditemukan" });
+  if (req.body.entityId && !visibleEntityIds.includes(req.body.entityId)) return res.status(403).json({ error: "Entitas di luar ruang lingkup Anda" });
+
   const [updated] = await db
     .update(jobRequisitions)
     .set(req.body)
-    .where(and(eq(jobRequisitions.id, req.params.id), eq(jobRequisitions.tenantId, tenantId)))
+    .where(eq(jobRequisitions.id, req.params.id))
     .returning();
   if (!updated) return res.status(404).json({ error: "FPTK tidak ditemukan" });
   await logAudit({ actorUserId: req.session!.userId, tenantId, action: "job_requisition.update", details: { jobRequisitionId: updated.id } });
@@ -1072,6 +1143,8 @@ const jobVacancySchema = z.object({
 
 tenantRouter.post("/job-vacancies", validateBody(jobVacancySchema), async (req, res) => {
   const tenantId = req.session!.tenantId!;
+  const visibleEntityIds = await resolveVisibleEntityIds(req, tenantId);
+  if (!visibleEntityIds.includes(req.body.entityId)) return res.status(403).json({ error: "Entitas di luar ruang lingkup Anda" });
   const [created] = await db.insert(jobVacancies).values({ ...req.body, tenantId }).returning();
   await logAudit({ actorUserId: req.session!.userId, tenantId, action: "job_vacancy.create", details: { jobVacancyId: created.id } });
   res.status(201).json(created);
@@ -1079,10 +1152,14 @@ tenantRouter.post("/job-vacancies", validateBody(jobVacancySchema), async (req, 
 
 tenantRouter.put("/job-vacancies/:id", validateParams(uuidParam("id")), validateBody(jobVacancySchema.partial()), async (req, res) => {
   const tenantId = req.session!.tenantId!;
+  const visibleEntityIds = await resolveVisibleEntityIds(req, tenantId);
+  const [existing] = await db.select().from(jobVacancies).where(and(eq(jobVacancies.id, req.params.id), eq(jobVacancies.tenantId, tenantId))).limit(1);
+  if (!existing || !visibleEntityIds.includes(existing.entityId)) return res.status(404).json({ error: "Lowongan tidak ditemukan" });
+  if (req.body.entityId && !visibleEntityIds.includes(req.body.entityId)) return res.status(403).json({ error: "Entitas di luar ruang lingkup Anda" });
   const [updated] = await db
     .update(jobVacancies)
     .set(req.body)
-    .where(and(eq(jobVacancies.id, req.params.id), eq(jobVacancies.tenantId, tenantId)))
+    .where(eq(jobVacancies.id, req.params.id))
     .returning();
   if (!updated) return res.status(404).json({ error: "Lowongan tidak ditemukan" });
   await logAudit({ actorUserId: req.session!.userId, tenantId, action: "job_vacancy.update", details: { jobVacancyId: updated.id } });
@@ -1121,6 +1198,9 @@ const candidateSchema = z.object({
 
 tenantRouter.post("/candidates", validateBody(candidateSchema), async (req, res) => {
   const tenantId = req.session!.tenantId!;
+  const visibleEntityIds = await resolveVisibleEntityIds(req, tenantId);
+  const [vacancy] = await db.select().from(jobVacancies).where(and(eq(jobVacancies.id, req.body.jobVacancyId), eq(jobVacancies.tenantId, tenantId))).limit(1);
+  if (!vacancy || !visibleEntityIds.includes(vacancy.entityId)) return res.status(404).json({ error: "Lowongan tidak ditemukan" });
   const [created] = await db.insert(candidates).values({ ...req.body, tenantId }).returning();
   await logAudit({ actorUserId: req.session!.userId, tenantId, action: "candidate.create", details: { candidateId: created.id } });
   res.status(201).json(created);
@@ -1128,10 +1208,18 @@ tenantRouter.post("/candidates", validateBody(candidateSchema), async (req, res)
 
 tenantRouter.put("/candidates/:id", validateParams(uuidParam("id")), validateBody(candidateSchema.partial()), async (req, res) => {
   const tenantId = req.session!.tenantId!;
+  const visibleEntityIds = await resolveVisibleEntityIds(req, tenantId);
+  const [existing] = await db
+    .select({ id: candidates.id, entityId: jobVacancies.entityId })
+    .from(candidates)
+    .innerJoin(jobVacancies, eq(jobVacancies.id, candidates.jobVacancyId))
+    .where(and(eq(candidates.id, req.params.id), eq(candidates.tenantId, tenantId)))
+    .limit(1);
+  if (!existing || !visibleEntityIds.includes(existing.entityId)) return res.status(404).json({ error: "Kandidat tidak ditemukan" });
   const [updated] = await db
     .update(candidates)
     .set(req.body)
-    .where(and(eq(candidates.id, req.params.id), eq(candidates.tenantId, tenantId)))
+    .where(eq(candidates.id, req.params.id))
     .returning();
   if (!updated) return res.status(404).json({ error: "Kandidat tidak ditemukan" });
   await logAudit({ actorUserId: req.session!.userId, tenantId, action: "candidate.update", details: { candidateId: updated.id } });
@@ -1173,6 +1261,8 @@ const onboardingProcessSchema = z.object({
 
 tenantRouter.post("/onboarding-processes", validateBody(onboardingProcessSchema), async (req, res) => {
   const tenantId = req.session!.tenantId!;
+  const visibleEntityIds = await resolveVisibleEntityIds(req, tenantId);
+  if (!visibleEntityIds.includes(req.body.entityId)) return res.status(403).json({ error: "Entitas di luar ruang lingkup Anda" });
   const [created] = await db.insert(onboardingProcesses).values({ ...req.body, tenantId }).returning();
   await logAudit({ actorUserId: req.session!.userId, tenantId, action: "onboarding_process.create", details: { onboardingProcessId: created.id } });
   res.status(201).json(created);
@@ -1180,10 +1270,14 @@ tenantRouter.post("/onboarding-processes", validateBody(onboardingProcessSchema)
 
 tenantRouter.put("/onboarding-processes/:id", validateParams(uuidParam("id")), validateBody(onboardingProcessSchema.partial()), async (req, res) => {
   const tenantId = req.session!.tenantId!;
+  const visibleEntityIds = await resolveVisibleEntityIds(req, tenantId);
+  const [existing] = await db.select().from(onboardingProcesses).where(and(eq(onboardingProcesses.id, req.params.id), eq(onboardingProcesses.tenantId, tenantId))).limit(1);
+  if (!existing || !visibleEntityIds.includes(existing.entityId)) return res.status(404).json({ error: "Proses onboarding tidak ditemukan" });
+  if (req.body.entityId && !visibleEntityIds.includes(req.body.entityId)) return res.status(403).json({ error: "Entitas di luar ruang lingkup Anda" });
   const [updated] = await db
     .update(onboardingProcesses)
     .set(req.body)
-    .where(and(eq(onboardingProcesses.id, req.params.id), eq(onboardingProcesses.tenantId, tenantId)))
+    .where(eq(onboardingProcesses.id, req.params.id))
     .returning();
   if (!updated) return res.status(404).json({ error: "Proses onboarding tidak ditemukan" });
   await logAudit({ actorUserId: req.session!.userId, tenantId, action: "onboarding_process.update", details: { onboardingProcessId: updated.id } });
@@ -1192,7 +1286,10 @@ tenantRouter.put("/onboarding-processes/:id", validateParams(uuidParam("id")), v
 
 tenantRouter.delete("/onboarding-processes/:id", validateParams(uuidParam("id")), async (req, res) => {
   const tenantId = req.session!.tenantId!;
-  const [deleted] = await db.delete(onboardingProcesses).where(and(eq(onboardingProcesses.id, req.params.id), eq(onboardingProcesses.tenantId, tenantId))).returning();
+  const visibleEntityIds = await resolveVisibleEntityIds(req, tenantId);
+  const [existing] = await db.select().from(onboardingProcesses).where(and(eq(onboardingProcesses.id, req.params.id), eq(onboardingProcesses.tenantId, tenantId))).limit(1);
+  if (!existing || !visibleEntityIds.includes(existing.entityId)) return res.status(404).json({ error: "Proses onboarding tidak ditemukan" });
+  const [deleted] = await db.delete(onboardingProcesses).where(eq(onboardingProcesses.id, req.params.id)).returning();
   if (!deleted) return res.status(404).json({ error: "Proses onboarding tidak ditemukan" });
   await logAudit({ actorUserId: req.session!.userId, tenantId, action: "onboarding_process.delete", details: { onboardingProcessId: deleted.id } });
   res.json({ ok: true });
@@ -1327,8 +1424,31 @@ tenantRouter.delete("/onboarding-checklist-templates/:id", validateParams(uuidPa
 // Probation Evaluations & Contract Renewal Reviews — Manajemen Karyawan sub-menus.
 // ---------------------------------------------------------------------------
 
+/**
+ * Resolves the set of employee ids visible to the caller (self + descendant
+ * entities), same vertical-scoping rule as everywhere else. Returns null
+ * when the caller has no resolvable entity (caller should then return []).
+ */
+async function resolveVisibleEmployeeIds(req: Request, tenantId: string): Promise<string[]> {
+  const visibleEntityIds = await resolveVisibleEntityIds(req, tenantId);
+  if (visibleEntityIds.length === 0) return [];
+  const visibleEmployees = await db.select({ id: employees.id }).from(employees).where(and(eq(employees.tenantId, tenantId), inArray(employees.entityId, visibleEntityIds)));
+  return visibleEmployees.map((e) => e.id);
+}
+
+/**
+ * Probation/contract review rows reference an employee but carry no
+ * entityId column of their own — visibility must go through the
+ * employee's own entity scope (same vertical rule as employees itself),
+ * never tenant-wide. Missing this was a real cross-sibling-entity leak:
+ * one entity's admin could see and create records against another
+ * sibling entity's employees.
+ */
 tenantRouter.get("/probation-evaluations", async (req, res) => {
-  res.json(await db.select().from(probationEvaluations).where(eq(probationEvaluations.tenantId, req.session!.tenantId!)));
+  const tenantId = req.session!.tenantId!;
+  const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
+  if (!visibleEmployeeIds || visibleEmployeeIds.length === 0) return res.json([]);
+  res.json(await db.select().from(probationEvaluations).where(and(eq(probationEvaluations.tenantId, tenantId), inArray(probationEvaluations.employeeId, visibleEmployeeIds))));
 });
 
 const probationEvaluationSchema = z.object({
@@ -1350,6 +1470,10 @@ const probationEvaluationSchema = z.object({
 
 tenantRouter.post("/probation-evaluations", validateBody(probationEvaluationSchema), async (req, res) => {
   const tenantId = req.session!.tenantId!;
+  const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
+  if (!visibleEmployeeIds || !visibleEmployeeIds.includes(req.body.employeeId)) {
+    return res.status(404).json({ error: "Karyawan tidak ditemukan" });
+  }
   const [created] = await db.insert(probationEvaluations).values({ ...req.body, tenantId }).returning();
   await logAudit({ actorUserId: req.session!.userId, tenantId, action: "probation_evaluation.create", details: { probationEvaluationId: created.id } });
   res.status(201).json(created);
@@ -1357,10 +1481,15 @@ tenantRouter.post("/probation-evaluations", validateBody(probationEvaluationSche
 
 tenantRouter.put("/probation-evaluations/:id", validateParams(uuidParam("id")), validateBody(probationEvaluationSchema.partial()), async (req, res) => {
   const tenantId = req.session!.tenantId!;
+  const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
+  const [existing] = await db.select().from(probationEvaluations).where(and(eq(probationEvaluations.id, req.params.id), eq(probationEvaluations.tenantId, tenantId))).limit(1);
+  if (!existing || !visibleEmployeeIds || !visibleEmployeeIds.includes(existing.employeeId)) {
+    return res.status(404).json({ error: "Evaluasi probation tidak ditemukan" });
+  }
   const [updated] = await db
     .update(probationEvaluations)
     .set(req.body)
-    .where(and(eq(probationEvaluations.id, req.params.id), eq(probationEvaluations.tenantId, tenantId)))
+    .where(eq(probationEvaluations.id, req.params.id))
     .returning();
   if (!updated) return res.status(404).json({ error: "Evaluasi probation tidak ditemukan" });
   await logAudit({ actorUserId: req.session!.userId, tenantId, action: "probation_evaluation.update", details: { probationEvaluationId: updated.id } });
@@ -1368,7 +1497,10 @@ tenantRouter.put("/probation-evaluations/:id", validateParams(uuidParam("id")), 
 });
 
 tenantRouter.get("/contract-renewal-reviews", async (req, res) => {
-  res.json(await db.select().from(contractRenewalReviews).where(eq(contractRenewalReviews.tenantId, req.session!.tenantId!)));
+  const tenantId = req.session!.tenantId!;
+  const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
+  if (!visibleEmployeeIds || visibleEmployeeIds.length === 0) return res.json([]);
+  res.json(await db.select().from(contractRenewalReviews).where(and(eq(contractRenewalReviews.tenantId, tenantId), inArray(contractRenewalReviews.employeeId, visibleEmployeeIds))));
 });
 
 const contractRenewalReviewSchema = z.object({
@@ -1384,6 +1516,10 @@ const contractRenewalReviewSchema = z.object({
 
 tenantRouter.post("/contract-renewal-reviews", validateBody(contractRenewalReviewSchema), async (req, res) => {
   const tenantId = req.session!.tenantId!;
+  const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
+  if (!visibleEmployeeIds || !visibleEmployeeIds.includes(req.body.employeeId)) {
+    return res.status(404).json({ error: "Karyawan tidak ditemukan" });
+  }
   const [created] = await db.insert(contractRenewalReviews).values({ ...req.body, tenantId }).returning();
   await logAudit({ actorUserId: req.session!.userId, tenantId, action: "contract_renewal_review.create", details: { contractRenewalReviewId: created.id } });
   res.status(201).json(created);
@@ -1391,10 +1527,15 @@ tenantRouter.post("/contract-renewal-reviews", validateBody(contractRenewalRevie
 
 tenantRouter.put("/contract-renewal-reviews/:id", validateParams(uuidParam("id")), validateBody(contractRenewalReviewSchema.partial()), async (req, res) => {
   const tenantId = req.session!.tenantId!;
+  const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
+  const [existing] = await db.select().from(contractRenewalReviews).where(and(eq(contractRenewalReviews.id, req.params.id), eq(contractRenewalReviews.tenantId, tenantId))).limit(1);
+  if (!existing || !visibleEmployeeIds || !visibleEmployeeIds.includes(existing.employeeId)) {
+    return res.status(404).json({ error: "Review kontrak tidak ditemukan" });
+  }
   const [updated] = await db
     .update(contractRenewalReviews)
     .set(req.body)
-    .where(and(eq(contractRenewalReviews.id, req.params.id), eq(contractRenewalReviews.tenantId, tenantId)))
+    .where(eq(contractRenewalReviews.id, req.params.id))
     .returning();
   if (!updated) return res.status(404).json({ error: "Review kontrak tidak ditemukan" });
   await logAudit({ actorUserId: req.session!.userId, tenantId, action: "contract_renewal_review.update", details: { contractRenewalReviewId: updated.id } });
