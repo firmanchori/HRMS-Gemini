@@ -13,7 +13,7 @@ import { z } from "zod";
  */
 const zDateTime = () => z.string().datetime().transform((s) => new Date(s));
 import bcrypt from "bcryptjs";
-import { eq, inArray, and, isNull } from "drizzle-orm";
+import { eq, inArray, and, isNull, desc } from "drizzle-orm";
 import { db } from "../db/client.ts";
 import {
   companyEntities,
@@ -446,6 +446,10 @@ tenantRouter.delete("/divisions/:id", validateParams(uuidParam("id")), async (re
   if (!existing) return res.status(404).json({ error: "Divisi tidak ditemukan" });
   const check = await requireUnlockedEntity(existing.entityId, tenantId, req);
   if (!check.ok) return res.status(check.status).json({ error: check.error });
+  // Same reasoning as deleting a position/org-node — unlink karyawan/FPTK
+  // still pointing at this division, don't block or cascade onto them.
+  await db.update(employees).set({ divisionId: null }).where(eq(employees.divisionId, existing.id));
+  await db.update(jobRequisitions).set({ divisionId: null }).where(eq(jobRequisitions.divisionId, existing.id));
   await db.delete(companyDivisions).where(eq(companyDivisions.id, existing.id));
   await logAudit({ actorUserId: req.session!.userId, tenantId, action: "division.delete", details: { divisionId: existing.id } });
   res.json({ ok: true });
@@ -493,6 +497,11 @@ tenantRouter.delete("/departments/:id", validateParams(uuidParam("id")), async (
   if (!existing) return res.status(404).json({ error: "Departemen tidak ditemukan" });
   const check = await requireUnlockedEntity(existing.entityId, tenantId, req);
   if (!check.ok) return res.status(check.status).json({ error: check.error });
+  // Same reasoning as deleting a position/org-node — unlink karyawan/FPTK/
+  // onboarding still pointing at this department, don't block/cascade.
+  await db.update(employees).set({ departmentId: null }).where(eq(employees.departmentId, existing.id));
+  await db.update(jobRequisitions).set({ departmentId: null }).where(eq(jobRequisitions.departmentId, existing.id));
+  await db.update(onboardingProcesses).set({ departmentId: null }).where(eq(onboardingProcesses.departmentId, existing.id));
   await db.delete(companyDepartments).where(eq(companyDepartments.id, existing.id));
   await logAudit({ actorUserId: req.session!.userId, tenantId, action: "department.delete", details: { departmentId: existing.id } });
   res.json({ ok: true });
@@ -547,6 +556,12 @@ tenantRouter.delete("/positions/:id", validateParams(uuidParam("id")), async (re
   if (!existing) return res.status(404).json({ error: "Posisi tidak ditemukan" });
   const check = await requireUnlockedEntity(existing.entityId, tenantId, req);
   if (!check.ok) return res.status(check.status).json({ error: check.error });
+  // Deleting a position a karyawan is still assigned to must not fail or
+  // silently drop the employee — unlink the reference (karyawan keeps
+  // existing, just needs re-assigning to a position afterwards), not block
+  // the delete or cascade onto the employee row.
+  await db.update(employees).set({ positionId: null }).where(eq(employees.positionId, existing.id));
+  await db.update(jobRequisitions).set({ positionId: null }).where(eq(jobRequisitions.positionId, existing.id));
   await db.delete(masterJobPositions).where(eq(masterJobPositions.id, existing.id));
   await logAudit({ actorUserId: req.session!.userId, tenantId, action: "position.delete", details: { positionId: existing.id } });
   res.json({ ok: true });
@@ -600,6 +615,8 @@ tenantRouter.delete("/org-nodes/:id", validateParams(uuidParam("id")), async (re
   if (!existing) return res.status(404).json({ error: "Posisi struktur tidak ditemukan" });
   const check = await requireUnlockedEntity(existing.entityId, tenantId, req);
   if (!check.ok) return res.status(check.status).json({ error: check.error });
+  // Same reasoning as deleting a position — unlink, don't block/cascade.
+  await db.update(employees).set({ orgNodeId: null }).where(eq(employees.orgNodeId, existing.id));
   await db.delete(orgStructureNodes).where(eq(orgStructureNodes.id, existing.id));
   await logAudit({ actorUserId: req.session!.userId, tenantId, action: "org_node.delete", details: { orgNodeId: existing.id } });
   res.json({ ok: true });
@@ -799,6 +816,7 @@ tenantRouter.post("/org-change-proposals/:id/approve", validateParams(uuidParam(
     proposalId: proposal.id,
     divisions: currentDivisions,
     departments: currentDepartments,
+    positions: currentPositions,
     orgNodes: currentOrgNodes,
   });
 
@@ -852,6 +870,253 @@ tenantRouter.post("/org-change-proposals/:id/reject", validateParams(uuidParam("
     .returning();
   await logAudit({ actorUserId: req.session!.userId, tenantId, action: "org_change_proposal.reject", details: { proposalId: updated.id } });
   res.json(updated);
+});
+
+// ---------------------------------------------------------------------------
+// Org structure snapshots & "Ajukan Restrukturisasi" direct-edit flow — the
+// lighter alternative to the proposal/approval workflow above. Unlocking a
+// LOCKED entity this way always snapshots its current structure first (the
+// "riwayat" browsable by effective date), then either leaves the live rows
+// as the draft to keep editing (startMode "copy") or clears them to a blank
+// slate (startMode "blank"). Reverting restores the latest snapshot and
+// re-locks. Both run as one DB transaction so a failure partway never
+// leaves the entity half-cleared or half-restored.
+// ---------------------------------------------------------------------------
+
+tenantRouter.get("/org-snapshots", async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const visibleEntityIds = await resolveVisibleEntityIds(req, tenantId);
+  if (visibleEntityIds.length === 0) return res.json([]);
+  res.json(
+    await db
+      .select()
+      .from(orgStructureSnapshots)
+      .where(and(eq(orgStructureSnapshots.tenantId, tenantId), inArray(orgStructureSnapshots.entityId, visibleEntityIds)))
+      .orderBy(desc(orgStructureSnapshots.takenAt))
+  );
+});
+
+type DbTx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/**
+ * Deletes an entity's org-nodes/positions/departments/divisions inside an
+ * open transaction — nodes' reportsToId is cleared first since nodes
+ * self-reference and a parallel/unordered delete can hit that FK. Karyawan/
+ * FPTK/onboarding still pointing at any of these are unlinked (not
+ * cascaded/blocked) before the delete, so they survive; returns each
+ * employee's old links so a caller that's about to recreate equivalent rows
+ * (the revert flow) can re-link them afterwards instead of leaving every
+ * employee's assignment permanently blank.
+ */
+async function clearEntityStructureTx(tx: DbTx, entityId: string) {
+  const nodes = await tx.select().from(orgStructureNodes).where(eq(orgStructureNodes.entityId, entityId));
+  for (const n of nodes) {
+    if (n.reportsToId) await tx.update(orgStructureNodes).set({ reportsToId: null }).where(eq(orgStructureNodes.id, n.id));
+  }
+  const employeeLinks = (await tx.select().from(employees).where(eq(employees.entityId, entityId))).map((e) => ({
+    id: e.id,
+    positionId: e.positionId,
+    orgNodeId: e.orgNodeId,
+    divisionId: e.divisionId,
+    departmentId: e.departmentId,
+  }));
+  await tx.update(employees).set({ positionId: null, orgNodeId: null, divisionId: null, departmentId: null }).where(eq(employees.entityId, entityId));
+  await tx.update(jobRequisitions).set({ positionId: null, divisionId: null, departmentId: null }).where(eq(jobRequisitions.entityId, entityId));
+  await tx.update(onboardingProcesses).set({ departmentId: null }).where(eq(onboardingProcesses.entityId, entityId));
+  await tx.delete(orgStructureNodes).where(eq(orgStructureNodes.entityId, entityId));
+  await tx.delete(masterJobPositions).where(eq(masterJobPositions.entityId, entityId));
+  await tx.delete(companyDepartments).where(eq(companyDepartments.entityId, entityId));
+  await tx.delete(companyDivisions).where(eq(companyDivisions.entityId, entityId));
+  return { employeeLinks };
+}
+
+const startRestructureSchema = z.object({
+  entityId: z.string().uuid(),
+  skDocNumber: z.string().trim().min(1).max(200),
+  effectiveDate: z.string().trim().min(1).max(20),
+  skDocFileName: z.string().trim().max(300).optional().nullable(),
+  changeType: z.enum(["restrukturisasi", "modifikasi"]),
+  reason: z.string().trim().min(1).max(2000),
+  startMode: z.enum(["copy", "blank"]),
+});
+
+tenantRouter.post("/org-restructure/start", validateBody(startRestructureSchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const { entityId, skDocNumber, effectiveDate, skDocFileName, changeType, reason, startMode } = req.body;
+
+  const [entity] = await db.select().from(companyEntities).where(and(eq(companyEntities.id, entityId), eq(companyEntities.tenantId, tenantId))).limit(1);
+  if (!entity) return res.status(404).json({ error: "Entitas tidak ditemukan" });
+  const visibleEntityIds = await resolveVisibleEntityIds(req, tenantId);
+  if (!visibleEntityIds.includes(entityId)) return res.status(403).json({ error: "Entitas di luar ruang lingkup Anda" });
+  if (!entity.isGovernanceLocked) return res.status(400).json({ error: "Entitas ini belum terkunci — gunakan mode setup baseline, bukan pengajuan restrukturisasi" });
+
+  const result = await db.transaction(async (tx) => {
+    const [currentDivisions, currentDepartments, currentPositions, currentOrgNodes] = await Promise.all([
+      tx.select().from(companyDivisions).where(eq(companyDivisions.entityId, entityId)),
+      tx.select().from(companyDepartments).where(eq(companyDepartments.entityId, entityId)),
+      tx.select().from(masterJobPositions).where(eq(masterJobPositions.entityId, entityId)),
+      tx.select().from(orgStructureNodes).where(eq(orgStructureNodes.entityId, entityId)),
+    ]);
+
+    const [snapshot] = await tx
+      .insert(orgStructureSnapshots)
+      .values({
+        tenantId,
+        entityId,
+        divisions: currentDivisions,
+        departments: currentDepartments,
+        positions: currentPositions,
+        orgNodes: currentOrgNodes,
+        skDocNumber,
+        effectiveDate,
+        skDocFileName: skDocFileName ?? null,
+        changeType,
+        reason,
+        createdByUserId: req.session!.userId,
+      })
+      .returning();
+
+    if (startMode === "blank") await clearEntityStructureTx(tx, entityId);
+
+    const [updatedEntity] = await tx
+      .update(companyEntities)
+      .set({ isGovernanceLocked: false })
+      .where(eq(companyEntities.id, entityId))
+      .returning();
+
+    return { snapshot, entity: updatedEntity };
+  });
+
+  await logAudit({ actorUserId: req.session!.userId, tenantId, action: "org_restructure.start", details: { entityId, changeType, startMode, snapshotId: result.snapshot.id } });
+  res.status(201).json(result);
+});
+
+const revertRestructureSchema = z.object({ entityId: z.string().uuid() });
+
+tenantRouter.post("/org-restructure/revert", validateBody(revertRestructureSchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const { entityId } = req.body;
+
+  const [entity] = await db.select().from(companyEntities).where(and(eq(companyEntities.id, entityId), eq(companyEntities.tenantId, tenantId))).limit(1);
+  if (!entity) return res.status(404).json({ error: "Entitas tidak ditemukan" });
+  const visibleEntityIds = await resolveVisibleEntityIds(req, tenantId);
+  if (!visibleEntityIds.includes(entityId)) return res.status(403).json({ error: "Entitas di luar ruang lingkup Anda" });
+  if (entity.isGovernanceLocked) return res.status(400).json({ error: "Entitas ini sudah terkunci — tidak ada draft restrukturisasi untuk dibatalkan" });
+
+  const [latestSnapshot] = await db
+    .select()
+    .from(orgStructureSnapshots)
+    .where(and(eq(orgStructureSnapshots.tenantId, tenantId), eq(orgStructureSnapshots.entityId, entityId)))
+    .orderBy(desc(orgStructureSnapshots.takenAt))
+    .limit(1);
+  if (!latestSnapshot) return res.status(400).json({ error: "Tidak ada riwayat struktur untuk dipulihkan" });
+
+  const updatedEntity = await db.transaction(async (tx) => {
+    const { employeeLinks } = await clearEntityStructureTx(tx, entityId);
+
+    const divisionIdByOldId = new Map<string, string>();
+    for (const d of latestSnapshot.divisions as Array<Record<string, unknown>>) {
+      const [created] = await tx
+        .insert(companyDivisions)
+        .values({ tenantId, entityId, code: d.code as string, name: d.name as string, headTitle: (d.headTitle as string) ?? null, description: (d.description as string) ?? null })
+        .returning();
+      divisionIdByOldId.set(d.id as string, created.id);
+    }
+
+    const departmentIdByOldId = new Map<string, string>();
+    for (const d of latestSnapshot.departments as Array<Record<string, unknown>>) {
+      const [created] = await tx
+        .insert(companyDepartments)
+        .values({
+          tenantId,
+          entityId,
+          divisionId: d.divisionId ? divisionIdByOldId.get(d.divisionId as string) ?? null : null,
+          code: d.code as string,
+          name: d.name as string,
+          headTitle: (d.headTitle as string) ?? null,
+          description: (d.description as string) ?? null,
+        })
+        .returning();
+      departmentIdByOldId.set(d.id as string, created.id);
+    }
+
+    const positionIdByOldId = new Map<string, string>();
+    for (const p of latestSnapshot.positions as Array<Record<string, unknown>>) {
+      const [created] = await tx
+        .insert(masterJobPositions)
+        .values({
+          tenantId,
+          entityId,
+          code: p.code as string,
+          title: p.title as string,
+          defaultLevel: p.defaultLevel as number,
+          divisionId: p.divisionId ? divisionIdByOldId.get(p.divisionId as string) ?? null : null,
+          departmentId: p.departmentId ? departmentIdByOldId.get(p.departmentId as string) ?? null : null,
+          jobFamily: (p.jobFamily as string) ?? null,
+          jobGrade: (p.jobGrade as string) ?? null,
+          minGrade: (p.minGrade as string) ?? null,
+          maxGrade: (p.maxGrade as string) ?? null,
+          gradingScheme: (p.gradingScheme as "single" | "broadbanding") ?? "single",
+          description: (p.description as string) ?? null,
+          requirements: (p.requirements as string) ?? null,
+        })
+        .returning();
+      positionIdByOldId.set(p.id as string, created.id);
+    }
+
+    const nodeIdByOldId = new Map<string, string>();
+    const createdNodes: Array<{ id: string; oldReportsToId: string | null }> = [];
+    for (const n of latestSnapshot.orgNodes as Array<Record<string, unknown>>) {
+      const [created] = await tx
+        .insert(orgStructureNodes)
+        .values({
+          tenantId,
+          entityId,
+          title: n.title as string,
+          divisionId: n.divisionId ? divisionIdByOldId.get(n.divisionId as string) ?? null : null,
+          departmentId: n.departmentId ? departmentIdByOldId.get(n.departmentId as string) ?? null : null,
+          reportsToId: null, // relinked below, once every node has a real id
+          code: (n.code as string) ?? null,
+          jobGrade: (n.jobGrade as string) ?? null,
+          description: (n.description as string) ?? null,
+          relationType: (n.relationType as "struktural" | "administratif") ?? "struktural",
+          isVacant: (n.isVacant as boolean) ?? true,
+          level: n.level as number,
+          masterJobPositionId: n.masterJobPositionId ? positionIdByOldId.get(n.masterJobPositionId as string) ?? null : null,
+        })
+        .returning();
+      nodeIdByOldId.set(n.id as string, created.id);
+      createdNodes.push({ id: created.id, oldReportsToId: (n.reportsToId as string) ?? null });
+    }
+    for (const n of createdNodes) {
+      if (n.oldReportsToId && nodeIdByOldId.has(n.oldReportsToId)) {
+        await tx.update(orgStructureNodes).set({ reportsToId: nodeIdByOldId.get(n.oldReportsToId) }).where(eq(orgStructureNodes.id, n.id));
+      }
+    }
+
+    // Re-link every employee to the freshly-recreated row equivalent to the
+    // one it pointed at before the revert (same old id -> new id maps as
+    // above), so reverting really does restore the old state instead of
+    // leaving every employee's assignment permanently blank.
+    for (const link of employeeLinks) {
+      if (!link.positionId && !link.orgNodeId && !link.divisionId && !link.departmentId) continue;
+      await tx
+        .update(employees)
+        .set({
+          positionId: link.positionId ? positionIdByOldId.get(link.positionId) ?? null : null,
+          orgNodeId: link.orgNodeId ? nodeIdByOldId.get(link.orgNodeId) ?? null : null,
+          divisionId: link.divisionId ? divisionIdByOldId.get(link.divisionId) ?? null : null,
+          departmentId: link.departmentId ? departmentIdByOldId.get(link.departmentId) ?? null : null,
+        })
+        .where(eq(employees.id, link.id));
+    }
+
+    const [relocked] = await tx.update(companyEntities).set({ isGovernanceLocked: true }).where(eq(companyEntities.id, entityId)).returning();
+    return relocked;
+  });
+
+  await logAudit({ actorUserId: req.session!.userId, tenantId, action: "org_restructure.revert", details: { entityId, snapshotId: latestSnapshot.id } });
+  res.json({ entity: updatedEntity, restoredFromSnapshotId: latestSnapshot.id });
 });
 
 // ---------------------------------------------------------------------------

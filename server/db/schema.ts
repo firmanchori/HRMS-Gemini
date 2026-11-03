@@ -573,7 +573,19 @@ export const orgChangeProposals = pgTable("org_change_proposals", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-/** A full snapshot of one entity's structure, taken automatically right before a proposal is applied — the "riwayat perubahan struktur". */
+export const orgSnapshotChangeTypeEnum = pgEnum("org_snapshot_change_type", ["restrukturisasi", "modifikasi"]);
+
+/**
+ * A full snapshot of one entity's structure, taken automatically right
+ * before a proposal is applied, OR right before "Ajukan Restrukturisasi"
+ * (re)opens a locked entity for direct editing — the "riwayat perubahan
+ * struktur", browsable by effective date even while a new draft is being
+ * edited live on top of the (now-unlocked) division/department/position/
+ * org-node rows. proposalId stays null for the direct-edit restructuring
+ * flow; the metadata fields below (skDocNumber..reason) are null for a
+ * proposal-triggered snapshot, which already carries that detail on the
+ * proposal itself.
+ */
 export const orgStructureSnapshots = pgTable("org_structure_snapshots", {
   id: uuid("id").defaultRandom().primaryKey(),
   tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
@@ -581,7 +593,14 @@ export const orgStructureSnapshots = pgTable("org_structure_snapshots", {
   proposalId: uuid("proposal_id").references(() => orgChangeProposals.id),
   divisions: jsonb("divisions").notNull().$type<unknown[]>(),
   departments: jsonb("departments").notNull().$type<unknown[]>(),
+  positions: jsonb("positions").notNull().default([]).$type<unknown[]>(),
   orgNodes: jsonb("org_nodes").notNull().$type<unknown[]>(),
+  skDocNumber: text("sk_doc_number"),
+  effectiveDate: text("effective_date"),
+  skDocFileName: text("sk_doc_file_name"),
+  changeType: orgSnapshotChangeTypeEnum("change_type"),
+  reason: text("reason"),
+  createdByUserId: uuid("created_by_user_id").references(() => users.id),
   takenAt: timestamp("taken_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
