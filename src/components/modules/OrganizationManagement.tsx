@@ -803,10 +803,12 @@ export const OrganizationManagement: React.FC = () => {
       (draftDepartments.length > 0 &&
         draftDepartments.every((d) => d.name.trim() && d.code.trim() && d.divisionId)));
 
+  // Divisi tidak wajib per-jabatan — jabatan level puncak seperti CEO wajar
+  // tanpa divisi (user, 2026-11-03), jadi hanya nama jabatan yang divalidasi.
   const isDraftStep5Valid =
     isDraftStep4Valid &&
     draftNodes.length > 0 &&
-    draftNodes.every((n) => n.title.trim() && n.division);
+    draftNodes.every((n) => n.title.trim());
 
   const canAccessDraftTab = (tab: 'info' | 'grades' | 'divisions' | 'departments' | 'positions') => {
     switch (tab) {
@@ -6656,9 +6658,8 @@ export const OrganizationManagement: React.FC = () => {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Divisi *</label>
+                  <label className="font-semibold text-slate-700 block mb-1">Divisi</label>
                   <select
-                    required
                     value={masterPositionFormData.division}
                     onChange={(e) => {
                       const selectedDivName = e.target.value;
@@ -6675,7 +6676,8 @@ export const OrganizationManagement: React.FC = () => {
                     }}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white text-xs font-medium focus:outline-slate-800"
                   >
-                    <option value="">Pilih Divisi...</option>
+                    {/* Tidak wajib — jabatan level puncak seperti CEO wajar tanpa divisi (user, 2026-11-03) */}
+                    <option value="">Tanpa Divisi (mis. CEO)</option>
                     {entityDivisions.map((d) => (
                       <option key={d.id} value={d.name}>{d.name}</option>
                     ))}
@@ -7319,7 +7321,7 @@ export const OrganizationManagement: React.FC = () => {
                     <div className="p-3 bg-slate-50 border border-slate-300 rounded-xl space-y-2">
                       <label className="font-semibold text-slate-800 block text-xs flex items-center justify-between">
                         <span>Upload Dokumen / Surat Bukti Restrukturisasi *</span>
-                        <span className="text-[10px] text-slate-400 font-normal">Format PDF / DOCX / Scan SK</span>
+                        <span className="text-[10px] text-slate-400 font-normal">Format PDF saja, maks. 10MB</span>
                       </label>
                       <div className="flex items-center gap-2">
                         <div className={`flex-1 px-3 py-2 bg-white border border-slate-300 rounded-lg font-mono text-xs truncate ${restructureForm.skDocFileName ? 'text-slate-700' : 'text-slate-400 italic'}`}>
@@ -7330,16 +7332,30 @@ export const OrganizationManagement: React.FC = () => {
                           <span>Upload File</span>
                           <input
                             type="file"
+                            accept="application/pdf"
                             className="hidden"
                             onChange={(e) => {
                               const file = e.target.files?.[0];
-                              if (file) {
-                                setRestructureForm({
-                                  ...restructureForm,
-                                  skDocFileName: file.name,
-                                  skDocUrl: URL.createObjectURL(file),
-                                });
+                              if (!file) return;
+                              // Dokumen bukti restrukturisasi harus PDF saja (user, 2026-11-03) —
+                              // accept="application/pdf" steers the picker, but the browser doesn't
+                              // enforce it, so re-check both MIME type and extension here.
+                              const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+                              if (!isPdf) {
+                                showToast('File harus berformat PDF. Silakan scan/convert dokumen ke PDF terlebih dahulu.');
+                                e.target.value = '';
+                                return;
                               }
+                              if (file.size > 10 * 1024 * 1024) {
+                                showToast('Ukuran file maksimal 10MB.');
+                                e.target.value = '';
+                                return;
+                              }
+                              setRestructureForm({
+                                ...restructureForm,
+                                skDocFileName: file.name,
+                                skDocUrl: URL.createObjectURL(file),
+                              });
                             }}
                           />
                         </label>
@@ -8223,7 +8239,7 @@ export const OrganizationManagement: React.FC = () => {
 
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div>
-                              <label className="font-semibold text-slate-700 block mb-1">Divisi (Sesuai Tahap 3) *</label>
+                              <label className="font-semibold text-slate-700 block mb-1">Divisi (Sesuai Tahap 3)</label>
                               <select
                                 value={node.division || ''}
                                 onChange={(e) => {
@@ -8239,7 +8255,7 @@ export const OrganizationManagement: React.FC = () => {
                                 }}
                                 className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-medium focus:outline-violet-600 bg-white"
                               >
-                                <option value="">Pilih Divisi...</option>
+                                <option value="">Tanpa Divisi (mis. CEO)</option>
                                 {draftDivisions.map((d) => (
                                   <option key={d.id} value={d.name}>{d.name} ({d.code})</option>
                                 ))}
