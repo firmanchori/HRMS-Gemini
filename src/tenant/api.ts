@@ -394,6 +394,88 @@ export interface ApprovalDelegation {
   isActive: boolean;
 }
 
+export interface WorkShift {
+  id: string;
+  tenantId: string;
+  name: string;
+  code: string;
+  startTime: string;
+  endTime: string;
+  color: string;
+  isNightShift: boolean;
+  lateToleranceMins: number;
+  breakMins: number | null;
+  isActive: boolean;
+}
+
+export interface EmployeeSchedule {
+  id: string;
+  tenantId: string;
+  employeeId: string;
+  date: string;
+  shiftId: string;
+}
+
+export interface ShiftSwapRequest {
+  id: string;
+  tenantId: string;
+  requesterId: string;
+  targetEmployeeId: string;
+  requestDate: string;
+  targetDate: string;
+  requestShiftId: string | null;
+  targetShiftId: string | null;
+  reason: string | null;
+  status: "Menunggu" | "Disetujui" | "Ditolak";
+  approvedBy: string | null;
+}
+
+export interface AttendanceRecord {
+  id: string;
+  tenantId: string;
+  employeeId: string;
+  date: string;
+  clockIn: string | null;
+  clockOut: string | null;
+  status: string;
+  overtimeHours: number;
+  lateMinutes: number;
+  notes: string | null;
+  shiftId: string | null;
+}
+
+export interface AttendanceCorrectionRequest {
+  id: string;
+  tenantId: string;
+  employeeId: string;
+  date: string;
+  type: string;
+  proposedClockIn: string | null;
+  proposedClockOut: string | null;
+  reason: string | null;
+  status: "Menunggu" | "Disetujui" | "Ditolak";
+  approvedBy: string | null;
+  attachmentUrl: string | null;
+}
+
+export interface OvertimeRequest {
+  id: string;
+  tenantId: string;
+  entityId: string | null;
+  employeeId: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  hours: number;
+  reason: string | null;
+  type: "Pengajuan Karyawan" | "Perintah Atasan";
+  status: "Menunggu" | "Disetujui" | "Ditolak";
+  approvedBy: string | null;
+  approvedHours: number | null;
+  compensationType: "Lembur Berbayar" | "Cuti Pengganti";
+  notes: string | null;
+}
+
 export type OrgChangeSet = { create?: Record<string, unknown>[]; update?: { id: string; data: Record<string, unknown> }[]; delete?: string[] };
 
 export interface OrgChangeProposal {
@@ -588,4 +670,45 @@ export const tenantApi = {
     request<ApprovalDelegation>("/api/tenant/approval-delegations", { method: "POST", body: JSON.stringify(data) }),
   updateApprovalDelegation: (id: string, data: Partial<ApprovalDelegation>) =>
     request<ApprovalDelegation>(`/api/tenant/approval-delegations/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+
+  // Attendance (Presensi) module.
+  listWorkShifts: () => request<WorkShift[]>("/api/tenant/work-shifts"),
+  createWorkShift: (data: Omit<WorkShift, "id" | "tenantId">) => request<WorkShift>("/api/tenant/work-shifts", { method: "POST", body: JSON.stringify(data) }),
+  updateWorkShift: (id: string, data: Partial<WorkShift>) => request<WorkShift>(`/api/tenant/work-shifts/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteWorkShift: (id: string) => request<{ ok: true }>(`/api/tenant/work-shifts/${id}`, { method: "DELETE" }),
+
+  listEmployeeSchedules: () => request<EmployeeSchedule[]>("/api/tenant/employee-schedules"),
+  createEmployeeSchedule: (data: Omit<EmployeeSchedule, "id" | "tenantId">) =>
+    request<EmployeeSchedule>("/api/tenant/employee-schedules", { method: "POST", body: JSON.stringify(data) }),
+  updateEmployeeSchedule: (id: string, data: Partial<EmployeeSchedule>) =>
+    request<EmployeeSchedule>(`/api/tenant/employee-schedules/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteEmployeeSchedule: (id: string) => request<{ ok: true }>(`/api/tenant/employee-schedules/${id}`, { method: "DELETE" }),
+  bulkCreateEmployeeSchedules: (entries: Omit<EmployeeSchedule, "id" | "tenantId">[]) =>
+    request<EmployeeSchedule[]>("/api/tenant/employee-schedules/bulk", { method: "POST", body: JSON.stringify({ entries }) }),
+
+  listShiftSwapRequests: () => request<ShiftSwapRequest[]>("/api/tenant/shift-swap-requests"),
+  createShiftSwapRequest: (data: Omit<ShiftSwapRequest, "id" | "tenantId">) =>
+    request<ShiftSwapRequest>("/api/tenant/shift-swap-requests", { method: "POST", body: JSON.stringify(data) }),
+  updateShiftSwapRequest: (id: string, data: Partial<ShiftSwapRequest>) =>
+    request<ShiftSwapRequest>(`/api/tenant/shift-swap-requests/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+
+  listAttendanceRecords: () => request<AttendanceRecord[]>("/api/tenant/attendance-records"),
+  createAttendanceRecord: (data: Omit<AttendanceRecord, "id" | "tenantId">) =>
+    request<AttendanceRecord>("/api/tenant/attendance-records", { method: "POST", body: JSON.stringify(data) }),
+  updateAttendanceRecord: (id: string, data: Partial<AttendanceRecord>) =>
+    request<AttendanceRecord>(`/api/tenant/attendance-records/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  upsertAttendanceRecord: (data: Omit<AttendanceRecord, "id" | "tenantId">) =>
+    request<AttendanceRecord>("/api/tenant/attendance-records/upsert", { method: "POST", body: JSON.stringify(data) }),
+
+  listAttendanceCorrections: () => request<AttendanceCorrectionRequest[]>("/api/tenant/attendance-corrections"),
+  createAttendanceCorrection: (data: Omit<AttendanceCorrectionRequest, "id" | "tenantId">) =>
+    request<AttendanceCorrectionRequest>("/api/tenant/attendance-corrections", { method: "POST", body: JSON.stringify(data) }),
+  updateAttendanceCorrection: (id: string, data: Partial<AttendanceCorrectionRequest>) =>
+    request<AttendanceCorrectionRequest>(`/api/tenant/attendance-corrections/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+
+  listOvertimeRequests: () => request<OvertimeRequest[]>("/api/tenant/overtime-requests"),
+  createOvertimeRequest: (data: Omit<OvertimeRequest, "id" | "tenantId">) =>
+    request<OvertimeRequest>("/api/tenant/overtime-requests", { method: "POST", body: JSON.stringify(data) }),
+  updateOvertimeRequest: (id: string, data: Partial<OvertimeRequest>) =>
+    request<OvertimeRequest>(`/api/tenant/overtime-requests/${id}`, { method: "PUT", body: JSON.stringify(data) }),
 };

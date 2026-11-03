@@ -183,6 +183,13 @@
       "when": 1793596134565,
       "tag": "0025_faulty_gorilla_man",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1793664310820,
+      "tag": "0026_little_scarlet_spider",
+      "breakpoints": true
     }
   ]
 }

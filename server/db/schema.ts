@@ -1005,3 +1005,102 @@ export const approvalDelegations = pgTable("approval_delegations", {
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+// ---------------------------------------------------------------------------
+// Attendance (Presensi) module — real headcount already exists (employees);
+// date/time fields here are plain text ("2026-11-02" / "08:00"), not
+// `timestamp`, since they're date-only or time-only strings the frontend
+// already treats as such — using `timestamp` for these caused the exact
+// zDateTime bug class fixed earlier this session, so plain text sidesteps
+// that entirely for values that never need timezone math server-side.
+// ---------------------------------------------------------------------------
+
+/** Master shift catalog (Pagi/Siang/Malam, etc.) — tenant-wide, like grades/office-locations. */
+export const workShifts = pgTable("work_shifts", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  name: text("name").notNull(),
+  code: text("code").notNull(),
+  startTime: text("start_time").notNull(),
+  endTime: text("end_time").notNull(),
+  color: text("color").notNull().default("#64748b"),
+  isNightShift: boolean("is_night_shift").notNull().default(false),
+  lateToleranceMins: integer("late_tolerance_mins").notNull().default(15),
+  breakMins: integer("break_mins"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+/** One roster entry: one employee, one date. shiftId is a work_shifts.id OR the literal 'OFF' sentinel, so it's plain text, not an FK. */
+export const employeeSchedules = pgTable("employee_schedules", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  employeeId: uuid("employee_id").references(() => employees.id).notNull(),
+  date: text("date").notNull(),
+  shiftId: text("shift_id").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const shiftSwapRequests = pgTable("shift_swap_requests", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  requesterId: uuid("requester_id").references(() => employees.id).notNull(),
+  targetEmployeeId: uuid("target_employee_id").references(() => employees.id).notNull(),
+  requestDate: text("request_date").notNull(),
+  targetDate: text("target_date").notNull(),
+  requestShiftId: text("request_shift_id"),
+  targetShiftId: text("target_shift_id"),
+  reason: text("reason"),
+  status: text("status").notNull().default("Menunggu"),
+  approvedBy: text("approved_by"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const attendanceRecords = pgTable("attendance_records", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  employeeId: uuid("employee_id").references(() => employees.id).notNull(),
+  date: text("date").notNull(),
+  clockIn: text("clock_in"),
+  clockOut: text("clock_out"),
+  status: text("status").notNull().default("Hadir"),
+  overtimeHours: integer("overtime_hours").notNull().default(0),
+  lateMinutes: integer("late_minutes").notNull().default(0),
+  notes: text("notes"),
+  shiftId: text("shift_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const attendanceCorrectionRequests = pgTable("attendance_correction_requests", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  employeeId: uuid("employee_id").references(() => employees.id).notNull(),
+  date: text("date").notNull(),
+  type: text("type").notNull(),
+  proposedClockIn: text("proposed_clock_in"),
+  proposedClockOut: text("proposed_clock_out"),
+  reason: text("reason"),
+  status: text("status").notNull().default("Menunggu"),
+  approvedBy: text("approved_by"),
+  attachmentUrl: text("attachment_url"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const overtimeRequests = pgTable("overtime_requests", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  entityId: uuid("entity_id").references(() => companyEntities.id),
+  employeeId: uuid("employee_id").references(() => employees.id).notNull(),
+  date: text("date").notNull(),
+  startTime: text("start_time").notNull(),
+  endTime: text("end_time").notNull(),
+  hours: integer("hours").notNull(),
+  reason: text("reason"),
+  type: text("type").notNull().default("Pengajuan Karyawan"),
+  status: text("status").notNull().default("Menunggu"),
+  approvedBy: text("approved_by"),
+  approvedHours: integer("approved_hours"),
+  compensationType: text("compensation_type").notNull().default("Lembur Berbayar"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});

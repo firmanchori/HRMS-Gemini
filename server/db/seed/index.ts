@@ -10,6 +10,7 @@ import { seedExamples } from "./examples.ts";
 import { seedTenantOrgExamples } from "./tenantOrgExamples.ts";
 import { seedRecruitmentMasterData, seedRecruitmentSamplesForContoh } from "./recruitmentExamples.ts";
 import { seedEmployeeExamples } from "./employeeExamples.ts";
+import { seedAttendanceExamples } from "./attendanceExamples.ts";
 import { computeMonthlyReference } from "../../lib/pricing.ts";
 
 const PRESET_TIERS = [
@@ -104,6 +105,7 @@ async function main() {
   await seedRecruitmentMasterData();
   await seedRecruitmentSamplesForContoh();
   await seedEmployeeExamples();
+  await seedAttendanceExamples();
   await pool.end();
 }
 

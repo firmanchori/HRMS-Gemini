@@ -21,6 +21,12 @@ import {
   type ContractRenewalReview as ApiContractRenewalReview,
   type ApprovalWorkflowItem as ApiApprovalWorkflowItem,
   type ApprovalDelegation as ApiApprovalDelegation,
+  type WorkShift as ApiWorkShift,
+  type EmployeeSchedule as ApiEmployeeSchedule,
+  type ShiftSwapRequest as ApiShiftSwapRequest,
+  type AttendanceRecord as ApiAttendanceRecord,
+  type AttendanceCorrectionRequest as ApiAttendanceCorrectionRequest,
+  type OvertimeRequest as ApiOvertimeRequest,
 } from '../tenant/api';
 import { ORG_STRUCTURE_TEMPLATES } from '../utils/orgStructureTemplates';
 import {
@@ -852,10 +858,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return saved ? JSON.parse(saved) : INITIAL_PERSONALIA_LOGS;
   });
 
-  const [attendance, setAttendance] = useState<AttendanceRecord[]>(() => {
-    const saved = localStorage.getItem('nusahr_attendance');
-    return saved ? JSON.parse(saved) : INITIAL_ATTENDANCE;
-  });
+  const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
 
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>(() => {
     const saved = localStorage.getItem('nusahr_leaves');
@@ -1014,52 +1017,14 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const [onboardingChecklistTemplates, setOnboardingChecklistTemplates] = useState<OnboardingChecklistTemplateItem[]>([]);
 
-  const [shifts, setShifts] = useState<WorkShift[]>(() => {
-    const saved = localStorage.getItem('nusahr_shifts');
-    return saved ? JSON.parse(saved) : INITIAL_SHIFTS;
-  });
+  // Real backend data, hydrated via loadTenantOrgData() — Attendance
+  // (Presensi) module (user, 2026-11-03: "selesaikan semua integrasi dan
+  // konsistensinya").
+  const [shifts, setShifts] = useState<WorkShift[]>([]);
 
-  const [shiftSwaps, setShiftSwaps] = useState<ShiftSwapRequest[]>(() => {
-    const saved = localStorage.getItem('nusahr_shiftswaps');
-    return saved ? JSON.parse(saved) : INITIAL_SHIFT_SWAPS;
-  });
-
-  const [schedules, setSchedules] = useState<EmployeeSchedule[]>(() => {
-    try {
-      const saved = localStorage.getItem('nusahr_schedules');
-      if (saved) {
-        const parsed = JSON.parse(saved) as EmployeeSchedule[];
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const existingKeys = new Set(parsed.map((s) => `${s.employeeId}|${s.date}`));
-          const merged = [...parsed];
-          for (const initSch of INITIAL_SCHEDULES) {
-            if (!existingKeys.has(`${initSch.employeeId}|${initSch.date}`)) {
-              merged.push(initSch);
-            }
-          }
-          return merged;
-        }
-      }
-      return INITIAL_SCHEDULES;
-    } catch {
-      return INITIAL_SCHEDULES;
-    }
-  });
-
-  useEffect(() => {
-    localStorage.setItem('nusahr_shifts', JSON.stringify(shifts));
-  }, [shifts]);
-  useEffect(() => {
-    localStorage.setItem('nusahr_shiftswaps', JSON.stringify(shiftSwaps));
-  }, [shiftSwaps]);
-  useEffect(() => {
-    localStorage.setItem('nusahr_schedules', JSON.stringify(schedules));
-  }, [schedules]);
-
-  const [attendanceCorrections, setAttendanceCorrections] = useState<AttendanceCorrectionRequest[]>(() => {
-    const saved = localStorage.getItem('nusahr_corrections');
-    return saved ? JSON.parse(saved) : INITIAL_ATTENDANCE_CORRECTIONS;
-  });
+  const [shiftSwaps, setShiftSwaps] = useState<ShiftSwapRequest[]>([]);
+  const [schedules, setSchedules] = useState<EmployeeSchedule[]>([]);
+  const [attendanceCorrections, setAttendanceCorrections] = useState<AttendanceCorrectionRequest[]>([]);
 
   const [businessTrips, setBusinessTrips] = useState<BusinessTripRequest[]>(() => {
     const saved = localStorage.getItem('nusahr_trips');
@@ -1194,10 +1159,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   // 24. Overtime Requests
-  const [overtimeRequests, setOvertimeRequests] = useState<OvertimeRequest[]>(() => {
-    const saved = localStorage.getItem('nusahr_overtime');
-    return saved ? JSON.parse(saved) : INITIAL_OVERTIME_REQUESTS;
-  });
+  const [overtimeRequests, setOvertimeRequests] = useState<OvertimeRequest[]>([]);
 
   // 25. Reimbursements
   const [reimbursementClaims, setReimbursementClaims] = useState<ReimbursementClaim[]>(() => {
@@ -1412,6 +1374,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       realCompetencyTestTypes, realInterviewTypes, realOnboardingChecklistTemplates, realEmployees,
       realProbationEvaluations, realContractReviews, realModuleSettings,
       realApprovalItems, realApprovalDelegations,
+      realWorkShifts, realEmployeeSchedules, realShiftSwapRequests, realAttendanceRecords, realAttendanceCorrections, realOvertimeRequests,
     ] = await Promise.all([
       tenantApi.listEntities(),
       tenantApi.listOfficeLocations(),
@@ -1434,6 +1397,12 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       tenantApi.getModuleSettings(),
       tenantApi.listApprovalItems(),
       tenantApi.listApprovalDelegations(),
+      tenantApi.listWorkShifts(),
+      tenantApi.listEmployeeSchedules(),
+      tenantApi.listShiftSwapRequests(),
+      tenantApi.listAttendanceRecords(),
+      tenantApi.listAttendanceCorrections(),
+      tenantApi.listOvertimeRequests(),
     ]);
     setApiEntities(realEntities);
     setApiOfficeLocations(realOfficeLocations);
@@ -1462,6 +1431,12 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
     setApprovalItems(realApprovalItems as unknown as ApprovalWorkflowItem[]);
     setApprovalDelegations(realApprovalDelegations as unknown as ApprovalDelegation[]);
+    setShifts(realWorkShifts as unknown as WorkShift[]);
+    setSchedules(realEmployeeSchedules as unknown as EmployeeSchedule[]);
+    setShiftSwaps(realShiftSwapRequests as unknown as ShiftSwapRequest[]);
+    setAttendance(realAttendanceRecords as unknown as AttendanceRecord[]);
+    setAttendanceCorrections(realAttendanceCorrections as unknown as AttendanceCorrectionRequest[]);
+    setOvertimeRequests(realOvertimeRequests as unknown as OvertimeRequest[]);
   };
 
   // 34. Vendor Invoices (AP)
@@ -1496,9 +1471,6 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem('nusahr_active_tenant', currentTenantId);
   }, [currentTenantId]);
 
-  useEffect(() => {
-    localStorage.setItem('nusahr_attendance', JSON.stringify(attendance));
-  }, [attendance]);
 
   useEffect(() => {
     localStorage.setItem('nusahr_assets', JSON.stringify(assets));
@@ -1712,7 +1684,25 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   };
 
-  // 2. Attendance & Leave
+  // 2. Attendance & Leave — real backend. persistAttendanceUpsert mirrors
+  // the server's own upsert-by-(employeeId, date) endpoint: compute the
+  // merged row exactly as before, send it, and swap the local row for
+  // whatever the server actually persisted.
+  const persistAttendanceUpsert = (record: Omit<AttendanceRecord, 'id' | 'tenantId'>) => {
+    tenantApi.upsertAttendanceRecord(record as unknown as Omit<ApiAttendanceRecord, 'id' | 'tenantId'>).then((saved) => {
+      const mock = saved as unknown as AttendanceRecord;
+      setAttendance((prev) => {
+        const idx = prev.findIndex((a) => a.employeeId === mock.employeeId && a.date === mock.date);
+        if (idx >= 0) {
+          const copy = [...prev];
+          copy[idx] = mock;
+          return copy;
+        }
+        return [mock, ...prev];
+      });
+    });
+  };
+
   const clockIn = (employeeId: string, notes?: string) => {
     const now = new Date();
     const today = now.toISOString().split('T')[0];
@@ -1723,36 +1713,19 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const lateMinutes = Math.max(0, hours * 60 + mins - (8 * 60 + 30));
     const status = lateMinutes > 0 ? 'Terlambat' : 'Hadir';
 
-    const existingIdx = attendance.findIndex(
-      (a) => a.tenantId === currentTenant.id && a.employeeId === employeeId && a.date === today
-    );
+    const existing = attendance.find((a) => a.tenantId === currentTenant.id && a.employeeId === employeeId && a.date === today);
 
-    if (existingIdx >= 0) {
-      setAttendance((prev) => {
-        const copy = [...prev];
-        copy[existingIdx] = {
-          ...copy[existingIdx],
-          clockIn: timeStr,
-          status,
-          lateMinutes,
-          notes: notes || copy[existingIdx].notes,
-        };
-        return copy;
-      });
-    } else {
-      const record: AttendanceRecord = {
-        id: `att-${Date.now()}`,
-        tenantId: currentTenant.id,
-        employeeId,
-        date: today,
-        clockIn: timeStr,
-        status,
-        overtimeHours: 0,
-        lateMinutes,
-        notes: notes || 'Presensi ESS Mobile/Webcam Terverifikasi',
-      };
-      setAttendance((prev) => [record, ...prev]);
-    }
+    persistAttendanceUpsert({
+      employeeId,
+      date: today,
+      clockIn: timeStr,
+      clockOut: existing?.clockOut,
+      status,
+      overtimeHours: existing?.overtimeHours ?? 0,
+      lateMinutes,
+      notes: notes || existing?.notes || 'Presensi ESS Mobile/Webcam Terverifikasi',
+      shiftId: existing?.shiftId,
+    });
   };
 
   const clockOut = (employeeId: string, notes?: string) => {
@@ -1767,19 +1740,15 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const otMinutes = Math.max(0, outTotalMins - standardOutMins);
     const overtimeHours = Number((otMinutes / 60).toFixed(1));
 
-    setAttendance((prev) =>
-      prev.map((a) => {
-        if (a.tenantId === currentTenant.id && a.employeeId === employeeId && a.date === today) {
-          return {
-            ...a,
-            clockOut: timeStr,
-            overtimeHours,
-            notes: notes || a.notes,
-          };
-        }
-        return a;
-      })
-    );
+    const existing = attendance.find((a) => a.tenantId === currentTenant.id && a.employeeId === employeeId && a.date === today);
+    if (!existing) return;
+
+    persistAttendanceUpsert({
+      ...existing,
+      clockOut: timeStr,
+      overtimeHours,
+      notes: notes || existing.notes,
+    });
   };
 
   const submitLeaveRequest = (requestData: Omit<LeaveRequest, 'id' | 'tenantId' | 'status'>) => {
@@ -1816,33 +1785,21 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         : req.leaveType.includes('Izin')
         ? 'Izin'
         : 'Cuti';
-      setAttendance((prev) => {
-        const exists = prev.some(
-          (a) => a.tenantId === currentTenant.id && a.employeeId === req.employeeId && a.date === req.startDate
-        );
-        if (exists) {
-          return prev.map((a) =>
-            a.tenantId === currentTenant.id && a.employeeId === req.employeeId && a.date === req.startDate
-              ? { ...a, status: attStatus, lateMinutes: 0, notes: `${req.leaveType}: ${req.reason}` }
-              : a
-          );
-        }
-        return [
-          {
-            id: `att-lv-${Date.now()}`,
-            tenantId: currentTenant.id,
-            employeeId: req.employeeId,
-            date: req.startDate,
-            clockIn: '-',
-            clockOut: '-',
-            status: attStatus,
-            overtimeHours: 0,
-            lateMinutes: 0,
-            notes: `${req.leaveType} Disetujui: ${req.reason}`,
-          },
-          ...prev,
-        ];
-      });
+      const existing = attendance.find((a) => a.tenantId === currentTenant.id && a.employeeId === req.employeeId && a.date === req.startDate);
+      persistAttendanceUpsert(
+        existing
+          ? { ...existing, status: attStatus, lateMinutes: 0, notes: `${req.leaveType}: ${req.reason}` }
+          : {
+              employeeId: req.employeeId,
+              date: req.startDate,
+              clockIn: '-',
+              clockOut: '-',
+              status: attStatus,
+              overtimeHours: 0,
+              lateMinutes: 0,
+              notes: `${req.leaveType} Disetujui: ${req.reason}`,
+            }
+      );
     }
     if (!req) return;
 
@@ -3151,161 +3108,162 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   };
 
-  // 14. Shifts & Roaster Actions
+  // 14. Shifts & Roaster Actions — real backend.
   const addShiftSwapRequest = (swap: Omit<ShiftSwapRequest, 'id' | 'tenantId' | 'status'>) => {
-    const newSwap: ShiftSwapRequest = {
-      ...swap,
-      id: `swap-${Date.now()}`,
-      tenantId: currentTenant.id,
-      status: 'Menunggu',
-    };
-    setShiftSwaps((prev) => [newSwap, ...prev]);
+    tenantApi.createShiftSwapRequest({ ...swap, status: 'Menunggu' } as unknown as Omit<ApiShiftSwapRequest, 'id' | 'tenantId'>).then((created) => {
+      const newSwap = created as unknown as ShiftSwapRequest;
+      setShiftSwaps((prev) => [newSwap, ...prev]);
 
-    // Add to approval hub
-    const requester = employees.find((e) => e.id === swap.requesterId);
-    createApprovalItem({
-      category: 'Tukar Shift',
-      referenceId: newSwap.id,
-      title: `Pengajuan Tukar Shift: ${requester?.fullName || 'Karyawan'}`,
-      requesterId: swap.requesterId,
-      department: requester?.department || 'Operasional',
-      submittedAt: new Date().toISOString().replace('T', ' ').slice(0, 16),
-      deadlineAt: new Date(Date.now() + 48 * 3600 * 1000).toISOString().replace('T', ' ').slice(0, 16),
-      level: 1,
-      totalLevels: 1,
-      assignedApproverRole: 'manager',
-      status: 'Menunggu',
-      notes: swap.reason,
+      // Add to approval hub
+      const requester = employees.find((e) => e.id === swap.requesterId);
+      createApprovalItem({
+        category: 'Tukar Shift',
+        referenceId: newSwap.id,
+        title: `Pengajuan Tukar Shift: ${requester?.fullName || 'Karyawan'}`,
+        requesterId: swap.requesterId,
+        department: requester?.department || 'Operasional',
+        submittedAt: new Date().toISOString().replace('T', ' ').slice(0, 16),
+        deadlineAt: new Date(Date.now() + 48 * 3600 * 1000).toISOString().replace('T', ' ').slice(0, 16),
+        level: 1,
+        totalLevels: 1,
+        assignedApproverRole: 'manager',
+        status: 'Menunggu',
+        notes: swap.reason,
+      });
     });
   };
 
   const reviewShiftSwapRequest = (id: string, approved: boolean) => {
     const swap = shiftSwaps.find((s) => s.id === id);
-    setShiftSwaps((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, status: approved ? 'Disetujui' : 'Ditolak', approvedBy: currentUser.name } : s))
-    );
+    tenantApi.updateShiftSwapRequest(id, { status: approved ? 'Disetujui' : 'Ditolak', approvedBy: currentUser.name }).then((updated) => {
+      setShiftSwaps((prev) => prev.map((s) => (s.id === id ? (updated as unknown as ShiftSwapRequest) : s)));
+    });
     persistApprovalItemByReference(id, 'Tukar Shift', { status: approved ? 'Disetujui' : 'Ditolak' });
     // Tukar shift disetujui -> roster kedua karyawan ikut ditukar
     if (approved && swap && swap.status === 'Menunggu') {
-      setSchedules((prev) => {
-        const findEntry = (empId: string, date: string) =>
-          prev.find((p) => p.tenantId === swap.tenantId && p.employeeId === empId && p.date === date);
-        const a = findEntry(swap.requesterId, swap.requestDate);
-        const b = findEntry(swap.targetEmployeeId, swap.targetDate);
-        if (!a && !b) return prev;
-        const withoutBoth = prev.filter((p) => p !== a && p !== b);
-        const next = [...withoutBoth];
-        if (b) next.push({ id: `sch-${swap.requesterId}-${swap.requestDate}`, tenantId: swap.tenantId, employeeId: swap.requesterId, date: swap.requestDate, shiftId: b.shiftId });
-        if (a) next.push({ id: `sch-${swap.targetEmployeeId}-${swap.targetDate}`, tenantId: swap.tenantId, employeeId: swap.targetEmployeeId, date: swap.targetDate, shiftId: a.shiftId });
-        return next;
-      });
+      const findEntry = (empId: string, date: string) =>
+        schedules.find((p) => p.tenantId === swap.tenantId && p.employeeId === empId && p.date === date);
+      const a = findEntry(swap.requesterId, swap.requestDate);
+      const b = findEntry(swap.targetEmployeeId, swap.targetDate);
+      if (a && b) {
+        tenantApi.updateEmployeeSchedule(a.id, { shiftId: b.shiftId }).then((u) => setSchedules((prev) => prev.map((s) => (s.id === a.id ? (u as unknown as EmployeeSchedule) : s))));
+        tenantApi.updateEmployeeSchedule(b.id, { shiftId: a.shiftId }).then((u) => setSchedules((prev) => prev.map((s) => (s.id === b.id ? (u as unknown as EmployeeSchedule) : s))));
+      } else if (a && !b) {
+        tenantApi.createEmployeeSchedule({ employeeId: swap.targetEmployeeId, date: swap.targetDate, shiftId: a.shiftId }).then((c) => setSchedules((prev) => [c as unknown as EmployeeSchedule, ...prev]));
+        tenantApi.deleteEmployeeSchedule(a.id).then(() => setSchedules((prev) => prev.filter((s) => s.id !== a.id)));
+      } else if (b && !a) {
+        tenantApi.createEmployeeSchedule({ employeeId: swap.requesterId, date: swap.requestDate, shiftId: b.shiftId }).then((c) => setSchedules((prev) => [c as unknown as EmployeeSchedule, ...prev]));
+        tenantApi.deleteEmployeeSchedule(b.id).then(() => setSchedules((prev) => prev.filter((s) => s.id !== b.id)));
+      }
     }
   };
 
   // Master shift & roster
   const addShift = (shift: Omit<WorkShift, 'id' | 'tenantId'>) => {
-    setShifts((prev) => [...prev, { ...shift, id: `shift-${Date.now()}`, tenantId: currentTenant.id }]);
+    tenantApi.createWorkShift(shift as unknown as Omit<ApiWorkShift, 'id' | 'tenantId'>).then((created) => {
+      setShifts((prev) => [...prev, created as unknown as WorkShift]);
+    });
   };
 
   const updateShift = (id: string, updates: Partial<WorkShift>) => {
-    setShifts((prev) => prev.map((s) => (s.id === id ? { ...s, ...updates } : s)));
+    tenantApi.updateWorkShift(id, updates as Partial<ApiWorkShift>).then((updated) => {
+      setShifts((prev) => prev.map((s) => (s.id === id ? (updated as unknown as WorkShift) : s)));
+    });
   };
 
   const deleteShift = (id: string) => {
-    setShifts((prev) => prev.filter((s) => s.id !== id));
-    setSchedules((prev) => prev.filter((s) => s.shiftId !== id));
+    tenantApi.deleteWorkShift(id).then(() => {
+      setShifts((prev) => prev.filter((s) => s.id !== id));
+      setSchedules((prev) => prev.filter((s) => s.shiftId !== id));
+    });
   };
 
   // shiftId null = hapus entri roster pada tanggal tersebut
   const upsertSchedules = (items: { employeeId: string; date: string; shiftId: string | null }[]) => {
-    setSchedules((prev) => {
-      const map = new Map(prev.map((p) => [`${p.tenantId}|${p.employeeId}|${p.date}`, p]));
-      items.forEach((it) => {
-        const key = `${currentTenant.id}|${it.employeeId}|${it.date}`;
-        if (it.shiftId === null) {
-          map.delete(key);
-        } else {
-          map.set(key, { id: `sch-${it.employeeId}-${it.date}`, tenantId: currentTenant.id, employeeId: it.employeeId, date: it.date, shiftId: it.shiftId });
+    const toCreate: { employeeId: string; date: string; shiftId: string }[] = [];
+    items.forEach((it) => {
+      const existing = schedules.find((s) => s.employeeId === it.employeeId && s.date === it.date);
+      if (it.shiftId === null) {
+        if (existing) {
+          tenantApi.deleteEmployeeSchedule(existing.id).then(() => setSchedules((prev) => prev.filter((s) => s.id !== existing.id)));
         }
-      });
-      return Array.from(map.values());
+      } else if (existing) {
+        tenantApi.updateEmployeeSchedule(existing.id, { shiftId: it.shiftId }).then((u) => setSchedules((prev) => prev.map((s) => (s.id === existing.id ? (u as unknown as EmployeeSchedule) : s))));
+      } else {
+        toCreate.push({ employeeId: it.employeeId, date: it.date, shiftId: it.shiftId });
+      }
     });
+    if (toCreate.length > 0) {
+      tenantApi.bulkCreateEmployeeSchedules(toCreate).then((created) => {
+        setSchedules((prev) => [...(created as unknown as EmployeeSchedule[]), ...prev]);
+      });
+    }
   };
 
   const clearSchedules = (employeeIds: string[], dateFrom: string, dateTo: string) => {
-    setSchedules((prev) =>
-      prev.filter(
-        (p) => !(p.tenantId === currentTenant.id && employeeIds.includes(p.employeeId) && p.date >= dateFrom && p.date <= dateTo)
-      )
+    const toDelete = schedules.filter(
+      (p) => p.tenantId === currentTenant.id && employeeIds.includes(p.employeeId) && p.date >= dateFrom && p.date <= dateTo
     );
+    const deleteIds = new Set(toDelete.map((p) => p.id));
+    setSchedules((prev) => prev.filter((p) => !deleteIds.has(p.id)));
+    toDelete.forEach((p) => {
+      tenantApi.deleteEmployeeSchedule(p.id).catch(() => {});
+    });
   };
 
-  // 15. Attendance Corrections Actions
+  // 15. Attendance Corrections Actions — real backend.
   const submitAttendanceCorrection = (req: Omit<AttendanceCorrectionRequest, 'id' | 'tenantId' | 'status'>) => {
-    const newReq: AttendanceCorrectionRequest = {
-      ...req,
-      id: `cor-${Date.now()}`,
-      tenantId: currentTenant.id,
-      status: 'Menunggu',
-    };
-    setAttendanceCorrections((prev) => [newReq, ...prev]);
+    tenantApi.createAttendanceCorrection({ ...req, status: 'Menunggu' } as unknown as Omit<ApiAttendanceCorrectionRequest, 'id' | 'tenantId'>).then((created) => {
+      const newReq = created as unknown as AttendanceCorrectionRequest;
+      setAttendanceCorrections((prev) => [newReq, ...prev]);
 
-    const requester = employees.find((e) => e.id === req.employeeId);
-    createApprovalItem({
-      category: 'Perbaikan Presensi',
-      referenceId: newReq.id,
-      title: `Koreksi Presensi (${req.type}) - ${requester?.fullName || 'Karyawan'}`,
-      requesterId: req.employeeId,
-      department: requester?.department || 'Operasional',
-      submittedAt: new Date().toISOString().replace('T', ' ').slice(0, 16),
-      deadlineAt: new Date(Date.now() + 48 * 3600 * 1000).toISOString().replace('T', ' ').slice(0, 16),
-      level: 1,
-      totalLevels: 1,
-      assignedApproverRole: 'hr_admin',
-      status: 'Menunggu',
-      notes: req.reason,
+      const requester = employees.find((e) => e.id === req.employeeId);
+      createApprovalItem({
+        category: 'Perbaikan Presensi',
+        referenceId: newReq.id,
+        title: `Koreksi Presensi (${req.type}) - ${requester?.fullName || 'Karyawan'}`,
+        requesterId: req.employeeId,
+        department: requester?.department || 'Operasional',
+        submittedAt: new Date().toISOString().replace('T', ' ').slice(0, 16),
+        deadlineAt: new Date(Date.now() + 48 * 3600 * 1000).toISOString().replace('T', ' ').slice(0, 16),
+        level: 1,
+        totalLevels: 1,
+        assignedApproverRole: 'hr_admin',
+        status: 'Menunggu',
+        notes: req.reason,
+      });
     });
   };
 
   const reviewAttendanceCorrection = (id: string, approved: boolean) => {
     const corr = attendanceCorrections.find((c) => c.id === id);
     if (approved && corr) {
-      setAttendance((prev) => {
-        const exists = prev.find((a) => a.employeeId === corr.employeeId && a.date === corr.date);
-        if (exists) {
-          return prev.map((a) =>
-            a.id === exists.id
-              ? {
-                  ...a,
-                  clockIn: corr.proposedClockIn || a.clockIn,
-                  clockOut: corr.proposedClockOut || a.clockOut,
-                  status: 'Hadir',
-                  lateMinutes: 0,
-                  notes: `Koreksi Presensi (${corr.type}) disetujui: ${corr.reason}`,
-                }
-              : a
-          );
-        }
-        return [
-          {
-            id: `att-cor-${Date.now()}`,
-            tenantId: currentTenant.id,
-            employeeId: corr.employeeId,
-            date: corr.date,
-            clockIn: corr.proposedClockIn || '08:00',
-            clockOut: corr.proposedClockOut || '17:00',
-            status: 'Hadir',
-            lateMinutes: 0,
-            overtimeHours: 0,
-            notes: `Koreksi Presensi (${corr.type}) disetujui: ${corr.reason}`,
-          },
-          ...prev,
-        ];
-      });
+      const existing = attendance.find((a) => a.employeeId === corr.employeeId && a.date === corr.date);
+      persistAttendanceUpsert(
+        existing
+          ? {
+              ...existing,
+              clockIn: corr.proposedClockIn || existing.clockIn,
+              clockOut: corr.proposedClockOut || existing.clockOut,
+              status: 'Hadir',
+              lateMinutes: 0,
+              notes: `Koreksi Presensi (${corr.type}) disetujui: ${corr.reason}`,
+            }
+          : {
+              employeeId: corr.employeeId,
+              date: corr.date,
+              clockIn: corr.proposedClockIn || '08:00',
+              clockOut: corr.proposedClockOut || '17:00',
+              status: 'Hadir',
+              lateMinutes: 0,
+              overtimeHours: 0,
+              notes: `Koreksi Presensi (${corr.type}) disetujui: ${corr.reason}`,
+            }
+      );
     }
-    setAttendanceCorrections((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, status: approved ? 'Disetujui' : 'Ditolak', approvedBy: currentUser.name } : c))
-    );
+    tenantApi.updateAttendanceCorrection(id, { status: approved ? 'Disetujui' : 'Ditolak', approvedBy: currentUser.name }).then((updated) => {
+      setAttendanceCorrections((prev) => prev.map((c) => (c.id === id ? (updated as unknown as AttendanceCorrectionRequest) : c)));
+    });
     persistApprovalItemByReference(id, 'Perbaikan Presensi', { status: approved ? 'Disetujui' : 'Ditolak' });
   };
 
@@ -4135,49 +4093,42 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return newEmp;
   };
 
-  // 24. Overtime Handlers
+  // 24. Overtime Handlers — real backend.
   const submitOvertimeRequest = (req: Omit<OvertimeRequest, 'id' | 'tenantId' | 'status'>) => {
-    const newReq: OvertimeRequest = {
-      ...req,
-      id: `ovt-${Date.now()}`,
-      tenantId: currentTenant.id,
-      status: 'Menunggu',
-    };
-    setOvertimeRequests((prev) => [newReq, ...prev]);
+    tenantApi.createOvertimeRequest({ ...req, status: 'Menunggu' } as unknown as Omit<ApiOvertimeRequest, 'id' | 'tenantId'>).then((created) => {
+      const newReq = created as unknown as OvertimeRequest;
+      setOvertimeRequests((prev) => [newReq, ...prev]);
 
-    const emp = employees.find((e) => e.id === req.employeeId);
-    createApprovalItem({
-      category: 'Lembur',
-      referenceId: newReq.id,
-      title: `Lembur: ${emp?.fullName || 'Karyawan'} (${req.hours} jam - ${req.date})`,
-      requesterId: req.employeeId,
-      department: emp?.department || 'Operasional',
-      submittedAt: new Date().toISOString().replace('T', ' ').slice(0, 16),
-      deadlineAt: new Date(Date.now() + 48 * 3600 * 1000).toISOString().replace('T', ' ').slice(0, 16),
-      level: 1,
-      totalLevels: 1,
-      assignedApproverRole: 'manager',
-      status: 'Menunggu',
-      notes: req.reason,
+      const emp = employees.find((e) => e.id === req.employeeId);
+      createApprovalItem({
+        category: 'Lembur',
+        referenceId: newReq.id,
+        title: `Lembur: ${emp?.fullName || 'Karyawan'} (${req.hours} jam - ${req.date})`,
+        requesterId: req.employeeId,
+        department: emp?.department || 'Operasional',
+        submittedAt: new Date().toISOString().replace('T', ' ').slice(0, 16),
+        deadlineAt: new Date(Date.now() + 48 * 3600 * 1000).toISOString().replace('T', ' ').slice(0, 16),
+        level: 1,
+        totalLevels: 1,
+        assignedApproverRole: 'manager',
+        status: 'Menunggu',
+        notes: req.reason,
+      });
+
+      logAuditAction('Presensi', 'SUBMIT_LEMBUR', newReq.id, `Pengajuan lembur ${req.hours} jam oleh ${emp?.fullName}`);
     });
-
-    logAuditAction('Presensi', 'SUBMIT_LEMBUR', newReq.id, `Pengajuan lembur ${req.hours} jam oleh ${emp?.fullName}`);
   };
 
   const reviewOvertimeRequest = (id: string, approved: boolean, approvedHours?: number, notes?: string) => {
-    setOvertimeRequests((prev) =>
-      prev.map((o) =>
-        o.id === id
-          ? {
-              ...o,
-              status: approved ? 'Disetujui' : 'Ditolak',
-              approvedBy: currentUser.name,
-              approvedHours: approvedHours || o.hours,
-              notes: notes || o.notes,
-            }
-          : o
-      )
-    );
+    const current = overtimeRequests.find((o) => o.id === id);
+    tenantApi
+      .updateOvertimeRequest(id, {
+        status: approved ? 'Disetujui' : 'Ditolak',
+        approvedBy: currentUser.name,
+        approvedHours: approvedHours || current?.hours,
+        notes: notes || current?.notes,
+      })
+      .then((updated) => setOvertimeRequests((prev) => prev.map((o) => (o.id === id ? (updated as unknown as OvertimeRequest) : o))));
     persistApprovalItemByReference(id, 'Lembur', { status: approved ? 'Disetujui' : 'Ditolak' });
   };
 
@@ -5033,7 +4984,6 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // storage unavailable
     }
 
-    setAttendance(INITIAL_ATTENDANCE);
     setPayrollRecords(INITIAL_PAYROLL_RECORDS);
     setLoans(INITIAL_LOANS);
     setLeaveRequests(INITIAL_LEAVE_REQUESTS);
