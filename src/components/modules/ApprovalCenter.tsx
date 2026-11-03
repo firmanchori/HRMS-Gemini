@@ -21,6 +21,7 @@ import {
   Eye,
   AlertCircle,
   History,
+  ChevronRight,
 } from 'lucide-react';
 import { EmployeeSelect } from '../common/EmployeeSelect';
 import { ValidatedDateInput } from '../common/ValidatedDateInput';

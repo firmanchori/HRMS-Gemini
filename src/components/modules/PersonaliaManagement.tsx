@@ -1989,7 +1989,7 @@ export const PersonaliaManagement: React.FC = () => {
                                     defaultRevokedAllowances: [...prev[settingsActionKey].defaultRevokedAllowances, revokedAllowanceInput.trim()],
                                   },
                                 }));
-                                setNewRevokedAllowanceInput('');
+                                setRevokedAllowanceInput('');
                               }
                             }}
                             className="flex-1 px-2.5 py-1 text-[11px] border border-slate-300 rounded bg-white"

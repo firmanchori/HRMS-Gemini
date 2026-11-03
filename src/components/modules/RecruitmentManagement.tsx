@@ -120,6 +120,8 @@ import {
   InterviewerChangeHistory,
   ScreeningKnockoutCriterion,
   ScreeningScoredCriterion,
+  InterviewTypeSetting,
+  InterviewScorecardCriterion,
 } from '../../types/hrms';
 import {
   runAutoScreening,
@@ -3945,11 +3947,7 @@ Nama Berkas: ${fileName} (${candidate.cvFileSize || '1.2 MB'})
   };
 
   const currentSelectedTest = React.useMemo(() => {
-    return (
-      competencyTestTypes.find((t) => t.id === selectedTestTypeId) ||
-      competencyTestTypes[0] ||
-      INITIAL_COMPETENCY_TEST_TYPES[0]
-    );
+    return competencyTestTypes.find((t) => t.id === selectedTestTypeId) || competencyTestTypes[0];
   }, [competencyTestTypes, selectedTestTypeId]);
 
   const calculatedCompositeScore = React.useMemo(() => {
@@ -4237,8 +4235,8 @@ Nama Berkas: ${fileName} (${candidate.cvFileSize || '1.2 MB'})
       }
     } else {
       // Default: pilih 2 tes (Teknis + Psikotes)
-      const test1 = competencyTestTypes.find((t) => t.id === 'test-tech') || competencyTestTypes[0] || INITIAL_COMPETENCY_TEST_TYPES[0];
-      const test2 = competencyTestTypes.find((t) => t.id === 'test-psych') || competencyTestTypes[1] || INITIAL_COMPETENCY_TEST_TYPES[1];
+      const test1 = competencyTestTypes.find((t) => t.id === 'test-tech') || competencyTestTypes[0];
+      const test2 = competencyTestTypes.find((t) => t.id === 'test-psych') || competencyTestTypes[1] || test1;
 
       const token1 = generateNewTestToken(candidate.id, test1.id);
       const token2 = generateNewTestToken(candidate.id, test2.id);
@@ -4632,10 +4630,7 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
     e.preventDefault();
     if (!activeCandidate) return;
 
-    const targetTest =
-      competencyTestTypes.find((t) => t.id === selectedTestTypeId) ||
-      competencyTestTypes[0] ||
-      INITIAL_COMPETENCY_TEST_TYPES[0];
+    const targetTest = competencyTestTypes.find((t) => t.id === selectedTestTypeId) || competencyTestTypes[0];
     const isPassing = calculatedCompositeScore >= testPassingGradeInput;
 
     let details: Record<string, any> = {};
@@ -4792,19 +4787,12 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
   };
 
   const currentSelectedInterviewType = React.useMemo(() => {
-    return (
-      interviewTypeSettings.find((i) => i.id === selectedInterviewTypeId) ||
-      interviewTypeSettings[0] ||
-      INITIAL_INTERVIEW_TYPES[0]
-    );
+    return interviewTypeSettings.find((i) => i.id === selectedInterviewTypeId) || interviewTypeSettings[0];
   }, [interviewTypeSettings, selectedInterviewTypeId]);
 
   const handleOpenInterviewModal = (candidate: Candidate) => {
     setActiveCandidate(candidate);
-    const defaultType =
-      interviewTypeSettings.find((i) => i.id === candidate.interviewTypeId) ||
-      interviewTypeSettings[0] ||
-      INITIAL_INTERVIEW_TYPES[0];
+    const defaultType = interviewTypeSettings.find((i) => i.id === candidate.interviewTypeId) || interviewTypeSettings[0];
     const initialTypeId = defaultType?.id || 'int-tech';
     setSelectedInterviewTypeId(initialTypeId);
 
@@ -23144,25 +23132,17 @@ PT Nusantara Multi Talenta Tbk`);
                     extendedAt: new Date().toISOString(),
                     extendedBy: (currentUser && (currentUser as any).name) || 'HR Recruitment Lead',
                     addedDays: days,
-                    previousTargetDate: slaExtendModalVacancy.targetCloseDate || new Date().toISOString().split('T')[0],
-                    newTargetDate: newTargetStr,
+                    previousCloseDate: slaExtendModalVacancy.targetCloseDate || new Date().toISOString().split('T')[0],
+                    newCloseDate: newTargetStr,
                     reason: slaExtendReason.trim(),
                   };
 
-                  const updatedVacancies = vacancies.map((v) => {
-                    if (v.id === slaExtendModalVacancy.id) {
-                      return {
-                        ...v,
-                        targetCloseDate: newTargetStr,
-                        status: 'Buka' as const,
-                        isClosedBySla: false,
-                        slaHistory: [...(v.slaHistory || []), historyItem],
-                      };
-                    }
-                    return v;
+                  updateVacancy(slaExtendModalVacancy.id, {
+                    targetCloseDate: newTargetStr,
+                    status: 'Buka' as const,
+                    isClosedBySla: false,
+                    slaHistory: [...(slaExtendModalVacancy.slaHistory || []), historyItem],
                   });
-
-                  setVacancies(updatedVacancies);
                   setToastFeedback(`SLA Lowongan '${slaExtendModalVacancy.title}' berhasil diperpanjang +${days} hari (hingga ${newTargetStr}).`);
                   setSlaExtendModalVacancy(null);
                   setSlaExtendReason('');
@@ -23233,11 +23213,11 @@ PT Nusantara Multi Talenta Tbk`);
                         <div className="text-[11px] text-slate-600 grid grid-cols-2 gap-2 bg-slate-50 p-2 rounded-lg">
                           <div>
                             <span className="text-slate-400 block text-[10px]">Target Sebelumnya:</span>
-                            <span className="font-mono font-medium text-slate-700">{item.previousTargetDate}</span>
+                            <span className="font-mono font-medium text-slate-700">{item.previousCloseDate}</span>
                           </div>
                           <div>
                             <span className="text-slate-400 block text-[10px]">Target Baru:</span>
-                            <span className="font-mono font-bold text-emerald-700">{item.newTargetDate}</span>
+                            <span className="font-mono font-bold text-emerald-700">{item.newCloseDate}</span>
                           </div>
                         </div>
                         <div className="text-[11px] pt-1">
