@@ -27,6 +27,7 @@ import {
   type AttendanceRecord as ApiAttendanceRecord,
   type AttendanceCorrectionRequest as ApiAttendanceCorrectionRequest,
   type OvertimeRequest as ApiOvertimeRequest,
+  type OrgStructureSnapshot as ApiOrgStructureSnapshot,
 } from '../tenant/api';
 import { ORG_STRUCTURE_TEMPLATES } from '../utils/orgStructureTemplates';
 import {
@@ -473,6 +474,16 @@ interface HrmsContextType {
   /** Only ever call this on a Draft-status proposal — a Draft hasn't been submitted for approval yet, so deleting it is safe; anything already Menunggu Approval/Disetujui/Ditolak is a real decision record and must not be deletable here. */
   deleteOrgProposal: (id: string) => void;
   orgSnapshots: OrgStructureSnapshot[];
+  startOrgRestructure: (data: {
+    entityId: string;
+    skDocNumber: string;
+    effectiveDate: string;
+    skDocFileName?: string | null;
+    changeType: 'restrukturisasi' | 'modifikasi';
+    reason: string;
+    startMode: 'copy' | 'blank';
+  }) => Promise<void>;
+  revertOrgRestructure: (entityId: string) => Promise<void>;
   replaceEntityStructure: (
     entityId: string,
     newDivisions: CompanyDivision[],
@@ -1215,36 +1226,34 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const saved = localStorage.getItem('nusahr_org_proposals');
     return saved ? JSON.parse(saved) : INITIAL_ORG_PROPOSALS;
   });
-  const [orgSnapshots, setOrgSnapshots] = useState<OrgStructureSnapshot[]>(() => {
-    const saved = localStorage.getItem('nusahr_org_snapshots');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        // fallback
-      }
-    }
-    return [
-      {
-        id: 'snap-holding-2025-v1',
-        tenantId: 'default',
-        entityId: 'ent-ntm-holding',
-        skDocNumber: 'SK-DIR/HOLDING/2025/001',
-        versionTitle: 'Versi Awal Pembentukan Holding 2025 (Baseline SK-001)',
-        effectiveDate: '2025-01-02',
-        archivedAt: '2025-12-30',
-        archivedBy: 'Direktur Utama',
-        reason: 'Arsip penetapan awal struktur organisasi holding PT Nusantara Tech Media',
-        divisions: INITIAL_DIVISIONS.filter((d) => d.entityId === 'ent-ntm-holding'),
-        departments: INITIAL_DEPARTMENTS.filter((d) => d.entityId === 'ent-ntm-holding'),
-        orgNodes: INITIAL_ORG_NODES.filter((n) => n.entityId === 'ent-ntm-holding'),
-      },
-    ];
-  });
-
-  useEffect(() => {
-    localStorage.setItem('nusahr_org_snapshots', JSON.stringify(orgSnapshots));
-  }, [orgSnapshots]);
+  // Real backend data, loaded via loadTenantOrgData() — the "riwayat"
+  // archive, browsable by effective date, taken automatically whenever a
+  // proposal is approved or "Ajukan Restrukturisasi" (re)opens a locked
+  // entity for direct editing (see startOrgRestructure below).
+  const [apiOrgSnapshots, setApiOrgSnapshots] = useState<ApiOrgStructureSnapshot[]>([]);
+  const orgSnapshots = useMemo<OrgStructureSnapshot[]>(
+    () =>
+      apiOrgSnapshots.map((s) => {
+        const authorName = users.find((u) => u.id === s.createdByUserId)?.name || 'Sistem';
+        const changeTypeLabel = s.changeType === 'modifikasi' ? 'Modifikasi/Pengembangan' : s.changeType === 'restrukturisasi' ? 'Restrukturisasi' : 'Perubahan';
+        return {
+          id: s.id,
+          tenantId: s.tenantId,
+          entityId: s.entityId,
+          proposalId: s.proposalId ?? undefined,
+          skDocNumber: s.skDocNumber ?? undefined,
+          versionTitle: s.skDocNumber ? `${changeTypeLabel} — SK ${s.skDocNumber}` : `${changeTypeLabel} (otomatis dari proposal)`,
+          effectiveDate: s.effectiveDate ?? s.takenAt.slice(0, 10),
+          archivedAt: s.takenAt.slice(0, 10),
+          archivedBy: authorName,
+          reason: s.reason ?? '',
+          divisions: s.divisions as unknown as CompanyDivision[],
+          departments: s.departments as unknown as CompanyDepartment[],
+          orgNodes: s.orgNodes as unknown as OrgStructureNode[],
+        };
+      }),
+    [apiOrgSnapshots, users]
+  );
 
   // Reads/writes the entity's REAL isGovernanceLocked column — must stay in
   // sync with the backend, which enforces this same flag server-side on
@@ -1261,6 +1270,36 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const setIsOrgGovernanceLocked = (locked: boolean) => {
     updateEntity(currentEntityId, { isGovernanceLocked: locked });
+  };
+
+  /**
+   * "Ajukan Restrukturisasi" (button #2, as opposed to the full in-modal
+   * Perancang & Pengajuan Restrukturisasi wizard) — unlocks a locked entity
+   * for direct editing through the normal Setup tabs. The backend does the
+   * snapshot + optional clear + unlock as one transaction; this just calls
+   * it and refreshes every collection it touched (entities, divisions,
+   * departments, positions, org-nodes, employees, snapshots) from the
+   * server rather than trying to hand-merge each one locally.
+   */
+  const startOrgRestructure = async (data: {
+    entityId: string;
+    skDocNumber: string;
+    effectiveDate: string;
+    skDocFileName?: string | null;
+    changeType: 'restrukturisasi' | 'modifikasi';
+    reason: string;
+    startMode: 'copy' | 'blank';
+  }) => {
+    await tenantApi.startOrgRestructure(data);
+    await loadTenantOrgData();
+    logAuditAction('Struktur Organisasi', 'AJUKAN_RESTRUKTURISASI', data.entityId, `Membuka entitas ${data.entityId} untuk restrukturisasi (${data.changeType}), SK ${data.skDocNumber}`);
+  };
+
+  /** Discards the in-progress restructuring draft and restores the entity's last snapshot, re-locking it. */
+  const revertOrgRestructure = async (entityId: string) => {
+    await tenantApi.revertOrgRestructure(entityId);
+    await loadTenantOrgData();
+    logAuditAction('Struktur Organisasi', 'BATALKAN_RESTRUKTURISASI', entityId, `Membatalkan draft restrukturisasi entitas ${entityId}, dikembalikan ke snapshot terakhir`);
   };
 
   // 28. Probation Evaluations & 29. Contract Reviews — real backend data,
@@ -1375,6 +1414,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       realProbationEvaluations, realContractReviews, realModuleSettings,
       realApprovalItems, realApprovalDelegations,
       realWorkShifts, realEmployeeSchedules, realShiftSwapRequests, realAttendanceRecords, realAttendanceCorrections, realOvertimeRequests,
+      realOrgSnapshots,
     ] = await Promise.all([
       tenantApi.listEntities(),
       tenantApi.listOfficeLocations(),
@@ -1403,6 +1443,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       tenantApi.listAttendanceRecords(),
       tenantApi.listAttendanceCorrections(),
       tenantApi.listOvertimeRequests(),
+      tenantApi.listOrgSnapshots(),
     ]);
     setApiEntities(realEntities);
     setApiOfficeLocations(realOfficeLocations);
@@ -1437,6 +1478,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setAttendance(realAttendanceRecords as unknown as AttendanceRecord[]);
     setAttendanceCorrections(realAttendanceCorrections as unknown as AttendanceCorrectionRequest[]);
     setOvertimeRequests(realOvertimeRequests as unknown as OvertimeRequest[]);
+    setApiOrgSnapshots(realOrgSnapshots);
   };
 
   // 34. Vendor Invoices (AP)
@@ -4422,27 +4464,25 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     newNodes: OrgStructureNode[],
     proposalInfo?: { skDocNumber?: string; title?: string; effectiveDate?: string; reason?: string }
   ) => {
-    // 1. Simpan snapshot struktur existing sebelum direplace
-    const prevDivs = divisions.filter((d) => d.entityId === entityId);
-    const prevDepts = departments.filter((d) => d.entityId === entityId);
-    const prevNodes = orgNodes.filter((n) => n.entityId === entityId);
+    // 1. Simpan snapshot struktur existing sebelum direplace (real backend —
+    // this is the "riwayat" browsable in Arsip Snapshot, not local mock
+    // state).
+    const prevDivs = apiDivisions.filter((d) => d.entityId === entityId);
+    const prevDepts = apiDepartments.filter((d) => d.entityId === entityId);
+    const prevPositions = apiPositions.filter((p) => p.entityId === entityId);
+    const prevNodes = apiOrgNodes.filter((n) => n.entityId === entityId);
 
-    const snapshot: OrgStructureSnapshot = {
-      id: `snap-${Date.now()}`,
-      tenantId: currentTenant.id,
+    const createdSnapshot = await tenantApi.createOrgSnapshot({
       entityId,
-      skDocNumber: proposalInfo?.skDocNumber || 'SK-RESTRUCT-AUTO',
-      versionTitle: `Versi Pra-Restrukturisasi: ${proposalInfo?.title || 'Penataan Struktur'}`,
-      effectiveDate: proposalInfo?.effectiveDate || new Date().toISOString().split('T')[0],
-      archivedAt: new Date().toISOString().split('T')[0],
-      archivedBy: currentUser.name,
-      reason: proposalInfo?.reason || 'Snapshot otomatis diarsipkan saat restrukturisasi resmi disetujui',
       divisions: prevDivs,
       departments: prevDepts,
+      positions: prevPositions,
       orgNodes: prevNodes,
-    };
-
-    setOrgSnapshots((prev) => [snapshot, ...prev]);
+      skDocNumber: proposalInfo?.skDocNumber || null,
+      effectiveDate: proposalInfo?.effectiveDate || new Date().toISOString().split('T')[0],
+      reason: proposalInfo?.reason || `Snapshot otomatis diarsipkan saat restrukturisasi "${proposalInfo?.title || 'Penataan Struktur'}" diterapkan`,
+    });
+    setApiOrgSnapshots((prev) => [createdSnapshot, ...prev]);
 
     // 2. Replace the real backend rows for this entity: delete everything existing, then
     // recreate from the draft, remapping draft-local ids to the real ones the backend assigns.
@@ -4509,7 +4549,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       'Struktur Organisasi',
       'REPLACE_STRUCTURE',
       entityId,
-      `Restrukturisasi menyeluruh diterapkan untuk entitas ${entityId}. Struktur lama diarsipkan ke snapshot ID ${snapshot.id}`
+      `Restrukturisasi menyeluruh diterapkan untuk entitas ${entityId}. Struktur lama diarsipkan ke snapshot ID ${createdSnapshot.id}`
     );
   };
 
@@ -5282,7 +5322,9 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         submitOrgProposal,
         reviewOrgProposal,
         deleteOrgProposal,
-        orgSnapshots: orgSnapshots.filter((s) => s.tenantId === currentTenant.id),
+        orgSnapshots, // real backend data, already tenant-scoped server-side
+        startOrgRestructure,
+        revertOrgRestructure,
         replaceEntityStructure,
         probationEvaluations, // real backend data, already tenant-scoped server-side
         submitProbationEvaluation,

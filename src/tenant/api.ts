@@ -115,6 +115,24 @@ export interface OrgStructureNode {
   masterJobPositionId: string | null;
 }
 
+export interface OrgStructureSnapshot {
+  id: string;
+  tenantId: string;
+  entityId: string;
+  proposalId: string | null;
+  divisions: unknown[];
+  departments: unknown[];
+  positions: unknown[];
+  orgNodes: unknown[];
+  skDocNumber: string | null;
+  effectiveDate: string | null;
+  skDocFileName: string | null;
+  changeType: "restrukturisasi" | "modifikasi" | null;
+  reason: string | null;
+  createdByUserId: string | null;
+  takenAt: string;
+}
+
 export interface OrgStructure {
   divisions: CompanyDivision[];
   departments: CompanyDepartment[];
@@ -537,6 +555,31 @@ export const tenantApi = {
   listOrgNodes: () => request<OrgStructureNode[]>("/api/tenant/org-nodes"),
   updateOrgNode: (id: string, data: Partial<OrgStructureNode>) => request<OrgStructureNode>(`/api/tenant/org-nodes/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   deleteOrgNode: (id: string) => request<{ ok: true }>(`/api/tenant/org-nodes/${id}`, { method: "DELETE" }),
+
+  listOrgSnapshots: () => request<OrgStructureSnapshot[]>("/api/tenant/org-snapshots"),
+  createOrgSnapshot: (data: {
+    entityId: string;
+    divisions: unknown[];
+    departments: unknown[];
+    positions?: unknown[];
+    orgNodes: unknown[];
+    skDocNumber?: string | null;
+    effectiveDate?: string | null;
+    skDocFileName?: string | null;
+    changeType?: "restrukturisasi" | "modifikasi" | null;
+    reason?: string | null;
+  }) => request<OrgStructureSnapshot>("/api/tenant/org-snapshots", { method: "POST", body: JSON.stringify(data) }),
+  startOrgRestructure: (data: {
+    entityId: string;
+    skDocNumber: string;
+    effectiveDate: string;
+    skDocFileName?: string | null;
+    changeType: "restrukturisasi" | "modifikasi";
+    reason: string;
+    startMode: "copy" | "blank";
+  }) => request<{ snapshot: OrgStructureSnapshot; entity: CompanyEntity }>("/api/tenant/org-restructure/start", { method: "POST", body: JSON.stringify(data) }),
+  revertOrgRestructure: (entityId: string) =>
+    request<{ entity: CompanyEntity; restoredFromSnapshotId: string }>("/api/tenant/org-restructure/revert", { method: "POST", body: JSON.stringify({ entityId }) }),
 
   // Grades — plain CRUD, never gated by the governance lock.
   createGrade: (data: Omit<GradeSalaryRange, "id" | "tenantId" | "effectiveDate" | "version">) =>

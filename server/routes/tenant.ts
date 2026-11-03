@@ -896,6 +896,31 @@ tenantRouter.get("/org-snapshots", async (req, res) => {
   );
 });
 
+const createSnapshotSchema = z.object({
+  entityId: z.string().uuid(),
+  divisions: z.array(z.unknown()),
+  departments: z.array(z.unknown()),
+  positions: z.array(z.unknown()).optional(),
+  orgNodes: z.array(z.unknown()),
+  skDocNumber: z.string().trim().max(200).optional().nullable(),
+  effectiveDate: z.string().trim().max(20).optional().nullable(),
+  skDocFileName: z.string().trim().max(300).optional().nullable(),
+  changeType: z.enum(["restrukturisasi", "modifikasi"]).optional().nullable(),
+  reason: z.string().trim().max(2000).optional().nullable(),
+});
+
+/** Standalone snapshot insert — used by the full-modal "Perancang & Pengajuan Restrukturisasi" wizard (button #1) when it finishes replacing an entity's structure, as opposed to /org-restructure/start's own automatic snapshot (button #2). */
+tenantRouter.post("/org-snapshots", validateBody(createSnapshotSchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const visibleEntityIds = await resolveVisibleEntityIds(req, tenantId);
+  if (!visibleEntityIds.includes(req.body.entityId)) return res.status(403).json({ error: "Entitas di luar ruang lingkup Anda" });
+  const [created] = await db
+    .insert(orgStructureSnapshots)
+    .values({ ...req.body, positions: req.body.positions ?? [], tenantId, createdByUserId: req.session!.userId })
+    .returning();
+  res.status(201).json(created);
+});
+
 type DbTx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 /**
