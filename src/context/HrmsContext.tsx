@@ -3845,15 +3845,15 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       )
     );
 
-    // Grades are tenant-wide (not per-entity), so only seed them the first time — applying a second template elsewhere shouldn't duplicate them.
-    const createdGrades =
-      gradeSalaryRanges.length === 0
-        ? await Promise.all(
-            template.grades.map((g) =>
-              tenantApi.createGrade({ entityId: null, gradeCode: g.gradeCode, gradeName: g.gradeName, minSalary: g.minSalary ?? null, midSalary: g.midSalary ?? null, maxSalary: g.maxSalary ?? null, singleValueSalary: null, notes: null })
-            )
-          )
-        : [];
+    // Grades are tenant-wide (not per-entity) — dedupe by gradeCode instead of
+    // skipping the whole template just because the tenant already has any grade.
+    const existingGradeCodes = new Set(gradeSalaryRanges.map((g) => g.gradeCode));
+    const gradesToCreate = template.grades.filter((g) => !existingGradeCodes.has(g.gradeCode));
+    const createdGrades = await Promise.all(
+      gradesToCreate.map((g) =>
+        tenantApi.createGrade({ entityId: null, gradeCode: g.gradeCode, gradeName: g.gradeName, minSalary: g.minSalary ?? null, midSalary: g.midSalary ?? null, maxSalary: g.maxSalary ?? null, singleValueSalary: null, notes: null })
+      )
+    );
 
     setApiDivisions((prev) => [...prev, ...createdDivisions]);
     setApiDepartments((prev) => [...prev, ...createdDepartments]);
