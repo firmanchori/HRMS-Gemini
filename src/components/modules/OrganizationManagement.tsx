@@ -2762,17 +2762,23 @@ export const OrganizationManagement: React.FC = () => {
                 </div>
               </div>
 
-              {/* Setup Awal: Template Bawaan / Salin dari Entitas Lain — hanya tampil saat entitas belum punya divisi sama sekali */}
-              {entityDivisions.length === 0 && !currentEntityLocked && (
+              {/* Setup Awal: Template Bawaan / Salin dari Entitas Lain — tersedia selama
+                  entitas masih Open (belum dikunci), bukan cuma saat kosong, supaya bisa
+                  terus diganti/dicoba ulang selama baseline belum dikunci (user, 2026-11-03). */}
+              {!currentEntityLocked && (
                 <div className="p-4 rounded-xl border-2 border-dashed border-indigo-300 bg-indigo-50/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div className="flex items-start gap-3">
                     <div className="w-9 h-9 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
                       <Sparkles className="w-4 h-4" />
                     </div>
                     <div>
-                      <h3 className="text-sm font-bold text-indigo-950">Mulai dari Template, Bukan dari Kosong</h3>
+                      <h3 className="text-sm font-bold text-indigo-950">
+                        {entityDivisions.length === 0 ? 'Mulai dari Template, Bukan dari Kosong' : 'Ganti Struktur dengan Template Lain'}
+                      </h3>
                       <p className="text-xs text-indigo-800 max-w-xl">
-                        Entitas {currentEntity.name} belum punya divisi, departemen, atau jabatan. Gunakan template standar bawaan, atau salin struktur dari entitas lain yang sudah ada — bisa diedit lagi setelahnya.
+                        {entityDivisions.length === 0
+                          ? `Entitas ${currentEntity.name} belum punya divisi, departemen, atau jabatan. Gunakan template standar bawaan, atau salin struktur dari entitas lain yang sudah ada — bisa diedit lagi setelahnya.`
+                          : `Selama baseline entitas ${currentEntity.name} masih belum dikunci, Anda bisa terus mencoba template atau menyalin struktur lain — data yang sudah ada tidak akan diduplikasi.`}
                       </p>
                     </div>
                   </div>
