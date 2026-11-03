@@ -65,7 +65,6 @@ import {
 } from '../../types/hrms';
 import { exportElementToPng, exportElementToPdf } from '../../utils/exportTreeHelper';
 import { ScrollableTabNav } from '../common/ScrollableTabNav';
-import { ModuleDocumentModal } from '../common/ModuleDocumentModal';
 import { useTabSwipe } from '../../utils/useTabSwipe';
 
 interface EmployeeDropdownSelectProps {
@@ -352,7 +351,6 @@ export const OrganizationManagement: React.FC = () => {
   const orgScrollContainerRef = useRef<HTMLDivElement>(null);
   const corpScrollContainerRef = useRef<HTMLDivElement>(null);
   const [isExporting, setIsExporting] = useState(false);
-  const [isDocModalOpen, setIsDocModalOpen] = useState(false);
 
   // Search filter
   const [searchQuery, setSearchQuery] = useState('');
@@ -2101,15 +2099,6 @@ export const OrganizationManagement: React.FC = () => {
         </div>
 
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
-          <button
-            type="button"
-            onClick={() => setIsDocModalOpen(true)}
-            className="px-3.5 py-2 rounded-lg text-xs font-semibold transition-all shrink-0 flex items-center justify-center gap-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 cursor-pointer shadow-xs w-full sm:w-auto"
-          >
-            <FileText className="w-3.5 h-3.5 text-indigo-600" />
-            <span>Dokumen SK Karier & Organisasi</span>
-          </button>
-
           <button
             type="button"
             onClick={() => {
@@ -8972,14 +8961,6 @@ export const OrganizationManagement: React.FC = () => {
         document.body
       )}
 
-      {/* Module Document Modal: Karier & Organisasi */}
-      <ModuleDocumentModal
-        isOpen={isDocModalOpen}
-        onClose={() => setIsDocModalOpen(false)}
-        title="Pusat Dokumen Resmi SK Karier & Struktur Organisasi"
-        categoryFilter="Karier & Organisasi"
-        defaultTemplateId="tmpl-3"
-      />
     </div>
   );
 };
