@@ -408,8 +408,8 @@ const divisionSchema = z.object({
   entityId: z.string().uuid(),
   code: z.string().trim().min(1).max(50),
   name: z.string().trim().min(2).max(200),
-  headTitle: z.string().trim().max(200).optional(),
-  description: z.string().trim().max(1000).optional(),
+  headTitle: z.string().trim().max(200).optional().nullable(),
+  description: z.string().trim().max(1000).optional().nullable(),
 });
 
 /** Tenant-wide listing (every entity's divisions) — the frontend filters by entity client-side, same pattern as grades/office-locations below. */
@@ -453,11 +453,11 @@ tenantRouter.delete("/divisions/:id", validateParams(uuidParam("id")), async (re
 
 const departmentSchema = z.object({
   entityId: z.string().uuid(),
-  divisionId: z.string().uuid().optional(),
+  divisionId: z.string().uuid().optional().nullable(),
   code: z.string().trim().min(1).max(50),
   name: z.string().trim().min(2).max(200),
-  headTitle: z.string().trim().max(200).optional(),
-  description: z.string().trim().max(1000).optional(),
+  headTitle: z.string().trim().max(200).optional().nullable(),
+  description: z.string().trim().max(1000).optional().nullable(),
 });
 
 tenantRouter.get("/departments", async (req, res) => {
@@ -502,16 +502,16 @@ const positionSchema = z.object({
   entityId: z.string().uuid(),
   code: z.string().trim().min(1).max(50),
   title: z.string().trim().min(2).max(200),
-  defaultLevel: z.number().int().min(1).max(5).optional(),
-  divisionId: z.string().uuid().optional(),
-  departmentId: z.string().uuid().optional(),
-  jobFamily: z.string().trim().max(100).optional(),
-  jobGrade: z.string().trim().max(50).optional(),
-  minGrade: z.string().trim().max(50).optional(),
-  maxGrade: z.string().trim().max(50).optional(),
-  gradingScheme: z.enum(["single", "broadbanding"]).optional(),
-  description: z.string().trim().max(1000).optional(),
-  requirements: z.string().trim().max(1000).optional(),
+  defaultLevel: z.number().int().min(1).max(5).optional().nullable(),
+  divisionId: z.string().uuid().optional().nullable(),
+  departmentId: z.string().uuid().optional().nullable(),
+  jobFamily: z.string().trim().max(100).optional().nullable(),
+  jobGrade: z.string().trim().max(50).optional().nullable(),
+  minGrade: z.string().trim().max(50).optional().nullable(),
+  maxGrade: z.string().trim().max(50).optional().nullable(),
+  gradingScheme: z.enum(["single", "broadbanding"]).optional().nullable(),
+  description: z.string().trim().max(1000).optional().nullable(),
+  requirements: z.string().trim().max(1000).optional().nullable(),
 });
 
 tenantRouter.get("/positions", async (req, res) => {
@@ -612,14 +612,14 @@ tenantRouter.delete("/org-nodes/:id", validateParams(uuidParam("id")), async (re
 // ---------------------------------------------------------------------------
 
 const gradeSchema = z.object({
-  entityId: z.string().uuid().optional(),
+  entityId: z.string().uuid().optional().nullable(),
   gradeCode: z.string().trim().min(1).max(50),
   gradeName: z.string().trim().min(1).max(200),
-  minSalary: z.number().int().min(0).optional(),
-  midSalary: z.number().int().min(0).optional(),
-  maxSalary: z.number().int().min(0).optional(),
-  singleValueSalary: z.number().int().min(0).optional(),
-  notes: z.string().trim().max(1000).optional(),
+  minSalary: z.number().int().min(0).optional().nullable(),
+  midSalary: z.number().int().min(0).optional().nullable(),
+  maxSalary: z.number().int().min(0).optional().nullable(),
+  singleValueSalary: z.number().int().min(0).optional().nullable(),
+  notes: z.string().trim().max(1000).optional().nullable(),
 });
 
 tenantRouter.post("/grades", validateBody(gradeSchema), async (req, res) => {
