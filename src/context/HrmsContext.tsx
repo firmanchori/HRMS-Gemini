@@ -3845,30 +3845,15 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       )
     );
 
-    // Grades are tenant-wide (not per-entity). A grade is only truly a
-    // duplicate if BOTH its code and name already exist (re-applying the
-    // same template). If the code collides with a differently-named grade
-    // (e.g. a generic seeded "G1" vs. this template's own "G1"), mint a
-    // fresh code instead of silently dropping the template's grade — codes
-    // must stay unique tenant-wide since positions/UI look grades up by code.
-    const existingByCode = new Map(gradeSalaryRanges.map((g) => [g.gradeCode, g]));
-    const mintedCodes = new Set<string>();
-    const gradesToCreate: typeof template.grades = [];
-    for (const g of template.grades) {
-      const existing = existingByCode.get(g.gradeCode);
-      if (existing && existing.gradeName === g.gradeName) continue; // already applied before
-      if (!existing) {
-        gradesToCreate.push(g);
-        continue;
-      }
-      let code = `${g.gradeCode}-${template.key.toUpperCase()}`;
-      let n = 2;
-      while (existingByCode.has(code) || mintedCodes.has(code)) {
-        code = `${g.gradeCode}-${template.key.toUpperCase()}-${n++}`;
-      }
-      mintedCodes.add(code);
-      gradesToCreate.push({ ...g, gradeCode: code });
-    }
+    // Grades are tenant-wide (not per-entity). gradeCode is a label, not a
+    // unique key (user, 2026-11-03: codes can repeat as a standard, and
+    // different companies may use the same code) — so only skip a
+    // template's grade when BOTH code and name already match exactly
+    // (meaning this exact template was already applied before); otherwise
+    // create it as-is, same code and all.
+    const alreadyApplied = (g: { gradeCode: string; gradeName: string }) =>
+      gradeSalaryRanges.some((existing) => existing.gradeCode === g.gradeCode && existing.gradeName === g.gradeName);
+    const gradesToCreate = template.grades.filter((g) => !alreadyApplied(g));
     const createdGrades = await Promise.all(
       gradesToCreate.map((g) =>
         tenantApi.createGrade({ entityId: null, gradeCode: g.gradeCode, gradeName: g.gradeName, minSalary: g.minSalary ?? null, midSalary: g.midSalary ?? null, maxSalary: g.maxSalary ?? null, singleValueSalary: null, notes: null })
