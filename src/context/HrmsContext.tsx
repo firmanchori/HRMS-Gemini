@@ -3811,35 +3811,65 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       .catch((err) => console.error('Gagal menghapus standar jabatan:', err));
   };
 
-  /** One-click starter setup for a brand-new entity — bulk-creates a predefined set of divisions/departments/jabatan/grade so setup doesn't have to start from a blank slate. Rejects on failure (e.g. entity already locked) so the caller can show it. */
+  /**
+   * Clears an entity's divisions/departments/positions/org-nodes so a
+   * template or copy-from-entity can be tried and re-tried freely while the
+   * entity's baseline is still Open (user, 2026-11-03: template/copy should
+   * replace the existing draft structure, not skip-merge around it — the
+   * backend already refuses this once the entity is locked, via
+   * requireUnlockedEntity, so this never touches a finalized structure).
+   * Deletes in dependency order: nodes first (reference positions/divisions/
+   * departments), then positions, then departments, then divisions. Nodes
+   * also reference EACH OTHER via reportsToId (self-referencing FK), so a
+   * "boss" node can't be deleted in parallel with its own subordinates still
+   * pointing at it — every node's reportsToId is cleared first to break
+   * those links before any node is actually deleted.
+   */
+  const clearEntityOrgStructure = async (entityId: string) => {
+    const nodesToDelete = apiOrgNodes.filter((n) => n.entityId === entityId);
+    const positionsToDelete = apiPositions.filter((p) => p.entityId === entityId);
+    const departmentsToDelete = apiDepartments.filter((d) => d.entityId === entityId);
+    const divisionsToDelete = apiDivisions.filter((d) => d.entityId === entityId);
+
+    await Promise.all(
+      nodesToDelete.filter((n) => n.reportsToId).map((n) => tenantApi.updateOrgNode(n.id, { reportsToId: null }))
+    );
+    await Promise.all(nodesToDelete.map((n) => tenantApi.deleteOrgNode(n.id)));
+    await Promise.all(positionsToDelete.map((p) => tenantApi.deletePosition(p.id)));
+    await Promise.all(departmentsToDelete.map((d) => tenantApi.deleteDepartment(d.id)));
+    await Promise.all(divisionsToDelete.map((d) => tenantApi.deleteDivision(d.id)));
+
+    const nodeIds = new Set(nodesToDelete.map((n) => n.id));
+    const positionIds = new Set(positionsToDelete.map((p) => p.id));
+    const departmentIds = new Set(departmentsToDelete.map((d) => d.id));
+    const divisionIds = new Set(divisionsToDelete.map((d) => d.id));
+    setApiOrgNodes((prev) => prev.filter((n) => !nodeIds.has(n.id)));
+    setApiPositions((prev) => prev.filter((p) => !positionIds.has(p.id)));
+    setApiDepartments((prev) => prev.filter((d) => !departmentIds.has(d.id)));
+    setApiDivisions((prev) => prev.filter((d) => !divisionIds.has(d.id)));
+  };
+
+  /** One-click starter setup for an entity's baseline — bulk-creates a predefined set of divisions/departments/jabatan/grade/org-nodes. Replaces whatever draft structure the entity already has (see clearEntityOrgStructure); rejects on failure (e.g. entity already locked) so the caller can show it. */
   const applyOrgTemplate = async (entityId: string, templateKey: string) => {
     const template = ORG_STRUCTURE_TEMPLATES.find((t) => t.key === templateKey);
     if (!template) throw new Error('Template tidak ditemukan');
 
-    // Divisions/departments/positions are entity-scoped, so a code IS meant
-    // to be unique within one entity — re-applying the same template (or
-    // clicking the button twice) must reuse what's already there instead of
-    // duplicating it (bug, 2026-11-03: every click created a brand new copy).
-    const existingDivisionsByCode = new Map(apiDivisions.filter((d) => d.entityId === entityId).map((d) => [d.code, d]));
-    const newDivisions = template.divisions.filter((d) => !existingDivisionsByCode.has(d.code));
-    const createdDivisions = await Promise.all(
-      newDivisions.map((d) => tenantApi.createDivision({ entityId, code: d.code, name: d.name, headTitle: d.headTitle ?? null, description: null }))
-    );
-    const divisionByCode = new Map([...existingDivisionsByCode, ...createdDivisions.map((d) => [d.code, d] as const)]);
+    await clearEntityOrgStructure(entityId);
 
-    const existingDepartmentsByCode = new Map(apiDepartments.filter((d) => d.entityId === entityId).map((d) => [d.code, d]));
-    const newDepartmentDefs = template.departments.filter((d) => !existingDepartmentsByCode.has(d.code));
+    const createdDivisions = await Promise.all(
+      template.divisions.map((d) => tenantApi.createDivision({ entityId, code: d.code, name: d.name, headTitle: d.headTitle ?? null, description: null }))
+    );
+    const divisionByCode = new Map(createdDivisions.map((d) => [d.code, d]));
+
     const createdDepartments = await Promise.all(
-      newDepartmentDefs.map((d) =>
+      template.departments.map((d) =>
         tenantApi.createDepartment({ entityId, divisionId: divisionByCode.get(d.divisionCode)?.id ?? null, code: d.code, name: d.name, headTitle: null, description: null })
       )
     );
-    const departmentByCode = new Map([...existingDepartmentsByCode, ...createdDepartments.map((d) => [d.code, d] as const)]);
+    const departmentByCode = new Map(createdDepartments.map((d) => [d.code, d]));
 
-    const existingPositionsByCode = new Map(apiPositions.filter((p) => p.entityId === entityId).map((p) => [p.code, p]));
-    const newPositionDefs = template.positions.filter((p) => !existingPositionsByCode.has(p.code));
     const createdPositions = await Promise.all(
-      newPositionDefs.map((p) =>
+      template.positions.map((p) =>
         tenantApi.createPosition({
           entityId,
           code: p.code,
@@ -3857,14 +3887,14 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         })
       )
     );
-    const positionByCode = new Map([...existingPositionsByCode, ...createdPositions.map((p) => [p.code, p] as const)]);
+    const positionByCode = new Map(createdPositions.map((p) => [p.code, p]));
 
-    // Grades are tenant-wide (not per-entity). gradeCode is a label, not a
-    // unique key (user, 2026-11-03: codes can repeat as a standard, and
-    // different companies may use the same code) — so only skip a
-    // template's grade when BOTH code and name already match exactly
-    // (meaning this exact template was already applied before); otherwise
-    // create it as-is, same code and all.
+    // Grades are tenant-wide (not per-entity), so clearEntityOrgStructure
+    // never touches them. gradeCode is a label, not a unique key (user,
+    // 2026-11-03: codes can repeat as a standard, and different companies
+    // may use the same code) — so only skip a template's grade when BOTH
+    // code and name already match exactly (meaning this exact template was
+    // already applied before); otherwise create it as-is, same code and all.
     const alreadyApplied = (g: { gradeCode: string; gradeName: string }) =>
       gradeSalaryRanges.some((existing) => existing.gradeCode === g.gradeCode && existing.gradeName === g.gradeName);
     const gradesToCreate = template.grades.filter((g) => !alreadyApplied(g));
@@ -3877,70 +3907,61 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // The "Struktur Organisasi" diagram renders org-nodes, NOT the division/
     // department/position master lists directly (bug, 2026-11-03: the
     // template never created any, so the diagram stayed empty even though
-    // the master data existed). One node per template position, skipping any
-    // position that already has a node (matched by masterJobPositionId) from
-    // an earlier apply. Templates don't encode reportsTo explicitly, so the
-    // boss is inferred: the closest lower-level position in the same
-    // department, else same division, else the entity-wide top position.
-    const existingNodePositionIds = new Set(
-      apiOrgNodes.filter((n) => n.entityId === entityId && n.masterJobPositionId).map((n) => n.masterJobPositionId)
+    // the master data existed). One node per template position. Templates
+    // don't encode reportsTo explicitly, so the boss is inferred: the
+    // closest lower-level position in the same department, else same
+    // division, else the entity-wide top position.
+    const closestBossCode = (p: (typeof template.positions)[number]) => {
+      const lowerLevel = template.positions.filter((other) => other.code !== p.code && other.defaultLevel < p.defaultLevel);
+      const inDept = p.departmentCode ? lowerLevel.filter((c) => c.departmentCode === p.departmentCode) : [];
+      const inDiv = p.divisionCode ? lowerLevel.filter((c) => c.divisionCode === p.divisionCode) : [];
+      const topLevel = lowerLevel.filter((c) => !c.divisionCode && !c.departmentCode);
+      const pool = inDept.length ? inDept : inDiv.length ? inDiv : topLevel.length ? topLevel : lowerLevel;
+      if (pool.length === 0) return null;
+      return pool.reduce((closest, c) => (c.defaultLevel > closest.defaultLevel ? c : closest)).code;
+    };
+
+    const createdNodesRaw = await Promise.all(
+      template.positions.map((p) => {
+        const pos = positionByCode.get(p.code)!;
+        return tenantApi.createOrgNode({
+          entityId,
+          title: pos.title,
+          divisionId: pos.divisionId,
+          departmentId: pos.departmentId,
+          reportsToId: null, // relinked below, once every node has a real id
+          code: pos.code,
+          jobGrade: null,
+          description: null,
+          relationType: 'struktural',
+          isVacant: true,
+          level: p.defaultLevel,
+          masterJobPositionId: pos.id,
+        });
+      })
     );
-    const positionsNeedingNodes = template.positions
-      .map((p) => positionByCode.get(p.code)!)
-      .filter((pos) => pos && !existingNodePositionIds.has(pos.id));
+    const nodeIdByPositionCode = new Map(template.positions.map((p, i) => [p.code, createdNodesRaw[i].id]));
+    const createdNodes = await Promise.all(
+      template.positions.map((p, i) => {
+        const bossCode = closestBossCode(p);
+        const bossNodeId = bossCode ? nodeIdByPositionCode.get(bossCode) : undefined;
+        return bossNodeId ? tenantApi.updateOrgNode(createdNodesRaw[i].id, { reportsToId: bossNodeId }) : createdNodesRaw[i];
+      })
+    );
 
-    if (positionsNeedingNodes.length > 0) {
-      const closestBossCode = (p: (typeof template.positions)[number]) => {
-        const lowerLevel = template.positions.filter((other) => other.code !== p.code && other.defaultLevel < p.defaultLevel);
-        const inDept = p.departmentCode ? lowerLevel.filter((c) => c.departmentCode === p.departmentCode) : [];
-        const inDiv = p.divisionCode ? lowerLevel.filter((c) => c.divisionCode === p.divisionCode) : [];
-        const topLevel = lowerLevel.filter((c) => !c.divisionCode && !c.departmentCode);
-        const pool = inDept.length ? inDept : inDiv.length ? inDiv : topLevel.length ? topLevel : lowerLevel;
-        if (pool.length === 0) return null;
-        return pool.reduce((closest, c) => (c.defaultLevel > closest.defaultLevel ? c : closest)).code;
-      };
-
-      const createdNodesRaw = await Promise.all(
-        positionsNeedingNodes.map((pos) => {
-          const tp = template.positions.find((p) => p.code === pos.code)!;
-          return tenantApi.createOrgNode({
-            entityId,
-            title: pos.title,
-            divisionId: pos.divisionId,
-            departmentId: pos.departmentId,
-            reportsToId: null, // relinked below, once every node has a real id
-            code: pos.code,
-            jobGrade: null,
-            description: null,
-            relationType: 'struktural',
-            isVacant: true,
-            level: tp.defaultLevel,
-            masterJobPositionId: pos.id,
-          });
-        })
-      );
-      const nodeIdByPositionCode = new Map(positionsNeedingNodes.map((pos, i) => [pos.code, createdNodesRaw[i].id]));
-      const createdNodes = await Promise.all(
-        positionsNeedingNodes.map((pos, i) => {
-          const tp = template.positions.find((p) => p.code === pos.code)!;
-          const bossCode = closestBossCode(tp);
-          const bossNodeId = bossCode ? nodeIdByPositionCode.get(bossCode) : undefined;
-          return bossNodeId ? tenantApi.updateOrgNode(createdNodesRaw[i].id, { reportsToId: bossNodeId }) : createdNodesRaw[i];
-        })
-      );
-      setApiOrgNodes((prev) => [...prev, ...createdNodes]);
-    }
-
-    if (createdDivisions.length > 0) setApiDivisions((prev) => [...prev, ...createdDivisions]);
-    if (createdDepartments.length > 0) setApiDepartments((prev) => [...prev, ...createdDepartments]);
-    if (createdPositions.length > 0) setApiPositions((prev) => [...prev, ...createdPositions]);
+    setApiDivisions((prev) => [...prev, ...createdDivisions]);
+    setApiDepartments((prev) => [...prev, ...createdDepartments]);
+    setApiPositions((prev) => [...prev, ...createdPositions]);
+    setApiOrgNodes((prev) => [...prev, ...createdNodes]);
     if (createdGrades.length > 0) setApiGrades((prev) => [...prev, ...createdGrades]);
 
     logAuditAction('Struktur Organisasi', 'TERAPKAN_TEMPLATE', entityId, `Menerapkan template "${template.label}" untuk entitas ${entityId}`);
   };
 
-  /** Copies another entity's divisions/departments/master jabatan as a starting point for this one — a faster alternative to the built-in templates when an existing entity already has the right shape. */
+  /** Copies another entity's divisions/departments/master jabatan as a starting point for this one — a faster alternative to the built-in templates when an existing entity already has the right shape. Replaces whatever draft structure the target entity already has (see clearEntityOrgStructure). */
   const copyOrgStructureFromEntity = async (targetEntityId: string, sourceEntityId: string) => {
+    await clearEntityOrgStructure(targetEntityId);
+
     const sourceDivisions = apiDivisions.filter((d) => d.entityId === sourceEntityId);
     const sourceDepartments = apiDepartments.filter((d) => d.entityId === sourceEntityId);
     const sourcePositions = apiPositions.filter((p) => p.entityId === sourceEntityId);

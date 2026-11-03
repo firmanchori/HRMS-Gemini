@@ -555,16 +555,16 @@ tenantRouter.delete("/positions/:id", validateParams(uuidParam("id")), async (re
 const orgNodeSchema = z.object({
   entityId: z.string().uuid(),
   title: z.string().trim().min(2).max(200),
-  divisionId: z.string().uuid().optional(),
-  departmentId: z.string().uuid().optional(),
-  code: z.string().trim().max(50).optional(),
-  jobGrade: z.string().trim().max(50).optional(),
-  description: z.string().trim().max(1000).optional(),
-  reportsToId: z.string().uuid().optional(),
+  divisionId: z.string().uuid().optional().nullable(),
+  departmentId: z.string().uuid().optional().nullable(),
+  code: z.string().trim().max(50).optional().nullable(),
+  jobGrade: z.string().trim().max(50).optional().nullable(),
+  description: z.string().trim().max(1000).optional().nullable(),
+  reportsToId: z.string().uuid().optional().nullable(),
   relationType: z.enum(["struktural", "administratif"]).optional(),
   isVacant: z.boolean().optional(),
   level: z.number().int().min(1).optional(),
-  masterJobPositionId: z.string().uuid().optional(),
+  masterJobPositionId: z.string().uuid().optional().nullable(),
 });
 
 tenantRouter.get("/org-nodes", async (req, res) => {
