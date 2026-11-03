@@ -1501,10 +1501,13 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [reimbursementClaims]);
 
 
-  // Filtered scoped items for active tenant
+  // Real backend data, already tenant-scoped server-side — NOT re-filtered by
+  // currentTenant.id (bug, 2026-11-03: currentTenant is still mock/App-Owner
+  // tenant-switcher state whose id never matches the real tenant UUID, so this
+  // filter silently emptied every real employee list for every real session).
   const tenantEmployees = useMemo(
-    () => employees.filter((e) => e.tenantId === currentTenant.id),
-    [employees, currentTenant.id]
+    () => employees,
+    [employees]
   );
 
   // 1. Employee & Personalia Functions
@@ -3813,27 +3816,37 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const template = ORG_STRUCTURE_TEMPLATES.find((t) => t.key === templateKey);
     if (!template) throw new Error('Template tidak ditemukan');
 
+    // Divisions/departments/positions are entity-scoped, so a code IS meant
+    // to be unique within one entity — re-applying the same template (or
+    // clicking the button twice) must reuse what's already there instead of
+    // duplicating it (bug, 2026-11-03: every click created a brand new copy).
+    const existingDivisionsByCode = new Map(apiDivisions.filter((d) => d.entityId === entityId).map((d) => [d.code, d]));
+    const newDivisions = template.divisions.filter((d) => !existingDivisionsByCode.has(d.code));
     const createdDivisions = await Promise.all(
-      template.divisions.map((d) => tenantApi.createDivision({ entityId, code: d.code, name: d.name, headTitle: d.headTitle ?? null, description: null }))
+      newDivisions.map((d) => tenantApi.createDivision({ entityId, code: d.code, name: d.name, headTitle: d.headTitle ?? null, description: null }))
     );
-    const divisionIdByCode = new Map(template.divisions.map((d, i) => [d.code, createdDivisions[i].id]));
+    const divisionByCode = new Map([...existingDivisionsByCode, ...createdDivisions.map((d) => [d.code, d] as const)]);
 
+    const existingDepartmentsByCode = new Map(apiDepartments.filter((d) => d.entityId === entityId).map((d) => [d.code, d]));
+    const newDepartmentDefs = template.departments.filter((d) => !existingDepartmentsByCode.has(d.code));
     const createdDepartments = await Promise.all(
-      template.departments.map((d) =>
-        tenantApi.createDepartment({ entityId, divisionId: divisionIdByCode.get(d.divisionCode) ?? null, code: d.code, name: d.name, headTitle: null, description: null })
+      newDepartmentDefs.map((d) =>
+        tenantApi.createDepartment({ entityId, divisionId: divisionByCode.get(d.divisionCode)?.id ?? null, code: d.code, name: d.name, headTitle: null, description: null })
       )
     );
-    const departmentIdByCode = new Map(template.departments.map((d, i) => [d.code, createdDepartments[i].id]));
+    const departmentByCode = new Map([...existingDepartmentsByCode, ...createdDepartments.map((d) => [d.code, d] as const)]);
 
+    const existingPositionsByCode = new Map(apiPositions.filter((p) => p.entityId === entityId).map((p) => [p.code, p]));
+    const newPositionDefs = template.positions.filter((p) => !existingPositionsByCode.has(p.code));
     const createdPositions = await Promise.all(
-      template.positions.map((p) =>
+      newPositionDefs.map((p) =>
         tenantApi.createPosition({
           entityId,
           code: p.code,
           title: p.title,
           defaultLevel: p.defaultLevel,
-          divisionId: p.divisionCode ? divisionIdByCode.get(p.divisionCode) ?? null : null,
-          departmentId: p.departmentCode ? departmentIdByCode.get(p.departmentCode) ?? null : null,
+          divisionId: p.divisionCode ? divisionByCode.get(p.divisionCode)?.id ?? null : null,
+          departmentId: p.departmentCode ? departmentByCode.get(p.departmentCode)?.id ?? null : null,
           jobFamily: null,
           jobGrade: null,
           minGrade: null,
@@ -3844,6 +3857,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         })
       )
     );
+    const positionByCode = new Map([...existingPositionsByCode, ...createdPositions.map((p) => [p.code, p] as const)]);
 
     // Grades are tenant-wide (not per-entity). gradeCode is a label, not a
     // unique key (user, 2026-11-03: codes can repeat as a standard, and
@@ -3860,9 +3874,66 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       )
     );
 
-    setApiDivisions((prev) => [...prev, ...createdDivisions]);
-    setApiDepartments((prev) => [...prev, ...createdDepartments]);
-    setApiPositions((prev) => [...prev, ...createdPositions]);
+    // The "Struktur Organisasi" diagram renders org-nodes, NOT the division/
+    // department/position master lists directly (bug, 2026-11-03: the
+    // template never created any, so the diagram stayed empty even though
+    // the master data existed). One node per template position, skipping any
+    // position that already has a node (matched by masterJobPositionId) from
+    // an earlier apply. Templates don't encode reportsTo explicitly, so the
+    // boss is inferred: the closest lower-level position in the same
+    // department, else same division, else the entity-wide top position.
+    const existingNodePositionIds = new Set(
+      apiOrgNodes.filter((n) => n.entityId === entityId && n.masterJobPositionId).map((n) => n.masterJobPositionId)
+    );
+    const positionsNeedingNodes = template.positions
+      .map((p) => positionByCode.get(p.code)!)
+      .filter((pos) => pos && !existingNodePositionIds.has(pos.id));
+
+    if (positionsNeedingNodes.length > 0) {
+      const closestBossCode = (p: (typeof template.positions)[number]) => {
+        const lowerLevel = template.positions.filter((other) => other.code !== p.code && other.defaultLevel < p.defaultLevel);
+        const inDept = p.departmentCode ? lowerLevel.filter((c) => c.departmentCode === p.departmentCode) : [];
+        const inDiv = p.divisionCode ? lowerLevel.filter((c) => c.divisionCode === p.divisionCode) : [];
+        const topLevel = lowerLevel.filter((c) => !c.divisionCode && !c.departmentCode);
+        const pool = inDept.length ? inDept : inDiv.length ? inDiv : topLevel.length ? topLevel : lowerLevel;
+        if (pool.length === 0) return null;
+        return pool.reduce((closest, c) => (c.defaultLevel > closest.defaultLevel ? c : closest)).code;
+      };
+
+      const createdNodesRaw = await Promise.all(
+        positionsNeedingNodes.map((pos) => {
+          const tp = template.positions.find((p) => p.code === pos.code)!;
+          return tenantApi.createOrgNode({
+            entityId,
+            title: pos.title,
+            divisionId: pos.divisionId,
+            departmentId: pos.departmentId,
+            reportsToId: null, // relinked below, once every node has a real id
+            code: pos.code,
+            jobGrade: null,
+            description: null,
+            relationType: 'struktural',
+            isVacant: true,
+            level: tp.defaultLevel,
+            masterJobPositionId: pos.id,
+          });
+        })
+      );
+      const nodeIdByPositionCode = new Map(positionsNeedingNodes.map((pos, i) => [pos.code, createdNodesRaw[i].id]));
+      const createdNodes = await Promise.all(
+        positionsNeedingNodes.map((pos, i) => {
+          const tp = template.positions.find((p) => p.code === pos.code)!;
+          const bossCode = closestBossCode(tp);
+          const bossNodeId = bossCode ? nodeIdByPositionCode.get(bossCode) : undefined;
+          return bossNodeId ? tenantApi.updateOrgNode(createdNodesRaw[i].id, { reportsToId: bossNodeId }) : createdNodesRaw[i];
+        })
+      );
+      setApiOrgNodes((prev) => [...prev, ...createdNodes]);
+    }
+
+    if (createdDivisions.length > 0) setApiDivisions((prev) => [...prev, ...createdDivisions]);
+    if (createdDepartments.length > 0) setApiDepartments((prev) => [...prev, ...createdDepartments]);
+    if (createdPositions.length > 0) setApiPositions((prev) => [...prev, ...createdPositions]);
     if (createdGrades.length > 0) setApiGrades((prev) => [...prev, ...createdGrades]);
 
     logAuditAction('Struktur Organisasi', 'TERAPKAN_TEMPLATE', entityId, `Menerapkan template "${template.label}" untuk entitas ${entityId}`);
@@ -5029,7 +5100,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updateEmployee,
         deleteEmployee,
         processPersonaliaAction,
-        attendance: attendance.filter((a) => a.tenantId === currentTenant.id),
+        attendance, // real backend data, already tenant-scoped server-side
         leaveRequests: leaveRequests.filter((l) => l.tenantId === currentTenant.id),
         clockIn,
         clockOut,
@@ -5046,12 +5117,12 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         saveKPIReview,
         complianceRecords: complianceRecords.filter((c) => c.tenantId === currentTenant.id),
         issueComplianceAction,
-        vacancies: vacancies.filter((v) => v.id && v.tenantId === currentTenant.id),
-        jobRequisitions: jobRequisitions.filter((r) => r.tenantId === currentTenant.id),
+        vacancies, // real backend data, already tenant-scoped server-side
+        jobRequisitions, // real backend data, already tenant-scoped server-side
         addJobRequisition,
         updateJobRequisition,
         deleteJobRequisition,
-        candidates: candidates.filter((c) => c.tenantId === currentTenant.id),
+        candidates, // real backend data, already tenant-scoped server-side
         addVacancy,
         updateVacancy,
         addCandidate,
@@ -5085,7 +5156,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         createOfficialDocument,
         executeMigrationImport,
         // Advanced Modules
-        onboardingProcesses: onboardingProcesses.filter((o) => o.tenantId === currentTenant.id),
+        onboardingProcesses, // real backend data, already tenant-scoped server-side
         onboardingChecklistTemplates,
         addOnboardingProcess,
         updateOnboardingTask,
@@ -5096,17 +5167,17 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updateOnboardingChecklistTemplates,
         addChecklistTemplateItem,
         removeChecklistTemplateItem,
-        shifts: shifts.filter((s) => s.tenantId === currentTenant.id),
-        schedules: schedules.filter((s) => s.tenantId === currentTenant.id),
+        shifts, // real backend data, already tenant-scoped server-side
+        schedules, // real backend data, already tenant-scoped server-side
         addShift,
         updateShift,
         deleteShift,
         upsertSchedules,
         clearSchedules,
-        shiftSwaps: shiftSwaps.filter((s) => s.tenantId === currentTenant.id),
+        shiftSwaps, // real backend data, already tenant-scoped server-side
         addShiftSwapRequest,
         reviewShiftSwapRequest,
-        attendanceCorrections: attendanceCorrections.filter((c) => c.tenantId === currentTenant.id),
+        attendanceCorrections, // real backend data, already tenant-scoped server-side
         submitAttendanceCorrection,
         reviewAttendanceCorrection,
         businessTrips: (() => {
@@ -5115,9 +5186,9 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         })(),
         submitBusinessTrip,
         reviewBusinessTrip,
-        approvalItems: approvalItems.filter((a) => a.tenantId === currentTenant.id),
+        approvalItems, // real backend data, already tenant-scoped server-side
         reviewApprovalItem,
-        approvalDelegations: approvalDelegations.filter((d) => d.tenantId === currentTenant.id),
+        approvalDelegations, // real backend data, already tenant-scoped server-side
         setApprovalDelegation,
         vendors: vendors.filter((v) => v.tenantId === currentTenant.id),
         addVendor,
@@ -5146,15 +5217,15 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         deleteEntity,
         toggleEntityDepartmentLevel,
         loadTenantOrgData,
-        divisions: divisions.filter((d) => entities.some((e) => e.id === d.entityId && e.tenantId === currentTenant.id)),
+        divisions, // real backend data, already tenant-scoped server-side
         addDivision,
         updateDivision,
         deleteDivision,
-        departments: departments.filter((dept) => entities.some((e) => e.id === dept.entityId && e.tenantId === currentTenant.id)),
+        departments, // real backend data, already tenant-scoped server-side
         addDepartment,
         updateDepartment,
         deleteDepartment,
-        masterJobPositions: masterJobPositions.filter((mjp) => entities.some((e) => e.id === mjp.entityId && e.tenantId === currentTenant.id)),
+        masterJobPositions, // real backend data, already tenant-scoped server-side
         addMasterJobPosition,
         updateMasterJobPosition,
         deleteMasterJobPosition,
@@ -5168,7 +5239,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         addEmployeeStaging,
         updateEmployeeStagingTask,
         completeOnboarding,
-        overtimeRequests: overtimeRequests.filter((o) => o.tenantId === currentTenant.id),
+        overtimeRequests, // real backend data, already tenant-scoped server-side
         submitOvertimeRequest,
         reviewOvertimeRequest,
         reimbursementClaims: reimbursementClaims.filter((c) => c.tenantId === currentTenant.id),
@@ -5182,7 +5253,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isEntityGovernanceLocked,
         toggleEntityGovernanceLock,
         setOrgGovernanceLocked: setIsOrgGovernanceLocked,
-        orgNodes: orgNodes.filter((n) => entities.some((e) => e.id === n.entityId && e.tenantId === currentTenant.id)),
+        orgNodes, // real backend data, already tenant-scoped server-side
         addOrgNode,
         updateOrgNode,
         deleteOrgNode,
@@ -5192,15 +5263,15 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         deleteOrgProposal,
         orgSnapshots: orgSnapshots.filter((s) => s.tenantId === currentTenant.id),
         replaceEntityStructure,
-        probationEvaluations: probationEvaluations.filter((p) => p.tenantId === currentTenant.id),
+        probationEvaluations, // real backend data, already tenant-scoped server-side
         submitProbationEvaluation,
         reviewProbationEvaluation,
-        contractReviews: contractReviews.filter((r) => r.tenantId === currentTenant.id),
+        contractReviews, // real backend data, already tenant-scoped server-side
         submitContractReview,
         reviewContractReview,
         calendarEvents: calendarEvents.filter((c) => c.tenantId === currentTenant.id),
         addCalendarEvent,
-        gradeSalaryRanges: gradeSalaryRanges.filter((g) => g.tenantId === currentTenant.id),
+        gradeSalaryRanges, // real backend data, already tenant-scoped server-side
         addGradeSalaryRange,
         updateGradeSalaryRange,
         deleteGradeSalaryRange,
