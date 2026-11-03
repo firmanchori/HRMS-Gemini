@@ -143,6 +143,7 @@ export interface Employee {
   id: string;
   tenantId: string;
   isShiftWorker?: boolean; // Karyawan shift (masuk roster P/S/M/L)
+  canOvertime?: boolean; // Berhak lembur — default true; jika false, tidak bisa ajukan (ESS) maupun diinput (HR) lembur
   entityId?: string;
   nik: string;
   fullName: string;
@@ -355,6 +356,7 @@ export interface AttendanceRecord {
   lateMinutes: number;
   notes?: string;
   shiftId?: string;
+  workType?: 'WFO' | 'WFH' | 'WFA';
 }
 
 export interface AttendanceCorrectionRequest {

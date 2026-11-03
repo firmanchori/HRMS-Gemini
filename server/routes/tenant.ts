@@ -2187,6 +2187,7 @@ const attendanceRecordSchema = z.object({
   lateMinutes: z.number().int().min(0).optional(),
   notes: z.string().trim().max(1000).optional(),
   shiftId: z.string().trim().max(50).optional(),
+  workType: z.enum(["WFO", "WFH", "WFA"]).optional(),
 });
 
 tenantRouter.post("/attendance-records", validateBody(attendanceRecordSchema), async (req, res) => {

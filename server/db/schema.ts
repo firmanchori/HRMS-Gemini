@@ -1087,6 +1087,9 @@ export const attendanceRecords = pgTable("attendance_records", {
   lateMinutes: integer("late_minutes").notNull().default(0),
   notes: text("notes"),
   shiftId: text("shift_id"),
+  // WFO/WFH/WFA — dipilih wajib sebelum clock-in di ESS (user, 2026-11-03).
+  // Radius geofencing GPS hanya ditegakkan untuk WFO.
+  workType: text("work_type"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 

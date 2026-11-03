@@ -227,7 +227,7 @@ interface HrmsContextType {
   // 2. Attendance & Leave
   attendance: AttendanceRecord[];
   leaveRequests: LeaveRequest[];
-  clockIn: (employeeId: string, notes?: string) => void;
+  clockIn: (employeeId: string, notes?: string, workType?: 'WFO' | 'WFH' | 'WFA') => void;
   clockOut: (employeeId: string, notes?: string) => void;
   submitLeaveRequest: (request: Omit<LeaveRequest, 'id' | 'tenantId' | 'status'>) => void;
   reviewLeaveRequest: (id: string, approved: boolean) => void;
@@ -1748,7 +1748,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   };
 
-  const clockIn = (employeeId: string, notes?: string) => {
+  const clockIn = (employeeId: string, notes?: string, workType?: 'WFO' | 'WFH' | 'WFA') => {
     const now = new Date();
     const today = now.toISOString().split('T')[0];
     const timeStr = now.toTimeString().substring(0, 5);
@@ -1770,6 +1770,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       lateMinutes,
       notes: notes || existing?.notes || 'Presensi ESS Mobile/Webcam Terverifikasi',
       shiftId: existing?.shiftId,
+      workType: workType || existing?.workType,
     });
   };
 

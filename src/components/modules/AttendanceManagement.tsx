@@ -48,6 +48,7 @@ import { ShiftRosterManagement } from './ShiftRosterManagement';
 export const AttendanceManagement: React.FC = () => {
   const {
     employees,
+    updateEmployee,
     attendance,
     currentTenant,
     leaveRequests,
@@ -244,6 +245,7 @@ export const AttendanceManagement: React.FC = () => {
   const [latePenaltyPerHour, setLatePenaltyPerHour] = useState(moduleSettings.attendance.latePenaltyPerHour || 50000);
   // Catatan: gpsRadius TIDAK diatur di sini — setiap Lokasi Kantor punya radius sendiri (Menu Lokasi Kantor)
   const [requireCamera, setRequireCamera] = useState(moduleSettings.attendance.cameraSelfieRequired ?? true);
+  const [overtimeEligibilitySearch, setOvertimeEligibilitySearch] = useState('');
 
   // Kuota & Batas Toleransi per 1 Periode Payroll / 1 Bulan
   const [maxLateMonthly, setMaxLateMonthly] = useState(moduleSettings.attendance.maxLateOccurrencesMonthly ?? 3);
@@ -299,17 +301,6 @@ export const AttendanceManagement: React.FC = () => {
 
     setIsLeaveModalOpen(false);
     setLeaveReason('');
-  };
-
-  const handlePunchClock = () => {
-    if (!clockEmpId) return;
-    if (clockType === 'in') {
-      clockIn(clockEmpId, clockNote || 'Presensi ESS dengan Kamera & GPS Valid');
-    } else {
-      clockOut(clockEmpId, clockNote || 'Clock-out Mandiri Selesai Jam Kerja');
-    }
-    setIsClockModalOpen(false);
-    setClockNote('');
   };
 
   const handleShiftSwapSubmit = (e: React.FormEvent) => {
@@ -1283,6 +1274,41 @@ export const AttendanceManagement: React.FC = () => {
               >
                 Simpan Konfigurasi Presensi
               </button>
+            </div>
+          </div>
+
+          {/* Hak Lembur per Karyawan — jika tidak dicentang, karyawan tidak bisa
+              mengajukan lembur di ESS dan HR tidak bisa menginput/menyetujui
+              lembur untuk karyawan tsb (user, 2026-11-03). Default: bisa lembur. */}
+          <div className="pt-2 border-t border-slate-200">
+            <h3 className="text-sm font-bold text-slate-900 mb-1">Hak Lembur per Karyawan</h3>
+            <p className="text-xs text-slate-500 mb-3">
+              Karyawan yang tidak dicentang tidak bisa mengajukan lembur di ESS, dan lembur tidak bisa diinput/disetujui untuk karyawan tersebut.
+            </p>
+            <input
+              value={overtimeEligibilitySearch}
+              onChange={(e) => setOvertimeEligibilitySearch(e.target.value)}
+              placeholder="Cari nama / NIK…"
+              className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-xs mb-2"
+            />
+            <div className="max-h-64 overflow-y-auto divide-y divide-slate-100 border border-slate-200 rounded-xl">
+              {employees
+                .filter((e) => e.status === 'Aktif')
+                .filter((e) => `${e.fullName} ${e.nik}`.toLowerCase().includes(overtimeEligibilitySearch.trim().toLowerCase()))
+                .map((e) => (
+                  <label key={e.id} className="flex items-center gap-3 px-3 py-2 text-xs hover:bg-slate-50 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={e.canOvertime !== false}
+                      onChange={(ev) => updateEmployee(e.id, { canOvertime: ev.target.checked })}
+                      className="rounded text-indigo-600 w-4 h-4"
+                    />
+                    <span className="flex-1 min-w-0">
+                      <span className="block font-semibold text-slate-900 truncate">{e.fullName}</span>
+                      <span className="block text-[10px] text-slate-400 truncate">{e.nik} · {e.department}</span>
+                    </span>
+                  </label>
+                ))}
             </div>
           </div>
         </div>

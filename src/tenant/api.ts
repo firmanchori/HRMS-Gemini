@@ -460,6 +460,7 @@ export interface AttendanceRecord {
   lateMinutes: number;
   notes: string | null;
   shiftId: string | null;
+  workType: "WFO" | "WFH" | "WFA" | null;
 }
 
 export interface AttendanceCorrectionRequest {

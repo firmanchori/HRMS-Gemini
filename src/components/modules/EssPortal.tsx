@@ -26,7 +26,6 @@ import {
 import { ScrollableTabNav } from '../common/ScrollableTabNav';
 import { formatRupiah } from '../../utils/taxCalculator';
 import { CurrencyInput } from '../common/CurrencyInput';
-import { EmployeeSelect } from '../common/EmployeeSelect';
 import { REIMBURSEMENT_CATEGORIES, ReimbursementCategory } from '../../types/hrms';
 
 export const EssPortal: React.FC = () => {
@@ -75,26 +74,26 @@ export const EssPortal: React.FC = () => {
   >('cuti');
 
   const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
-  const [clockEmpId, setClockEmpId] = useState(currentEmp.id || employees[0]?.id || '');
-  const [selectedClockLocationId, setSelectedClockLocationId] = useState<string>('');
+  // Clock-in is always for the logged-in employee — ESS is self-service,
+  // there is no "pick which employee is clocking in" (user, 2026-11-03).
+  const clockEmpId = currentEmp.id;
+  const [clockWorkType, setClockWorkType] = useState<'WFO' | 'WFH' | 'WFA' | ''>('');
   const [simulatedDistanceMeters, setSimulatedDistanceMeters] = useState<number>(18);
   const gpsRadius = moduleSettings?.attendance?.gpsRadiusMeters || 100;
 
-  const selectedClockEmployee = employees.find((e) => e.id === clockEmpId) || currentEmp;
+  // Lokasi penugasan tidak ditampilkan ke karyawan — cukup tahu apakah posisi
+  // GPS sekarang berada dalam radius SALAH SATU lokasi kantor yang
+  // ditugaskan atau tidak (user, 2026-11-03: "misal ada 2 lokasi apakah
+  // masuk di salah satu radius lokasi atau tidak sudah cukup"). Hanya
+  // relevan untuk WFO — WFH/WFA tidak perlu dekat kantor.
   const assignedClockLocations = (() => {
-    const matched = officeLocations.filter(
-      (loc) => loc.isActive && selectedClockEmployee?.officeLocationIds?.includes(loc.id)
-    );
+    const matched = officeLocations.filter((loc) => loc.isActive && currentEmp?.officeLocationIds?.includes(loc.id));
     if (matched.length > 0) return matched;
-    return officeLocations.filter((loc) => loc.isActive).slice(0, 1);
+    return officeLocations.filter((loc) => loc.isActive);
   })();
-
-  const activeClockLocation =
-    assignedClockLocations.find((loc) => loc.id === selectedClockLocationId) ||
-    assignedClockLocations[0] ||
-    officeLocations[0];
-  const activeLocationRadius = activeClockLocation?.radiusMeters || gpsRadius;
-  const isWithinRadius = simulatedDistanceMeters <= activeLocationRadius;
+  const nearestLocationRadius = assignedClockLocations.length > 0 ? Math.max(...assignedClockLocations.map((l) => l.radiusMeters)) : gpsRadius;
+  const isWithinAnyOfficeRadius = assignedClockLocations.some((loc) => simulatedDistanceMeters <= loc.radiusMeters);
+  const isWithinRadius = clockWorkType !== 'WFO' || isWithinAnyOfficeRadius;
 
   // Forms State
   const [leaveForm, setLeaveForm] = useState({
@@ -226,6 +225,10 @@ export const EssPortal: React.FC = () => {
   // Handle Overtime Submission
   const handleSubmitOvertime = (e: React.FormEvent) => {
     e.preventDefault();
+    if (currentEmp.canOvertime === false) {
+      alert('Anda tidak memiliki hak lembur — hubungi HR jika ini keliru.');
+      return;
+    }
     if (!overtimeForm.taskDescription.trim()) {
       alert('Uraian tugas lembur wajib diisi.');
       return;
@@ -630,18 +633,22 @@ export const EssPortal: React.FC = () => {
           <div className="flex flex-wrap gap-2">
             {[
               { id: 'cuti', label: 'Pengajuan Cuti', icon: Calendar },
-              { id: 'lembur', label: 'Pengajuan Lembur', icon: Clock },
+              { id: 'lembur', label: 'Pengajuan Lembur', icon: Clock, disabled: currentEmp.canOvertime === false },
               { id: 'koreksi_presensi', label: 'Perbaikan Presensi', icon: CheckCircle2 },
               { id: 'reimburse', label: 'Klaim Reimbursement', icon: Receipt },
               { id: 'sppd', label: 'Perjalanan Dinas (SPPD)', icon: Plane },
               { id: 'kasbon', label: 'Pinjaman & Kasbon', icon: Wallet },
-            ].map(({ id, label, icon: Icon }) => (
+            ].map(({ id, label, icon: Icon, disabled }) => (
               <button
                 key={id}
                 type="button"
-                onClick={() => setSubmissionCategory(id as any)}
+                disabled={disabled}
+                title={disabled ? 'Anda tidak memiliki hak lembur — hubungi HR jika ini keliru.' : undefined}
+                onClick={() => !disabled && setSubmissionCategory(id as any)}
                 className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold transition-all ${
-                  submissionCategory === id
+                  disabled
+                    ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                    : submissionCategory === id
                     ? 'bg-indigo-600 text-white shadow-xs'
                     : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
                 }`}
@@ -1323,104 +1330,83 @@ export const EssPortal: React.FC = () => {
           <div className="text-center space-y-1">
             <h3 className="text-base font-bold text-slate-900">Employee Self-Service (ESS) Clock-In (GPS)</h3>
             <p className="text-xs text-slate-500">
-              Validasi Geofencing GPS mengikuti penugasan <strong>Lokasi Kantor</strong> karyawan (Radius Maks.{' '}
-              <strong>{activeLocationRadius}m</strong>) & swafoto biometrik kamera.
+              Presensi untuk <strong>{currentEmp.fullName}</strong> ({currentEmp.nik}) — pilih jenis kehadiran, validasi geofencing GPS (untuk WFO) & swafoto biometrik kamera.
             </p>
           </div>
 
-          <EmployeeSelect
-            label="Karyawan yang Melakukan Presensi"
-            required
-            employees={employees}
-            value={clockEmpId}
-            onChange={(id) => {
-              setClockEmpId(id);
-              setSelectedClockLocationId('');
-              setSimulatedDistanceMeters(18);
-            }}
-          />
-
-          {/* Lokasi Kantor Penugasan Karyawan */}
-          <div className="p-3.5 bg-indigo-50/70 border border-indigo-200 rounded-xl space-y-2.5">
-            <div className="flex items-center justify-between">
-              <div className="text-xs font-bold text-indigo-950 flex items-center gap-1.5">
-                <MapPin className="w-3.5 h-3.5 text-indigo-600" />
-                <span>Lokasi Kantor Penugasan ({assignedClockLocations.length} Lokasi Aktif)</span>
-              </div>
-              <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-indigo-600 text-white">
-                Radius Maks: {activeLocationRadius} Meter
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {assignedClockLocations.map((loc) => {
-                const isSelected = activeClockLocation?.id === loc.id;
-                return (
-                  <button
-                    key={loc.id}
-                    type="button"
-                    onClick={() => setSelectedClockLocationId(loc.id)}
-                    className={`p-2.5 rounded-lg border text-left transition-all ${
-                      isSelected
-                        ? 'bg-white border-indigo-600 ring-2 ring-indigo-500/20 shadow-2xs'
-                        : 'bg-white/70 border-slate-200 hover:border-indigo-300'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-1">
-                      <span className="text-xs font-bold text-slate-900 truncate">{loc.name}</span>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 font-mono font-bold shrink-0">
-                        {loc.radiusMeters}m
-                      </span>
-                    </div>
-                    <div className="text-[10px] text-slate-500 truncate mt-0.5">
-                      {loc.companyName} · {loc.type}
-                    </div>
-                    <div className="text-[10px] text-slate-400 font-mono mt-0.5">
-                      Lat/Long: {loc.latitude.toFixed(5)}, {loc.longitude.toFixed(5)}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Simulasi Posisi GPS Karyawan — Radius ditetapkan oleh HR, tidak bisa diubah karyawan */}
-            <div className="pt-2 border-t border-indigo-200/70 space-y-1.5">
-              <div className="flex items-center justify-between text-[11px]">
-                <span className="text-slate-600 font-medium">
-                  Deteksi Jarak GPS ke <strong>{activeClockLocation?.name}</strong>:
-                </span>
-                <span
-                  className={`font-mono font-bold ${
-                    isWithinRadius ? 'text-emerald-700' : 'text-rose-600'
+          {/* Jenis Kehadiran — wajib dipilih sebelum bisa clock-in (user, 2026-11-03) */}
+          <div>
+            <label className="font-semibold text-slate-700 block mb-1.5 text-xs">Jenis Kehadiran *</label>
+            <div className="grid grid-cols-3 gap-2">
+              {([
+                { id: 'WFO', label: 'WFO', desc: 'Kerja dari Kantor' },
+                { id: 'WFH', label: 'WFH', desc: 'Kerja dari Rumah' },
+                { id: 'WFA', label: 'WFA', desc: 'Kerja dari Mana Saja' },
+              ] as const).map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setClockWorkType(t.id)}
+                  className={`p-2.5 rounded-lg border text-center transition-all ${
+                    clockWorkType === t.id
+                      ? 'bg-indigo-600 border-indigo-600 text-white shadow-xs'
+                      : 'bg-white border-slate-200 text-slate-600 hover:border-indigo-300'
                   }`}
                 >
-                  {simulatedDistanceMeters}m / Maks. {activeLocationRadius}m
+                  <div className="text-xs font-bold">{t.label}</div>
+                  <div className={`text-[10px] mt-0.5 ${clockWorkType === t.id ? 'text-indigo-100' : 'text-slate-400'}`}>{t.desc}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Status Radius Kantor — hanya relevan & ditampilkan untuk WFO.
+              Lokasi penugasan spesifik tidak ditampilkan, cukup status
+              lolos/tidak terhadap salah satu lokasi kantor aktif (user,
+              2026-11-03). */}
+          {clockWorkType === 'WFO' && (
+            <div className="p-3.5 bg-indigo-50/70 border border-indigo-200 rounded-xl space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div className="text-xs font-bold text-indigo-950 flex items-center gap-1.5">
+                  <MapPin className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>Validasi Radius Kantor</span>
+                </div>
+                <span
+                  className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded ${
+                    isWithinAnyOfficeRadius ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white'
+                  }`}
+                >
+                  {isWithinAnyOfficeRadius ? 'Dalam Radius' : 'Di Luar Radius'}
                 </span>
               </div>
-              {/* Slider ini merupakan SIMULASI posisi GPS karyawan (demo prototype) — 
-                  di produksi nyata posisi ini otomatis dari GPS device. 
-                  Radius absensi ditetapkan oleh HR/Admin di Menu Lokasi Kantor, bukan oleh karyawan. */}
-              <div className="relative">
+
+              {/* Simulasi Posisi GPS Karyawan — demo prototype; di produksi nyata posisi ini otomatis dari GPS device. */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="text-slate-600 font-medium">Deteksi Jarak GPS ke lokasi kantor terdekat:</span>
+                  <span className={`font-mono font-bold ${isWithinAnyOfficeRadius ? 'text-emerald-700' : 'text-rose-600'}`}>
+                    {simulatedDistanceMeters}m
+                  </span>
+                </div>
                 <input
                   type="range"
                   min={5}
-                  max={Math.max(activeLocationRadius * 2, 300)}
+                  max={Math.max(nearestLocationRadius * 2, 300)}
                   value={simulatedDistanceMeters}
                   onChange={(e) => setSimulatedDistanceMeters(Number(e.target.value))}
                   className="w-full accent-indigo-600 cursor-pointer h-1.5"
                   title="Simulasi posisi GPS (demo) — di produksi nyata posisi GPS terdeteksi otomatis"
                 />
-              </div>
-              <div className="flex items-center gap-1.5 text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
-                <span className="shrink-0">⚙</span>
-                <span>
-                  <strong>Radius {activeLocationRadius}m</strong> ditetapkan oleh HR/Admin di{' '}
-                  <strong>Menu Lokasi Kantor</strong>. Karyawan tidak dapat mengubah radius absensi.{' '}
-                  <em>(Slider di atas hanya simulasi posisi GPS untuk keperluan demo.)</em>
-                </span>
+                <div className="flex items-center gap-1.5 text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
+                  <span className="shrink-0">⚙</span>
+                  <span>
+                    Radius ditetapkan oleh HR/Admin di <strong>Menu Lokasi Kantor</strong>, cukup berada dalam radius salah satu lokasi aktif.{' '}
+                    <em>(Slider di atas hanya simulasi posisi GPS untuk keperluan demo.)</em>
+                  </span>
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           <div className="p-4 bg-slate-900 text-white rounded-xl text-center space-y-3">
             <div className="relative w-48 h-36 mx-auto rounded-lg overflow-hidden border-2 border-indigo-500 bg-slate-800 flex items-center justify-center">
@@ -1430,44 +1416,38 @@ export const EssPortal: React.FC = () => {
               </div>
             </div>
 
-            <div
-              className={`text-xs font-mono flex items-center justify-center gap-1 ${
-                isWithinRadius ? 'text-emerald-400' : 'text-rose-400'
-              }`}
-            >
-              <MapPin className="w-3.5 h-3.5 shrink-0" />
-              <span>
-                {isWithinRadius
-                  ? `Lokasi Valid: ${activeClockLocation?.name} (Jarak ${simulatedDistanceMeters}m ≤ Radius ${activeLocationRadius}m)`
-                  : `Di Luar Radius: ${activeClockLocation?.name} (Jarak ${simulatedDistanceMeters}m > Radius ${activeLocationRadius}m)`}
-              </span>
-            </div>
-          </div>
-
-          <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono text-slate-700 flex items-center justify-between">
-            <span>Titik Lokasi Presensi:</span>
-            <span className="text-indigo-700 font-bold">
-              {activeClockLocation?.name} ({activeClockLocation?.type})
-            </span>
+            {clockWorkType ? (
+              <div
+                className={`text-xs font-mono flex items-center justify-center gap-1 ${
+                  isWithinRadius ? 'text-emerald-400' : 'text-rose-400'
+                }`}
+              >
+                <MapPin className="w-3.5 h-3.5 shrink-0" />
+                <span>
+                  {clockWorkType !== 'WFO'
+                    ? `Jenis Kehadiran: ${clockWorkType} (tidak perlu validasi lokasi kantor)`
+                    : isWithinRadius
+                    ? `Lokasi Valid (Dalam Radius Kantor)`
+                    : `Di Luar Radius Kantor`}
+                </span>
+              </div>
+            ) : (
+              <div className="text-xs font-mono text-amber-400">Pilih jenis kehadiran (WFO/WFH/WFA) terlebih dahulu.</div>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <button
               type="button"
-              disabled={!isWithinRadius}
+              disabled={!clockWorkType || !isWithinRadius}
               onClick={() => {
-                if (clockEmpId && isWithinRadius) {
-                  clockIn(
-                    clockEmpId,
-                    `Presensi ESS di ${activeClockLocation?.name} (Jarak ${simulatedDistanceMeters}m / Radius ${activeLocationRadius}m)`
-                  );
-                  setNoticeMessage(
-                    `Clock-in Masuk Kerja di ${activeClockLocation?.name} (Radius ${activeLocationRadius}m) berhasil tercatat!`
-                  );
+                if (clockEmpId && clockWorkType && isWithinRadius) {
+                  clockIn(clockEmpId, `Presensi ESS (${clockWorkType})`, clockWorkType);
+                  setNoticeMessage(`Clock-in Masuk Kerja (${clockWorkType}) berhasil tercatat!`);
                 }
               }}
               className={`py-3 rounded-lg font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-1.5 ${
-                isWithinRadius
+                clockWorkType && isWithinRadius
                   ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
                   : 'bg-slate-200 text-slate-400 cursor-not-allowed'
               }`}
@@ -1478,20 +1458,15 @@ export const EssPortal: React.FC = () => {
 
             <button
               type="button"
-              disabled={!isWithinRadius}
+              disabled={!clockWorkType || !isWithinRadius}
               onClick={() => {
-                if (clockEmpId && isWithinRadius) {
-                  clockOut(
-                    clockEmpId,
-                    `Clock-out ESS di ${activeClockLocation?.name} (Jarak ${simulatedDistanceMeters}m / Radius ${activeLocationRadius}m)`
-                  );
-                  setNoticeMessage(
-                    `Clock-out Pulang Kerja di ${activeClockLocation?.name} (Radius ${activeLocationRadius}m) berhasil tercatat!`
-                  );
+                if (clockEmpId && clockWorkType && isWithinRadius) {
+                  clockOut(clockEmpId, `Clock-out ESS (${clockWorkType})`);
+                  setNoticeMessage(`Clock-out Pulang Kerja (${clockWorkType}) berhasil tercatat!`);
                 }
               }}
               className={`py-3 rounded-lg font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-1.5 ${
-                isWithinRadius
+                clockWorkType && isWithinRadius
                   ? 'bg-indigo-600 hover:bg-indigo-700 text-white'
                   : 'bg-slate-200 text-slate-400 cursor-not-allowed'
               }`}
