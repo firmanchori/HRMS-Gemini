@@ -107,7 +107,7 @@ export const EmployeeManagement: React.FC = () => {
     officeLocations,
   } = useHrms();
 
-  const [activeTab, setActiveTab] = useState<'karyawan' | 'probation' | 'contracts' | 'nikformat' | 'pengaturan'>('karyawan');
+  const [activeTab, setActiveTab] = useState<'karyawan' | 'probation' | 'contracts' | 'pengaturan'>('karyawan');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<string>('all');
   const [filterWorkerCategory, setFilterWorkerCategory] = useState<string>('all');
@@ -1102,18 +1102,6 @@ export const EmployeeManagement: React.FC = () => {
         </button>
 
         <button
-          onClick={() => setActiveTab('nikformat')}
-          className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
-            activeTab === 'nikformat'
-              ? 'border-indigo-600 text-indigo-700 font-bold'
-              : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
-          }`}
-        >
-          <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-          <span>Format NIK Dinamis</span>
-        </button>
-
-        <button
           onClick={() => setActiveTab('pengaturan')}
           className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
             activeTab === 'pengaturan'
@@ -1122,7 +1110,7 @@ export const EmployeeManagement: React.FC = () => {
           }`}
         >
           <Settings className="w-3.5 h-3.5" />
-          <span>Pengaturan Modul</span>
+          <span>Pengaturan</span>
         </button>
       </ScrollableTabNav>
 
@@ -1505,9 +1493,6 @@ export const EmployeeManagement: React.FC = () => {
           </div>
         </div>
       )}
-
-      {/* Dynamic NIK Format Settings Tab */}
-      {activeTab === 'nikformat' && <NikFormatSettingsTab />}
 
       {/* Settings Tab */}
       {activeTab === 'pengaturan' && (
