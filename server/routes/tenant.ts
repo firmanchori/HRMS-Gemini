@@ -53,6 +53,9 @@ import {
   employeeSalaryComponentAssignments,
   payrollRecords,
   employeeLoans,
+  leaveRequests,
+  employeeKpis,
+  complianceRecords,
 } from "../db/schema.ts";
 import { requireTenantAdmin } from "../middleware/auth.ts";
 import { validateBody, validateParams, uuidParam } from "../lib/validate.ts";
@@ -2500,5 +2503,130 @@ tenantRouter.put("/loans/:id", validateParams(uuidParam("id")), validateBody(emp
   const [existing] = await db.select().from(employeeLoans).where(and(eq(employeeLoans.id, req.params.id), eq(employeeLoans.tenantId, tenantId))).limit(1);
   if (!existing || !visibleEmployeeIds.includes(existing.employeeId)) return res.status(404).json({ error: "Data pinjaman tidak ditemukan" });
   const [updated] = await db.update(employeeLoans).set(req.body).where(eq(employeeLoans.id, req.params.id)).returning();
+  res.json(updated);
+});
+
+// ---------------------------------------------------------------------------
+// Leave Requests (Cuti)
+// ---------------------------------------------------------------------------
+
+const leaveRequestSchema = z.object({
+  employeeId: z.string().uuid(),
+  leaveType: z.enum(["Cuti Tahunan", "Sakit Tanpa Surat Dokter", "Sakit dengan Surat Dokter", "Cuti Menikah", "Cuti Melahirkan", "Izin Urusan Pribadi"]),
+  startDate: z.string().trim().min(1).max(20),
+  endDate: z.string().trim().min(1).max(20),
+  totalDays: z.number().int().min(1),
+  reason: z.string().trim().max(1000).optional().nullable(),
+  status: z.enum(["Menunggu", "Disetujui", "Ditolak"]).optional(),
+  approvedBy: z.string().trim().max(200).optional().nullable(),
+});
+
+tenantRouter.get("/leave-requests", async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
+  if (visibleEmployeeIds.length === 0) return res.json([]);
+  res.json(await db.select().from(leaveRequests).where(and(eq(leaveRequests.tenantId, tenantId), inArray(leaveRequests.employeeId, visibleEmployeeIds))));
+});
+
+tenantRouter.post("/leave-requests", validateBody(leaveRequestSchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
+  if (!visibleEmployeeIds.includes(req.body.employeeId)) return res.status(403).json({ error: "Karyawan di luar ruang lingkup Anda" });
+  const [created] = await db.insert(leaveRequests).values({ ...req.body, tenantId }).returning();
+  res.status(201).json(created);
+});
+
+tenantRouter.put("/leave-requests/:id", validateParams(uuidParam("id")), validateBody(leaveRequestSchema.partial()), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
+  const [existing] = await db.select().from(leaveRequests).where(and(eq(leaveRequests.id, req.params.id), eq(leaveRequests.tenantId, tenantId))).limit(1);
+  if (!existing || !visibleEmployeeIds.includes(existing.employeeId)) return res.status(404).json({ error: "Pengajuan cuti tidak ditemukan" });
+  const [updated] = await db.update(leaveRequests).set(req.body).where(eq(leaveRequests.id, req.params.id)).returning();
+  res.json(updated);
+});
+
+// ---------------------------------------------------------------------------
+// Employee KPI reviews
+// ---------------------------------------------------------------------------
+
+const employeeKpiSchema = z.object({
+  employeeId: z.string().uuid(),
+  period: z.string().trim().min(1).max(100),
+  quarter: z.enum(["Q1", "Q2", "Q3", "Q4"]),
+  metrics: z.array(z.unknown()).optional(),
+  finalScore: z.number().optional(),
+  feedback: z.string().trim().max(2000).optional().nullable(),
+  reviewer: z.string().trim().max(200).optional().nullable(),
+  evaluatedAt: z.string().trim().min(1).max(20),
+});
+
+tenantRouter.get("/employee-kpis", async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
+  if (visibleEmployeeIds.length === 0) return res.json([]);
+  res.json(await db.select().from(employeeKpis).where(and(eq(employeeKpis.tenantId, tenantId), inArray(employeeKpis.employeeId, visibleEmployeeIds))));
+});
+
+/** Upsert by (employeeId, quarter, period) — re-saving a review for the same quarter replaces it instead of duplicating. */
+tenantRouter.post("/employee-kpis/upsert", validateBody(employeeKpiSchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
+  if (!visibleEmployeeIds.includes(req.body.employeeId)) return res.status(403).json({ error: "Karyawan di luar ruang lingkup Anda" });
+  const [existing] = await db
+    .select()
+    .from(employeeKpis)
+    .where(
+      and(
+        eq(employeeKpis.tenantId, tenantId),
+        eq(employeeKpis.employeeId, req.body.employeeId),
+        eq(employeeKpis.quarter, req.body.quarter),
+        eq(employeeKpis.period, req.body.period)
+      )
+    )
+    .limit(1);
+  if (existing) {
+    const [updated] = await db.update(employeeKpis).set(req.body).where(eq(employeeKpis.id, existing.id)).returning();
+    return res.json(updated);
+  }
+  const [created] = await db.insert(employeeKpis).values({ ...req.body, tenantId }).returning();
+  res.status(201).json(created);
+});
+
+// ---------------------------------------------------------------------------
+// Compliance (SP/PHK)
+// ---------------------------------------------------------------------------
+
+const complianceRecordSchema = z.object({
+  employeeId: z.string().uuid(),
+  level: z.enum(["SP 1", "SP 2", "SP 3", "Skorsing", "PHK"]),
+  violationReason: z.string().trim().min(1).max(2000),
+  letterNumber: z.string().trim().min(1).max(200),
+  issueDate: z.string().trim().min(1).max(20),
+  validUntil: z.string().trim().min(1).max(20),
+  signedBy: z.string().trim().max(200).optional().nullable(),
+  status: z.enum(["Aktif", "Kedaluwarsa", "Dibatalkan"]).optional(),
+});
+
+tenantRouter.get("/compliance-records", async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
+  if (visibleEmployeeIds.length === 0) return res.json([]);
+  res.json(await db.select().from(complianceRecords).where(and(eq(complianceRecords.tenantId, tenantId), inArray(complianceRecords.employeeId, visibleEmployeeIds))));
+});
+
+tenantRouter.post("/compliance-records", validateBody(complianceRecordSchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
+  if (!visibleEmployeeIds.includes(req.body.employeeId)) return res.status(403).json({ error: "Karyawan di luar ruang lingkup Anda" });
+  const [created] = await db.insert(complianceRecords).values({ ...req.body, tenantId }).returning();
+  res.status(201).json(created);
+});
+
+tenantRouter.put("/compliance-records/:id", validateParams(uuidParam("id")), validateBody(complianceRecordSchema.partial()), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
+  const [existing] = await db.select().from(complianceRecords).where(and(eq(complianceRecords.id, req.params.id), eq(complianceRecords.tenantId, tenantId))).limit(1);
+  if (!existing || !visibleEmployeeIds.includes(existing.employeeId)) return res.status(404).json({ error: "Data kepatuhan tidak ditemukan" });
+  const [updated] = await db.update(complianceRecords).set(req.body).where(eq(complianceRecords.id, req.params.id)).returning();
   res.json(updated);
 });

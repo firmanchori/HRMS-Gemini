@@ -1216,3 +1216,51 @@ export const employeeLoans = pgTable("employee_loans", {
   interestRatePercent: doublePrecision("interest_rate_percent"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+// ---------------------------------------------------------------------------
+// Leave requests, KPI reviews, Compliance (SP/PHK) — real backend
+// (user, 2026-11-05: "Selesaikan 1, 2, dan 3").
+// ---------------------------------------------------------------------------
+
+export const leaveRequests = pgTable("leave_requests", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  employeeId: uuid("employee_id").references(() => employees.id).notNull(),
+  leaveType: text("leave_type").notNull(),
+  startDate: text("start_date").notNull(),
+  endDate: text("end_date").notNull(),
+  totalDays: integer("total_days").notNull().default(1),
+  reason: text("reason"),
+  status: text("status").notNull().default("Menunggu"),
+  approvedBy: text("approved_by"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+/** metrics stays jsonb (a variable-length array of {id,name,target,actual,weight,unit,score} rows the mock type already defines) — same "details jsonb" reasoning as everywhere else this session, just scoped to one field instead of the whole row since everything else here is flat/queryable. */
+export const employeeKpis = pgTable("employee_kpis", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  employeeId: uuid("employee_id").references(() => employees.id).notNull(),
+  period: text("period").notNull(),
+  quarter: text("quarter").notNull(),
+  metrics: jsonb("metrics").notNull().default([]).$type<unknown[]>(),
+  finalScore: doublePrecision("final_score").notNull().default(0),
+  feedback: text("feedback"),
+  reviewer: text("reviewer"),
+  evaluatedAt: text("evaluated_at").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const complianceRecords = pgTable("compliance_records", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  employeeId: uuid("employee_id").references(() => employees.id).notNull(),
+  level: text("level").notNull(),
+  violationReason: text("violation_reason").notNull(),
+  letterNumber: text("letter_number").notNull(),
+  issueDate: text("issue_date").notNull(),
+  validUntil: text("valid_until").notNull(),
+  signedBy: text("signed_by"),
+  status: text("status").notNull().default("Aktif"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});

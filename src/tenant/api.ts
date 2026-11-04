@@ -564,6 +564,45 @@ export interface EmployeeLoan {
   interestRatePercent: number | null;
 }
 
+export interface LeaveRequest {
+  id: string;
+  tenantId: string;
+  employeeId: string;
+  leaveType: "Cuti Tahunan" | "Sakit Tanpa Surat Dokter" | "Sakit dengan Surat Dokter" | "Cuti Menikah" | "Cuti Melahirkan" | "Izin Urusan Pribadi";
+  startDate: string;
+  endDate: string;
+  totalDays: number;
+  reason: string | null;
+  status: "Menunggu" | "Disetujui" | "Ditolak";
+  approvedBy: string | null;
+}
+
+export interface EmployeeKpi {
+  id: string;
+  tenantId: string;
+  employeeId: string;
+  period: string;
+  quarter: "Q1" | "Q2" | "Q3" | "Q4";
+  metrics: unknown[];
+  finalScore: number;
+  feedback: string | null;
+  reviewer: string | null;
+  evaluatedAt: string;
+}
+
+export interface ComplianceRecord {
+  id: string;
+  tenantId: string;
+  employeeId: string;
+  level: "SP 1" | "SP 2" | "SP 3" | "Skorsing" | "PHK";
+  violationReason: string;
+  letterNumber: string;
+  issueDate: string;
+  validUntil: string;
+  signedBy: string | null;
+  status: "Aktif" | "Kedaluwarsa" | "Dibatalkan";
+}
+
 export type OrgChangeSet = { create?: Record<string, unknown>[]; update?: { id: string; data: Record<string, unknown> }[]; delete?: string[] };
 
 export interface OrgChangeProposal {
@@ -849,4 +888,20 @@ export const tenantApi = {
     request<EmployeeLoan>("/api/tenant/loans", { method: "POST", body: JSON.stringify(data) }),
   updateLoan: (id: string, data: Partial<EmployeeLoan>) =>
     request<EmployeeLoan>(`/api/tenant/loans/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+
+  listLeaveRequests: () => request<LeaveRequest[]>("/api/tenant/leave-requests"),
+  createLeaveRequest: (data: Omit<LeaveRequest, "id" | "tenantId">) =>
+    request<LeaveRequest>("/api/tenant/leave-requests", { method: "POST", body: JSON.stringify(data) }),
+  updateLeaveRequest: (id: string, data: Partial<LeaveRequest>) =>
+    request<LeaveRequest>(`/api/tenant/leave-requests/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+
+  listEmployeeKpis: () => request<EmployeeKpi[]>("/api/tenant/employee-kpis"),
+  upsertEmployeeKpi: (data: Omit<EmployeeKpi, "id" | "tenantId">) =>
+    request<EmployeeKpi>("/api/tenant/employee-kpis/upsert", { method: "POST", body: JSON.stringify(data) }),
+
+  listComplianceRecords: () => request<ComplianceRecord[]>("/api/tenant/compliance-records"),
+  createComplianceRecord: (data: Omit<ComplianceRecord, "id" | "tenantId">) =>
+    request<ComplianceRecord>("/api/tenant/compliance-records", { method: "POST", body: JSON.stringify(data) }),
+  updateComplianceRecord: (id: string, data: Partial<ComplianceRecord>) =>
+    request<ComplianceRecord>(`/api/tenant/compliance-records/${id}`, { method: "PUT", body: JSON.stringify(data) }),
 };

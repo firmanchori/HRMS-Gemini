@@ -32,6 +32,9 @@ import {
   type EmployeeSalaryAssignment as ApiEmployeeSalaryAssignment,
   type PayrollRecord as ApiPayrollRecord,
   type EmployeeLoan as ApiEmployeeLoan,
+  type LeaveRequest as ApiLeaveRequest,
+  type EmployeeKpi as ApiEmployeeKpi,
+  type ComplianceRecord as ApiComplianceRecord,
 } from '../tenant/api';
 import { ORG_STRUCTURE_TEMPLATES } from '../utils/orgStructureTemplates';
 import {
@@ -875,10 +878,9 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
 
-  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>(() => {
-    const saved = localStorage.getItem('nusahr_leaves');
-    return saved ? JSON.parse(saved) : INITIAL_LEAVE_REQUESTS;
-  });
+  // Real backend data, loaded via loadTenantOrgData() (user, 2026-11-05: "Selesaikan 1, 2, dan 3").
+  const [apiLeaveRequests, setApiLeaveRequests] = useState<ApiLeaveRequest[]>([]);
+  const leaveRequests = useMemo(() => apiLeaveRequests as unknown as LeaveRequest[], [apiLeaveRequests]);
 
   // Real backend data, loaded via loadTenantOrgData() (user, 2026-11-04:
   // "lanjut full module payroll"). generatePayrollRun's calculation stays
@@ -892,15 +894,11 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [apiLoans, setApiLoans] = useState<ApiEmployeeLoan[]>([]);
   const loans = useMemo(() => apiLoans as unknown as EmployeeLoan[], [apiLoans]);
 
-  const [kpis, setKpis] = useState<EmployeeKPI[]>(() => {
-    const saved = localStorage.getItem('nusahr_kpis');
-    return saved ? JSON.parse(saved) : INITIAL_KPIS;
-  });
+  const [apiEmployeeKpis, setApiEmployeeKpis] = useState<ApiEmployeeKpi[]>([]);
+  const kpis = useMemo(() => apiEmployeeKpis as unknown as EmployeeKPI[], [apiEmployeeKpis]);
 
-  const [complianceRecords, setComplianceRecords] = useState<ComplianceRecord[]>(() => {
-    const saved = localStorage.getItem('nusahr_compliance');
-    return saved ? JSON.parse(saved) : INITIAL_COMPLIANCE;
-  });
+  const [apiComplianceRecords, setApiComplianceRecords] = useState<ApiComplianceRecord[]>([]);
+  const complianceRecords = useMemo(() => apiComplianceRecords as unknown as ComplianceRecord[], [apiComplianceRecords]);
 
   // Real backend data, loaded via loadTenantOrgData(). FPTK is no longer
   // mock-only (user, 2026-11-02: "kenapa semua masih mockup form nya bukan
@@ -1414,6 +1412,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       realOrgSnapshots,
       realSalaryComponents, realEmployeeSalaryAssignments, realPayrollRecords,
       realLoans,
+      realLeaveRequests, realEmployeeKpis, realComplianceRecords,
     ] = await Promise.all([
       tenantApi.listEntities(),
       tenantApi.listOfficeLocations(),
@@ -1447,6 +1446,9 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       tenantApi.listEmployeeSalaryAssignments(),
       tenantApi.listPayrollRecords(),
       tenantApi.listLoans(),
+      tenantApi.listLeaveRequests(),
+      tenantApi.listEmployeeKpis(),
+      tenantApi.listComplianceRecords(),
     ]);
     setApiEntities(realEntities);
     setApiOfficeLocations(realOfficeLocations);
@@ -1486,6 +1488,9 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setApiEmployeeSalaryAssignments(realEmployeeSalaryAssignments);
     setApiPayrollRecords(realPayrollRecords);
     setApiLoans(realLoans);
+    setApiLeaveRequests(realLeaveRequests);
+    setApiEmployeeKpis(realEmployeeKpis);
+    setApiComplianceRecords(realComplianceRecords);
   };
 
   // 34. Vendor Invoices (AP)
@@ -1803,28 +1808,26 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const submitLeaveRequest = (requestData: Omit<LeaveRequest, 'id' | 'tenantId' | 'status'>) => {
-    const newReq: LeaveRequest = {
-      ...requestData,
-      id: `leave-${Date.now()}`,
-      tenantId: currentTenant.id,
-      status: 'Menunggu',
-    };
-    setLeaveRequests((prev) => [newReq, ...prev]);
-    const emp = employees.find((e) => e.id === newReq.employeeId);
-    createApprovalItem({
-      category: 'Cuti',
-      referenceId: newReq.id,
-      title: `Permohonan ${newReq.leaveType} (${newReq.totalDays} Hari) - ${emp?.fullName || 'Karyawan'}`,
-      requesterId: newReq.employeeId,
-      department: emp?.department || 'Operasional',
-      submittedAt: new Date().toISOString(),
-      deadlineAt: new Date(Date.now() + 48 * 3600 * 1000).toISOString(),
-      level: 1,
-      totalLevels: 2,
-      assignedApproverRole: 'manager',
-      status: 'Menunggu',
-      notes: `${newReq.startDate} s/d ${newReq.endDate}: ${newReq.reason}`,
-    });
+    tenantApi
+      .createLeaveRequest({ ...requestData, status: 'Menunggu' } as unknown as Omit<ApiLeaveRequest, 'id' | 'tenantId'>)
+      .then((created) => {
+        setApiLeaveRequests((prev) => [created, ...prev]);
+        const emp = employees.find((e) => e.id === created.employeeId);
+        createApprovalItem({
+          category: 'Cuti',
+          referenceId: created.id,
+          title: `Permohonan ${created.leaveType} (${created.totalDays} Hari) - ${emp?.fullName || 'Karyawan'}`,
+          requesterId: created.employeeId,
+          department: emp?.department || 'Operasional',
+          submittedAt: new Date().toISOString(),
+          deadlineAt: new Date(Date.now() + 48 * 3600 * 1000).toISOString(),
+          level: 1,
+          totalLevels: 2,
+          assignedApproverRole: 'manager',
+          status: 'Menunggu',
+          notes: `${created.startDate} s/d ${created.endDate}: ${created.reason ?? ''}`,
+        });
+      });
   };
 
   const reviewLeaveRequest = (id: string, approved: boolean) => {
@@ -1854,17 +1857,9 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     if (!req) return;
 
-    setLeaveRequests((prev) =>
-      prev.map((l) =>
-        l.id === id
-          ? {
-              ...l,
-              status: approved ? 'Disetujui' : 'Ditolak',
-              approvedBy: currentUser.name,
-            }
-          : l
-      )
-    );
+    tenantApi
+      .updateLeaveRequest(id, { status: approved ? 'Disetujui' : 'Ditolak', approvedBy: currentUser.name })
+      .then((updated) => setApiLeaveRequests((prev) => prev.map((l) => (l.id === id ? updated : l))));
 
     // If approved, deduct leave days from employee
     if (approved) {
@@ -2086,24 +2081,16 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // 5. Performance & KPI
   const saveKPIReview = (kpiData: Omit<EmployeeKPI, 'id' | 'tenantId' | 'evaluatedAt'>) => {
     const evaluatedAt = new Date().toISOString().split('T')[0];
-    const newKpi: EmployeeKPI = {
-      ...kpiData,
-      id: `kpi-${Date.now()}`,
-      tenantId: currentTenant.id,
-      evaluatedAt,
-    };
-    setKpis((prev) => {
-      const filtered = prev.filter(
-        (k) =>
-          !(
-            k.tenantId === currentTenant.id &&
-            k.employeeId === kpiData.employeeId &&
-            k.quarter === kpiData.quarter &&
-            k.period === kpiData.period
-          )
-      );
-      return [newKpi, ...filtered];
-    });
+    tenantApi
+      .upsertEmployeeKpi({ ...kpiData, evaluatedAt } as unknown as Omit<ApiEmployeeKpi, 'id' | 'tenantId'>)
+      .then((saved) => {
+        setApiEmployeeKpis((prev) => {
+          const filtered = prev.filter(
+            (k) => !(k.employeeId === kpiData.employeeId && k.quarter === kpiData.quarter && k.period === kpiData.period)
+          );
+          return [saved, ...filtered];
+        });
+      });
   };
 
   // 6. Compliance (SP & PHK)
@@ -2128,20 +2115,18 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       currentTenant.code
     );
 
-    const newCompliance: ComplianceRecord = {
-      id: `comp-${Date.now()}`,
-      tenantId: currentTenant.id,
-      employeeId: record.employeeId,
-      level: record.level,
-      violationReason: record.violationReason,
-      letterNumber,
-      issueDate,
-      validUntil,
-      signedBy: currentUser.name,
-      status: 'Aktif',
-    };
-
-    setComplianceRecords((prev) => [newCompliance, ...prev]);
+    tenantApi
+      .createComplianceRecord({
+        employeeId: record.employeeId,
+        level: record.level,
+        violationReason: record.violationReason,
+        letterNumber,
+        issueDate,
+        validUntil,
+        signedBy: currentUser.name,
+        status: 'Aktif',
+      } as unknown as Omit<ApiComplianceRecord, 'id' | 'tenantId'>)
+      .then((created) => setApiComplianceRecords((prev) => [created, ...prev]));
 
     if (record.level === 'PHK') {
       updateEmployee(emp.id, { status: 'PHK' });
@@ -5110,9 +5095,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // storage unavailable
     }
 
-    // payrollRecords/loans are now real backend data — no local mock to reset.
-    setLeaveRequests(INITIAL_LEAVE_REQUESTS);
-    setComplianceRecords(INITIAL_COMPLIANCE);
+    // payrollRecords/loans/leaveRequests/kpis/complianceRecords are now real backend data — no local mock to reset.
     setOffboardingRecords(INITIAL_OFFBOARDING);
     setProcurementOrders(INITIAL_PROCUREMENT);
     setAssets(INITIAL_ASSETS);
@@ -5150,7 +5133,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         deleteEmployee,
         processPersonaliaAction,
         attendance, // real backend data, already tenant-scoped server-side
-        leaveRequests: leaveRequests.filter((l) => l.tenantId === currentTenant.id),
+        leaveRequests, // real backend data, already tenant-scoped server-side
         clockIn,
         clockOut,
         submitLeaveRequest,
@@ -5162,9 +5145,9 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         loans, // real backend data, already tenant-scoped server-side
         addLoan,
         updateLoanStatus,
-        kpis: kpis.filter((k) => k.tenantId === currentTenant.id),
+        kpis, // real backend data, already tenant-scoped server-side
         saveKPIReview,
-        complianceRecords: complianceRecords.filter((c) => c.tenantId === currentTenant.id),
+        complianceRecords, // real backend data, already tenant-scoped server-side
         issueComplianceAction,
         vacancies, // real backend data, already tenant-scoped server-side
         jobRequisitions, // real backend data, already tenant-scoped server-side
