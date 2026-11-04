@@ -1126,3 +1126,66 @@ export const overtimeRequests = pgTable("overtime_requests", {
   notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+// ---------------------------------------------------------------------------
+// Payroll — real backend (user, 2026-11-04: "lanjut full module payroll").
+// generatePayrollRun's calculation itself stays client-side (it already
+// reads real attendance/overtime/reimbursement/loan data), these tables
+// just persist its output and the salary-component master data instead of
+// localStorage.
+// ---------------------------------------------------------------------------
+
+export const salaryComponents = pgTable("salary_components", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  entityId: uuid("entity_id").references(() => companyEntities.id),
+  code: text("code").notNull(),
+  name: text("name").notNull(),
+  category: text("category").notNull(),
+  calculationBasis: text("calculation_basis").notNull(),
+  defaultValue: integer("default_value").notNull().default(0),
+  isTaxable: boolean("is_taxable").notNull().default(true),
+  isBpjsBase: boolean("is_bpjs_base").notNull().default(false),
+  description: text("description"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const employeeSalaryComponentAssignments = pgTable("employee_salary_component_assignments", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  employeeId: uuid("employee_id").references(() => employees.id).notNull(),
+  componentId: uuid("component_id").references(() => salaryComponents.id).notNull(),
+  amount: integer("amount").notNull().default(0),
+  effectiveDate: text("effective_date").notNull(),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const payrollRecords = pgTable("payroll_records", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  employeeId: uuid("employee_id").references(() => employees.id).notNull(),
+  period: text("period").notNull(),
+  basicSalary: integer("basic_salary").notNull().default(0),
+  allowances: integer("allowances").notNull().default(0),
+  overtimePay: integer("overtime_pay").notNull().default(0),
+  reimbursement: integer("reimbursement").notNull().default(0),
+  thrBonus: integer("thr_bonus").notNull().default(0),
+  grossPay: integer("gross_pay").notNull().default(0),
+  bpjsKesCompany: integer("bpjs_kes_company").notNull().default(0),
+  bpjsKesEmployee: integer("bpjs_kes_employee").notNull().default(0),
+  bpjsTkCompany: integer("bpjs_tk_company").notNull().default(0),
+  bpjsTkEmployee: integer("bpjs_tk_employee").notNull().default(0),
+  pph21TERCategory: text("pph21_ter_category").notNull().default("TER A"),
+  pph21RatePercent: doublePrecision("pph21_rate_percent").notNull().default(0),
+  pph21Amount: integer("pph21_amount").notNull().default(0),
+  loanDeduction: integer("loan_deduction").notNull().default(0),
+  lateDeduction: integer("late_deduction").notNull().default(0),
+  unpaidLeaveDeduction: integer("unpaid_leave_deduction"),
+  severancePay: integer("severance_pay"),
+  totalDeductions: integer("total_deductions").notNull().default(0),
+  netPay: integer("net_pay").notNull().default(0),
+  status: text("status").notNull().default("Draft"),
+  paidDate: text("paid_date"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});

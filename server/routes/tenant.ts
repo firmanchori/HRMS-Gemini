@@ -49,6 +49,9 @@ import {
   attendanceRecords,
   attendanceCorrectionRequests,
   overtimeRequests,
+  salaryComponents,
+  employeeSalaryComponentAssignments,
+  payrollRecords,
 } from "../db/schema.ts";
 import { requireTenantAdmin } from "../middleware/auth.ts";
 import { validateBody, validateParams, uuidParam } from "../lib/validate.ts";
@@ -2302,5 +2305,153 @@ tenantRouter.put("/overtime-requests/:id", validateParams(uuidParam("id")), vali
   const [existing] = await db.select().from(overtimeRequests).where(and(eq(overtimeRequests.id, req.params.id), eq(overtimeRequests.tenantId, tenantId))).limit(1);
   if (!existing || !visibleEmployeeIds.includes(existing.employeeId)) return res.status(404).json({ error: "Pengajuan lembur tidak ditemukan" });
   const [updated] = await db.update(overtimeRequests).set(req.body).where(eq(overtimeRequests.id, req.params.id)).returning();
+  res.json(updated);
+});
+
+// ---------------------------------------------------------------------------
+// Payroll — salary component master/assignments + payroll records. The
+// run-generation calculation itself happens client-side (HrmsContext
+// already has real attendance/overtime/reimbursement/loan data to compute
+// from); these endpoints just persist its master data and output.
+// ---------------------------------------------------------------------------
+
+const salaryComponentSchema = z.object({
+  entityId: z.string().uuid().optional().nullable(),
+  code: z.string().trim().min(1).max(50),
+  name: z.string().trim().min(1).max(200),
+  category: z.enum(["Tunjangan Tetap", "Tunjangan Tidak Tetap", "Asuransi Pemerintah", "Asuransi Swasta", "Potongan"]),
+  calculationBasis: z.enum(["Nominal Tetap", "Persen Gaji Pokok"]),
+  defaultValue: z.number().int().min(0).optional(),
+  isTaxable: z.boolean().optional(),
+  isBpjsBase: z.boolean().optional(),
+  description: z.string().trim().max(500).optional().nullable(),
+});
+
+tenantRouter.get("/salary-components", async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  res.json(await db.select().from(salaryComponents).where(eq(salaryComponents.tenantId, tenantId)));
+});
+
+tenantRouter.post("/salary-components", validateBody(salaryComponentSchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [created] = await db.insert(salaryComponents).values({ ...req.body, tenantId }).returning();
+  res.status(201).json(created);
+});
+
+tenantRouter.put("/salary-components/:id", validateParams(uuidParam("id")), validateBody(salaryComponentSchema.partial()), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [existing] = await db.select().from(salaryComponents).where(and(eq(salaryComponents.id, req.params.id), eq(salaryComponents.tenantId, tenantId))).limit(1);
+  if (!existing) return res.status(404).json({ error: "Komponen gaji tidak ditemukan" });
+  const [updated] = await db.update(salaryComponents).set(req.body).where(eq(salaryComponents.id, req.params.id)).returning();
+  res.json(updated);
+});
+
+tenantRouter.delete("/salary-components/:id", validateParams(uuidParam("id")), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [existing] = await db.select().from(salaryComponents).where(and(eq(salaryComponents.id, req.params.id), eq(salaryComponents.tenantId, tenantId))).limit(1);
+  if (!existing) return res.status(404).json({ error: "Komponen gaji tidak ditemukan" });
+  await db.delete(employeeSalaryComponentAssignments).where(eq(employeeSalaryComponentAssignments.componentId, existing.id));
+  await db.delete(salaryComponents).where(eq(salaryComponents.id, req.params.id));
+  res.json({ ok: true });
+});
+
+const salaryAssignmentSchema = z.object({
+  employeeId: z.string().uuid(),
+  componentId: z.string().uuid(),
+  amount: z.number().int().min(0).optional(),
+  effectiveDate: z.string().trim().min(1).max(20),
+  isActive: z.boolean().optional(),
+});
+
+tenantRouter.get("/employee-salary-assignments", async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
+  if (visibleEmployeeIds.length === 0) return res.json([]);
+  res.json(
+    await db
+      .select()
+      .from(employeeSalaryComponentAssignments)
+      .where(and(eq(employeeSalaryComponentAssignments.tenantId, tenantId), inArray(employeeSalaryComponentAssignments.employeeId, visibleEmployeeIds)))
+  );
+});
+
+tenantRouter.post("/employee-salary-assignments", validateBody(salaryAssignmentSchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
+  if (!visibleEmployeeIds.includes(req.body.employeeId)) return res.status(403).json({ error: "Karyawan di luar ruang lingkup Anda" });
+  const [created] = await db.insert(employeeSalaryComponentAssignments).values({ ...req.body, tenantId }).returning();
+  res.status(201).json(created);
+});
+
+tenantRouter.delete("/employee-salary-assignments/:id", validateParams(uuidParam("id")), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [existing] = await db.select().from(employeeSalaryComponentAssignments).where(and(eq(employeeSalaryComponentAssignments.id, req.params.id), eq(employeeSalaryComponentAssignments.tenantId, tenantId))).limit(1);
+  if (!existing) return res.status(404).json({ error: "Penetapan komponen tidak ditemukan" });
+  await db.delete(employeeSalaryComponentAssignments).where(eq(employeeSalaryComponentAssignments.id, req.params.id));
+  res.json({ ok: true });
+});
+
+const payrollRecordSchema = z.object({
+  employeeId: z.string().uuid(),
+  period: z.string().trim().min(1).max(100),
+  basicSalary: z.number().int().min(0).optional(),
+  allowances: z.number().int().min(0).optional(),
+  overtimePay: z.number().int().min(0).optional(),
+  reimbursement: z.number().int().min(0).optional(),
+  thrBonus: z.number().int().min(0).optional(),
+  grossPay: z.number().int().min(0).optional(),
+  bpjsKesCompany: z.number().int().min(0).optional(),
+  bpjsKesEmployee: z.number().int().min(0).optional(),
+  bpjsTkCompany: z.number().int().min(0).optional(),
+  bpjsTkEmployee: z.number().int().min(0).optional(),
+  pph21TERCategory: z.enum(["TER A", "TER B", "TER C"]).optional(),
+  pph21RatePercent: z.number().min(0).optional(),
+  pph21Amount: z.number().int().min(0).optional(),
+  loanDeduction: z.number().int().min(0).optional(),
+  lateDeduction: z.number().int().min(0).optional(),
+  unpaidLeaveDeduction: z.number().int().min(0).optional().nullable(),
+  severancePay: z.number().int().min(0).optional().nullable(),
+  totalDeductions: z.number().int().min(0).optional(),
+  netPay: z.number().int().min(0).optional(),
+  status: z.enum(["Draft", "Approved", "Disbursed"]).optional(),
+  paidDate: z.string().trim().max(20).optional().nullable(),
+});
+
+tenantRouter.get("/payroll-records", async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
+  if (visibleEmployeeIds.length === 0) return res.json([]);
+  res.json(
+    await db
+      .select()
+      .from(payrollRecords)
+      .where(and(eq(payrollRecords.tenantId, tenantId), inArray(payrollRecords.employeeId, visibleEmployeeIds)))
+  );
+});
+
+/** Upsert by (employeeId, period) — re-generating a draft run for the same period must replace that employee's row, not duplicate it. */
+tenantRouter.post("/payroll-records/upsert", validateBody(payrollRecordSchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
+  if (!visibleEmployeeIds.includes(req.body.employeeId)) return res.status(403).json({ error: "Karyawan di luar ruang lingkup Anda" });
+  const [existing] = await db
+    .select()
+    .from(payrollRecords)
+    .where(and(eq(payrollRecords.tenantId, tenantId), eq(payrollRecords.employeeId, req.body.employeeId), eq(payrollRecords.period, req.body.period)))
+    .limit(1);
+  if (existing) {
+    const [updated] = await db.update(payrollRecords).set(req.body).where(eq(payrollRecords.id, existing.id)).returning();
+    return res.json(updated);
+  }
+  const [created] = await db.insert(payrollRecords).values({ ...req.body, tenantId }).returning();
+  res.status(201).json(created);
+});
+
+tenantRouter.put("/payroll-records/:id", validateParams(uuidParam("id")), validateBody(payrollRecordSchema.partial()), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
+  const [existing] = await db.select().from(payrollRecords).where(and(eq(payrollRecords.id, req.params.id), eq(payrollRecords.tenantId, tenantId))).limit(1);
+  if (!existing || !visibleEmployeeIds.includes(existing.employeeId)) return res.status(404).json({ error: "Data payroll tidak ditemukan" });
+  const [updated] = await db.update(payrollRecords).set(req.body).where(eq(payrollRecords.id, req.params.id)).returning();
   res.json(updated);
 });

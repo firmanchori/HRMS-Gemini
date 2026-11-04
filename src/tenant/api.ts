@@ -495,6 +495,58 @@ export interface OvertimeRequest {
   notes: string | null;
 }
 
+export interface SalaryComponent {
+  id: string;
+  tenantId: string;
+  entityId: string | null;
+  code: string;
+  name: string;
+  category: "Tunjangan Tetap" | "Tunjangan Tidak Tetap" | "Asuransi Pemerintah" | "Asuransi Swasta" | "Potongan";
+  calculationBasis: "Nominal Tetap" | "Persen Gaji Pokok";
+  defaultValue: number;
+  isTaxable: boolean;
+  isBpjsBase: boolean;
+  description: string | null;
+}
+
+export interface EmployeeSalaryAssignment {
+  id: string;
+  tenantId: string;
+  employeeId: string;
+  componentId: string;
+  amount: number;
+  effectiveDate: string;
+  isActive: boolean;
+}
+
+export interface PayrollRecord {
+  id: string;
+  tenantId: string;
+  employeeId: string;
+  period: string;
+  basicSalary: number;
+  allowances: number;
+  overtimePay: number;
+  reimbursement: number;
+  thrBonus: number;
+  grossPay: number;
+  bpjsKesCompany: number;
+  bpjsKesEmployee: number;
+  bpjsTkCompany: number;
+  bpjsTkEmployee: number;
+  pph21TERCategory: "TER A" | "TER B" | "TER C";
+  pph21RatePercent: number;
+  pph21Amount: number;
+  loanDeduction: number;
+  lateDeduction: number;
+  unpaidLeaveDeduction: number | null;
+  severancePay: number | null;
+  totalDeductions: number;
+  netPay: number;
+  status: "Draft" | "Approved" | "Disbursed";
+  paidDate: string | null;
+}
+
 export type OrgChangeSet = { create?: Record<string, unknown>[]; update?: { id: string; data: Record<string, unknown> }[]; delete?: string[] };
 
 export interface OrgChangeProposal {
@@ -755,4 +807,23 @@ export const tenantApi = {
     request<OvertimeRequest>("/api/tenant/overtime-requests", { method: "POST", body: JSON.stringify(data) }),
   updateOvertimeRequest: (id: string, data: Partial<OvertimeRequest>) =>
     request<OvertimeRequest>(`/api/tenant/overtime-requests/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+
+  listSalaryComponents: () => request<SalaryComponent[]>("/api/tenant/salary-components"),
+  createSalaryComponent: (data: Omit<SalaryComponent, "id" | "tenantId">) =>
+    request<SalaryComponent>("/api/tenant/salary-components", { method: "POST", body: JSON.stringify(data) }),
+  updateSalaryComponent: (id: string, data: Partial<SalaryComponent>) =>
+    request<SalaryComponent>(`/api/tenant/salary-components/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteSalaryComponent: (id: string) => request<{ ok: true }>(`/api/tenant/salary-components/${id}`, { method: "DELETE" }),
+
+  listEmployeeSalaryAssignments: () => request<EmployeeSalaryAssignment[]>("/api/tenant/employee-salary-assignments"),
+  createEmployeeSalaryAssignment: (data: Omit<EmployeeSalaryAssignment, "id" | "tenantId">) =>
+    request<EmployeeSalaryAssignment>("/api/tenant/employee-salary-assignments", { method: "POST", body: JSON.stringify(data) }),
+  deleteEmployeeSalaryAssignment: (id: string) =>
+    request<{ ok: true }>(`/api/tenant/employee-salary-assignments/${id}`, { method: "DELETE" }),
+
+  listPayrollRecords: () => request<PayrollRecord[]>("/api/tenant/payroll-records"),
+  upsertPayrollRecord: (data: Omit<PayrollRecord, "id" | "tenantId">) =>
+    request<PayrollRecord>("/api/tenant/payroll-records/upsert", { method: "POST", body: JSON.stringify(data) }),
+  updatePayrollRecord: (id: string, data: Partial<PayrollRecord>) =>
+    request<PayrollRecord>(`/api/tenant/payroll-records/${id}`, { method: "PUT", body: JSON.stringify(data) }),
 };

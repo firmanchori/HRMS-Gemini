@@ -28,6 +28,9 @@ import {
   type AttendanceCorrectionRequest as ApiAttendanceCorrectionRequest,
   type OvertimeRequest as ApiOvertimeRequest,
   type OrgStructureSnapshot as ApiOrgStructureSnapshot,
+  type SalaryComponent as ApiSalaryComponent,
+  type EmployeeSalaryAssignment as ApiEmployeeSalaryAssignment,
+  type PayrollRecord as ApiPayrollRecord,
 } from '../tenant/api';
 import { ORG_STRUCTURE_TEMPLATES } from '../utils/orgStructureTemplates';
 import {
@@ -876,18 +879,12 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return saved ? JSON.parse(saved) : INITIAL_LEAVE_REQUESTS;
   });
 
-  const [payrollRecords, setPayrollRecords] = useState<PayrollRecord[]>(() => {
-    const saved = localStorage.getItem('nusahr_payroll');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      } catch {
-        // fallback
-      }
-    }
-    return INITIAL_PAYROLL_RECORDS;
-  });
+  // Real backend data, loaded via loadTenantOrgData() (user, 2026-11-04:
+  // "lanjut full module payroll"). generatePayrollRun's calculation stays
+  // client-side (reads real attendance/overtime/reimbursement/loan data
+  // already); these just persist its output instead of localStorage.
+  const [apiPayrollRecords, setApiPayrollRecords] = useState<ApiPayrollRecord[]>([]);
+  const payrollRecords = useMemo(() => apiPayrollRecords as unknown as PayrollRecord[], [apiPayrollRecords]);
 
   const [loans, setLoans] = useState<EmployeeLoan[]>(() => {
     const saved = localStorage.getItem('nusahr_loans');
@@ -1322,15 +1319,14 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return saved === 'broadbanding' || saved === 'single' ? saved : 'single';
   });
 
-  // 32. Salary Components & Assignments
-  const [salaryComponents, setSalaryComponents] = useState<SalaryComponentMaster[]>(() => {
-    const saved = localStorage.getItem('nusahr_salary_components');
-    return saved ? JSON.parse(saved) : INITIAL_SALARY_COMPONENTS;
-  });
-  const [employeeSalaryAssignments, setEmployeeSalaryAssignments] = useState<EmployeeSalaryComponentAssignment[]>(() => {
-    const saved = localStorage.getItem('nusahr_salary_assignments');
-    return saved ? JSON.parse(saved) : INITIAL_EMPLOYEE_SALARY_ASSIGNMENTS;
-  });
+  // 32. Salary Components & Assignments — real backend data, loaded via loadTenantOrgData().
+  const [apiSalaryComponents, setApiSalaryComponents] = useState<ApiSalaryComponent[]>([]);
+  const salaryComponents = useMemo(() => apiSalaryComponents as unknown as SalaryComponentMaster[], [apiSalaryComponents]);
+  const [apiEmployeeSalaryAssignments, setApiEmployeeSalaryAssignments] = useState<ApiEmployeeSalaryAssignment[]>([]);
+  const employeeSalaryAssignments = useMemo(
+    () => apiEmployeeSalaryAssignments as unknown as EmployeeSalaryComponentAssignment[],
+    [apiEmployeeSalaryAssignments]
+  );
 
   // 33. GA Facilities, Fleet & Supply
   const [roomBookings, setRoomBookings] = useState<GARoomBooking[]>(() => {
@@ -1415,6 +1411,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       realApprovalItems, realApprovalDelegations,
       realWorkShifts, realEmployeeSchedules, realShiftSwapRequests, realAttendanceRecords, realAttendanceCorrections, realOvertimeRequests,
       realOrgSnapshots,
+      realSalaryComponents, realEmployeeSalaryAssignments, realPayrollRecords,
     ] = await Promise.all([
       tenantApi.listEntities(),
       tenantApi.listOfficeLocations(),
@@ -1444,6 +1441,9 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       tenantApi.listAttendanceCorrections(),
       tenantApi.listOvertimeRequests(),
       tenantApi.listOrgSnapshots(),
+      tenantApi.listSalaryComponents(),
+      tenantApi.listEmployeeSalaryAssignments(),
+      tenantApi.listPayrollRecords(),
     ]);
     setApiEntities(realEntities);
     setApiOfficeLocations(realOfficeLocations);
@@ -1479,6 +1479,9 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setAttendanceCorrections(realAttendanceCorrections as unknown as AttendanceCorrectionRequest[]);
     setOvertimeRequests(realOvertimeRequests as unknown as OvertimeRequest[]);
     setApiOrgSnapshots(realOrgSnapshots);
+    setApiSalaryComponents(realSalaryComponents);
+    setApiEmployeeSalaryAssignments(realEmployeeSalaryAssignments);
+    setApiPayrollRecords(realPayrollRecords);
   };
 
   // 34. Vendor Invoices (AP)
@@ -1526,9 +1529,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem('nusahr_templates_v6', JSON.stringify(documentTemplates));
   }, [documentTemplates]);
 
-  useEffect(() => {
-    localStorage.setItem('nusahr_payroll', JSON.stringify(payrollRecords));
-  }, [payrollRecords]);
+  // payrollRecords/salaryComponents/employeeSalaryAssignments are now derived from real backend data — no mock persistence.
 
   // entities is now derived from real backend data (apiEntities) — no mock persistence.
 
@@ -1888,7 +1889,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const periodDatePrefix = `${yearStr}-${monthStr}`;
 
     // Generate payroll records for all active employees of current tenant
-    const newRecords: PayrollRecord[] = tenantEmployees.filter((e) => e.status === 'Aktif').map((emp) => {
+    const newRecords = tenantEmployees.filter((e) => e.status === 'Aktif').map((emp) => {
       // 1. Find employee's attendance strictly filtered by this period (FR-0.1)
       const empAttendance = attendance.filter(
         (a) => a.tenantId === currentTenant.id && a.employeeId === emp.id && a.date.startsWith(periodDatePrefix)
@@ -1936,7 +1937,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .reduce((sum, asg) => {
           const comp = salaryComponents.find((sc) => sc.id === asg.componentId);
           if (comp && comp.category === 'Potongan') return sum;
-          return sum + (asg.customAmount ?? asg.amount ?? comp?.defaultAmount ?? 0);
+          return sum + (asg.amount ?? comp?.defaultValue ?? 0);
         }, 0);
       const allowances =
         (emp.fixedAllowance || 0) +
@@ -1956,7 +1957,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const lateDeduction = Math.floor(totalLateMins / 60) * penaltyPerHour;
 
       // 8. BPJS calculations
-      const bpjs = calculateBPJS(effectiveBasicSalary + emp.fixedAllowance);
+      const bpjs = calculateBPJS(effectiveBasicSalary + (emp.fixedAllowance || 0));
 
       // 9. Gross pay for PPh 21 TER: Gaji Pokok + Tunjangan Tetap + Lembur + BPJS Dibayar Pemberi Kerja (JKK, JKM, Kes)
       const grossIncomeForTax =
@@ -1982,8 +1983,6 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const netPay = Math.max(0, totalTakeHomeIncome - totalDeductions);
 
       return {
-        id: `pay-${period.replace(/\s+/g, '-')}-${emp.id}`,
-        tenantId: currentTenant.id,
         employeeId: emp.id,
         period,
         basicSalary: effectiveBasicSalary,
@@ -2003,36 +2002,35 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         lateDeduction,
         totalDeductions,
         netPay,
-        status: 'Draft',
+        status: 'Draft' as const,
       };
     });
 
-    // Replace or merge payroll records for this period
-    setPayrollRecords((prev) => {
-      const filtered = prev.filter((p) => !(p.tenantId === currentTenant.id && p.period === period));
-      return [...newRecords, ...filtered];
+    // Upsert by (employeeId, period) — re-generating a draft for a period
+    // that already has records replaces them instead of duplicating.
+    Promise.all(newRecords.map((r) => tenantApi.upsertPayrollRecord(r as unknown as Omit<ApiPayrollRecord, 'id' | 'tenantId'>))).then((saved) => {
+      const savedIds = new Set(saved.map((s) => s.id));
+      setApiPayrollRecords((prev) => [...saved, ...prev.filter((p) => !savedIds.has(p.id) && p.period !== period)]);
     });
 
     logAuditAction('Payroll', 'GENERATE_PAYROLL', `run-${period}`, `Generate draft payroll periode ${period} untuk ${newRecords.length} karyawan`);
   };
 
   const approvePayrollRun = (period: string) => {
-    setPayrollRecords((prev) =>
-      prev.map((p) =>
-        p.tenantId === currentTenant.id && p.period === period ? { ...p, status: 'Approved' } : p
-      )
-    );
+    const targets = apiPayrollRecords.filter((p) => p.period === period);
+    Promise.all(targets.map((p) => tenantApi.updatePayrollRecord(p.id, { status: 'Approved' }))).then((updated) => {
+      const updatedIds = new Set(updated.map((u) => u.id));
+      setApiPayrollRecords((prev) => [...updated, ...prev.filter((p) => !updatedIds.has(p.id))]);
+    });
   };
 
   const disbursePayrollRun = (period: string) => {
     const today = new Date().toISOString().split('T')[0];
-    setPayrollRecords((prev) =>
-      prev.map((p) =>
-        p.tenantId === currentTenant.id && p.period === period
-          ? { ...p, status: 'Disbursed', paidDate: today }
-          : p
-      )
-    );
+    const targets = apiPayrollRecords.filter((p) => p.period === period);
+    Promise.all(targets.map((p) => tenantApi.updatePayrollRecord(p.id, { status: 'Disbursed', paidDate: today }))).then((updated) => {
+      const updatedIds = new Set(updated.map((u) => u.id));
+      setApiPayrollRecords((prev) => [...updated, ...prev.filter((p) => !updatedIds.has(p.id))]);
+    });
 
     // Also deduct remaining amount on active loans
     setLoans((prev) =>
@@ -4889,21 +4887,15 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // 32. Salary Components
   const addSalaryComponent = (comp: Omit<SalaryComponentMaster, 'id' | 'tenantId'>) => {
-    const newComp: SalaryComponentMaster = {
-      ...comp,
-      id: `cmp-${Date.now()}`,
-      tenantId: currentTenant.id,
-    };
-    setSalaryComponents((prev) => [...prev, newComp]);
+    tenantApi
+      .createSalaryComponent(comp as unknown as Omit<ApiSalaryComponent, 'id' | 'tenantId'>)
+      .then((created) => setApiSalaryComponents((prev) => [...prev, created]));
   };
 
   const assignSalaryComponent = (assignment: Omit<EmployeeSalaryComponentAssignment, 'id' | 'tenantId'>) => {
-    const newAsg: EmployeeSalaryComponentAssignment = {
-      ...assignment,
-      id: `asg-${Date.now()}`,
-      tenantId: currentTenant.id,
-    };
-    setEmployeeSalaryAssignments((prev) => [...prev, newAsg]);
+    tenantApi
+      .createEmployeeSalaryAssignment(assignment as unknown as Omit<ApiEmployeeSalaryAssignment, 'id' | 'tenantId'>)
+      .then((created) => setApiEmployeeSalaryAssignments((prev) => [...prev, created]));
   };
 
   // 33. GA Facilities, Fleet & Supply
@@ -5122,7 +5114,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // storage unavailable
     }
 
-    setPayrollRecords(INITIAL_PAYROLL_RECORDS);
+    // payrollRecords is now real backend data — no local mock to reset.
     setLoans(INITIAL_LOANS);
     setLeaveRequests(INITIAL_LEAVE_REQUESTS);
     setComplianceRecords(INITIAL_COMPLIANCE);
@@ -5168,7 +5160,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         clockOut,
         submitLeaveRequest,
         reviewLeaveRequest,
-        payrollRecords: payrollRecords.filter((p) => p.tenantId === currentTenant.id),
+        payrollRecords, // real backend data, already tenant-scoped server-side
         generatePayrollRun,
         approvePayrollRun,
         disbursePayrollRun,
@@ -5341,9 +5333,9 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         deleteGradeSalaryRange,
         jobGradingScheme,
         setJobGradingScheme,
-        salaryComponents: salaryComponents.filter((s) => s.tenantId === currentTenant.id),
+        salaryComponents, // real backend data, already tenant-scoped server-side
         addSalaryComponent,
-        employeeSalaryAssignments: employeeSalaryAssignments.filter((a) => a.tenantId === currentTenant.id),
+        employeeSalaryAssignments, // real backend data, already tenant-scoped server-side
         assignSalaryComponent,
         roomBookings: roomBookings.filter((b) => b.tenantId === currentTenant.id),
         addRoomBooking,
