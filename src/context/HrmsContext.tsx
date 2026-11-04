@@ -31,6 +31,7 @@ import {
   type SalaryComponent as ApiSalaryComponent,
   type EmployeeSalaryAssignment as ApiEmployeeSalaryAssignment,
   type PayrollRecord as ApiPayrollRecord,
+  type EmployeeLoan as ApiEmployeeLoan,
 } from '../tenant/api';
 import { ORG_STRUCTURE_TEMPLATES } from '../utils/orgStructureTemplates';
 import {
@@ -886,10 +887,10 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [apiPayrollRecords, setApiPayrollRecords] = useState<ApiPayrollRecord[]>([]);
   const payrollRecords = useMemo(() => apiPayrollRecords as unknown as PayrollRecord[], [apiPayrollRecords]);
 
-  const [loans, setLoans] = useState<EmployeeLoan[]>(() => {
-    const saved = localStorage.getItem('nusahr_loans');
-    return saved ? JSON.parse(saved) : INITIAL_LOANS;
-  });
+  // Real backend data, loaded via loadTenantOrgData() (user, 2026-11-05 —
+  // disbursePayrollRun was deducting installments against mock loan state).
+  const [apiLoans, setApiLoans] = useState<ApiEmployeeLoan[]>([]);
+  const loans = useMemo(() => apiLoans as unknown as EmployeeLoan[], [apiLoans]);
 
   const [kpis, setKpis] = useState<EmployeeKPI[]>(() => {
     const saved = localStorage.getItem('nusahr_kpis');
@@ -1412,6 +1413,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       realWorkShifts, realEmployeeSchedules, realShiftSwapRequests, realAttendanceRecords, realAttendanceCorrections, realOvertimeRequests,
       realOrgSnapshots,
       realSalaryComponents, realEmployeeSalaryAssignments, realPayrollRecords,
+      realLoans,
     ] = await Promise.all([
       tenantApi.listEntities(),
       tenantApi.listOfficeLocations(),
@@ -1444,6 +1446,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       tenantApi.listSalaryComponents(),
       tenantApi.listEmployeeSalaryAssignments(),
       tenantApi.listPayrollRecords(),
+      tenantApi.listLoans(),
     ]);
     setApiEntities(realEntities);
     setApiOfficeLocations(realOfficeLocations);
@@ -1482,6 +1485,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setApiSalaryComponents(realSalaryComponents);
     setApiEmployeeSalaryAssignments(realEmployeeSalaryAssignments);
     setApiPayrollRecords(realPayrollRecords);
+    setApiLoans(realLoans);
   };
 
   // 34. Vendor Invoices (AP)
@@ -2033,56 +2037,50 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     // Also deduct remaining amount on active loans
-    setLoans((prev) =>
-      prev.map((l) => {
-        if (l.tenantId === currentTenant.id && l.status === 'Aktif') {
-          const newRemaining = Math.max(0, l.remainingAmount - l.monthlyInstallment);
-          return {
-            ...l,
-            remainingAmount: newRemaining,
-            status: newRemaining === 0 ? 'Lunas' : 'Aktif',
-          };
-        }
-        return l;
+    const activeLoans = apiLoans.filter((l) => l.status === 'Aktif');
+    Promise.all(
+      activeLoans.map((l) => {
+        const newRemaining = Math.max(0, l.remainingAmount - l.monthlyInstallment);
+        return tenantApi.updateLoan(l.id, { remainingAmount: newRemaining, status: newRemaining === 0 ? 'Lunas' : 'Aktif' });
       })
-    );
+    ).then((updated) => {
+      const updatedIds = new Set(updated.map((u) => u.id));
+      setApiLoans((prev) => [...updated, ...prev.filter((l) => !updatedIds.has(l.id))]);
+    });
   };
 
   // 4. Loans & Kasbon
   const addLoan = (
     loanData: Omit<EmployeeLoan, 'id' | 'tenantId' | 'remainingAmount' | 'status'>
   ) => {
-    const newLoan: EmployeeLoan = {
-      ...loanData,
-      id: `loan-${Date.now()}`,
-      tenantId: currentTenant.id,
-      remainingAmount: loanData.totalAmount,
-      status: 'Menunggu Approval',
-    };
-    setLoans((prev) => [newLoan, ...prev]);
-    const emp = employees.find((e) => e.id === newLoan.employeeId);
-    createApprovalItem({
-      category: 'Pinjaman',
-      referenceId: newLoan.id,
-      title: `Pengajuan ${newLoan.loanType}: ${emp?.fullName || 'Karyawan'} (Tenor ${newLoan.tenorMonths} Bln)`,
-      requesterId: newLoan.employeeId,
-      department: emp?.department || 'Operasional',
-      amount: newLoan.totalAmount,
-      submittedAt: new Date().toISOString(),
-      deadlineAt: new Date(Date.now() + 48 * 3600 * 1000).toISOString(),
-      level: 1,
-      totalLevels: 2,
-      assignedApproverRole: 'payroll_admin',
-      status: 'Menunggu',
-      notes: newLoan.reason,
-    });
+    tenantApi
+      .createLoan({ ...loanData, remainingAmount: loanData.totalAmount, status: 'Menunggu Approval' } as unknown as Omit<ApiEmployeeLoan, 'id' | 'tenantId'>)
+      .then((created) => {
+        setApiLoans((prev) => [created, ...prev]);
+        const emp = employees.find((e) => e.id === created.employeeId);
+        createApprovalItem({
+          category: 'Pinjaman',
+          referenceId: created.id,
+          title: `Pengajuan ${created.loanType}: ${emp?.fullName || 'Karyawan'} (Tenor ${created.tenorMonths} Bln)`,
+          requesterId: created.employeeId,
+          department: emp?.department || 'Operasional',
+          amount: created.totalAmount,
+          submittedAt: new Date().toISOString(),
+          deadlineAt: new Date(Date.now() + 48 * 3600 * 1000).toISOString(),
+          level: 1,
+          totalLevels: 2,
+          assignedApproverRole: 'payroll_admin',
+          status: 'Menunggu',
+          notes: created.reason ?? undefined,
+        });
+      });
   };
 
   const updateLoanStatus = (id: string, status: 'Aktif' | 'Lunas' | 'Menunggu Approval' | 'Ditolak') => {
     persistApprovalItemByReference(id, 'Pinjaman', {
       status: status === 'Aktif' || status === 'Lunas' ? 'Disetujui' : status === 'Ditolak' ? 'Ditolak' : 'Menunggu',
     });
-    setLoans((prev) => prev.map((l) => (l.id === id ? { ...l, status } : l)));
+    tenantApi.updateLoan(id, { status }).then((updated) => setApiLoans((prev) => prev.map((l) => (l.id === id ? updated : l))));
   };
 
   // 5. Performance & KPI
@@ -2608,13 +2606,11 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
             );
           }
           if (checklist.financeCleared && !o.financeCleared) {
-            setLoans((prevLoans) =>
-              prevLoans.map((ln) =>
-                ln.employeeId === o.employeeId && ln.status === 'Aktif'
-                  ? { ...ln, remainingAmount: 0, status: 'Lunas' }
-                  : ln
-              )
-            );
+            const employeeActiveLoans = apiLoans.filter((ln) => ln.employeeId === o.employeeId && ln.status === 'Aktif');
+            Promise.all(employeeActiveLoans.map((ln) => tenantApi.updateLoan(ln.id, { remainingAmount: 0, status: 'Lunas' }))).then((updated) => {
+              const updatedIds = new Set(updated.map((u) => u.id));
+              setApiLoans((prev) => [...updated, ...prev.filter((ln) => !updatedIds.has(ln.id))]);
+            });
           }
           // If parklaring just issued, create document
           if (checklist.parklaringIssued && !o.parklaringIssued) {
@@ -5114,8 +5110,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // storage unavailable
     }
 
-    // payrollRecords is now real backend data — no local mock to reset.
-    setLoans(INITIAL_LOANS);
+    // payrollRecords/loans are now real backend data — no local mock to reset.
     setLeaveRequests(INITIAL_LEAVE_REQUESTS);
     setComplianceRecords(INITIAL_COMPLIANCE);
     setOffboardingRecords(INITIAL_OFFBOARDING);
@@ -5164,7 +5159,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         generatePayrollRun,
         approvePayrollRun,
         disbursePayrollRun,
-        loans: loans.filter((l) => l.tenantId === currentTenant.id),
+        loans, // real backend data, already tenant-scoped server-side
         addLoan,
         updateLoanStatus,
         kpis: kpis.filter((k) => k.tenantId === currentTenant.id),

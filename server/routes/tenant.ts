@@ -52,6 +52,7 @@ import {
   salaryComponents,
   employeeSalaryComponentAssignments,
   payrollRecords,
+  employeeLoans,
 } from "../db/schema.ts";
 import { requireTenantAdmin } from "../middleware/auth.ts";
 import { validateBody, validateParams, uuidParam } from "../lib/validate.ts";
@@ -2453,5 +2454,51 @@ tenantRouter.put("/payroll-records/:id", validateParams(uuidParam("id")), valida
   const [existing] = await db.select().from(payrollRecords).where(and(eq(payrollRecords.id, req.params.id), eq(payrollRecords.tenantId, tenantId))).limit(1);
   if (!existing || !visibleEmployeeIds.includes(existing.employeeId)) return res.status(404).json({ error: "Data payroll tidak ditemukan" });
   const [updated] = await db.update(payrollRecords).set(req.body).where(eq(payrollRecords.id, req.params.id)).returning();
+  res.json(updated);
+});
+
+// ---------------------------------------------------------------------------
+// Employee Loans & Kasbon
+// ---------------------------------------------------------------------------
+
+const employeeLoanSchema = z.object({
+  employeeId: z.string().uuid(),
+  loanType: z.string().trim().min(1).max(100),
+  totalAmount: z.number().int().min(0),
+  tenorMonths: z.number().int().min(1),
+  monthlyInstallment: z.number().int().min(0),
+  remainingAmount: z.number().int().min(0).optional(),
+  startDate: z.string().trim().min(1).max(20),
+  reason: z.string().trim().max(1000).optional().nullable(),
+  status: z.enum(["Aktif", "Lunas", "Menunggu Approval", "Ditolak"]).optional(),
+  adminFee: z.number().int().min(0).optional().nullable(),
+  interestMethod: z.string().trim().max(100).optional().nullable(),
+  interestRatePercent: z.number().min(0).optional().nullable(),
+});
+
+tenantRouter.get("/loans", async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
+  if (visibleEmployeeIds.length === 0) return res.json([]);
+  res.json(await db.select().from(employeeLoans).where(and(eq(employeeLoans.tenantId, tenantId), inArray(employeeLoans.employeeId, visibleEmployeeIds))));
+});
+
+tenantRouter.post("/loans", validateBody(employeeLoanSchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
+  if (!visibleEmployeeIds.includes(req.body.employeeId)) return res.status(403).json({ error: "Karyawan di luar ruang lingkup Anda" });
+  const [created] = await db
+    .insert(employeeLoans)
+    .values({ ...req.body, remainingAmount: req.body.remainingAmount ?? req.body.totalAmount, tenantId })
+    .returning();
+  res.status(201).json(created);
+});
+
+tenantRouter.put("/loans/:id", validateParams(uuidParam("id")), validateBody(employeeLoanSchema.partial()), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
+  const [existing] = await db.select().from(employeeLoans).where(and(eq(employeeLoans.id, req.params.id), eq(employeeLoans.tenantId, tenantId))).limit(1);
+  if (!existing || !visibleEmployeeIds.includes(existing.employeeId)) return res.status(404).json({ error: "Data pinjaman tidak ditemukan" });
+  const [updated] = await db.update(employeeLoans).set(req.body).where(eq(employeeLoans.id, req.params.id)).returning();
   res.json(updated);
 });

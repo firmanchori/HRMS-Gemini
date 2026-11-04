@@ -1189,3 +1189,30 @@ export const payrollRecords = pgTable("payroll_records", {
   paidDate: text("paid_date"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+// ---------------------------------------------------------------------------
+// Employee Loans & Kasbon — real backend (user, 2026-11-05: disbursePayrollRun
+// was deducting installments against mock loan state since Loans itself
+// hadn't been migrated yet; this table is that migration). loanSchemes
+// (the scheme/plan master config in LoanManagement.tsx) stays local —
+// only the loan RECORDS themselves (applications HR approves and payroll
+// deducts against) needed a real table.
+// ---------------------------------------------------------------------------
+
+export const employeeLoans = pgTable("employee_loans", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  employeeId: uuid("employee_id").references(() => employees.id).notNull(),
+  loanType: text("loan_type").notNull(),
+  totalAmount: integer("total_amount").notNull().default(0),
+  tenorMonths: integer("tenor_months").notNull().default(1),
+  monthlyInstallment: integer("monthly_installment").notNull().default(0),
+  remainingAmount: integer("remaining_amount").notNull().default(0),
+  startDate: text("start_date").notNull(),
+  reason: text("reason"),
+  status: text("status").notNull().default("Menunggu Approval"),
+  adminFee: integer("admin_fee"),
+  interestMethod: text("interest_method"),
+  interestRatePercent: doublePrecision("interest_rate_percent"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});

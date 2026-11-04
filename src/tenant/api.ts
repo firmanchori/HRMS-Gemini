@@ -547,6 +547,23 @@ export interface PayrollRecord {
   paidDate: string | null;
 }
 
+export interface EmployeeLoan {
+  id: string;
+  tenantId: string;
+  employeeId: string;
+  loanType: string;
+  totalAmount: number;
+  tenorMonths: number;
+  monthlyInstallment: number;
+  remainingAmount: number;
+  startDate: string;
+  reason: string | null;
+  status: "Aktif" | "Lunas" | "Menunggu Approval" | "Ditolak";
+  adminFee: number | null;
+  interestMethod: string | null;
+  interestRatePercent: number | null;
+}
+
 export type OrgChangeSet = { create?: Record<string, unknown>[]; update?: { id: string; data: Record<string, unknown> }[]; delete?: string[] };
 
 export interface OrgChangeProposal {
@@ -826,4 +843,10 @@ export const tenantApi = {
     request<PayrollRecord>("/api/tenant/payroll-records/upsert", { method: "POST", body: JSON.stringify(data) }),
   updatePayrollRecord: (id: string, data: Partial<PayrollRecord>) =>
     request<PayrollRecord>(`/api/tenant/payroll-records/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+
+  listLoans: () => request<EmployeeLoan[]>("/api/tenant/loans"),
+  createLoan: (data: Omit<EmployeeLoan, "id" | "tenantId">) =>
+    request<EmployeeLoan>("/api/tenant/loans", { method: "POST", body: JSON.stringify(data) }),
+  updateLoan: (id: string, data: Partial<EmployeeLoan>) =>
+    request<EmployeeLoan>(`/api/tenant/loans/${id}`, { method: "PUT", body: JSON.stringify(data) }),
 };
