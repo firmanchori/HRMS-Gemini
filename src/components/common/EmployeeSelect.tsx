@@ -70,16 +70,21 @@ export const EmployeeSelect: React.FC<EmployeeSelectProps> = ({
 
   const filtered = employees.filter((emp) => {
     const q = search.toLowerCase();
+    // position/department aren't always resolved (e.g. employee has no
+    // position/department assigned yet) despite the mock type claiming
+    // they're required strings — real backend rows can omit them, which
+    // crashed every EmployeeSelect search with "Cannot read properties of
+    // undefined (reading 'toLowerCase')" (found live, 2026-11-04).
     return (
-      emp.fullName.toLowerCase().includes(q) ||
-      emp.nik.toLowerCase().includes(q) ||
-      emp.position.toLowerCase().includes(q) ||
-      emp.department.toLowerCase().includes(q)
+      (emp.fullName || '').toLowerCase().includes(q) ||
+      (emp.nik || '').toLowerCase().includes(q) ||
+      (emp.position || '').toLowerCase().includes(q) ||
+      (emp.department || '').toLowerCase().includes(q)
     );
   });
 
   const getInitials = (name: string) => {
-    return name
+    return (name || '?')
       .split(' ')
       .map((n) => n[0])
       .slice(0, 2)

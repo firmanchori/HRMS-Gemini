@@ -56,6 +56,7 @@ export const AttendanceManagement: React.FC = () => {
     clockOut,
     submitLeaveRequest,
     reviewLeaveRequest,
+    submitOvertimeRequest,
     shifts,
     shiftSwaps,
     addShiftSwapRequest,
@@ -191,6 +192,14 @@ export const AttendanceManagement: React.FC = () => {
 
   // Modals
   const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
+  const [isOvertimeModalOpen, setIsOvertimeModalOpen] = useState(false);
+  const [overtimeEmpId, setOvertimeEmpId] = useState('');
+  const [overtimeDate, setOvertimeDate] = useState(new Date().toISOString().split('T')[0]);
+  const [overtimeStartTime, setOvertimeStartTime] = useState('18:00');
+  const [overtimeEndTime, setOvertimeEndTime] = useState('20:00');
+  const [overtimeCompensationType, setOvertimeCompensationType] = useState<'Lembur Berbayar' | 'Cuti Pengganti'>('Lembur Berbayar');
+  const [overtimeReason, setOvertimeReason] = useState('');
+  const [overtimeFormError, setOvertimeFormError] = useState<string | null>(null);
   const [isShiftSwapModalOpen, setIsShiftSwapModalOpen] = useState(false);
   const [isCorrectionModalOpen, setIsCorrectionModalOpen] = useState(false);
   const [confirmCorrectionAction, setConfirmCorrectionAction] = useState<{
@@ -303,6 +312,43 @@ export const AttendanceManagement: React.FC = () => {
     setLeaveReason('');
   };
 
+  const handleOvertimeInputSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const emp = employees.find((em) => em.id === overtimeEmpId);
+    if (!emp) {
+      setOvertimeFormError('Pilih nama karyawan yang akan diinput lemburnya');
+      return;
+    }
+    // Hak lembur per karyawan (user, 2026-11-04): HR juga tidak bisa
+    // menginput lembur untuk karyawan yang tidak berhak, bukan cuma ESS.
+    if (emp.canOvertime === false) {
+      setOvertimeFormError(`${emp.fullName} tidak memiliki hak lembur (lihat Pengaturan).`);
+      return;
+    }
+    const [startH, startM] = overtimeStartTime.split(':').map(Number);
+    const [endH, endM] = overtimeEndTime.split(':').map(Number);
+    const hours = Number((((endH * 60 + endM) - (startH * 60 + startM)) / 60).toFixed(1));
+    if (!(hours > 0)) {
+      setOvertimeFormError('Jam selesai harus setelah jam mulai.');
+      return;
+    }
+
+    setOvertimeFormError(null);
+    submitOvertimeRequest({
+      employeeId: overtimeEmpId,
+      date: overtimeDate,
+      startTime: overtimeStartTime,
+      endTime: overtimeEndTime,
+      hours,
+      reason: overtimeReason || 'Input lembur oleh HR',
+      type: 'Perintah Atasan',
+      compensationType: overtimeCompensationType,
+    });
+
+    setIsOvertimeModalOpen(false);
+    setOvertimeReason('');
+  };
+
   const handleShiftSwapSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!swapRequesterId || !swapTargetId) {
@@ -393,13 +439,26 @@ export const AttendanceManagement: React.FC = () => {
           </p>
         </div>
 
-        <button
-          onClick={() => setIsLeaveModalOpen(true)}
-          className="flex items-center justify-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold shadow-xs shrink-0 transition-colors"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          <span>+ Ajukan Cuti Karyawan</span>
-        </button>
+        <div className="flex gap-2 shrink-0">
+          <button
+            onClick={() => setIsLeaveModalOpen(true)}
+            className="flex items-center justify-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>+ Ajukan Cuti Karyawan</span>
+          </button>
+          <button
+            onClick={() => {
+              setOvertimeFormError(null);
+              setOvertimeEmpId('');
+              setIsOvertimeModalOpen(true);
+            }}
+            className="flex items-center justify-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 text-indigo-700 border border-indigo-300 rounded-lg text-xs font-semibold shadow-xs transition-colors"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>+ Input Lembur Karyawan</span>
+          </button>
+        </div>
       </div>
 
       {/* Row 2: Standard Sub-Menu Navigation Bar with Icons (Not Parallel to Title) */}
@@ -1426,6 +1485,120 @@ export const AttendanceManagement: React.FC = () => {
                   className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-semibold shadow-xs"
                 >
                   Ajukan Cuti
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Input Lembur Karyawan (HR) */}
+      {isOvertimeModalOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsOvertimeModalOpen(false);
+          }}
+        >
+          <div
+            className="bg-white rounded-xl shadow-xl max-w-md w-full border border-slate-200 overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-5 py-4 bg-slate-900 text-white flex items-center justify-between">
+              <h3 className="text-sm font-bold">Input Lembur Karyawan</h3>
+              <button onClick={() => setIsOvertimeModalOpen(false)}>
+                <X className="w-4 h-4 text-slate-400 hover:text-white" />
+              </button>
+            </div>
+
+            <form onSubmit={handleOvertimeInputSubmit} className="p-5 space-y-4 text-xs">
+              {overtimeFormError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg flex items-center gap-2 text-rose-800 text-xs font-semibold animate-fadeIn">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                  <span>{overtimeFormError}</span>
+                </div>
+              )}
+
+              {/* Hanya karyawan yang berhak lembur (lihat tab Pengaturan) yang bisa dipilih di sini */}
+              <EmployeeSelect
+                label="Pilih Karyawan"
+                required
+                employees={employees.filter((e) => e.canOvertime !== false)}
+                value={overtimeEmpId}
+                onChange={(val) => {
+                  setOvertimeEmpId(val);
+                  if (overtimeFormError) setOvertimeFormError(null);
+                }}
+              />
+
+              <ValidatedDateInput
+                id="overtimeDate"
+                label="Tanggal Lembur *"
+                value={overtimeDate}
+                onChange={setOvertimeDate}
+                required
+                helperText="Format YYYY-MM-DD"
+              />
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-medium text-slate-700 block mb-1">Jam Mulai *</label>
+                  <input
+                    type="time"
+                    required
+                    value={overtimeStartTime}
+                    onChange={(e) => setOvertimeStartTime(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="font-medium text-slate-700 block mb-1">Jam Selesai *</label>
+                  <input
+                    type="time"
+                    required
+                    value={overtimeEndTime}
+                    onChange={(e) => setOvertimeEndTime(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded font-mono"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="font-medium text-slate-700 block mb-1">Jenis Kompensasi *</label>
+                <select
+                  value={overtimeCompensationType}
+                  onChange={(e) => setOvertimeCompensationType(e.target.value as any)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded bg-white font-medium"
+                >
+                  <option value="Lembur Berbayar">Lembur Berbayar</option>
+                  <option value="Cuti Pengganti">Cuti Pengganti</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="font-medium text-slate-700 block mb-1">Alasan / Uraian Tugas</label>
+                <textarea
+                  rows={2}
+                  value={overtimeReason}
+                  onChange={(e) => setOvertimeReason(e.target.value)}
+                  placeholder="Keterangan keperluan lembur..."
+                  className="w-full px-3 py-2 border border-slate-300 rounded"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-slate-200 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsOvertimeModalOpen(false)}
+                  className="px-3 py-1.5 bg-slate-100 text-slate-700 rounded font-semibold"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-semibold shadow-xs"
+                >
+                  Input Lembur
                 </button>
               </div>
             </form>
