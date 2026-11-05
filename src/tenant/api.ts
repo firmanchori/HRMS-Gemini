@@ -603,6 +603,22 @@ export interface ComplianceRecord {
   status: "Aktif" | "Kedaluwarsa" | "Dibatalkan";
 }
 
+export interface OffboardingRecord {
+  id: string;
+  tenantId: string;
+  employeeId: string;
+  separationType: "Resign Sukarela" | "Habis Kontrak" | "PHK Efisiensi" | "PHK Indisipliner";
+  requestDate: string;
+  effectiveDate: string;
+  handoverCompleted: boolean;
+  assetReturned: boolean;
+  financeCleared: boolean;
+  severancePay: number;
+  parklaringIssued: boolean;
+  parklaringNumber: string | null;
+  notes: string | null;
+}
+
 export type OrgChangeSet = { create?: Record<string, unknown>[]; update?: { id: string; data: Record<string, unknown> }[]; delete?: string[] };
 
 export interface OrgChangeProposal {
@@ -904,4 +920,10 @@ export const tenantApi = {
     request<ComplianceRecord>("/api/tenant/compliance-records", { method: "POST", body: JSON.stringify(data) }),
   updateComplianceRecord: (id: string, data: Partial<ComplianceRecord>) =>
     request<ComplianceRecord>(`/api/tenant/compliance-records/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+
+  listOffboardingRecords: () => request<OffboardingRecord[]>("/api/tenant/offboarding-records"),
+  createOffboardingRecord: (data: Omit<OffboardingRecord, "id" | "tenantId">) =>
+    request<OffboardingRecord>("/api/tenant/offboarding-records", { method: "POST", body: JSON.stringify(data) }),
+  updateOffboardingRecord: (id: string, data: Partial<OffboardingRecord>) =>
+    request<OffboardingRecord>(`/api/tenant/offboarding-records/${id}`, { method: "PUT", body: JSON.stringify(data) }),
 };

@@ -225,6 +225,13 @@
       "when": 1793816053104,
       "tag": "0031_colossal_thunderbird",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1793837419618,
+      "tag": "0032_complete_sunspot",
+      "breakpoints": true
     }
   ]
 }

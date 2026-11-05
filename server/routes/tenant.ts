@@ -56,6 +56,7 @@ import {
   leaveRequests,
   employeeKpis,
   complianceRecords,
+  offboardingRecords,
 } from "../db/schema.ts";
 import { requireTenantAdmin } from "../middleware/auth.ts";
 import { validateBody, validateParams, uuidParam } from "../lib/validate.ts";
@@ -2628,5 +2629,47 @@ tenantRouter.put("/compliance-records/:id", validateParams(uuidParam("id")), val
   const [existing] = await db.select().from(complianceRecords).where(and(eq(complianceRecords.id, req.params.id), eq(complianceRecords.tenantId, tenantId))).limit(1);
   if (!existing || !visibleEmployeeIds.includes(existing.employeeId)) return res.status(404).json({ error: "Data kepatuhan tidak ditemukan" });
   const [updated] = await db.update(complianceRecords).set(req.body).where(eq(complianceRecords.id, req.params.id)).returning();
+  res.json(updated);
+});
+
+// ---------------------------------------------------------------------------
+// Offboarding
+// ---------------------------------------------------------------------------
+
+const offboardingRecordSchema = z.object({
+  employeeId: z.string().uuid(),
+  separationType: z.enum(["Resign Sukarela", "Habis Kontrak", "PHK Efisiensi", "PHK Indisipliner"]),
+  requestDate: z.string().trim().min(1).max(20),
+  effectiveDate: z.string().trim().min(1).max(20),
+  handoverCompleted: z.boolean().optional(),
+  assetReturned: z.boolean().optional(),
+  financeCleared: z.boolean().optional(),
+  severancePay: z.number().int().min(0).optional(),
+  parklaringIssued: z.boolean().optional(),
+  parklaringNumber: z.string().trim().max(200).optional().nullable(),
+  notes: z.string().trim().max(2000).optional().nullable(),
+});
+
+tenantRouter.get("/offboarding-records", async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
+  if (visibleEmployeeIds.length === 0) return res.json([]);
+  res.json(await db.select().from(offboardingRecords).where(and(eq(offboardingRecords.tenantId, tenantId), inArray(offboardingRecords.employeeId, visibleEmployeeIds))));
+});
+
+tenantRouter.post("/offboarding-records", validateBody(offboardingRecordSchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
+  if (!visibleEmployeeIds.includes(req.body.employeeId)) return res.status(403).json({ error: "Karyawan di luar ruang lingkup Anda" });
+  const [created] = await db.insert(offboardingRecords).values({ ...req.body, tenantId }).returning();
+  res.status(201).json(created);
+});
+
+tenantRouter.put("/offboarding-records/:id", validateParams(uuidParam("id")), validateBody(offboardingRecordSchema.partial()), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
+  const [existing] = await db.select().from(offboardingRecords).where(and(eq(offboardingRecords.id, req.params.id), eq(offboardingRecords.tenantId, tenantId))).limit(1);
+  if (!existing || !visibleEmployeeIds.includes(existing.employeeId)) return res.status(404).json({ error: "Data offboarding tidak ditemukan" });
+  const [updated] = await db.update(offboardingRecords).set(req.body).where(eq(offboardingRecords.id, req.params.id)).returning();
   res.json(updated);
 });

@@ -35,6 +35,7 @@ import {
   type LeaveRequest as ApiLeaveRequest,
   type EmployeeKpi as ApiEmployeeKpi,
   type ComplianceRecord as ApiComplianceRecord,
+  type OffboardingRecord as ApiOffboardingRecord,
 } from '../tenant/api';
 import { ORG_STRUCTURE_TEMPLATES } from '../utils/orgStructureTemplates';
 import {
@@ -127,7 +128,6 @@ import {
   INITIAL_CANDIDATES,
   INITIAL_COMPETENCY_TEST_TYPES,
   INITIAL_INTERVIEW_TYPES,
-  INITIAL_OFFBOARDING,
   INITIAL_ASSETS,
   INITIAL_PROCUREMENT,
   INITIAL_DOCUMENTS,
@@ -969,10 +969,9 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [competencyTestTypes, setCompetencyTestTypes] = useState<CompetencyTestTypeSetting[]>([]);
   const [interviewTypeSettings, setInterviewTypeSettings] = useState<InterviewTypeSetting[]>([]);
 
-  const [offboardingRecords, setOffboardingRecords] = useState<OffboardingRecord[]>(() => {
-    const saved = localStorage.getItem('nusahr_offboarding');
-    return saved ? JSON.parse(saved) : INITIAL_OFFBOARDING;
-  });
+  // Real backend data, loaded via loadTenantOrgData() (user, 2026-11-05: "lanjut 4").
+  const [apiOffboardingRecords, setApiOffboardingRecords] = useState<ApiOffboardingRecord[]>([]);
+  const offboardingRecords = useMemo(() => apiOffboardingRecords as unknown as OffboardingRecord[], [apiOffboardingRecords]);
 
   const [assets, setAssets] = useState<GAAsset[]>(() => {
     const saved = localStorage.getItem('nusahr_assets');
@@ -1413,6 +1412,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       realSalaryComponents, realEmployeeSalaryAssignments, realPayrollRecords,
       realLoans,
       realLeaveRequests, realEmployeeKpis, realComplianceRecords,
+      realOffboardingRecords,
     ] = await Promise.all([
       tenantApi.listEntities(),
       tenantApi.listOfficeLocations(),
@@ -1449,6 +1449,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       tenantApi.listLeaveRequests(),
       tenantApi.listEmployeeKpis(),
       tenantApi.listComplianceRecords(),
+      tenantApi.listOffboardingRecords(),
     ]);
     setApiEntities(realEntities);
     setApiOfficeLocations(realOfficeLocations);
@@ -1491,6 +1492,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setApiLeaveRequests(realLeaveRequests);
     setApiEmployeeKpis(realEmployeeKpis);
     setApiComplianceRecords(realComplianceRecords);
+    setApiOffboardingRecords(realOffboardingRecords);
   };
 
   // 34. Vendor Invoices (AP)
@@ -2554,69 +2556,65 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       currentTenant.code
     );
 
-    const record: OffboardingRecord = {
-      id: `off-${Date.now()}`,
-      tenantId: currentTenant.id,
-      employeeId,
-      separationType,
-      requestDate: new Date().toISOString().split('T')[0],
-      effectiveDate,
-      handoverCompleted: false,
-      assetReturned: false,
-      financeCleared: false,
-      severancePay: separationType.includes('PHK') ? totalSeverance : 0,
-      parklaringIssued: false,
-      parklaringNumber,
-      notes,
-    };
-
-    setOffboardingRecords((prev) => [record, ...prev]);
+    tenantApi
+      .createOffboardingRecord({
+        employeeId,
+        separationType,
+        requestDate: new Date().toISOString().split('T')[0],
+        effectiveDate,
+        handoverCompleted: false,
+        assetReturned: false,
+        financeCleared: false,
+        severancePay: separationType.includes('PHK') ? totalSeverance : 0,
+        parklaringIssued: false,
+        parklaringNumber,
+        notes,
+      })
+      .then((created) => setApiOffboardingRecords((prev) => [created, ...prev]));
   };
 
   const updateOffboardingChecklist = (
     id: string,
-    checklist: Partial<Pick<OffboardingRecord, 'handoverCompleted' | 'assetReturned' | 'financeCleared' | 'parklaringIssued'>>
+    checklist: Partial<Pick<OffboardingRecord, 'handoverCompleted' | 'assetReturned' | 'financeCleared' | 'parklaringIssued' | 'parklaringNumber'>>
   ) => {
-    setOffboardingRecords((prev) =>
-      prev.map((o) => {
-        if (o.id === id) {
-          const updated = { ...o, ...checklist };
-          if (checklist.assetReturned && !o.assetReturned) {
-            setAssets((prevAssets) =>
-              prevAssets.map((ast) =>
-                ast.assignedToEmployeeId === o.employeeId
-                  ? { ...ast, assignedToEmployeeId: undefined, condition: 'Baik' }
-                  : ast
-              )
-            );
-          }
-          if (checklist.financeCleared && !o.financeCleared) {
-            const employeeActiveLoans = apiLoans.filter((ln) => ln.employeeId === o.employeeId && ln.status === 'Aktif');
-            Promise.all(employeeActiveLoans.map((ln) => tenantApi.updateLoan(ln.id, { remainingAmount: 0, status: 'Lunas' }))).then((updated) => {
-              const updatedIds = new Set(updated.map((u) => u.id));
-              setApiLoans((prev) => [...updated, ...prev.filter((ln) => !updatedIds.has(ln.id))]);
-            });
-          }
-          // If parklaring just issued, create document
-          if (checklist.parklaringIssued && !o.parklaringIssued) {
-            const emp = employees.find((e) => e.id === o.employeeId);
-            if (emp) {
-              createOfficialDocument({
-                type: 'Parklaring',
-                title: `Surat Keterangan Pengalaman Kerja (Parklaring): ${emp.fullName}`,
-                targetEmployeeId: emp.id,
-                signeeName: currentUser.name,
-                signeeRole: 'VP Human Resources',
-                contentPreview: `Menerangkan bahwa Saudara/i ${emp.fullName} telah bekerja dengan baik di ${currentTenant.name} terhitung sejak ${emp.joinDate} sampai ${o.effectiveDate} dengan jabatan terakhir ${emp.position}.`,
-              });
-              updateEmployee(emp.id, { status: 'Resign' });
-            }
-          }
-          return updated;
-        }
-        return o;
-      })
-    );
+    const o = offboardingRecords.find((rec) => rec.id === id);
+    if (!o) return;
+
+    tenantApi.updateOffboardingRecord(id, checklist).then((updated) => {
+      setApiOffboardingRecords((prev) => prev.map((rec) => (rec.id === id ? updated : rec)));
+    });
+
+    if (checklist.assetReturned && !o.assetReturned) {
+      setAssets((prevAssets) =>
+        prevAssets.map((ast) =>
+          ast.assignedToEmployeeId === o.employeeId
+            ? { ...ast, assignedToEmployeeId: undefined, condition: 'Baik' }
+            : ast
+        )
+      );
+    }
+    if (checklist.financeCleared && !o.financeCleared) {
+      const employeeActiveLoans = apiLoans.filter((ln) => ln.employeeId === o.employeeId && ln.status === 'Aktif');
+      Promise.all(employeeActiveLoans.map((ln) => tenantApi.updateLoan(ln.id, { remainingAmount: 0, status: 'Lunas' }))).then((updatedLoans) => {
+        const updatedIds = new Set(updatedLoans.map((u) => u.id));
+        setApiLoans((prev) => [...updatedLoans, ...prev.filter((ln) => !updatedIds.has(ln.id))]);
+      });
+    }
+    // If parklaring just issued, create document
+    if (checklist.parklaringIssued && !o.parklaringIssued) {
+      const emp = employees.find((e) => e.id === o.employeeId);
+      if (emp) {
+        createOfficialDocument({
+          type: 'Parklaring',
+          title: `Surat Keterangan Pengalaman Kerja (Parklaring): ${emp.fullName}`,
+          targetEmployeeId: emp.id,
+          signeeName: currentUser.name,
+          signeeRole: 'VP Human Resources',
+          contentPreview: `Menerangkan bahwa Saudara/i ${emp.fullName} telah bekerja dengan baik di ${currentTenant.name} terhitung sejak ${emp.joinDate} sampai ${o.effectiveDate} dengan jabatan terakhir ${emp.position}.`,
+        });
+        updateEmployee(emp.id, { status: 'Resign' });
+      }
+    }
   };
 
   // 9. GA Assets & QR
@@ -5081,7 +5079,6 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.removeItem('nusahr_loans');
       localStorage.removeItem('nusahr_leaves');
       localStorage.removeItem('nusahr_compliance');
-      localStorage.removeItem('nusahr_offboarding');
       localStorage.removeItem('nusahr_procurement');
       localStorage.removeItem('nusahr_approvals');
       localStorage.removeItem('nusahr_assets');
@@ -5095,8 +5092,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // storage unavailable
     }
 
-    // payrollRecords/loans/leaveRequests/kpis/complianceRecords are now real backend data — no local mock to reset.
-    setOffboardingRecords(INITIAL_OFFBOARDING);
+    // payrollRecords/loans/leaveRequests/kpis/complianceRecords/offboardingRecords are now real backend data — no local mock to reset.
     setProcurementOrders(INITIAL_PROCUREMENT);
     setAssets(INITIAL_ASSETS);
     setBusinessTrips(INITIAL_BUSINESS_TRIPS);
@@ -5174,7 +5170,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         resetInterviewTypes,
         saveCandidateInterviewEvaluation,
         deleteCandidateInterviewEvaluation,
-        offboardingRecords: offboardingRecords.filter((o) => o.tenantId === currentTenant.id),
+        offboardingRecords, // real backend data, already tenant-scoped server-side
         initiateOffboarding,
         updateOffboardingChecklist,
         assets: assets.filter((a) => a.tenantId === currentTenant.id),

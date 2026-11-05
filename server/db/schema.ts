@@ -1264,3 +1264,24 @@ export const complianceRecords = pgTable("compliance_records", {
   status: text("status").notNull().default("Aktif"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+// ---------------------------------------------------------------------------
+// Offboarding — real backend (user, 2026-11-05: "lanjut 4").
+// ---------------------------------------------------------------------------
+
+export const offboardingRecords = pgTable("offboarding_records", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  employeeId: uuid("employee_id").references(() => employees.id).notNull(),
+  separationType: text("separation_type").notNull(),
+  requestDate: text("request_date").notNull(),
+  effectiveDate: text("effective_date").notNull(),
+  handoverCompleted: boolean("handover_completed").notNull().default(false),
+  assetReturned: boolean("asset_returned").notNull().default(false),
+  financeCleared: boolean("finance_cleared").notNull().default(false),
+  severancePay: integer("severance_pay").notNull().default(0),
+  parklaringIssued: boolean("parklaring_issued").notNull().default(false),
+  parklaringNumber: text("parklaring_number"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
