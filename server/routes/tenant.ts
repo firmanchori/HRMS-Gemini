@@ -57,6 +57,12 @@ import {
   employeeKpis,
   complianceRecords,
   offboardingRecords,
+  businessTrips,
+  vendors,
+  gaAssets,
+  assetMaintenanceTickets,
+  assetRelocationLogs,
+  procurementOrders,
 } from "../db/schema.ts";
 import { requireTenantAdmin } from "../middleware/auth.ts";
 import { validateBody, validateParams, uuidParam } from "../lib/validate.ts";
@@ -2671,5 +2677,230 @@ tenantRouter.put("/offboarding-records/:id", validateParams(uuidParam("id")), va
   const [existing] = await db.select().from(offboardingRecords).where(and(eq(offboardingRecords.id, req.params.id), eq(offboardingRecords.tenantId, tenantId))).limit(1);
   if (!existing || !visibleEmployeeIds.includes(existing.employeeId)) return res.status(404).json({ error: "Data offboarding tidak ditemukan" });
   const [updated] = await db.update(offboardingRecords).set(req.body).where(eq(offboardingRecords.id, req.params.id)).returning();
+  res.json(updated);
+});
+
+// ---------------------------------------------------------------------------
+// Business Trips (SPPD)
+// ---------------------------------------------------------------------------
+
+const businessTripSchema = z.object({
+  tripNumber: z.string().trim().min(1).max(100),
+  employeeId: z.string().uuid(),
+  destinationCity: z.string().trim().min(1).max(200),
+  startDate: z.string().trim().min(1).max(20),
+  endDate: z.string().trim().min(1).max(20),
+  totalDays: z.number().int().min(1),
+  purpose: z.string().trim().min(1).max(2000),
+  transportType: z.enum(["Pesawat", "Kereta Api", "Mobil Operasional", "Travel"]),
+  estimatedCost: z.number().int().min(0),
+  perDiemDaily: z.number().int().min(0),
+  accommodationCost: z.number().int().min(0),
+  status: z.enum(["Menunggu Approval", "Disetujui Atasan", "Disetujui Finance", "Selesai", "Ditolak"]).optional(),
+  approvedBy: z.string().trim().max(200).optional().nullable(),
+});
+
+tenantRouter.get("/business-trips", async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
+  if (visibleEmployeeIds.length === 0) return res.json([]);
+  res.json(await db.select().from(businessTrips).where(and(eq(businessTrips.tenantId, tenantId), inArray(businessTrips.employeeId, visibleEmployeeIds))));
+});
+
+tenantRouter.post("/business-trips", validateBody(businessTripSchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
+  if (!visibleEmployeeIds.includes(req.body.employeeId)) return res.status(403).json({ error: "Karyawan di luar ruang lingkup Anda" });
+  const [created] = await db.insert(businessTrips).values({ ...req.body, tenantId }).returning();
+  res.status(201).json(created);
+});
+
+tenantRouter.put("/business-trips/:id", validateParams(uuidParam("id")), validateBody(businessTripSchema.partial()), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
+  const [existing] = await db.select().from(businessTrips).where(and(eq(businessTrips.id, req.params.id), eq(businessTrips.tenantId, tenantId))).limit(1);
+  if (!existing || !visibleEmployeeIds.includes(existing.employeeId)) return res.status(404).json({ error: "Data perjalanan dinas tidak ditemukan" });
+  const [updated] = await db.update(businessTrips).set(req.body).where(eq(businessTrips.id, req.params.id)).returning();
+  res.json(updated);
+});
+
+// ---------------------------------------------------------------------------
+// GA Asset & Procurement — Vendors
+// ---------------------------------------------------------------------------
+
+const vendorSchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  code: z.string().trim().min(1).max(50),
+  category: z.enum(["Hardware & IT", "Konstruksi & Fasilitas", "ATK & Cetak", "Jasa Konsultan / Project", "Event & Logistik"]),
+  contactPerson: z.string().trim().min(1).max(200),
+  phone: z.string().trim().min(1).max(50),
+  email: z.string().trim().email().max(200),
+  npwp: z.string().trim().max(50),
+  rating: z.number().int().min(1).max(5).optional(),
+  address: z.string().trim().max(500),
+  isVerified: z.boolean().optional(),
+});
+
+tenantRouter.get("/vendors", async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  res.json(await db.select().from(vendors).where(eq(vendors.tenantId, tenantId)));
+});
+
+tenantRouter.post("/vendors", validateBody(vendorSchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [created] = await db.insert(vendors).values({ ...req.body, tenantId }).returning();
+  res.status(201).json(created);
+});
+
+tenantRouter.put("/vendors/:id", validateParams(uuidParam("id")), validateBody(vendorSchema.partial()), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [existing] = await db.select().from(vendors).where(and(eq(vendors.id, req.params.id), eq(vendors.tenantId, tenantId))).limit(1);
+  if (!existing) return res.status(404).json({ error: "Vendor tidak ditemukan" });
+  const [updated] = await db.update(vendors).set(req.body).where(eq(vendors.id, req.params.id)).returning();
+  res.json(updated);
+});
+
+// ---------------------------------------------------------------------------
+// GA Asset & Procurement — GA Assets
+// ---------------------------------------------------------------------------
+
+const gaAssetSchema = z.object({
+  assetCode: z.string().trim().min(1).max(100),
+  name: z.string().trim().min(1).max(200),
+  category: z.enum(["Laptop & Komputer", "Kendaraan Operasional", "Fasilitas Gedung", "Furniture", "Perangkat Jaringan"]),
+  building: z.string().trim().min(1).max(200),
+  room: z.string().trim().min(1).max(200),
+  purchaseDate: z.string().trim().min(1).max(20),
+  purchasePrice: z.number().int().min(0),
+  condition: z.enum(["Baik", "Perlu Perbaikan", "Rusak", "Dipinjam", "Hilang"]).optional(),
+  assignedToEmployeeId: z.string().uuid().optional().nullable(),
+  lastStockOpname: z.string().trim().min(1).max(20),
+  qrPayload: z.string().trim().min(1).max(2000),
+  usageStatus: z.enum(["Tersedia", "Digunakan", "Dalam Perbaikan"]).optional().nullable(),
+});
+
+tenantRouter.get("/ga-assets", async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  res.json(await db.select().from(gaAssets).where(eq(gaAssets.tenantId, tenantId)));
+});
+
+tenantRouter.post("/ga-assets", validateBody(gaAssetSchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [created] = await db.insert(gaAssets).values({ ...req.body, tenantId }).returning();
+  res.status(201).json(created);
+});
+
+tenantRouter.put("/ga-assets/:id", validateParams(uuidParam("id")), validateBody(gaAssetSchema.partial()), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [existing] = await db.select().from(gaAssets).where(and(eq(gaAssets.id, req.params.id), eq(gaAssets.tenantId, tenantId))).limit(1);
+  if (!existing) return res.status(404).json({ error: "Aset tidak ditemukan" });
+  const [updated] = await db.update(gaAssets).set(req.body).where(eq(gaAssets.id, req.params.id)).returning();
+  res.json(updated);
+});
+
+// ---------------------------------------------------------------------------
+// GA Asset & Procurement — Maintenance Tickets
+// ---------------------------------------------------------------------------
+
+const maintenanceTicketSchema = z.object({
+  ticketNumber: z.string().trim().min(1).max(100),
+  assetCode: z.string().trim().min(1).max(100),
+  assetName: z.string().trim().min(1).max(200),
+  reporterEmployeeId: z.string().uuid(),
+  issueType: z.enum(["Kerusakan Hardware", "Perawatan Rutin", "Perbaikan Fasilitas / Gedung", "Permintaan Penggantian"]),
+  priority: z.enum(["Rendah", "Sedang", "Tinggi", "Darurat"]),
+  description: z.string().trim().min(1).max(2000),
+  reportedAt: z.string().trim().min(1).max(40),
+  status: z.enum(["Tiket Dibuka", "Sedang Dikerjakan GA", "Menunggu Sparepart", "Selesai Diperbaiki", "Aset Diganti Baru"]).optional(),
+  assignedTechnician: z.string().trim().max(200).optional().nullable(),
+  cost: z.number().int().min(0).optional().nullable(),
+  resolutionNotes: z.string().trim().max(2000).optional().nullable(),
+});
+
+tenantRouter.get("/asset-maintenance-tickets", async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  res.json(await db.select().from(assetMaintenanceTickets).where(eq(assetMaintenanceTickets.tenantId, tenantId)));
+});
+
+tenantRouter.post("/asset-maintenance-tickets", validateBody(maintenanceTicketSchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [created] = await db.insert(assetMaintenanceTickets).values({ ...req.body, tenantId }).returning();
+  res.status(201).json(created);
+});
+
+tenantRouter.put("/asset-maintenance-tickets/:id", validateParams(uuidParam("id")), validateBody(maintenanceTicketSchema.partial()), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [existing] = await db.select().from(assetMaintenanceTickets).where(and(eq(assetMaintenanceTickets.id, req.params.id), eq(assetMaintenanceTickets.tenantId, tenantId))).limit(1);
+  if (!existing) return res.status(404).json({ error: "Tiket maintenance tidak ditemukan" });
+  const [updated] = await db.update(assetMaintenanceTickets).set(req.body).where(eq(assetMaintenanceTickets.id, req.params.id)).returning();
+  res.json(updated);
+});
+
+// ---------------------------------------------------------------------------
+// GA Asset & Procurement — Asset Relocation Logs
+// ---------------------------------------------------------------------------
+
+const assetRelocationSchema = z.object({
+  assetCode: z.string().trim().min(1).max(100),
+  assetName: z.string().trim().min(1).max(200),
+  fromBuilding: z.string().trim().min(1).max(200),
+  fromRoom: z.string().trim().min(1).max(200),
+  fromEmployeeId: z.string().uuid().optional().nullable(),
+  toBuilding: z.string().trim().min(1).max(200),
+  toRoom: z.string().trim().min(1).max(200),
+  toEmployeeId: z.string().uuid().optional().nullable(),
+  relocationDate: z.string().trim().min(1).max(20),
+  approvedBy: z.string().trim().min(1).max(200),
+  notes: z.string().trim().max(2000).optional(),
+});
+
+tenantRouter.get("/asset-relocations", async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  res.json(await db.select().from(assetRelocationLogs).where(eq(assetRelocationLogs.tenantId, tenantId)));
+});
+
+tenantRouter.post("/asset-relocations", validateBody(assetRelocationSchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [created] = await db.insert(assetRelocationLogs).values({ ...req.body, tenantId }).returning();
+  res.status(201).json(created);
+});
+
+// ---------------------------------------------------------------------------
+// GA Asset & Procurement — Procurement Orders
+// ---------------------------------------------------------------------------
+
+const procurementOrderSchema = z.object({
+  type: z.enum(["Pengadaan Barang", "Project / Jasa", "Barang", "Proyek / Jasa Kontrak"]).optional().nullable(),
+  prNumber: z.string().trim().min(1).max(100),
+  poNumber: z.string().trim().max(100).optional(),
+  quotationNumber: z.string().trim().max(100).optional().nullable(),
+  contractNumber: z.string().trim().max(100).optional().nullable(),
+  vendorId: z.string().uuid().optional().nullable(),
+  vendorName: z.string().trim().min(1).max(200),
+  itemName: z.string().trim().min(1).max(500),
+  quantity: z.number().int().min(1),
+  estimatedCost: z.number().int().min(0),
+  requestor: z.string().trim().min(1).max(200),
+  department: z.string().trim().min(1).max(200),
+  status: z.enum(["Pengajuan PR", "Quotation Diterima", "Disetujui HR/Finance", "PO Terbit", "Kontrak Berjalan", "Barang Diterima / Project Selesai", "Barang Diterima"]).optional(),
+  requestedDate: z.string().trim().min(1).max(20),
+});
+
+tenantRouter.get("/procurement-orders", async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  res.json(await db.select().from(procurementOrders).where(eq(procurementOrders.tenantId, tenantId)));
+});
+
+tenantRouter.post("/procurement-orders", validateBody(procurementOrderSchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [created] = await db.insert(procurementOrders).values({ ...req.body, tenantId }).returning();
+  res.status(201).json(created);
+});
+
+tenantRouter.put("/procurement-orders/:id", validateParams(uuidParam("id")), validateBody(procurementOrderSchema.partial()), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [existing] = await db.select().from(procurementOrders).where(and(eq(procurementOrders.id, req.params.id), eq(procurementOrders.tenantId, tenantId))).limit(1);
+  if (!existing) return res.status(404).json({ error: "Procurement order tidak ditemukan" });
+  const [updated] = await db.update(procurementOrders).set(req.body).where(eq(procurementOrders.id, req.params.id)).returning();
   res.json(updated);
 });

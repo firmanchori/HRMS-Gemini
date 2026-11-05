@@ -619,6 +619,108 @@ export interface OffboardingRecord {
   notes: string | null;
 }
 
+export interface BusinessTripRequest {
+  id: string;
+  tenantId: string;
+  tripNumber: string;
+  employeeId: string;
+  destinationCity: string;
+  startDate: string;
+  endDate: string;
+  totalDays: number;
+  purpose: string;
+  transportType: "Pesawat" | "Kereta Api" | "Mobil Operasional" | "Travel";
+  estimatedCost: number;
+  perDiemDaily: number;
+  accommodationCost: number;
+  status: "Menunggu Approval" | "Disetujui Atasan" | "Disetujui Finance" | "Selesai" | "Ditolak";
+  approvedBy: string | null;
+}
+
+export interface Vendor {
+  id: string;
+  tenantId: string;
+  name: string;
+  code: string;
+  category: "Hardware & IT" | "Konstruksi & Fasilitas" | "ATK & Cetak" | "Jasa Konsultan / Project" | "Event & Logistik";
+  contactPerson: string;
+  phone: string;
+  email: string;
+  npwp: string;
+  rating: number;
+  address: string;
+  isVerified: boolean;
+}
+
+export interface GAAsset {
+  id: string;
+  tenantId: string;
+  assetCode: string;
+  name: string;
+  category: "Laptop & Komputer" | "Kendaraan Operasional" | "Fasilitas Gedung" | "Furniture" | "Perangkat Jaringan";
+  building: string;
+  room: string;
+  purchaseDate: string;
+  purchasePrice: number;
+  condition: "Baik" | "Perlu Perbaikan" | "Rusak" | "Dipinjam" | "Hilang";
+  assignedToEmployeeId: string | null;
+  lastStockOpname: string;
+  qrPayload: string;
+  usageStatus: "Tersedia" | "Digunakan" | "Dalam Perbaikan" | null;
+}
+
+export interface AssetMaintenanceTicket {
+  id: string;
+  tenantId: string;
+  ticketNumber: string;
+  assetCode: string;
+  assetName: string;
+  reporterEmployeeId: string;
+  issueType: "Kerusakan Hardware" | "Perawatan Rutin" | "Perbaikan Fasilitas / Gedung" | "Permintaan Penggantian";
+  priority: "Rendah" | "Sedang" | "Tinggi" | "Darurat";
+  description: string;
+  reportedAt: string;
+  status: "Tiket Dibuka" | "Sedang Dikerjakan GA" | "Menunggu Sparepart" | "Selesai Diperbaiki" | "Aset Diganti Baru";
+  assignedTechnician: string | null;
+  cost: number | null;
+  resolutionNotes: string | null;
+}
+
+export interface AssetRelocationLog {
+  id: string;
+  tenantId: string;
+  assetCode: string;
+  assetName: string;
+  fromBuilding: string;
+  fromRoom: string;
+  fromEmployeeId: string | null;
+  toBuilding: string;
+  toRoom: string;
+  toEmployeeId: string | null;
+  relocationDate: string;
+  approvedBy: string;
+  notes: string;
+}
+
+export interface ProcurementOrder {
+  id: string;
+  tenantId: string;
+  type: "Pengadaan Barang" | "Project / Jasa" | "Barang" | "Proyek / Jasa Kontrak" | null;
+  prNumber: string;
+  poNumber: string;
+  quotationNumber: string | null;
+  contractNumber: string | null;
+  vendorId: string | null;
+  vendorName: string;
+  itemName: string;
+  quantity: number;
+  estimatedCost: number;
+  requestor: string;
+  department: string;
+  status: "Pengajuan PR" | "Quotation Diterima" | "Disetujui HR/Finance" | "PO Terbit" | "Kontrak Berjalan" | "Barang Diterima / Project Selesai" | "Barang Diterima";
+  requestedDate: string;
+}
+
 export type OrgChangeSet = { create?: Record<string, unknown>[]; update?: { id: string; data: Record<string, unknown> }[]; delete?: string[] };
 
 export interface OrgChangeProposal {
@@ -926,4 +1028,38 @@ export const tenantApi = {
     request<OffboardingRecord>("/api/tenant/offboarding-records", { method: "POST", body: JSON.stringify(data) }),
   updateOffboardingRecord: (id: string, data: Partial<OffboardingRecord>) =>
     request<OffboardingRecord>(`/api/tenant/offboarding-records/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+
+  listBusinessTrips: () => request<BusinessTripRequest[]>("/api/tenant/business-trips"),
+  createBusinessTrip: (data: Omit<BusinessTripRequest, "id" | "tenantId">) =>
+    request<BusinessTripRequest>("/api/tenant/business-trips", { method: "POST", body: JSON.stringify(data) }),
+  updateBusinessTrip: (id: string, data: Partial<BusinessTripRequest>) =>
+    request<BusinessTripRequest>(`/api/tenant/business-trips/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+
+  listVendors: () => request<Vendor[]>("/api/tenant/vendors"),
+  createVendor: (data: Omit<Vendor, "id" | "tenantId">) =>
+    request<Vendor>("/api/tenant/vendors", { method: "POST", body: JSON.stringify(data) }),
+  updateVendor: (id: string, data: Partial<Vendor>) =>
+    request<Vendor>(`/api/tenant/vendors/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+
+  listGAAssets: () => request<GAAsset[]>("/api/tenant/ga-assets"),
+  createGAAsset: (data: Omit<GAAsset, "id" | "tenantId">) =>
+    request<GAAsset>("/api/tenant/ga-assets", { method: "POST", body: JSON.stringify(data) }),
+  updateGAAsset: (id: string, data: Partial<GAAsset>) =>
+    request<GAAsset>(`/api/tenant/ga-assets/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+
+  listMaintenanceTickets: () => request<AssetMaintenanceTicket[]>("/api/tenant/asset-maintenance-tickets"),
+  createMaintenanceTicket: (data: Omit<AssetMaintenanceTicket, "id" | "tenantId">) =>
+    request<AssetMaintenanceTicket>("/api/tenant/asset-maintenance-tickets", { method: "POST", body: JSON.stringify(data) }),
+  updateMaintenanceTicket: (id: string, data: Partial<AssetMaintenanceTicket>) =>
+    request<AssetMaintenanceTicket>(`/api/tenant/asset-maintenance-tickets/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+
+  listAssetRelocations: () => request<AssetRelocationLog[]>("/api/tenant/asset-relocations"),
+  createAssetRelocation: (data: Omit<AssetRelocationLog, "id" | "tenantId">) =>
+    request<AssetRelocationLog>("/api/tenant/asset-relocations", { method: "POST", body: JSON.stringify(data) }),
+
+  listProcurementOrders: () => request<ProcurementOrder[]>("/api/tenant/procurement-orders"),
+  createProcurementOrder: (data: Omit<ProcurementOrder, "id" | "tenantId">) =>
+    request<ProcurementOrder>("/api/tenant/procurement-orders", { method: "POST", body: JSON.stringify(data) }),
+  updateProcurementOrder: (id: string, data: Partial<ProcurementOrder>) =>
+    request<ProcurementOrder>(`/api/tenant/procurement-orders/${id}`, { method: "PUT", body: JSON.stringify(data) }),
 };

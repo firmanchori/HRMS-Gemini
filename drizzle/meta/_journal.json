@@ -232,6 +232,13 @@
       "when": 1793837419618,
       "tag": "0032_complete_sunspot",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1793882830670,
+      "tag": "0033_cool_wonder_man",
+      "breakpoints": true
     }
   ]
 }

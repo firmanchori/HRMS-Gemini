@@ -36,6 +36,12 @@ import {
   type EmployeeKpi as ApiEmployeeKpi,
   type ComplianceRecord as ApiComplianceRecord,
   type OffboardingRecord as ApiOffboardingRecord,
+  type BusinessTripRequest as ApiBusinessTripRequest,
+  type Vendor as ApiVendor,
+  type GAAsset as ApiGAAsset,
+  type AssetMaintenanceTicket as ApiAssetMaintenanceTicket,
+  type AssetRelocationLog as ApiAssetRelocationLog,
+  type ProcurementOrder as ApiProcurementOrder,
 } from '../tenant/api';
 import { ORG_STRUCTURE_TEMPLATES } from '../utils/orgStructureTemplates';
 import {
@@ -128,16 +134,12 @@ import {
   INITIAL_CANDIDATES,
   INITIAL_COMPETENCY_TEST_TYPES,
   INITIAL_INTERVIEW_TYPES,
-  INITIAL_ASSETS,
-  INITIAL_PROCUREMENT,
   INITIAL_DOCUMENTS,
   INITIAL_SHIFTS,
   INITIAL_SCHEDULES,
   INITIAL_SHIFT_SWAPS,
   INITIAL_ATTENDANCE_CORRECTIONS,
-  INITIAL_BUSINESS_TRIPS,
   INITIAL_APPROVALS,
-  INITIAL_VENDORS,
   INITIAL_ONBOARDING,
   DEFAULT_ONBOARDING_CHECKLIST_TEMPLATES,
   INITIAL_DOCUMENT_TEMPLATES,
@@ -973,30 +975,13 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [apiOffboardingRecords, setApiOffboardingRecords] = useState<ApiOffboardingRecord[]>([]);
   const offboardingRecords = useMemo(() => apiOffboardingRecords as unknown as OffboardingRecord[], [apiOffboardingRecords]);
 
-  const [assets, setAssets] = useState<GAAsset[]>(() => {
-    const saved = localStorage.getItem('nusahr_assets');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved) as GAAsset[];
-        const existingIds = new Set(parsed.map((a) => a.id));
-        const merged = [...parsed];
-        for (const initAsset of INITIAL_ASSETS) {
-          if (!existingIds.has(initAsset.id)) {
-            merged.push(initAsset);
-          }
-        }
-        return merged;
-      } catch {
-        return INITIAL_ASSETS;
-      }
-    }
-    return INITIAL_ASSETS;
-  });
+  // Real backend data, loaded via loadTenantOrgData() (user, 2026-11-05:
+  // "GA Asset & Procurement — aset, maintenance, PO, relokasi aset").
+  const [apiAssets, setApiAssets] = useState<ApiGAAsset[]>([]);
+  const assets = useMemo(() => apiAssets as unknown as GAAsset[], [apiAssets]);
 
-  const [procurementOrders, setProcurementOrders] = useState<ProcurementOrder[]>(() => {
-    const saved = localStorage.getItem('nusahr_procurement');
-    return saved ? JSON.parse(saved) : INITIAL_PROCUREMENT;
-  });
+  const [apiProcurementOrders, setApiProcurementOrders] = useState<ApiProcurementOrder[]>([]);
+  const procurementOrders = useMemo(() => apiProcurementOrders as unknown as ProcurementOrder[], [apiProcurementOrders]);
 
   const [documents, setDocuments] = useState<OfficialDocument[]>(() => {
     const saved = localStorage.getItem('nusahr_documents');
@@ -1032,18 +1017,10 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [schedules, setSchedules] = useState<EmployeeSchedule[]>([]);
   const [attendanceCorrections, setAttendanceCorrections] = useState<AttendanceCorrectionRequest[]>([]);
 
-  const [businessTrips, setBusinessTrips] = useState<BusinessTripRequest[]>(() => {
-    const saved = localStorage.getItem('nusahr_trips');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      } catch (e) {
-        console.error('Failed to parse nusahr_trips', e);
-      }
-    }
-    return INITIAL_BUSINESS_TRIPS;
-  });
+  // Real backend data, loaded via loadTenantOrgData() (user, 2026-11-05:
+  // "Business Trip (SPPD) — perjalanan dinas").
+  const [apiBusinessTrips, setApiBusinessTrips] = useState<ApiBusinessTripRequest[]>([]);
+  const businessTrips = useMemo(() => apiBusinessTrips as unknown as BusinessTripRequest[], [apiBusinessTrips]);
 
   // Real backend data, hydrated via loadTenantOrgData() — the Approval
   // Engine (user, 2026-11-02: fix this before the modules that depend on
@@ -1075,20 +1052,14 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     persistApprovalItemUpdate(current.id, updates);
   };
 
-  const [vendors, setVendors] = useState<Vendor[]>(() => {
-    const saved = localStorage.getItem('nusahr_vendors');
-    return saved ? JSON.parse(saved) : INITIAL_VENDORS;
-  });
+  const [apiVendors, setApiVendors] = useState<ApiVendor[]>([]);
+  const vendors = useMemo(() => apiVendors as unknown as Vendor[], [apiVendors]);
 
-  const [assetMaintenanceTickets, setAssetMaintenanceTickets] = useState<AssetMaintenanceTicket[]>(() => {
-    const saved = localStorage.getItem('nusahr_maintenance');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [apiAssetMaintenanceTickets, setApiAssetMaintenanceTickets] = useState<ApiAssetMaintenanceTicket[]>([]);
+  const assetMaintenanceTickets = useMemo(() => apiAssetMaintenanceTickets as unknown as AssetMaintenanceTicket[], [apiAssetMaintenanceTickets]);
 
-  const [assetRelocations, setAssetRelocations] = useState<AssetRelocationLog[]>(() => {
-    const saved = localStorage.getItem('nusahr_relocations');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [apiAssetRelocations, setApiAssetRelocations] = useState<ApiAssetRelocationLog[]>([]);
+  const assetRelocations = useMemo(() => apiAssetRelocations as unknown as AssetRelocationLog[], [apiAssetRelocations]);
 
   const [documentTemplates, setDocumentTemplates] = useState<DocumentTemplateConfig[]>(() => {
     const saved = localStorage.getItem('nusahr_templates_v6');
@@ -1413,6 +1384,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       realLoans,
       realLeaveRequests, realEmployeeKpis, realComplianceRecords,
       realOffboardingRecords,
+      realBusinessTrips, realVendors, realGAAssets, realMaintenanceTickets, realAssetRelocations, realProcurementOrders,
     ] = await Promise.all([
       tenantApi.listEntities(),
       tenantApi.listOfficeLocations(),
@@ -1450,6 +1422,12 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       tenantApi.listEmployeeKpis(),
       tenantApi.listComplianceRecords(),
       tenantApi.listOffboardingRecords(),
+      tenantApi.listBusinessTrips(),
+      tenantApi.listVendors(),
+      tenantApi.listGAAssets(),
+      tenantApi.listMaintenanceTickets(),
+      tenantApi.listAssetRelocations(),
+      tenantApi.listProcurementOrders(),
     ]);
     setApiEntities(realEntities);
     setApiOfficeLocations(realOfficeLocations);
@@ -1493,6 +1471,12 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setApiEmployeeKpis(realEmployeeKpis);
     setApiComplianceRecords(realComplianceRecords);
     setApiOffboardingRecords(realOffboardingRecords);
+    setApiBusinessTrips(realBusinessTrips);
+    setApiVendors(realVendors);
+    setApiAssets(realGAAssets);
+    setApiAssetMaintenanceTickets(realMaintenanceTickets);
+    setApiAssetRelocations(realAssetRelocations);
+    setApiProcurementOrders(realProcurementOrders);
   };
 
   // 34. Vendor Invoices (AP)
@@ -1528,9 +1512,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [currentTenantId]);
 
 
-  useEffect(() => {
-    localStorage.setItem('nusahr_assets', JSON.stringify(assets));
-  }, [assets]);
+  // assets/procurementOrders/businessTrips/vendors/assetMaintenanceTickets/assetRelocations are now derived from real backend data — no mock persistence.
 
   useEffect(() => {
     localStorage.setItem('nusahr_documents', JSON.stringify(documents));
@@ -2585,13 +2567,10 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     if (checklist.assetReturned && !o.assetReturned) {
-      setAssets((prevAssets) =>
-        prevAssets.map((ast) =>
-          ast.assignedToEmployeeId === o.employeeId
-            ? { ...ast, assignedToEmployeeId: undefined, condition: 'Baik' }
-            : ast
-        )
-      );
+      const employeeAssets = assets.filter((ast) => ast.assignedToEmployeeId === o.employeeId);
+      for (const ast of employeeAssets) {
+        updateAsset(ast.id, { assignedToEmployeeId: undefined, condition: 'Baik' });
+      }
     }
     if (checklist.financeCleared && !o.financeCleared) {
       const employeeActiveLoans = apiLoans.filter((ln) => ln.employeeId === o.employeeId && ln.status === 'Aktif');
@@ -2629,18 +2608,15 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       name: assetData.name,
     });
 
-    const newAsset: GAAsset = {
-      ...assetData,
-      id: `ast-${Date.now()}`,
-      tenantId: currentTenant.id,
-      lastStockOpname: today,
-      qrPayload,
-    };
-    setAssets((prev) => [newAsset, ...prev]);
+    tenantApi
+      .createGAAsset({ ...assetData, lastStockOpname: today, qrPayload } as unknown as Omit<ApiGAAsset, 'id' | 'tenantId'>)
+      .then((created) => setApiAssets((prev) => [created, ...prev]));
   };
 
   const updateAsset = (id: string, updates: Partial<GAAsset>) => {
-    setAssets((prev) => prev.map((a) => (a.id === id ? { ...a, ...updates } : a)));
+    tenantApi.updateGAAsset(id, updates as Partial<ApiGAAsset>).then((updated) => {
+      setApiAssets((prev) => prev.map((a) => (a.id === id ? updated : a)));
+    });
   };
 
   const performStockOpname = (assetCode: string, condition: GAAsset['condition']): boolean => {
@@ -2663,16 +2639,15 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const year = new Date().getFullYear();
     const prNumber = `PR-${year}-${String(count).padStart(3, '0')}`;
 
-    const newOrder: ProcurementOrder = {
-      ...orderData,
-      id: `pr-${Date.now()}`,
-      tenantId: currentTenant.id,
-      prNumber,
-      poNumber: '',
-      status: 'Pengajuan PR',
-      requestedDate: new Date().toISOString().split('T')[0],
-    };
-    setProcurementOrders((prev) => [newOrder, ...prev]);
+    tenantApi
+      .createProcurementOrder({
+        ...orderData,
+        prNumber,
+        poNumber: '',
+        status: 'Pengajuan PR',
+        requestedDate: new Date().toISOString().split('T')[0],
+      } as unknown as Omit<ApiProcurementOrder, 'id' | 'tenantId'>)
+      .then((created) => setApiProcurementOrders((prev) => [created, ...prev]));
   };
 
   const updateProcurementStatus = (
@@ -2680,20 +2655,13 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     status: ProcurementOrder['status'],
     poNumber?: string
   ) => {
-    setProcurementOrders((prev) =>
-      prev.map((p) => {
-        if (p.id === id) {
-          const year = new Date().getFullYear();
-          const generatedPO = poNumber || (status === 'PO Terbit' && !p.poNumber ? `PO-${year}-${String(Date.now()).slice(-4)}` : p.poNumber);
-          return {
-            ...p,
-            status,
-            poNumber: generatedPO,
-          };
-        }
-        return p;
-      })
-    );
+    const p = procurementOrders.find((o) => o.id === id);
+    if (!p) return;
+    const year = new Date().getFullYear();
+    const generatedPO = poNumber || (status === 'PO Terbit' && !p.poNumber ? `PO-${year}-${String(Date.now()).slice(-4)}` : p.poNumber);
+    tenantApi.updateProcurementOrder(id, { status, poNumber: generatedPO }).then((updated) => {
+      setApiProcurementOrders((prev) => prev.map((o) => (o.id === id ? updated : o)));
+    });
   };
 
   // 11. Documents & Digital Signatures
@@ -3294,37 +3262,35 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const submitBusinessTrip = (trip: Omit<BusinessTripRequest, 'id' | 'tenantId' | 'tripNumber' | 'status'>) => {
     const seq = businessTrips.length + 1;
     const tripNumber = `${String(seq).padStart(3, '0')}/SPPD-HC/${currentTenant.code}/X/2026`;
-    const newTrip: BusinessTripRequest = {
-      ...trip,
-      id: `trip-${Date.now()}`,
-      tenantId: currentTenant.id,
-      tripNumber,
-      status: 'Menunggu Approval',
-    };
-    setBusinessTrips((prev) => [newTrip, ...prev]);
 
-    const requester = employees.find((e) => e.id === trip.employeeId);
-    createApprovalItem({
-      category: 'Perjalanan Dinas',
-      referenceId: newTrip.id,
-      title: `SPPD ke ${trip.destinationCity} (${trip.totalDays} Hari) - ${requester?.fullName || 'Karyawan'}`,
-      requesterId: trip.employeeId,
-      department: requester?.department || 'General',
-      submittedAt: new Date().toISOString(),
-      deadlineAt: new Date(Date.now() + 48 * 3600 * 1000).toISOString(),
-      level: 1,
-      totalLevels: 2,
-      assignedApproverRole: 'manager',
-      status: 'Menunggu',
-      amount: trip.estimatedCost,
-      notes: trip.purpose,
-    });
+    tenantApi
+      .createBusinessTrip({ ...trip, tripNumber, status: 'Menunggu Approval' } as unknown as Omit<ApiBusinessTripRequest, 'id' | 'tenantId'>)
+      .then((created) => {
+        setApiBusinessTrips((prev) => [created, ...prev]);
+
+        const requester = employees.find((e) => e.id === trip.employeeId);
+        createApprovalItem({
+          category: 'Perjalanan Dinas',
+          referenceId: created.id,
+          title: `SPPD ke ${trip.destinationCity} (${trip.totalDays} Hari) - ${requester?.fullName || 'Karyawan'}`,
+          requesterId: trip.employeeId,
+          department: requester?.department || 'General',
+          submittedAt: new Date().toISOString(),
+          deadlineAt: new Date(Date.now() + 48 * 3600 * 1000).toISOString(),
+          level: 1,
+          totalLevels: 2,
+          assignedApproverRole: 'manager',
+          status: 'Menunggu',
+          amount: trip.estimatedCost,
+          notes: trip.purpose,
+        });
+      });
   };
 
   const reviewBusinessTrip = (id: string, status: BusinessTripRequest['status']) => {
-    setBusinessTrips((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, status, approvedBy: currentUser.name } : t))
-    );
+    tenantApi.updateBusinessTrip(id, { status, approvedBy: currentUser.name }).then((updated) => {
+      setApiBusinessTrips((prev) => prev.map((t) => (t.id === id ? updated : t)));
+    });
     persistApprovalItemByReference(id, 'Perjalanan Dinas', { status: status === 'Disetujui Atasan' || status === 'Disetujui Finance' ? 'Disetujui' : 'Ditolak' });
   };
 
@@ -3415,16 +3381,15 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // 18. Vendors Actions
   const addVendor = (vendor: Omit<Vendor, 'id' | 'tenantId'>) => {
-    const newVendor: Vendor = {
-      ...vendor,
-      id: `vnd-${Date.now()}`,
-      tenantId: currentTenant.id,
-    };
-    setVendors((prev) => [newVendor, ...prev]);
+    tenantApi.createVendor(vendor as unknown as Omit<ApiVendor, 'id' | 'tenantId'>).then((created) => {
+      setApiVendors((prev) => [created, ...prev]);
+    });
   };
 
   const updateVendor = (id: string, updates: Partial<Vendor>) => {
-    setVendors((prev) => prev.map((v) => (v.id === id ? { ...v, ...updates } : v)));
+    tenantApi.updateVendor(id, updates as Partial<ApiVendor>).then((updated) => {
+      setApiVendors((prev) => prev.map((v) => (v.id === id ? updated : v)));
+    });
   };
 
   // 19. GA Maintenance & Relocations Actions
@@ -3433,15 +3398,14 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   ) => {
     const seq = assetMaintenanceTickets.length + 1;
     const ticketNumber = `TKT-${new Date().getFullYear()}-${String(seq).padStart(3, '0')}`;
-    const newTicket: AssetMaintenanceTicket = {
-      ...ticket,
-      id: `tkt-${Date.now()}`,
-      tenantId: currentTenant.id,
-      ticketNumber,
-      reportedAt: new Date().toISOString(),
-      status: 'Tiket Dibuka',
-    };
-    setAssetMaintenanceTickets((prev) => [newTicket, ...prev]);
+    tenantApi
+      .createMaintenanceTicket({
+        ...ticket,
+        ticketNumber,
+        reportedAt: new Date().toISOString(),
+        status: 'Tiket Dibuka',
+      } as unknown as Omit<ApiAssetMaintenanceTicket, 'id' | 'tenantId'>)
+      .then((created) => setApiAssetMaintenanceTickets((prev) => [created, ...prev]));
   };
 
   const updateMaintenanceTicket = (
@@ -3450,28 +3414,23 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     resolutionNotes?: string,
     cost?: number
   ) => {
-    setAssetMaintenanceTickets((prev) =>
-      prev.map((t) =>
-        t.id === id
-          ? {
-              ...t,
-              status,
-              resolutionNotes: resolutionNotes || t.resolutionNotes,
-              cost: cost !== undefined ? cost : t.cost,
-            }
-          : t
-      )
-    );
+    const t = assetMaintenanceTickets.find((tk) => tk.id === id);
+    if (!t) return;
+    tenantApi
+      .updateMaintenanceTicket(id, {
+        status,
+        resolutionNotes: resolutionNotes || t.resolutionNotes,
+        cost: cost !== undefined ? cost : t.cost,
+      })
+      .then((updated) => {
+        setApiAssetMaintenanceTickets((prev) => prev.map((tk) => (tk.id === id ? updated : tk)));
+      });
   };
 
   const addAssetRelocation = (relocation: Omit<AssetRelocationLog, 'id' | 'tenantId' | 'relocationDate'>) => {
-    const newRelocation: AssetRelocationLog = {
-      ...relocation,
-      id: `reloc-${Date.now()}`,
-      tenantId: currentTenant.id,
-      relocationDate: new Date().toISOString().split('T')[0],
-    };
-    setAssetRelocations((prev) => [newRelocation, ...prev]);
+    tenantApi
+      .createAssetRelocation({ ...relocation, relocationDate: new Date().toISOString().split('T')[0] } as unknown as Omit<ApiAssetRelocationLog, 'id' | 'tenantId'>)
+      .then((created) => setApiAssetRelocations((prev) => [created, ...prev]));
 
     const targetAsset = assets.find((a) => a.assetCode === relocation.assetCode);
     if (targetAsset) {
@@ -5079,11 +5038,8 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.removeItem('nusahr_loans');
       localStorage.removeItem('nusahr_leaves');
       localStorage.removeItem('nusahr_compliance');
-      localStorage.removeItem('nusahr_procurement');
       localStorage.removeItem('nusahr_approvals');
-      localStorage.removeItem('nusahr_assets');
       localStorage.removeItem('nusahr_candidates');
-      localStorage.removeItem('nusahr_trips');
       localStorage.removeItem('nusahr_contract_reviews');
       localStorage.removeItem('nusahr_probation_evals');
       localStorage.removeItem('nusahr_reimbursements');
@@ -5092,10 +5048,9 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // storage unavailable
     }
 
-    // payrollRecords/loans/leaveRequests/kpis/complianceRecords/offboardingRecords are now real backend data — no local mock to reset.
-    setProcurementOrders(INITIAL_PROCUREMENT);
-    setAssets(INITIAL_ASSETS);
-    setBusinessTrips(INITIAL_BUSINESS_TRIPS);
+    // payrollRecords/loans/leaveRequests/kpis/complianceRecords/offboardingRecords/
+    // procurementOrders/assets/businessTrips/vendors/assetMaintenanceTickets/assetRelocations
+    // are now real backend data — no local mock to reset.
     setPersonaliaLogs(INITIAL_PERSONALIA_LOGS);
   };
 
@@ -5173,11 +5128,11 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         offboardingRecords, // real backend data, already tenant-scoped server-side
         initiateOffboarding,
         updateOffboardingChecklist,
-        assets: assets.filter((a) => a.tenantId === currentTenant.id),
+        assets, // real backend data, already tenant-scoped server-side
         addAsset,
         updateAsset,
         performStockOpname,
-        procurementOrders: procurementOrders.filter((p) => p.tenantId === currentTenant.id),
+        procurementOrders, // real backend data, already tenant-scoped server-side
         addProcurementOrder,
         updateProcurementStatus,
         documents: documents.filter((d) => d.tenantId === currentTenant.id),
@@ -5208,21 +5163,18 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         attendanceCorrections, // real backend data, already tenant-scoped server-side
         submitAttendanceCorrection,
         reviewAttendanceCorrection,
-        businessTrips: (() => {
-          const scoped = businessTrips.filter((t) => t.tenantId === currentTenant.id);
-          return scoped.length > 0 ? scoped : businessTrips;
-        })(),
+        businessTrips, // real backend data, already tenant-scoped server-side
         submitBusinessTrip,
         reviewBusinessTrip,
         approvalItems, // real backend data, already tenant-scoped server-side
         reviewApprovalItem,
         approvalDelegations, // real backend data, already tenant-scoped server-side
         setApprovalDelegation,
-        vendors: vendors.filter((v) => v.tenantId === currentTenant.id),
+        vendors, // real backend data, already tenant-scoped server-side
         addVendor,
         updateVendor,
-        assetMaintenanceTickets: assetMaintenanceTickets.filter((m) => m.tenantId === currentTenant.id),
-        assetRelocations: assetRelocations.filter((r) => r.tenantId === currentTenant.id),
+        assetMaintenanceTickets, // real backend data, already tenant-scoped server-side
+        assetRelocations, // real backend data, already tenant-scoped server-side
         addMaintenanceTicket,
         updateMaintenanceTicket,
         addAssetRelocation,

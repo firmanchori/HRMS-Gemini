@@ -1285,3 +1285,119 @@ export const offboardingRecords = pgTable("offboarding_records", {
   notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+// ---------------------------------------------------------------------------
+// Business Trips (SPPD) — real backend (user, 2026-11-05: "lanjut" item 1).
+// ---------------------------------------------------------------------------
+
+export const businessTrips = pgTable("business_trips", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  tripNumber: text("trip_number").notNull(),
+  employeeId: uuid("employee_id").references(() => employees.id).notNull(),
+  destinationCity: text("destination_city").notNull(),
+  startDate: text("start_date").notNull(),
+  endDate: text("end_date").notNull(),
+  totalDays: integer("total_days").notNull(),
+  purpose: text("purpose").notNull(),
+  transportType: text("transport_type").notNull(),
+  estimatedCost: integer("estimated_cost").notNull().default(0),
+  perDiemDaily: integer("per_diem_daily").notNull().default(0),
+  accommodationCost: integer("accommodation_cost").notNull().default(0),
+  status: text("status").notNull().default("Menunggu Approval"),
+  approvedBy: text("approved_by"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+// ---------------------------------------------------------------------------
+// GA Asset & Procurement — real backend (user, 2026-11-05: "lanjut" item 2).
+// ---------------------------------------------------------------------------
+
+export const vendors = pgTable("vendors", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  name: text("name").notNull(),
+  code: text("code").notNull(),
+  category: text("category").notNull(),
+  contactPerson: text("contact_person").notNull(),
+  phone: text("phone").notNull(),
+  email: text("email").notNull(),
+  npwp: text("npwp").notNull(),
+  rating: integer("rating").notNull().default(3),
+  address: text("address").notNull(),
+  isVerified: boolean("is_verified").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const gaAssets = pgTable("ga_assets", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  assetCode: text("asset_code").notNull(),
+  name: text("name").notNull(),
+  category: text("category").notNull(),
+  building: text("building").notNull(),
+  room: text("room").notNull(),
+  purchaseDate: text("purchase_date").notNull(),
+  purchasePrice: integer("purchase_price").notNull().default(0),
+  condition: text("condition").notNull().default("Baik"),
+  assignedToEmployeeId: uuid("assigned_to_employee_id").references(() => employees.id),
+  lastStockOpname: text("last_stock_opname").notNull(),
+  qrPayload: text("qr_payload").notNull(),
+  usageStatus: text("usage_status"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const assetMaintenanceTickets = pgTable("asset_maintenance_tickets", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  ticketNumber: text("ticket_number").notNull(),
+  assetCode: text("asset_code").notNull(),
+  assetName: text("asset_name").notNull(),
+  reporterEmployeeId: uuid("reporter_employee_id").references(() => employees.id).notNull(),
+  issueType: text("issue_type").notNull(),
+  priority: text("priority").notNull(),
+  description: text("description").notNull(),
+  reportedAt: text("reported_at").notNull(),
+  status: text("status").notNull().default("Tiket Dibuka"),
+  assignedTechnician: text("assigned_technician"),
+  cost: integer("cost"),
+  resolutionNotes: text("resolution_notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const assetRelocationLogs = pgTable("asset_relocation_logs", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  assetCode: text("asset_code").notNull(),
+  assetName: text("asset_name").notNull(),
+  fromBuilding: text("from_building").notNull(),
+  fromRoom: text("from_room").notNull(),
+  fromEmployeeId: uuid("from_employee_id").references(() => employees.id),
+  toBuilding: text("to_building").notNull(),
+  toRoom: text("to_room").notNull(),
+  toEmployeeId: uuid("to_employee_id").references(() => employees.id),
+  relocationDate: text("relocation_date").notNull(),
+  approvedBy: text("approved_by").notNull(),
+  notes: text("notes").notNull().default(""),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const procurementOrders = pgTable("procurement_orders", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  type: text("type"),
+  prNumber: text("pr_number").notNull(),
+  poNumber: text("po_number").notNull(),
+  quotationNumber: text("quotation_number"),
+  contractNumber: text("contract_number"),
+  vendorId: uuid("vendor_id").references(() => vendors.id),
+  vendorName: text("vendor_name").notNull(),
+  itemName: text("item_name").notNull(),
+  quantity: integer("quantity").notNull().default(1),
+  estimatedCost: integer("estimated_cost").notNull().default(0),
+  requestor: text("requestor").notNull(),
+  department: text("department").notNull(),
+  status: text("status").notNull().default("Pengajuan PR"),
+  requestedDate: text("requested_date").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
