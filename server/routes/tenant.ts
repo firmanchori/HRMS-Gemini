@@ -63,6 +63,9 @@ import {
   assetMaintenanceTickets,
   assetRelocationLogs,
   procurementOrders,
+  roleDefinitions,
+  rolePermissionEntries,
+  companyCalendarEvents,
 } from "../db/schema.ts";
 import { requireTenantAdmin } from "../middleware/auth.ts";
 import { validateBody, validateParams, uuidParam } from "../lib/validate.ts";
@@ -2903,4 +2906,107 @@ tenantRouter.put("/procurement-orders/:id", validateParams(uuidParam("id")), val
   if (!existing) return res.status(404).json({ error: "Procurement order tidak ditemukan" });
   const [updated] = await db.update(procurementOrders).set(req.body).where(eq(procurementOrders.id, req.params.id)).returning();
   res.json(updated);
+});
+
+// ---------------------------------------------------------------------------
+// RBAC — Role Definitions & Permission Matrix
+// ---------------------------------------------------------------------------
+
+const roleDefinitionSchema = z.object({
+  id: z.string().trim().min(1).max(100).regex(/^[a-z0-9_]+$/, "Kode role hanya boleh huruf kecil, angka, underscore"),
+  label: z.string().trim().min(1).max(200),
+  description: z.string().trim().max(1000),
+  badgeClass: z.string().trim().max(200).optional().nullable(),
+  isSystem: z.boolean().optional(),
+});
+
+tenantRouter.get("/rbac-roles", async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  res.json(await db.select().from(roleDefinitions).where(eq(roleDefinitions.tenantId, tenantId)));
+});
+
+tenantRouter.post("/rbac-roles", validateBody(roleDefinitionSchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [existing] = await db.select().from(roleDefinitions).where(and(eq(roleDefinitions.tenantId, tenantId), eq(roleDefinitions.id, req.body.id))).limit(1);
+  if (existing) return res.status(409).json({ error: `Role dengan kode '${req.body.id}' sudah terdaftar` });
+  const [created] = await db.insert(roleDefinitions).values({ ...req.body, tenantId }).returning();
+  res.status(201).json(created);
+});
+
+tenantRouter.delete("/rbac-roles/:roleKey", async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [existing] = await db.select().from(roleDefinitions).where(and(eq(roleDefinitions.tenantId, tenantId), eq(roleDefinitions.id, req.params.roleKey))).limit(1);
+  if (!existing) return res.status(404).json({ error: "Role tidak ditemukan" });
+  await db.delete(rolePermissionEntries).where(and(eq(rolePermissionEntries.tenantId, tenantId), eq(rolePermissionEntries.roleKey, req.params.roleKey)));
+  await db.delete(roleDefinitions).where(and(eq(roleDefinitions.tenantId, tenantId), eq(roleDefinitions.id, req.params.roleKey)));
+  res.json({ ok: true });
+});
+
+const rolePermissionSchema = z.object({
+  view: z.boolean(),
+  create: z.boolean(),
+  edit: z.boolean(),
+  delete: z.boolean(),
+  approve: z.boolean(),
+  export: z.boolean(),
+});
+
+tenantRouter.get("/rbac-permissions", async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const rows = await db.select().from(rolePermissionEntries).where(eq(rolePermissionEntries.tenantId, tenantId));
+  const map: Record<string, { view: boolean; create: boolean; edit: boolean; delete: boolean; approve: boolean; export: boolean }> = {};
+  for (const row of rows) {
+    map[`${row.moduleKey}__${row.roleKey}`] = { view: row.view, create: row.create, edit: row.edit, delete: row.delete, approve: row.approve, export: row.export };
+  }
+  res.json(map);
+});
+
+tenantRouter.put("/rbac-permissions/:moduleKey/:roleKey", validateBody(rolePermissionSchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const { moduleKey, roleKey } = req.params;
+  const [existing] = await db
+    .select()
+    .from(rolePermissionEntries)
+    .where(and(eq(rolePermissionEntries.tenantId, tenantId), eq(rolePermissionEntries.moduleKey, moduleKey), eq(rolePermissionEntries.roleKey, roleKey)))
+    .limit(1);
+  if (existing) {
+    const [updated] = await db
+      .update(rolePermissionEntries)
+      .set({ ...req.body, updatedAt: new Date() })
+      .where(and(eq(rolePermissionEntries.tenantId, tenantId), eq(rolePermissionEntries.moduleKey, moduleKey), eq(rolePermissionEntries.roleKey, roleKey)))
+      .returning();
+    return res.json(updated);
+  }
+  const [created] = await db.insert(rolePermissionEntries).values({ ...req.body, tenantId, moduleKey, roleKey }).returning();
+  res.status(201).json(created);
+});
+
+// ---------------------------------------------------------------------------
+// Company Calendar
+// ---------------------------------------------------------------------------
+
+const calendarEventSchema = z.object({
+  entityId: z.string().uuid().optional().nullable(),
+  title: z.string().trim().min(1).max(200),
+  date: z.string().trim().min(1).max(20),
+  type: z.enum(["Cuti Bersama", "Libur Nasional", "Event", "Libur Perusahaan", "Cuti Bersama Perusahaan"]),
+  deductsLeaveBucket: z.boolean().optional(),
+  description: z.string().trim().max(1000).optional().nullable(),
+});
+
+tenantRouter.get("/calendar-events", async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const visibleEntityIds = await resolveVisibleEntityIds(req, tenantId);
+  const rows = await db.select().from(companyCalendarEvents).where(eq(companyCalendarEvents.tenantId, tenantId));
+  res.json(rows.filter((r) => !r.entityId || visibleEntityIds.includes(r.entityId)));
+});
+
+tenantRouter.post("/calendar-events", validateBody(calendarEventSchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  if (req.body.entityId) {
+    const visibleEntityIds = await resolveVisibleEntityIds(req, tenantId);
+    if (!visibleEntityIds.includes(req.body.entityId)) return res.status(403).json({ error: "Entitas di luar ruang lingkup Anda" });
+  }
+  const [created] = await db.insert(companyCalendarEvents).values({ ...req.body, tenantId }).returning();
+  res.status(201).json(created);
 });

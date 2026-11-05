@@ -721,6 +721,35 @@ export interface ProcurementOrder {
   requestedDate: string;
 }
 
+export interface RoleDefinition {
+  id: string;
+  tenantId: string;
+  label: string;
+  description: string;
+  badgeClass: string | null;
+  isSystem: boolean;
+}
+
+export interface OperationPermissions {
+  view: boolean;
+  create: boolean;
+  edit: boolean;
+  delete: boolean;
+  approve: boolean;
+  export: boolean;
+}
+
+export interface CompanyCalendarEvent {
+  id: string;
+  tenantId: string;
+  entityId: string | null;
+  title: string;
+  date: string;
+  type: "Cuti Bersama" | "Libur Nasional" | "Event" | "Libur Perusahaan" | "Cuti Bersama Perusahaan";
+  deductsLeaveBucket: boolean;
+  description: string | null;
+}
+
 export type OrgChangeSet = { create?: Record<string, unknown>[]; update?: { id: string; data: Record<string, unknown> }[]; delete?: string[] };
 
 export interface OrgChangeProposal {
@@ -1062,4 +1091,21 @@ export const tenantApi = {
     request<ProcurementOrder>("/api/tenant/procurement-orders", { method: "POST", body: JSON.stringify(data) }),
   updateProcurementOrder: (id: string, data: Partial<ProcurementOrder>) =>
     request<ProcurementOrder>(`/api/tenant/procurement-orders/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+
+  listRbacRoles: () => request<RoleDefinition[]>("/api/tenant/rbac-roles"),
+  createRbacRole: (data: Omit<RoleDefinition, "tenantId">) =>
+    request<RoleDefinition>("/api/tenant/rbac-roles", { method: "POST", body: JSON.stringify(data) }),
+  deleteRbacRole: (roleKey: string) =>
+    request<{ ok: true }>(`/api/tenant/rbac-roles/${encodeURIComponent(roleKey)}`, { method: "DELETE" }),
+
+  listRolePermissions: () => request<Record<string, OperationPermissions>>("/api/tenant/rbac-permissions"),
+  setRolePermission: (moduleKey: string, roleKey: string, data: OperationPermissions) =>
+    request<OperationPermissions>(`/api/tenant/rbac-permissions/${encodeURIComponent(moduleKey)}/${encodeURIComponent(roleKey)}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+
+  listCalendarEvents: () => request<CompanyCalendarEvent[]>("/api/tenant/calendar-events"),
+  createCalendarEvent: (data: Omit<CompanyCalendarEvent, "id" | "tenantId">) =>
+    request<CompanyCalendarEvent>("/api/tenant/calendar-events", { method: "POST", body: JSON.stringify(data) }),
 };

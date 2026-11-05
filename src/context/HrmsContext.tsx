@@ -42,6 +42,8 @@ import {
   type AssetMaintenanceTicket as ApiAssetMaintenanceTicket,
   type AssetRelocationLog as ApiAssetRelocationLog,
   type ProcurementOrder as ApiProcurementOrder,
+  type RoleDefinition as ApiRoleDefinition,
+  type CompanyCalendarEvent as ApiCompanyCalendarEvent,
 } from '../tenant/api';
 import { ORG_STRUCTURE_TEMPLATES } from '../utils/orgStructureTemplates';
 import {
@@ -152,7 +154,6 @@ import {
   INITIAL_ORG_PROPOSALS,
   INITIAL_PROBATION_EVALUATIONS,
   INITIAL_CONTRACT_REVIEWS,
-  INITIAL_CALENDAR_EVENTS,
   INITIAL_SALARY_COMPONENTS,
   INITIAL_EMPLOYEE_SALARY_ASSIGNMENTS,
   INITIAL_GA_ROOM_BOOKINGS,
@@ -807,10 +808,12 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Current User State & Role Switching
   const [currentUserRole, setCurrentUserRole] = useState<UserRole>('super_admin');
   const [currentSessionUser, setCurrentSessionUser] = useState<{ id: string; name: string; email: string } | null>(null);
-  const [roles, setRoles] = useState<RoleDefinition[]>(() => {
-    const saved = localStorage.getItem('nusahr_roles');
-    return saved ? JSON.parse(saved) : DEFAULT_ROLES;
-  });
+  // Real backend data, loaded via loadTenantOrgData() (user, 2026-11-05:
+  // "RBAC — role & permission"). Falls back to the system defaults when the
+  // tenant hasn't customized roles yet — never written back unless the user
+  // actually adds a custom role.
+  const [apiRoles, setApiRoles] = useState<ApiRoleDefinition[]>([]);
+  const roles = useMemo<RoleDefinition[]>(() => (apiRoles.length > 0 ? (apiRoles as unknown as RoleDefinition[]) : DEFAULT_ROLES), [apiRoles]);
   // Real backend login accounts, loaded via loadTenantOrgData(). Every real account is a
   // tenant_admin scoped to one entity; mapped to 'super_admin' here to match how LoginScreen
   // already labels a real session, since this app's in-house role/permission matrix (below)
@@ -820,30 +823,10 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     () => apiUsers.map((u) => ({ id: u.id, tenantId: u.tenantId, name: u.name, email: u.email, role: 'super_admin', status: 'Aktif' })),
     [apiUsers]
   );
-  const [rolePermissions, setRolePermissions] = useState<Record<string, OperationPermissions>>(() => {
-    const saved = localStorage.getItem('nusahr_role_permissions');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed && typeof parsed === 'object') {
-          return { ...INITIAL_ROLE_PERMISSIONS, ...parsed };
-        }
-      } catch (e) {
-        console.error('Failed to parse saved role permissions:', e);
-      }
-    }
-    return INITIAL_ROLE_PERMISSIONS;
-  });
-
-  useEffect(() => {
-    localStorage.setItem('nusahr_roles', JSON.stringify(roles));
-  }, [roles]);
+  const [rolePermissions, setRolePermissions] = useState<Record<string, OperationPermissions>>(INITIAL_ROLE_PERMISSIONS);
 
   // users is now derived from real backend accounts — no mock persistence.
-
-  useEffect(() => {
-    localStorage.setItem('nusahr_role_permissions', JSON.stringify(rolePermissions));
-  }, [rolePermissions]);
+  // roles/rolePermissions are now derived from real backend data (apiRoles / loadTenantOrgData) — no mock persistence.
 
   const currentUser = useMemo(() => {
     if (currentSessionUser) {
@@ -1273,11 +1256,10 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [probationEvaluations, setProbationEvaluations] = useState<ProbationEvaluation[]>([]);
   const [contractReviews, setContractReviews] = useState<ContractRenewalReview[]>([]);
 
-  // 30. Calendar Events
-  const [calendarEvents, setCalendarEvents] = useState<CompanyCalendarEvent[]>(() => {
-    const saved = localStorage.getItem('nusahr_calendar');
-    return saved ? JSON.parse(saved) : INITIAL_CALENDAR_EVENTS;
-  });
+  // 30. Calendar Events — real backend data, loaded via loadTenantOrgData()
+  // (user, 2026-11-05: "Company Calendar — kalender perusahaan").
+  const [apiCalendarEvents, setApiCalendarEvents] = useState<ApiCompanyCalendarEvent[]>([]);
+  const calendarEvents = useMemo(() => apiCalendarEvents as unknown as CompanyCalendarEvent[], [apiCalendarEvents]);
 
   // 31. Grade Salary Ranges
   const [apiGrades, setApiGrades] = useState<ApiGradeSalaryRange[]>([]);
@@ -1385,6 +1367,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       realLeaveRequests, realEmployeeKpis, realComplianceRecords,
       realOffboardingRecords,
       realBusinessTrips, realVendors, realGAAssets, realMaintenanceTickets, realAssetRelocations, realProcurementOrders,
+      realRoles, realRolePermissions, realCalendarEvents,
     ] = await Promise.all([
       tenantApi.listEntities(),
       tenantApi.listOfficeLocations(),
@@ -1428,6 +1411,9 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       tenantApi.listMaintenanceTickets(),
       tenantApi.listAssetRelocations(),
       tenantApi.listProcurementOrders(),
+      tenantApi.listRbacRoles(),
+      tenantApi.listRolePermissions(),
+      tenantApi.listCalendarEvents(),
     ]);
     setApiEntities(realEntities);
     setApiOfficeLocations(realOfficeLocations);
@@ -1477,6 +1463,9 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setApiAssetMaintenanceTickets(realMaintenanceTickets);
     setApiAssetRelocations(realAssetRelocations);
     setApiProcurementOrders(realProcurementOrders);
+    setApiRoles(realRoles);
+    setRolePermissions((prev) => ({ ...INITIAL_ROLE_PERMISSIONS, ...prev, ...realRolePermissions }));
+    setApiCalendarEvents(realCalendarEvents);
   };
 
   // 34. Vendor Invoices (AP)
@@ -3538,48 +3527,53 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const addRole = (newRole: RoleDefinition, copyFrom?: string) => {
-    setRoles((prev) => [...prev, newRole]);
-    setRolePermissions((prev) => {
-      const next = { ...prev };
-      const systemModules = [
-        'employees', 'personalia', 'attendance', 'trips', 'payroll',
-        'loans', 'approvals', 'kpi', 'compliance', 'recruitment',
-        'offboarding', 'assets', 'procurement', 'documents', 'audit_trail', 'calendar'
-      ];
-      systemModules.forEach((modId) => {
-        const targetKey = `${modId}__${newRole.id}`;
-        if (copyFrom) {
-          const source = prev[`${modId}__${copyFrom}`] || INITIAL_ROLE_PERMISSIONS[`${modId}__${copyFrom}`];
-          next[targetKey] = source
-            ? { ...source }
-            : { view: false, create: false, edit: false, delete: false, approve: false, export: false };
-        } else {
-          next[targetKey] = { view: false, create: false, edit: false, delete: false, approve: false, export: false };
-        }
+    tenantApi.createRbacRole(newRole as unknown as Omit<ApiRoleDefinition, 'tenantId'>).then((created) => {
+      setApiRoles((prev) => [...prev, created]);
+    });
+
+    const systemModules = [
+      'employees', 'personalia', 'attendance', 'trips', 'payroll',
+      'loans', 'approvals', 'kpi', 'compliance', 'recruitment',
+      'offboarding', 'assets', 'procurement', 'documents', 'audit_trail', 'calendar'
+    ];
+    systemModules.forEach((modId) => {
+      const source = copyFrom
+        ? getRolePermission(modId, copyFrom)
+        : { view: false, create: false, edit: false, delete: false, approve: false, export: false };
+      tenantApi.setRolePermission(modId, newRole.id, source).then((saved) => {
+        setRolePermissions((prev) => ({ ...prev, [`${modId}__${newRole.id}`]: saved }));
       });
-      return next;
     });
     logAuditAction('RBAC Role', 'ADD_ROLE', newRole.id, `Menambahkan jenis role baru: "${newRole.label}" (key: ${newRole.id})`);
   };
 
   const deleteRole = (id: string) => {
-    setRoles((prev) => prev.filter((r) => r.id !== id));
+    tenantApi.deleteRbacRole(id).then(() => {
+      setApiRoles((prev) => prev.filter((r) => r.id !== id));
+      setRolePermissions((prev) => {
+        const next = { ...prev };
+        for (const key of Object.keys(next)) {
+          if (key.endsWith(`__${id}`)) delete next[key];
+        }
+        return next;
+      });
+    });
     logAuditAction('RBAC Role', 'DELETE_ROLE', id, `Menghapus role kustom: ${id}`);
   };
 
   const updateRolePermission = (module: string, roleKey: string, op: keyof OperationPermissions, allowed: boolean) => {
     const key = `${module}__${roleKey}`;
-    setRolePermissions((prev) => {
-      const current = prev[key] || getRolePermission(module, roleKey);
-      const updated = { ...current, [op]: allowed };
-      if (!updated.view && op === 'view') {
-        updated.create = false;
-        updated.edit = false;
-        updated.delete = false;
-        updated.approve = false;
-        updated.export = false;
-      }
-      return { ...prev, [key]: updated };
+    const current = rolePermissions[key] || getRolePermission(module, roleKey);
+    const updated = { ...current, [op]: allowed };
+    if (!updated.view && op === 'view') {
+      updated.create = false;
+      updated.edit = false;
+      updated.delete = false;
+      updated.approve = false;
+      updated.export = false;
+    }
+    tenantApi.setRolePermission(module, roleKey, updated).then((saved) => {
+      setRolePermissions((prev) => ({ ...prev, [key]: saved }));
     });
     logAuditAction('RBAC Permission', 'UPDATE_PERMISSION', key, `Update izin [${op.toUpperCase()}=${allowed}] untuk role ${roleKey} di modul ${module}`);
   };
@@ -4769,13 +4763,10 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // 30. Calendar Events
   const addCalendarEvent = (event: Omit<CompanyCalendarEvent, 'id' | 'tenantId'>) => {
-    const newEvent: CompanyCalendarEvent = {
-      ...event,
-      id: `cal-${Date.now()}`,
-      tenantId: currentTenant.id,
-    };
-    setCalendarEvents((prev) => [...prev, newEvent]);
-    logAuditAction('Kalender', 'TAMBAH_EVENT', newEvent.id, `Menambahkan kalender ${newEvent.type}: ${newEvent.title}`);
+    tenantApi.createCalendarEvent(event as unknown as Omit<ApiCompanyCalendarEvent, 'id' | 'tenantId'>).then((created) => {
+      setApiCalendarEvents((prev) => [...prev, created]);
+      logAuditAction('Kalender', 'TAMBAH_EVENT', created.id, `Menambahkan kalender ${created.type}: ${created.title}`);
+    });
   };
 
   // 31. Grade Salary Ranges
@@ -5251,7 +5242,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         contractReviews, // real backend data, already tenant-scoped server-side
         submitContractReview,
         reviewContractReview,
-        calendarEvents: calendarEvents.filter((c) => c.tenantId === currentTenant.id),
+        calendarEvents, // real backend data, already tenant-scoped server-side
         addCalendarEvent,
         gradeSalaryRanges, // real backend data, already tenant-scoped server-side
         addGradeSalaryRange,

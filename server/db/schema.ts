@@ -1401,3 +1401,57 @@ export const procurementOrders = pgTable("procurement_orders", {
   requestedDate: text("requested_date").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+// ---------------------------------------------------------------------------
+// RBAC — role definitions & permission matrix (user, 2026-11-05: "lanjut"
+// item 4). role id is a human-chosen slug (e.g. "hr_admin"), not a uuid —
+// it's used as a dictionary key throughout the frontend, so the table key
+// is (tenantId, id) rather than a surrogate uuid.
+// ---------------------------------------------------------------------------
+
+export const roleDefinitions = pgTable(
+  "role_definitions",
+  {
+    tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+    id: text("id").notNull(),
+    label: text("label").notNull(),
+    description: text("description").notNull(),
+    badgeClass: text("badge_class"),
+    isSystem: boolean("is_system").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.tenantId, table.id] })]
+);
+
+export const rolePermissionEntries = pgTable(
+  "role_permission_entries",
+  {
+    tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+    moduleKey: text("module_key").notNull(),
+    roleKey: text("role_key").notNull(),
+    view: boolean("view").notNull().default(false),
+    create: boolean("create").notNull().default(false),
+    edit: boolean("edit").notNull().default(false),
+    delete: boolean("delete").notNull().default(false),
+    approve: boolean("approve").notNull().default(false),
+    export: boolean("export").notNull().default(false),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.tenantId, table.moduleKey, table.roleKey] })]
+);
+
+// ---------------------------------------------------------------------------
+// Company Calendar — real backend (user, 2026-11-05: "lanjut" item 5).
+// ---------------------------------------------------------------------------
+
+export const companyCalendarEvents = pgTable("company_calendar_events", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  entityId: uuid("entity_id").references(() => companyEntities.id),
+  title: text("title").notNull(),
+  date: text("date").notNull(),
+  type: text("type").notNull(),
+  deductsLeaveBucket: boolean("deducts_leave_bucket").notNull().default(false),
+  description: text("description"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});

@@ -239,6 +239,13 @@
       "when": 1793882830670,
       "tag": "0033_cool_wonder_man",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1793887742109,
+      "tag": "0034_magical_banshee",
+      "breakpoints": true
     }
   ]
 }
