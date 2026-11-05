@@ -1455,3 +1455,26 @@ export const companyCalendarEvents = pgTable("company_calendar_events", {
   description: text("description"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+// ---------------------------------------------------------------------------
+// Audit Trail — tenant-facing business activity log (user, 2026-11-05:
+// "lanjut 7. Audit Log"). Distinct from auditLogEntries above, which is the
+// App Owner's platform-wide security log keyed to the `users` (App Owner)
+// table; this one is per-tenant business activity, logged from nearly every
+// mutating action across the tenant app via HrmsContext's logAuditAction.
+// ---------------------------------------------------------------------------
+
+export const auditTrailEntries = pgTable("audit_trail_entries", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  entityId: uuid("entity_id").references(() => companyEntities.id),
+  timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow().notNull(),
+  actorId: text("actor_id").notNull(),
+  actorName: text("actor_name").notNull(),
+  actorRole: text("actor_role").notNull(),
+  module: text("module").notNull(),
+  action: text("action").notNull(),
+  recordId: text("record_id").notNull(),
+  changesSummary: text("changes_summary").notNull(),
+  details: jsonb("details").$type<unknown[]>(),
+});

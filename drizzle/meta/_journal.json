@@ -246,6 +246,13 @@
       "when": 1793887742109,
       "tag": "0034_magical_banshee",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1793889685410,
+      "tag": "0035_wandering_the_spike",
+      "breakpoints": true
     }
   ]
 }

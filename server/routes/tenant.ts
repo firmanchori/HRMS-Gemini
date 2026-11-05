@@ -66,6 +66,7 @@ import {
   roleDefinitions,
   rolePermissionEntries,
   companyCalendarEvents,
+  auditTrailEntries,
 } from "../db/schema.ts";
 import { requireTenantAdmin } from "../middleware/auth.ts";
 import { validateBody, validateParams, uuidParam } from "../lib/validate.ts";
@@ -3008,5 +3009,39 @@ tenantRouter.post("/calendar-events", validateBody(calendarEventSchema), async (
     if (!visibleEntityIds.includes(req.body.entityId)) return res.status(403).json({ error: "Entitas di luar ruang lingkup Anda" });
   }
   const [created] = await db.insert(companyCalendarEvents).values({ ...req.body, tenantId }).returning();
+  res.status(201).json(created);
+});
+
+// ---------------------------------------------------------------------------
+// Audit Trail — tenant-facing business activity log
+// ---------------------------------------------------------------------------
+
+const auditTrailEntrySchema = z.object({
+  entityId: z.string().uuid().optional().nullable(),
+  actorId: z.string().trim().min(1).max(100),
+  actorName: z.string().trim().min(1).max(200),
+  actorRole: z.string().trim().min(1).max(100),
+  module: z.string().trim().min(1).max(200),
+  action: z.string().trim().min(1).max(200),
+  recordId: z.string().trim().min(1).max(200),
+  changesSummary: z.string().trim().min(1).max(2000),
+  details: z.array(z.unknown()).optional().nullable(),
+});
+
+tenantRouter.get("/audit-trail", async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const visibleEntityIds = await resolveVisibleEntityIds(req, tenantId);
+  const rows = await db
+    .select()
+    .from(auditTrailEntries)
+    .where(eq(auditTrailEntries.tenantId, tenantId))
+    .orderBy(desc(auditTrailEntries.timestamp))
+    .limit(2000);
+  res.json(rows.filter((r) => !r.entityId || visibleEntityIds.includes(r.entityId)));
+});
+
+tenantRouter.post("/audit-trail", validateBody(auditTrailEntrySchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [created] = await db.insert(auditTrailEntries).values({ ...req.body, tenantId }).returning();
   res.status(201).json(created);
 });

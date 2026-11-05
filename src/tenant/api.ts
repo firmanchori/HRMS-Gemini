@@ -750,6 +750,21 @@ export interface CompanyCalendarEvent {
   description: string | null;
 }
 
+export interface AuditTrailEntry {
+  id: string;
+  tenantId: string;
+  entityId: string | null;
+  timestamp: string;
+  actorId: string;
+  actorName: string;
+  actorRole: string;
+  module: string;
+  action: string;
+  recordId: string;
+  changesSummary: string;
+  details: unknown[] | null;
+}
+
 export type OrgChangeSet = { create?: Record<string, unknown>[]; update?: { id: string; data: Record<string, unknown> }[]; delete?: string[] };
 
 export interface OrgChangeProposal {
@@ -1108,4 +1123,8 @@ export const tenantApi = {
   listCalendarEvents: () => request<CompanyCalendarEvent[]>("/api/tenant/calendar-events"),
   createCalendarEvent: (data: Omit<CompanyCalendarEvent, "id" | "tenantId">) =>
     request<CompanyCalendarEvent>("/api/tenant/calendar-events", { method: "POST", body: JSON.stringify(data) }),
+
+  listAuditTrail: () => request<AuditTrailEntry[]>("/api/tenant/audit-trail"),
+  createAuditTrailEntry: (data: Omit<AuditTrailEntry, "id" | "tenantId">) =>
+    request<AuditTrailEntry>("/api/tenant/audit-trail", { method: "POST", body: JSON.stringify(data) }),
 };

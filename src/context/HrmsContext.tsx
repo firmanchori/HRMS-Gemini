@@ -44,6 +44,7 @@ import {
   type ProcurementOrder as ApiProcurementOrder,
   type RoleDefinition as ApiRoleDefinition,
   type CompanyCalendarEvent as ApiCompanyCalendarEvent,
+  type AuditTrailEntry as ApiAuditTrailEntry,
 } from '../tenant/api';
 import { ORG_STRUCTURE_TEMPLATES } from '../utils/orgStructureTemplates';
 import {
@@ -162,7 +163,6 @@ import {
   INITIAL_GA_SUPPLY_REQUESTS,
   INITIAL_GA_TICKETS,
   INITIAL_VENDOR_INVOICES,
-  INITIAL_AUDIT_LOGS,
   INITIAL_ENPS_SURVEY,
   INITIAL_PAYROLL_RECORDS,
   INITIAL_ROLE_PERMISSIONS,
@@ -1368,6 +1368,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       realOffboardingRecords,
       realBusinessTrips, realVendors, realGAAssets, realMaintenanceTickets, realAssetRelocations, realProcurementOrders,
       realRoles, realRolePermissions, realCalendarEvents,
+      realAuditLogs,
     ] = await Promise.all([
       tenantApi.listEntities(),
       tenantApi.listOfficeLocations(),
@@ -1414,6 +1415,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       tenantApi.listRbacRoles(),
       tenantApi.listRolePermissions(),
       tenantApi.listCalendarEvents(),
+      tenantApi.listAuditTrail(),
     ]);
     setApiEntities(realEntities);
     setApiOfficeLocations(realOfficeLocations);
@@ -1466,6 +1468,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setApiRoles(realRoles);
     setRolePermissions((prev) => ({ ...INITIAL_ROLE_PERMISSIONS, ...prev, ...realRolePermissions }));
     setApiCalendarEvents(realCalendarEvents);
+    setApiAuditLogs(realAuditLogs);
   };
 
   // 34. Vendor Invoices (AP)
@@ -1474,11 +1477,10 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return saved ? JSON.parse(saved) : INITIAL_VENDOR_INVOICES;
   });
 
-  // 35. Audit Trail
-  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>(() => {
-    const saved = localStorage.getItem('nusahr_audit_logs');
-    return saved ? JSON.parse(saved) : INITIAL_AUDIT_LOGS;
-  });
+  // 35. Audit Trail — real backend data, loaded via loadTenantOrgData()
+  // (user, 2026-11-05: "lanjut 7. Audit Log").
+  const [apiAuditLogs, setApiAuditLogs] = useState<ApiAuditTrailEntry[]>([]);
+  const auditLogs = useMemo(() => apiAuditLogs as unknown as AuditLogEntry[], [apiAuditLogs]);
 
   // 36. eNPS
   const [enpsSurvey, setEnpsSurvey] = useState<ENpsSurvey>(() => {
@@ -3470,21 +3472,19 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // 35. Audit Log Action
   const logAuditAction = (module: string, action: string, recordId: string, changesSummary: string, details?: any[]) => {
-    const entry: AuditLogEntry = {
-      id: `adt-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-      tenantId: currentTenant.id,
-      entityId: currentEntityId,
-      timestamp: new Date().toISOString(),
-      actorId: currentUser.id,
-      actorName: currentUser.name,
-      actorRole: currentUser.role,
-      module,
-      action,
-      recordId,
-      changesSummary,
-      details,
-    };
-    setAuditLogs((prev) => [entry, ...prev]);
+    tenantApi
+      .createAuditTrailEntry({
+        entityId: currentEntityId,
+        actorId: currentUser.id,
+        actorName: currentUser.name,
+        actorRole: currentUser.role,
+        module,
+        action,
+        recordId,
+        changesSummary,
+        details: details ?? null,
+      } as unknown as Omit<ApiAuditTrailEntry, 'id' | 'tenantId'>)
+      .then((created) => setApiAuditLogs((prev) => [created, ...prev]));
   };
 
   const addUser = async (userData: Omit<UserAccount, 'id' | 'tenantId'>, password: string) => {
@@ -5271,7 +5271,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         vendorInvoices: vendorInvoices.filter((v) => v.tenantId === currentTenant.id),
         addVendorInvoice,
         updateVendorInvoiceStatus,
-        auditLogs: auditLogs.filter((a) => a.tenantId === currentTenant.id),
+        auditLogs, // real backend data, already tenant-scoped server-side
         logAuditAction,
         enpsSurvey,
         submitEnpsResponse,
