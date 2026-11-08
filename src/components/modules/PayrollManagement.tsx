@@ -1104,7 +1104,7 @@ export const PayrollManagement: React.FC = () => {
               !thrSearchQuery ||
               t.employee.fullName.toLowerCase().includes(thrSearchQuery.toLowerCase()) ||
               t.employee.nik.toLowerCase().includes(thrSearchQuery.toLowerCase()) ||
-              t.employee.department.toLowerCase().includes(thrSearchQuery.toLowerCase())
+              (t.employee.department || '').toLowerCase().includes(thrSearchQuery.toLowerCase())
             );
 
             const totalThrGross = thrCalculations.reduce((sum, t) => sum + t.thrGross, 0);

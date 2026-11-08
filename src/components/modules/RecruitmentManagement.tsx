@@ -488,8 +488,8 @@ const EmployeeSelectDropdown: React.FC<EmployeeSelectDropdownProps> = ({
     return (
       e.fullName.toLowerCase().includes(q) ||
       e.nik.toLowerCase().includes(q) ||
-      e.position.toLowerCase().includes(q) ||
-      e.department.toLowerCase().includes(q)
+      (e.position || '').toLowerCase().includes(q) ||
+      (e.department || '').toLowerCase().includes(q)
     );
   });
 
@@ -6588,9 +6588,9 @@ PT Nusantara Multi Talenta Tbk`);
             const filtered = jobRequisitions.filter((req) => {
               const matchSearch =
                 !fptkSearch ||
-                req.position.toLowerCase().includes(fptkSearch.toLowerCase()) ||
+                (req.position || '').toLowerCase().includes(fptkSearch.toLowerCase()) ||
                 req.reqNumber.toLowerCase().includes(fptkSearch.toLowerCase()) ||
-                req.department.toLowerCase().includes(fptkSearch.toLowerCase());
+                (req.department || '').toLowerCase().includes(fptkSearch.toLowerCase());
               const matchStatus = fptkStatusFilter === 'Semua' || req.status === fptkStatusFilter;
               const matchBudget =
                 fptkBudgetFilter === 'Semua' ||

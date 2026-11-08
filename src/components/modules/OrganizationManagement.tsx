@@ -3645,7 +3645,7 @@ export const OrganizationManagement: React.FC = () => {
               const occupant = employees.find((e) => e.id === pos.currentEmployeeId);
               const matchesSearch =
                 pos.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                pos.department.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                (pos.department || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
                 (pos.division || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
                 (occupant?.fullName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
                 (occupant?.nik || '').toLowerCase().includes(searchQuery.toLowerCase());

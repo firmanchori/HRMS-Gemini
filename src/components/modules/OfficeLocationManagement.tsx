@@ -205,8 +205,8 @@ export const OfficeLocationManagement: React.FC = () => {
         !q ||
         loc.name.toLowerCase().includes(q) ||
         loc.code.toLowerCase().includes(q) ||
-        loc.address.toLowerCase().includes(q) ||
-        loc.city.toLowerCase().includes(q) ||
+        (loc.address || '').toLowerCase().includes(q) ||
+        (loc.city || '').toLowerCase().includes(q) ||
         loc.companyName.toLowerCase().includes(q) ||
         `${loc.latitude}, ${loc.longitude}`.includes(q);
       const matchType = filterType === 'all' || loc.type === filterType;
