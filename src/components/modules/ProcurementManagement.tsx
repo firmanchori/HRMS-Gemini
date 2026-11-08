@@ -198,7 +198,7 @@ export const ProcurementManagement: React.FC = () => {
   // Invoice Modal
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
   const [invoiceForm, setInvoiceForm] = useState({
-    vendorId: vendors[0]?.id || 'ven-1',
+    vendorId: vendors[0]?.id || '',
     poNumber: 'PO-2026-001',
     invoiceNumber: '',
     invoiceDate: new Date().toISOString().split('T')[0],
@@ -220,6 +220,7 @@ export const ProcurementManagement: React.FC = () => {
     if (!itemName || !vendorName) return;
 
     addProcurementOrder({
+      vendorId: vendors.find((v) => v.name === vendorName)?.id,
       vendorName,
       itemName: `[${procurementCategory}] ${itemName}`,
       quantity: Number(quantity),
@@ -293,12 +294,12 @@ export const ProcurementManagement: React.FC = () => {
 
   const handleCreateInvoice = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!invoiceForm.invoiceNumber) return;
-
     const selectedVendor = vendors.find((v) => v.id === invoiceForm.vendorId) || vendors[0];
+    if (!invoiceForm.invoiceNumber || !selectedVendor) return;
+
     addVendorInvoice({
-      vendorId: selectedVendor?.id || 'ven-1',
-      vendorName: selectedVendor?.name || 'Vendor Rekanan',
+      vendorId: selectedVendor.id,
+      vendorName: selectedVendor.name,
       poNumber: invoiceForm.poNumber,
       invoiceNumber: invoiceForm.invoiceNumber,
       invoiceDate: invoiceForm.invoiceDate,

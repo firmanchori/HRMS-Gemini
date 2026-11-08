@@ -2625,7 +2625,26 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         status: 'Pengajuan PR',
         requestedDate: new Date().toISOString().split('T')[0],
       } as unknown as Omit<ApiProcurementOrder, 'id' | 'tenantId'>)
-      .then((created) => setApiProcurementOrders((prev) => [created, ...prev]));
+      .then((created) => {
+        setApiProcurementOrders((prev) => [created, ...prev]);
+
+        const requesterEmp = employees.find((e) => e.fullName === orderData.requestor);
+        createApprovalItem({
+          category: 'Procurement PR',
+          referenceId: created.id,
+          title: `PR ${created.itemName} (${created.quantity} unit) - ${orderData.vendorName}`,
+          requesterId: requesterEmp?.id || '',
+          department: orderData.department,
+          submittedAt: new Date().toISOString(),
+          deadlineAt: new Date(Date.now() + 72 * 3600 * 1000).toISOString(),
+          level: 1,
+          totalLevels: 2,
+          assignedApproverRole: 'manager',
+          status: 'Menunggu',
+          amount: orderData.estimatedCost,
+          notes: `PR ${created.prNumber}`,
+        });
+      });
   };
 
   const updateProcurementStatus = (
@@ -4085,7 +4104,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       probationEndDate: isTetap ? '2027-01-31' : undefined,
       department: stg.department,
       position: stg.position,
-      managerId: stg.managerId || 'emp-1',
+      managerId: stg.managerId,
       grade: 'L2',
       joinDate: stg.joinDate,
       status: 'Aktif',

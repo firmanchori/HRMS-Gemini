@@ -1100,13 +1100,14 @@ export const GaAssetManagement: React.FC = () => {
 
   const handleCreateMaintenance = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!maintAssetId || !maintIssue) return;
+    const reporterEmployeeId = currentUser?.employeeId || employees.find((emp) => emp.email === currentUser?.email)?.id;
+    if (!maintAssetId || !maintIssue || !reporterEmployeeId) return;
 
     const ast = assets.find((a) => a.id === maintAssetId);
     addMaintenanceTicket({
       assetCode: ast?.assetCode || 'AST-001',
       assetName: ast?.name || 'Aset Kantor',
-      reporterEmployeeId: employees[0]?.id || '',
+      reporterEmployeeId,
       issueType: maintType,
       priority: 'Sedang',
       description: maintIssue,
