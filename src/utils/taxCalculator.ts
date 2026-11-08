@@ -10,111 +10,109 @@ export function getTERCategory(ptkp: PTKPStatus): 'TER A' | 'TER B' | 'TER C' {
   return 'TER C'; // K/3
 }
 
+/**
+ * TER monthly bracket tables — transcribed verbatim from the official
+ * Lampiran of PMK 168/2023 (pajak.go.id), cross-checked against the live
+ * regulation status on 2026-11-08: still in force, no superseding PMK as
+ * of that date. The previous version of this file had these tables
+ * fabricated/approximated rather than sourced, and was wrong in two ways:
+ * TER B and TER C used incorrect bracket boundaries from roughly the
+ * 7th bracket onward (not just rounded — genuinely different thresholds),
+ * and all three categories were truncated to a flat top rate (25%/15%/9%)
+ * instead of continuing on to the real 34% ceiling above ~Rp1.4 miliar/bulan
+ * — meaning every high earner was under-withheld. If DJP revises these
+ * brackets, update the three arrays below from the new Lampiran — don't
+ * hand-derive replacement thresholds.
+ * Each tuple is [upperBound (Rp, inclusive) | null for the open-ended top
+ * bracket, ratePercent].
+ */
+const TER_A_BRACKETS: [number | null, number][] = [
+  [5400000, 0], [5650000, 0.25], [5950000, 0.5], [6300000, 0.75], [6750000, 1.0],
+  [7500000, 1.25], [8550000, 1.5], [9650000, 1.75], [10050000, 2.0], [10350000, 2.25],
+  [10700000, 2.5], [11050000, 3.0], [11600000, 3.5], [12500000, 4.0], [13750000, 5.0],
+  [15100000, 6.0], [16950000, 7.0], [19750000, 8.0], [24150000, 9.0], [26450000, 10.0],
+  [28000000, 11.0], [30050000, 12.0], [32400000, 13.0], [35400000, 14.0], [39100000, 15.0],
+  [43850000, 16.0], [47800000, 17.0], [51400000, 18.0], [56300000, 19.0], [62200000, 20.0],
+  [68600000, 21.0], [77500000, 22.0], [89000000, 23.0], [103000000, 24.0], [125000000, 25.0],
+  [157000000, 26.0], [206000000, 27.0], [337000000, 28.0], [454000000, 29.0], [550000000, 30.0],
+  [695000000, 31.0], [910000000, 32.0], [1400000000, 33.0], [null, 34.0],
+];
+
+const TER_B_BRACKETS: [number | null, number][] = [
+  [6200000, 0], [6500000, 0.25], [6850000, 0.5], [7300000, 0.75], [9200000, 1.0],
+  [10750000, 1.5], [11250000, 2.0], [11600000, 2.5], [12600000, 3.0], [13600000, 4.0],
+  [14950000, 5.0], [16400000, 6.0], [18450000, 7.0], [21850000, 8.0], [26000000, 9.0],
+  [27700000, 10.0], [29350000, 11.0], [31450000, 12.0], [33950000, 13.0], [37100000, 14.0],
+  [41100000, 15.0], [45800000, 16.0], [49500000, 17.0], [53800000, 18.0], [58500000, 19.0],
+  [64000000, 20.0], [71000000, 21.0], [80000000, 22.0], [93000000, 23.0], [109000000, 24.0],
+  [129000000, 25.0], [163000000, 26.0], [211000000, 27.0], [374000000, 28.0], [459000000, 29.0],
+  [555000000, 30.0], [704000000, 31.0], [957000000, 32.0], [1405000000, 33.0], [null, 34.0],
+];
+
+const TER_C_BRACKETS: [number | null, number][] = [
+  [6600000, 0], [6950000, 0.25], [7350000, 0.5], [7800000, 0.75], [8850000, 1.0],
+  [9800000, 1.25], [10950000, 1.5], [11200000, 1.75], [12050000, 2.0], [12950000, 3.0],
+  [14150000, 4.0], [15550000, 5.0], [17050000, 6.0], [19500000, 7.0], [22700000, 8.0],
+  [26600000, 9.0], [28100000, 10.0], [30100000, 11.0], [32600000, 12.0], [35400000, 13.0],
+  [38900000, 14.0], [43000000, 15.0], [47400000, 16.0], [51200000, 17.0], [55800000, 18.0],
+  [60400000, 19.0], [66700000, 20.0], [74500000, 21.0], [83200000, 22.0], [95600000, 23.0],
+  [110000000, 24.0], [134000000, 25.0], [169000000, 26.0], [221000000, 27.0], [390000000, 28.0],
+  [463000000, 29.0], [561000000, 30.0], [709000000, 31.0], [965000000, 32.0], [1419000000, 33.0],
+  [null, 34.0],
+];
+
+function lookupTERRate(grossIncome: number, brackets: [number | null, number][]): number {
+  for (const [upperBound, rate] of brackets) {
+    if (upperBound === null || grossIncome <= upperBound) return rate;
+  }
+  return brackets[brackets.length - 1][1];
+}
+
 export function calculatePPh21TER(grossIncome: number, ptkp: PTKPStatus): {
   category: 'TER A' | 'TER B' | 'TER C';
   ratePercent: number;
   taxAmount: number;
 } {
   const category = getTERCategory(ptkp);
-  let rate = 0;
-
-  if (category === 'TER A') {
-    if (grossIncome <= 5400000) rate = 0;
-    else if (grossIncome <= 5650000) rate = 0.25;
-    else if (grossIncome <= 5950000) rate = 0.5;
-    else if (grossIncome <= 6300000) rate = 0.75;
-    else if (grossIncome <= 6750000) rate = 1.0;
-    else if (grossIncome <= 7500000) rate = 1.25;
-    else if (grossIncome <= 8550000) rate = 1.5;
-    else if (grossIncome <= 9650000) rate = 1.75;
-    else if (grossIncome <= 10050000) rate = 2.0;
-    else if (grossIncome <= 10350000) rate = 2.25;
-    else if (grossIncome <= 10700000) rate = 2.5;
-    else if (grossIncome <= 11050000) rate = 3.0;
-    else if (grossIncome <= 11600000) rate = 3.5;
-    else if (grossIncome <= 12500000) rate = 4.0;
-    else if (grossIncome <= 13750000) rate = 5.0;
-    else if (grossIncome <= 15100000) rate = 6.0;
-    else if (grossIncome <= 16950000) rate = 7.0;
-    else if (grossIncome <= 19750000) rate = 8.0;
-    else if (grossIncome <= 24150000) rate = 9.0;
-    else if (grossIncome <= 26450000) rate = 10.0;
-    else if (grossIncome <= 28000000) rate = 11.0;
-    else if (grossIncome <= 30050000) rate = 12.0;
-    else if (grossIncome <= 32400000) rate = 13.0;
-    else if (grossIncome <= 35400000) rate = 14.0;
-    else if (grossIncome <= 39100000) rate = 15.0;
-    else if (grossIncome <= 43850000) rate = 16.0;
-    else if (grossIncome <= 47800000) rate = 17.0;
-    else if (grossIncome <= 51400000) rate = 18.0;
-    else if (grossIncome <= 56300000) rate = 19.0;
-    else if (grossIncome <= 62200000) rate = 20.0;
-    else if (grossIncome <= 68600000) rate = 21.0;
-    else if (grossIncome <= 77500000) rate = 22.0;
-    else if (grossIncome <= 89000000) rate = 23.0;
-    else if (grossIncome <= 103000000) rate = 24.0;
-    else rate = 25.0;
-  } else if (category === 'TER B') {
-    if (grossIncome <= 6200000) rate = 0;
-    else if (grossIncome <= 6500000) rate = 0.25;
-    else if (grossIncome <= 6850000) rate = 0.5;
-    else if (grossIncome <= 7300000) rate = 0.75;
-    else if (grossIncome <= 9200000) rate = 1.0;
-    else if (grossIncome <= 10750000) rate = 1.5;
-    else if (grossIncome <= 12550000) rate = 2.0;
-    else if (grossIncome <= 14900000) rate = 3.0;
-    else if (grossIncome <= 16500000) rate = 4.0;
-    else if (grossIncome <= 18600000) rate = 5.0;
-    else if (grossIncome <= 20850000) rate = 6.0;
-    else if (grossIncome <= 24500000) rate = 7.0;
-    else if (grossIncome <= 27000000) rate = 8.0;
-    else if (grossIncome <= 30000000) rate = 9.0;
-    else if (grossIncome <= 33500000) rate = 10.0;
-    else if (grossIncome <= 37500000) rate = 11.0;
-    else if (grossIncome <= 42000000) rate = 12.0;
-    else if (grossIncome <= 47000000) rate = 13.0;
-    else if (grossIncome <= 53000000) rate = 14.0;
-    else rate = 15.0;
-  } else {
-    // TER C
-    if (grossIncome <= 6600000) rate = 0;
-    else if (grossIncome <= 6950000) rate = 0.25;
-    else if (grossIncome <= 7350000) rate = 0.5;
-    else if (grossIncome <= 7800000) rate = 0.75;
-    else if (grossIncome <= 8850000) rate = 1.0;
-    else if (grossIncome <= 10600000) rate = 1.5;
-    else if (grossIncome <= 12700000) rate = 2.0;
-    else if (grossIncome <= 15200000) rate = 3.0;
-    else if (grossIncome <= 17000000) rate = 4.0;
-    else if (grossIncome <= 19300000) rate = 5.0;
-    else if (grossIncome <= 21850000) rate = 6.0;
-    else if (grossIncome <= 25600000) rate = 7.0;
-    else if (grossIncome <= 28500000) rate = 8.0;
-    else rate = 9.0;
-  }
-
+  const brackets = category === 'TER A' ? TER_A_BRACKETS : category === 'TER B' ? TER_B_BRACKETS : TER_C_BRACKETS;
+  const rate = lookupTERRate(grossIncome, brackets);
   const taxAmount = Math.round((grossIncome * rate) / 100);
   return { category, ratePercent: rate, taxAmount };
 }
 
 export function calculateBPJS(wage: number) {
-  // Batas plafon upah BPJS Kesehatan: Rp 12.000.000
+  // Batas plafon upah BPJS Kesehatan: Rp 12.000.000 (Pasal 32 Perpres
+  // 59/2024) — confirmed still current as of 2026-11-08, no revision found.
   const maxWageKes = 12000000;
   const wageForKes = Math.min(wage, maxWageKes);
   const bpjsKesCompany = Math.round(wageForKes * 0.04);
   const bpjsKesEmployee = Math.round(wageForKes * 0.01);
 
-  // Batas plafon upah BPJS TK Jaminan Pensiun: Rp 10.042.300
-  const maxWageJP = 10042300;
+  // Batas plafon upah BPJS TK Jaminan Pensiun: Rp 10.547.400, effective
+  // March 2025 per BPJS Ketenagakerjaan surat B/91/022025 (PP 45/2015
+  // Pasal 29(3): adjusted yearly by 1 + prior-year GDP growth). The
+  // previous figure here (Rp10.042.300) was the stale 2024 value —
+  // re-verify this against BPJS Ketenagakerjaan's annual announcement
+  // each year, since it changes on its own schedule independent of PMK
+  // tax regulations.
+  const maxWageJP = 10547400;
   const wageForJP = Math.min(wage, maxWageJP);
 
   // BPJS Ketenagakerjaan:
-  // JHT: Perusahaan 3.7%, Pekerja 2%
+  // JHT: Perusahaan 3.7%, Pekerja 2% (PP 46/2015, unchanged)
   const jhtCompany = Math.round(wage * 0.037);
   const jhtEmployee = Math.round(wage * 0.02);
 
-  // JKK (Tingkat Risiko Sangat Rendah 0.24%) + JKM (0.3%) dibayar Perusahaan
+  // JKK dibayar Perusahaan — rate varies by business risk category (5
+  // tiers: 0.24% / 0.54% / 0.89% / 1.27% / 1.74% per PP 82/2019); this
+  // hardcodes Tingkat Risiko Sangat Rendah (tier I), appropriate for an
+  // office/desk-work tenant but understates the real liability for a
+  // tenant in a higher-risk business (construction, heavy manufacturing,
+  // logistics with vehicle fleets, etc) — that risk tier should become a
+  // per-tenant setting rather than a hardcoded constant if NusaHR is sold
+  // into those industries.
   const jkkCompany = Math.round(wage * 0.0024);
+  // JKM (0.3%) dibayar Perusahaan — fixed regardless of risk category.
   const jkmCompany = Math.round(wage * 0.003);
 
   // JP (Jaminan Pensiun): Perusahaan 2%, Pekerja 1%
