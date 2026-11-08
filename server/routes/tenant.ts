@@ -107,6 +107,23 @@ async function resolveCallerEntityId(callerUser: { entityId: string | null } | u
  * audit).
  */
 async function resolveVisibleEntityIds(req: Request, tenantId: string): Promise<string[]> {
+  // Common path: one JOIN round trip instead of two sequential ones (fetch
+  // user, then fetch entity_closure). This is the single most-called shared
+  // primitive in this file — load testing (2026-11-08, docs/LOAD_TESTING.md)
+  // found that under real concurrency, requests weren't slow because of any
+  // one query but because each request held a pooled DB connection open
+  // across several SEQUENTIAL round trips, so connections queued up behind
+  // each other. Halving this function's round trips directly shortens that.
+  const joined = await db
+    .select({ id: entityClosure.descendantEntityId })
+    .from(users)
+    .innerJoin(entityClosure, eq(entityClosure.ancestorEntityId, users.entityId))
+    .where(eq(users.id, req.session!.userId));
+  if (joined.length > 0) return joined.map((r) => r.id);
+
+  // Rare fallback: entityId is null (a brand-new tenant's registration
+  // admin before its holding entity exists yet) — not the hot path, so the
+  // extra round trip here doesn't matter the way it did above.
   const [callerUser] = await db.select().from(users).where(eq(users.id, req.session!.userId)).limit(1);
   const callerEntityId = await resolveCallerEntityId(callerUser, tenantId);
   if (!callerEntityId) return [];

@@ -260,6 +260,13 @@
       "when": 1794122215250,
       "tag": "0036_solid_marauders",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1794152800000,
+      "tag": "0037_add_tenant_fk_indexes",
+      "breakpoints": true
     }
   ]
 }
