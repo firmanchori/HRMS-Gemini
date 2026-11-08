@@ -668,9 +668,9 @@ export const getPresetSignatoryForDocType = (docType: string, employees: Employe
   if (norm.includes('promosi') || norm.includes('phk') || norm.includes('pemberhentian')) {
     const ceo = employees.find(
       (e) =>
-        e.position.toLowerCase().includes('director') ||
-        e.position.toLowerCase().includes('ceo') ||
-        e.fullName.includes('Budi Santoso')
+        (e.position || '').toLowerCase().includes('director') ||
+        (e.position || '').toLowerCase().includes('ceo') ||
+        (e.fullName || '').includes('Budi Santoso')
     ) || employees[0];
     return {
       preferredName: ceo ? ceo.fullName : 'Ir. Budi Santoso, MBA',
@@ -685,9 +685,9 @@ export const getPresetSignatoryForDocType = (docType: string, employees: Employe
   if (norm.includes('penugasan') || norm.includes('plt') || norm.includes('acting')) {
     const dir = employees.find(
       (e) =>
-        e.position.toLowerCase().includes('direktur') ||
-        e.fullName.includes('Hendra') ||
-        e.department.toLowerCase().includes('human')
+        (e.position || '').toLowerCase().includes('direktur') ||
+        (e.fullName || '').includes('Hendra') ||
+        (e.department || '').toLowerCase().includes('human')
     ) || employees[0];
     return {
       preferredName: dir ? dir.fullName : 'Dr. Hendra Wijaya',
@@ -702,8 +702,8 @@ export const getPresetSignatoryForDocType = (docType: string, employees: Employe
   if (norm.includes('mutasi') || norm.includes('transfer') || norm.includes('rotasi')) {
     const vp = employees.find(
       (e) =>
-        e.position.toLowerCase().includes('vp') ||
-        e.fullName.includes('Aditya Pratama')
+        (e.position || '').toLowerCase().includes('vp') ||
+        (e.fullName || '').includes('Aditya Pratama')
     ) || employees[0];
     return {
       preferredName: vp ? vp.fullName : 'Aditya Pratama, S.Psi',
@@ -718,9 +718,9 @@ export const getPresetSignatoryForDocType = (docType: string, employees: Employe
   if (norm.includes('demosi') || norm.includes('peringatan') || norm.includes('sp ') || norm === 'sp' || norm.includes('sanksi')) {
     const ir = employees.find(
       (e) =>
-        e.position.toLowerCase().includes('compliance') ||
-        e.position.toLowerCase().includes('industrial') ||
-        e.fullName.includes('Aditya')
+        (e.position || '').toLowerCase().includes('compliance') ||
+        (e.position || '').toLowerCase().includes('industrial') ||
+        (e.fullName || '').includes('Aditya')
     ) || employees[0];
     return {
       preferredName: ir ? ir.fullName : 'Aditya Pratama, S.Psi',
@@ -735,9 +735,9 @@ export const getPresetSignatoryForDocType = (docType: string, employees: Employe
   if (norm.includes('tugas') || norm.includes('perjalanan') || norm.includes('sppd')) {
     const head = employees.find(
       (e) =>
-        e.position.toLowerCase().includes('lead') ||
-        e.position.toLowerCase().includes('head') ||
-        e.fullName.includes('Siti Aminah')
+        (e.position || '').toLowerCase().includes('lead') ||
+        (e.position || '').toLowerCase().includes('head') ||
+        (e.fullName || '').includes('Siti Aminah')
     ) || employees[0];
     return {
       preferredName: head ? head.fullName : 'Siti Aminah, S.E.',
@@ -752,9 +752,9 @@ export const getPresetSignatoryForDocType = (docType: string, employees: Employe
   if (norm.includes('gaji') || norm.includes('slip') || norm.includes('payroll')) {
     const payroll = employees.find(
       (e) =>
-        e.position.toLowerCase().includes('payroll') ||
-        e.position.toLowerCase().includes('finance') ||
-        e.department.toLowerCase().includes('finance')
+        (e.position || '').toLowerCase().includes('payroll') ||
+        (e.position || '').toLowerCase().includes('finance') ||
+        (e.department || '').toLowerCase().includes('finance')
     ) || employees[0];
     return {
       preferredName: payroll ? payroll.fullName : 'Dewi Lestari, S.E.',
@@ -769,9 +769,9 @@ export const getPresetSignatoryForDocType = (docType: string, employees: Employe
   if (norm.includes('keterangan') || norm.includes('paklaring') || norm.includes('skk')) {
     const hr = employees.find(
       (e) =>
-        e.position.toLowerCase().includes('people') ||
-        e.fullName.includes('Siti Aminah') ||
-        e.department.toLowerCase().includes('human')
+        (e.position || '').toLowerCase().includes('people') ||
+        (e.fullName || '').includes('Siti Aminah') ||
+        (e.department || '').toLowerCase().includes('human')
     ) || employees[0];
     return {
       preferredName: hr ? hr.fullName : 'Siti Aminah, S.E.',
@@ -786,9 +786,9 @@ export const getPresetSignatoryForDocType = (docType: string, employees: Employe
   if (norm.includes('bast') || norm.includes('aset') || norm.includes('inventaris') || norm.includes('fasilitas')) {
     const ga = employees.find(
       (e) =>
-        e.position.toLowerCase().includes('facility') ||
-        e.position.toLowerCase().includes('ga') ||
-        e.fullName.includes('Bambang Sudiro')
+        (e.position || '').toLowerCase().includes('facility') ||
+        (e.position || '').toLowerCase().includes('ga') ||
+        (e.fullName || '').includes('Bambang Sudiro')
     ) || employees[0];
     return {
       preferredName: ga ? ga.fullName : 'Bambang Sudiro',
@@ -802,8 +802,8 @@ export const getPresetSignatoryForDocType = (docType: string, employees: Employe
   // 9. Default: Kontrak Kerja PKWT / PKWTT / Dokumen Personalia Umum
   const defaultHc = employees.find(
     (e) =>
-      e.fullName.includes('Aditya Pratama') ||
-      e.position.toLowerCase().includes('human capital')
+      (e.fullName || '').includes('Aditya Pratama') ||
+      (e.position || '').toLowerCase().includes('human capital')
   ) || employees[0];
 
   return {

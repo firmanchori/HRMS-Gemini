@@ -867,7 +867,7 @@ export const DocumentManagement: React.FC = () => {
   };
 
   // Save parsed DOCX as DocumentTemplateConfig
-  const handleSaveUploadedDocxTemplate = () => {
+  const handleSaveUploadedDocxTemplate = async () => {
     if (!parsedDocx) {
       setFeedbackMessage({
         type: 'error',
@@ -877,7 +877,7 @@ export const DocumentManagement: React.FC = () => {
       return;
     }
 
-    const newTemplate = addDocumentTemplate({
+    const newTemplate = await addDocumentTemplate({
       type: uploadDocType as any,
       name: uploadDocTitle || parsedDocx.fileName,
       numberingPattern: uploadNumberingPattern,
@@ -965,7 +965,7 @@ export const DocumentManagement: React.FC = () => {
   };
 
   // Generate Document Execution
-  const handleGenerateDocument = (e: React.FormEvent) => {
+  const handleGenerateDocument = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!targetEmployeeId) return;
 
@@ -996,7 +996,7 @@ export const DocumentManagement: React.FC = () => {
 
     const isFromDocx = tmpl?.sourceType === 'uploaded_docx';
 
-    const newDoc = createOfficialDocument({
+    const newDoc = await createOfficialDocument({
       type: tmpl?.type || 'PKWT',
       templateId: tmpl?.id,
       title,

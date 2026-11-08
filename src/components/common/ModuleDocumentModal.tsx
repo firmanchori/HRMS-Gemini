@@ -203,12 +203,12 @@ const ModuleDocumentModalContent: React.FC<ModuleDocumentModalProps> = ({
   }, [activeTemplate, targetEmployee, currentTenant, documentNumber, signeeName, signeeRole, issueDate, customVariables]);
 
   // Handle Create & Publish to Archive
-  const handlePublishDocument = () => {
+  const handlePublishDocument = async () => {
     if (!activeTemplate || !targetEmployee) return;
 
     try {
       setIsSubmitting(true);
-      const newDoc = createOfficialDocument({
+      const newDoc = await createOfficialDocument({
         type: activeTemplate.type as any,
         templateId: activeTemplate.id,
         title: activeTemplate.name,

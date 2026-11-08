@@ -1478,3 +1478,104 @@ export const auditTrailEntries = pgTable("audit_trail_entries", {
   changesSummary: text("changes_summary").notNull(),
   details: jsonb("details").$type<unknown[]>(),
 });
+
+// ---------------------------------------------------------------------------
+// Document Management — template studio & official documents (user,
+// 2026-11-08: "lanjut 3. Document Management").
+// ---------------------------------------------------------------------------
+
+export const documentTemplates = pgTable("document_templates", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  type: text("type").notNull(),
+  name: text("name").notNull(),
+  numberingPattern: text("numbering_pattern").notNull(),
+  paperSize: text("paper_size"),
+  letterHeadTitle: text("letter_head_title").notNull(),
+  letterHeadAddress: text("letter_head_address").notNull(),
+  letterHeadNpwp: text("letter_head_npwp"),
+  letterHeadPhone: text("letter_head_phone"),
+  letterHeadEmail: text("letter_head_email"),
+  defaultBody: text("default_body").notNull(),
+  showQrSignature: boolean("show_qr_signature").notNull().default(true),
+  signeeTitle: text("signee_title").notNull(),
+  signeeRole: text("signee_role").notNull(),
+  sourceType: text("source_type"),
+  fileName: text("file_name"),
+  fileSize: text("file_size"),
+  uploadedAt: text("uploaded_at"),
+  rawHtmlTemplate: text("raw_html_template"),
+  extractedPlaceholders: jsonb("extracted_placeholders").$type<string[]>(),
+  kopPosition: text("kop_position"),
+  qrPosition: text("qr_position"),
+  footerText: text("footer_text"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const officialDocuments = pgTable("official_documents", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  documentNumber: text("document_number").notNull(),
+  type: text("type").notNull(),
+  templateId: uuid("template_id").references(() => documentTemplates.id),
+  title: text("title").notNull(),
+  // Nullable: a handover/BAST document can target a room rather than a
+  // specific employee (e.g. asset relocation with no assignee) — found
+  // during migration, the old mock code fell back to a fake 'emp-3' id
+  // here, which would violate this FK against the real employees table.
+  targetEmployeeId: uuid("target_employee_id").references(() => employees.id),
+  issueDate: text("issue_date").notNull(),
+  signeeName: text("signee_name").notNull(),
+  signeeRole: text("signee_role").notNull(),
+  qrVerificationUrl: text("qr_verification_url").notNull(),
+  status: text("status").notNull().default("Resmi Diterbitkan"),
+  contentPreview: text("content_preview").notNull(),
+  renderedHtml: text("rendered_html"),
+  isFromDocxTemplate: boolean("is_from_docx_template").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+// ---------------------------------------------------------------------------
+// eNPS Engagement Survey (user, 2026-11-08: "lanjut 6. eNPS"). Note: as of
+// this migration there is no UI screen wired to this feature anywhere in
+// src/components — the type/context plumbing pre-existed with no consumer.
+// Migrated for consistency with the "no mock data" mandate; verified via
+// API only, not live UI (there is nothing to click).
+// ---------------------------------------------------------------------------
+
+export const enpsSurveys = pgTable("enps_surveys", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  period: text("period").notNull(),
+  title: text("title").notNull(),
+  isActive: boolean("is_active").notNull().default(true),
+  responses: jsonb("responses").notNull().default([]).$type<unknown[]>(),
+  totalResponses: integer("total_responses").notNull().default(0),
+  promoters: integer("promoters").notNull().default(0),
+  passives: integer("passives").notNull().default(0),
+  detractors: integer("detractors").notNull().default(0),
+  score: integer("score").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+// ---------------------------------------------------------------------------
+// Vendor Invoices (AP) — real backend (user, 2026-11-08: "lanjut 8").
+// ---------------------------------------------------------------------------
+
+export const vendorInvoices = pgTable("vendor_invoices", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  vendorId: uuid("vendor_id").references(() => vendors.id).notNull(),
+  vendorName: text("vendor_name").notNull(),
+  poNumber: text("po_number").notNull(),
+  invoiceNumber: text("invoice_number").notNull(),
+  invoiceDate: text("invoice_date").notNull(),
+  dueDate: text("due_date").notNull(),
+  amount: integer("amount").notNull().default(0),
+  status: text("status").notNull().default("Belum Bill"),
+  paidDate: text("paid_date"),
+  paymentMethod: text("payment_method"),
+  taxInvoiceNumber: text("tax_invoice_number"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});

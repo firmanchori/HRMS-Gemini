@@ -67,6 +67,10 @@ import {
   rolePermissionEntries,
   companyCalendarEvents,
   auditTrailEntries,
+  documentTemplates,
+  officialDocuments,
+  enpsSurveys,
+  vendorInvoices,
 } from "../db/schema.ts";
 import { requireTenantAdmin } from "../middleware/auth.ts";
 import { validateBody, validateParams, uuidParam } from "../lib/validate.ts";
@@ -3044,4 +3048,199 @@ tenantRouter.post("/audit-trail", validateBody(auditTrailEntrySchema), async (re
   const tenantId = req.session!.tenantId!;
   const [created] = await db.insert(auditTrailEntries).values({ ...req.body, tenantId }).returning();
   res.status(201).json(created);
+});
+
+// ---------------------------------------------------------------------------
+// Document Management — Templates
+// ---------------------------------------------------------------------------
+
+const documentTemplateSchema = z.object({
+  type: z.string().trim().min(1).max(200),
+  name: z.string().trim().min(1).max(300),
+  numberingPattern: z.string().trim().min(1).max(300),
+  paperSize: z.enum(["A4", "F4", "A5"]).optional().nullable(),
+  letterHeadTitle: z.string().trim().min(1).max(300),
+  letterHeadAddress: z.string().trim().min(1).max(1000),
+  letterHeadNpwp: z.string().trim().max(100).optional().nullable(),
+  letterHeadPhone: z.string().trim().max(100).optional().nullable(),
+  letterHeadEmail: z.string().trim().max(200).optional().nullable(),
+  defaultBody: z.string().max(200000),
+  showQrSignature: z.boolean().optional(),
+  signeeTitle: z.string().trim().min(1).max(200),
+  signeeRole: z.string().trim().min(1).max(200),
+  sourceType: z.enum(["system", "uploaded_docx"]).optional().nullable(),
+  fileName: z.string().trim().max(300).optional().nullable(),
+  fileSize: z.string().trim().max(50).optional().nullable(),
+  uploadedAt: z.string().trim().max(40).optional().nullable(),
+  rawHtmlTemplate: z.string().max(2000000).optional().nullable(),
+  extractedPlaceholders: z.array(z.string()).optional().nullable(),
+  kopPosition: z.enum(["top", "none", "embedded"]).optional().nullable(),
+  qrPosition: z.enum(["bottom-right", "bottom-left", "inline", "none"]).optional().nullable(),
+  footerText: z.string().trim().max(1000).optional().nullable(),
+});
+
+tenantRouter.get("/document-templates", async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  res.json(await db.select().from(documentTemplates).where(eq(documentTemplates.tenantId, tenantId)));
+});
+
+tenantRouter.post("/document-templates", validateBody(documentTemplateSchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [created] = await db.insert(documentTemplates).values({ ...req.body, tenantId }).returning();
+  res.status(201).json(created);
+});
+
+tenantRouter.put("/document-templates/:id", validateParams(uuidParam("id")), validateBody(documentTemplateSchema.partial()), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [existing] = await db.select().from(documentTemplates).where(and(eq(documentTemplates.id, req.params.id), eq(documentTemplates.tenantId, tenantId))).limit(1);
+  if (!existing) return res.status(404).json({ error: "Template dokumen tidak ditemukan" });
+  const [updated] = await db.update(documentTemplates).set(req.body).where(eq(documentTemplates.id, req.params.id)).returning();
+  res.json(updated);
+});
+
+tenantRouter.delete("/document-templates/:id", validateParams(uuidParam("id")), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [existing] = await db.select().from(documentTemplates).where(and(eq(documentTemplates.id, req.params.id), eq(documentTemplates.tenantId, tenantId))).limit(1);
+  if (!existing) return res.status(404).json({ error: "Template dokumen tidak ditemukan" });
+  await db.update(officialDocuments).set({ templateId: null }).where(eq(officialDocuments.templateId, req.params.id));
+  await db.delete(documentTemplates).where(eq(documentTemplates.id, req.params.id));
+  res.json({ ok: true });
+});
+
+// ---------------------------------------------------------------------------
+// Document Management — Official Documents
+// ---------------------------------------------------------------------------
+
+const officialDocumentSchema = z.object({
+  documentNumber: z.string().trim().min(1).max(200),
+  type: z.string().trim().min(1).max(200),
+  templateId: z.string().uuid().optional().nullable(),
+  title: z.string().trim().min(1).max(400),
+  targetEmployeeId: z.string().uuid().optional().nullable(),
+  issueDate: z.string().trim().min(1).max(20),
+  signeeName: z.string().trim().min(1).max(200),
+  signeeRole: z.string().trim().min(1).max(200),
+  qrVerificationUrl: z.string().trim().min(1).max(500),
+  status: z.enum(["Resmi Diterbitkan", "Draft"]).optional(),
+  contentPreview: z.string().max(500000),
+  renderedHtml: z.string().max(2000000).optional().nullable(),
+  isFromDocxTemplate: z.boolean().optional(),
+});
+
+tenantRouter.get("/documents", async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  res.json(await db.select().from(officialDocuments).where(eq(officialDocuments.tenantId, tenantId)));
+});
+
+tenantRouter.post("/documents", validateBody(officialDocumentSchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  if (req.body.templateId) {
+    const [tmpl] = await db.select().from(documentTemplates).where(and(eq(documentTemplates.id, req.body.templateId), eq(documentTemplates.tenantId, tenantId))).limit(1);
+    if (!tmpl) return res.status(404).json({ error: "Template dokumen tidak ditemukan" });
+  }
+  const [created] = await db.insert(officialDocuments).values({ ...req.body, tenantId }).returning();
+  res.status(201).json(created);
+});
+
+// ---------------------------------------------------------------------------
+// eNPS Engagement Survey
+// ---------------------------------------------------------------------------
+
+tenantRouter.get("/enps-survey", async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [row] = await db
+    .select()
+    .from(enpsSurveys)
+    .where(eq(enpsSurveys.tenantId, tenantId))
+    .orderBy(desc(enpsSurveys.createdAt))
+    .limit(1);
+  res.json(row ?? null);
+});
+
+const enpsResponseSchema = z.object({
+  score: z.number().int().min(0).max(10),
+  department: z.string().trim().min(1).max(200),
+  feedback: z.string().trim().max(2000).optional().nullable(),
+});
+
+tenantRouter.post("/enps-survey/responses", validateBody(enpsResponseSchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  let [survey] = await db
+    .select()
+    .from(enpsSurveys)
+    .where(eq(enpsSurveys.tenantId, tenantId))
+    .orderBy(desc(enpsSurveys.createdAt))
+    .limit(1);
+
+  if (!survey) {
+    const now = new Date();
+    [survey] = await db
+      .insert(enpsSurveys)
+      .values({
+        tenantId,
+        period: `${now.getFullYear()}`,
+        title: "Survei Kepuasan & Employee Net Promoter Score",
+        isActive: true,
+      })
+      .returning();
+  }
+
+  const newResponse = {
+    id: crypto.randomUUID(),
+    score: req.body.score,
+    department: req.body.department,
+    feedback: req.body.feedback ?? undefined,
+    submittedAt: new Date().toISOString().split("T")[0],
+  };
+  const responses = [...(survey.responses as any[]), newResponse];
+  const promoters = responses.filter((r) => r.score >= 9).length;
+  const passives = responses.filter((r) => r.score >= 7 && r.score <= 8).length;
+  const detractors = responses.filter((r) => r.score <= 6).length;
+  const total = responses.length;
+  const score = Math.round(((promoters - detractors) / total) * 100);
+
+  const [updated] = await db
+    .update(enpsSurveys)
+    .set({ responses, totalResponses: total, promoters, passives, detractors, score })
+    .where(eq(enpsSurveys.id, survey.id))
+    .returning();
+  res.status(201).json(updated);
+});
+
+// ---------------------------------------------------------------------------
+// Vendor Invoices (AP)
+// ---------------------------------------------------------------------------
+
+const vendorInvoiceSchema = z.object({
+  vendorId: z.string().uuid(),
+  vendorName: z.string().trim().min(1).max(200),
+  poNumber: z.string().trim().max(200).optional(),
+  invoiceNumber: z.string().trim().min(1).max(200),
+  invoiceDate: z.string().trim().min(1).max(20),
+  dueDate: z.string().trim().min(1).max(20),
+  amount: z.number().int().min(0),
+  status: z.enum(["Belum Bill", "Sudah Bill"]).optional(),
+  paidDate: z.string().trim().max(20).optional().nullable(),
+  paymentMethod: z.string().trim().max(100).optional().nullable(),
+  taxInvoiceNumber: z.string().trim().max(100).optional().nullable(),
+  notes: z.string().trim().max(2000).optional().nullable(),
+});
+
+tenantRouter.get("/vendor-invoices", async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  res.json(await db.select().from(vendorInvoices).where(eq(vendorInvoices.tenantId, tenantId)));
+});
+
+tenantRouter.post("/vendor-invoices", validateBody(vendorInvoiceSchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [created] = await db.insert(vendorInvoices).values({ ...req.body, tenantId }).returning();
+  res.status(201).json(created);
+});
+
+tenantRouter.put("/vendor-invoices/:id", validateParams(uuidParam("id")), validateBody(vendorInvoiceSchema.partial()), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [existing] = await db.select().from(vendorInvoices).where(and(eq(vendorInvoices.id, req.params.id), eq(vendorInvoices.tenantId, tenantId))).limit(1);
+  if (!existing) return res.status(404).json({ error: "Invoice vendor tidak ditemukan" });
+  const [updated] = await db.update(vendorInvoices).set(req.body).where(eq(vendorInvoices.id, req.params.id)).returning();
+  res.json(updated);
 });

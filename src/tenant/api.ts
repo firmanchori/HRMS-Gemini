@@ -765,6 +765,90 @@ export interface AuditTrailEntry {
   details: unknown[] | null;
 }
 
+export interface DocumentTemplateConfig {
+  id: string;
+  tenantId: string;
+  type: string;
+  name: string;
+  numberingPattern: string;
+  paperSize: "A4" | "F4" | "A5" | null;
+  letterHeadTitle: string;
+  letterHeadAddress: string;
+  letterHeadNpwp: string | null;
+  letterHeadPhone: string | null;
+  letterHeadEmail: string | null;
+  defaultBody: string;
+  showQrSignature: boolean;
+  signeeTitle: string;
+  signeeRole: string;
+  sourceType: "system" | "uploaded_docx" | null;
+  fileName: string | null;
+  fileSize: string | null;
+  uploadedAt: string | null;
+  rawHtmlTemplate: string | null;
+  extractedPlaceholders: string[] | null;
+  kopPosition: "top" | "none" | "embedded" | null;
+  qrPosition: "bottom-right" | "bottom-left" | "inline" | "none" | null;
+  footerText: string | null;
+}
+
+export interface OfficialDocument {
+  id: string;
+  tenantId: string;
+  documentNumber: string;
+  type: string;
+  templateId: string | null;
+  title: string;
+  targetEmployeeId: string | null;
+  issueDate: string;
+  signeeName: string;
+  signeeRole: string;
+  qrVerificationUrl: string;
+  status: "Resmi Diterbitkan" | "Draft";
+  contentPreview: string;
+  renderedHtml: string | null;
+  isFromDocxTemplate: boolean;
+}
+
+export interface EnpsSurveyResponse {
+  id: string;
+  score: number;
+  department: string;
+  feedback?: string;
+  submittedAt: string;
+}
+
+export interface EnpsSurvey {
+  id: string;
+  tenantId: string;
+  period: string;
+  title: string;
+  isActive: boolean;
+  responses: EnpsSurveyResponse[];
+  totalResponses: number;
+  promoters: number;
+  passives: number;
+  detractors: number;
+  score: number;
+}
+
+export interface VendorInvoice {
+  id: string;
+  tenantId: string;
+  vendorId: string;
+  vendorName: string;
+  poNumber: string;
+  invoiceNumber: string;
+  invoiceDate: string;
+  dueDate: string;
+  amount: number;
+  status: "Belum Bill" | "Sudah Bill";
+  paidDate: string | null;
+  paymentMethod: string | null;
+  taxInvoiceNumber: string | null;
+  notes: string | null;
+}
+
 export type OrgChangeSet = { create?: Record<string, unknown>[]; update?: { id: string; data: Record<string, unknown> }[]; delete?: string[] };
 
 export interface OrgChangeProposal {
@@ -1127,4 +1211,26 @@ export const tenantApi = {
   listAuditTrail: () => request<AuditTrailEntry[]>("/api/tenant/audit-trail"),
   createAuditTrailEntry: (data: Omit<AuditTrailEntry, "id" | "tenantId">) =>
     request<AuditTrailEntry>("/api/tenant/audit-trail", { method: "POST", body: JSON.stringify(data) }),
+
+  listDocumentTemplates: () => request<DocumentTemplateConfig[]>("/api/tenant/document-templates"),
+  createDocumentTemplate: (data: Omit<DocumentTemplateConfig, "id" | "tenantId">) =>
+    request<DocumentTemplateConfig>("/api/tenant/document-templates", { method: "POST", body: JSON.stringify(data) }),
+  updateDocumentTemplate: (id: string, data: Partial<DocumentTemplateConfig>) =>
+    request<DocumentTemplateConfig>(`/api/tenant/document-templates/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteDocumentTemplate: (id: string) =>
+    request<{ ok: true }>(`/api/tenant/document-templates/${id}`, { method: "DELETE" }),
+
+  listDocuments: () => request<OfficialDocument[]>("/api/tenant/documents"),
+  createDocument: (data: Omit<OfficialDocument, "id" | "tenantId">) =>
+    request<OfficialDocument>("/api/tenant/documents", { method: "POST", body: JSON.stringify(data) }),
+
+  getEnpsSurvey: () => request<EnpsSurvey | null>("/api/tenant/enps-survey"),
+  submitEnpsResponse: (data: { score: number; department: string; feedback?: string | null }) =>
+    request<EnpsSurvey>("/api/tenant/enps-survey/responses", { method: "POST", body: JSON.stringify(data) }),
+
+  listVendorInvoices: () => request<VendorInvoice[]>("/api/tenant/vendor-invoices"),
+  createVendorInvoice: (data: Omit<VendorInvoice, "id" | "tenantId">) =>
+    request<VendorInvoice>("/api/tenant/vendor-invoices", { method: "POST", body: JSON.stringify(data) }),
+  updateVendorInvoice: (id: string, data: Partial<VendorInvoice>) =>
+    request<VendorInvoice>(`/api/tenant/vendor-invoices/${id}`, { method: "PUT", body: JSON.stringify(data) }),
 };

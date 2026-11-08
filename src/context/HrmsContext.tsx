@@ -45,6 +45,10 @@ import {
   type RoleDefinition as ApiRoleDefinition,
   type CompanyCalendarEvent as ApiCompanyCalendarEvent,
   type AuditTrailEntry as ApiAuditTrailEntry,
+  type DocumentTemplateConfig as ApiDocumentTemplateConfig,
+  type OfficialDocument as ApiOfficialDocument,
+  type EnpsSurvey as ApiEnpsSurvey,
+  type VendorInvoice as ApiVendorInvoice,
 } from '../tenant/api';
 import { ORG_STRUCTURE_TEMPLATES } from '../utils/orgStructureTemplates';
 import {
@@ -137,7 +141,6 @@ import {
   INITIAL_CANDIDATES,
   INITIAL_COMPETENCY_TEST_TYPES,
   INITIAL_INTERVIEW_TYPES,
-  INITIAL_DOCUMENTS,
   INITIAL_SHIFTS,
   INITIAL_SCHEDULES,
   INITIAL_SHIFT_SWAPS,
@@ -145,7 +148,6 @@ import {
   INITIAL_APPROVALS,
   INITIAL_ONBOARDING,
   DEFAULT_ONBOARDING_CHECKLIST_TEMPLATES,
-  INITIAL_DOCUMENT_TEMPLATES,
   INITIAL_MODULE_SETTINGS,
   INITIAL_EMPLOYEE_STAGING,
   INITIAL_OVERTIME_REQUESTS,
@@ -162,8 +164,6 @@ import {
   INITIAL_GA_SUPPLIES,
   INITIAL_GA_SUPPLY_REQUESTS,
   INITIAL_GA_TICKETS,
-  INITIAL_VENDOR_INVOICES,
-  INITIAL_ENPS_SURVEY,
   INITIAL_PAYROLL_RECORDS,
   INITIAL_ROLE_PERMISSIONS,
   INITIAL_DIVISIONS,
@@ -333,14 +333,14 @@ interface HrmsContextType {
     type: OfficialDocument['type'];
     templateId?: string;
     title: string;
-    targetEmployeeId: string;
+    targetEmployeeId?: string;
     signeeName: string;
     signeeRole: string;
     contentPreview: string;
     renderedHtml?: string;
     isFromDocxTemplate?: boolean;
     customDocumentNumber?: string;
-  }) => OfficialDocument;
+  }) => Promise<OfficialDocument>;
 
   // 12. Migration Wizard
   executeMigrationImport: (rows: MigrationRowPreview[]) => { successCount: number; errorCount: number };
@@ -400,7 +400,7 @@ interface HrmsContextType {
 
   // 20. Document Templates
   documentTemplates: DocumentTemplateConfig[];
-  addDocumentTemplate: (template: Omit<DocumentTemplateConfig, 'id' | 'tenantId'>) => DocumentTemplateConfig;
+  addDocumentTemplate: (template: Omit<DocumentTemplateConfig, 'id' | 'tenantId'>) => Promise<DocumentTemplateConfig>;
   updateDocumentTemplate: (id: string, updates: Partial<DocumentTemplateConfig>) => void;
   deleteDocumentTemplate: (id: string) => void;
 
@@ -966,25 +966,10 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [apiProcurementOrders, setApiProcurementOrders] = useState<ApiProcurementOrder[]>([]);
   const procurementOrders = useMemo(() => apiProcurementOrders as unknown as ProcurementOrder[], [apiProcurementOrders]);
 
-  const [documents, setDocuments] = useState<OfficialDocument[]>(() => {
-    const saved = localStorage.getItem('nusahr_documents');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved) as OfficialDocument[];
-        const existingIds = new Set(parsed.map((d) => d.id));
-        const merged = [...parsed];
-        for (const initDoc of INITIAL_DOCUMENTS) {
-          if (!existingIds.has(initDoc.id)) {
-            merged.push(initDoc);
-          }
-        }
-        return merged;
-      } catch (e) {
-        console.error('Failed to parse documents', e);
-      }
-    }
-    return INITIAL_DOCUMENTS;
-  });
+  // Real backend data, loaded via loadTenantOrgData() (user, 2026-11-08:
+  // "3. Document Management — template studio & dokumen resmi").
+  const [apiDocuments, setApiDocuments] = useState<ApiOfficialDocument[]>([]);
+  const documents = useMemo(() => apiDocuments as unknown as OfficialDocument[], [apiDocuments]);
 
   const [apiOnboardingProcesses, setApiOnboardingProcesses] = useState<ApiOnboardingProcess[]>([]);
   const onboardingProcesses = useMemo(() => apiOnboardingProcesses.map((r) => mergeRowIntoMock(r) as unknown as OnboardingProcess), [apiOnboardingProcesses]);
@@ -1044,25 +1029,8 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [apiAssetRelocations, setApiAssetRelocations] = useState<ApiAssetRelocationLog[]>([]);
   const assetRelocations = useMemo(() => apiAssetRelocations as unknown as AssetRelocationLog[], [apiAssetRelocations]);
 
-  const [documentTemplates, setDocumentTemplates] = useState<DocumentTemplateConfig[]>(() => {
-    const saved = localStorage.getItem('nusahr_templates_v6');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved) as DocumentTemplateConfig[];
-        const existingIds = new Set(parsed.map(t => t.id));
-        const merged = [...parsed];
-        for (const initTmpl of INITIAL_DOCUMENT_TEMPLATES) {
-          if (!existingIds.has(initTmpl.id)) {
-            merged.push(initTmpl);
-          }
-        }
-        return merged;
-      } catch (e) {
-        console.error('Failed to parse templates', e);
-      }
-    }
-    return INITIAL_DOCUMENT_TEMPLATES;
-  });
+  const [apiDocumentTemplates, setApiDocumentTemplates] = useState<ApiDocumentTemplateConfig[]>([]);
+  const documentTemplates = useMemo(() => apiDocumentTemplates as unknown as DocumentTemplateConfig[], [apiDocumentTemplates]);
 
   // Real backend data (per-module settings blob), hydrated via
   // loadTenantOrgData() and merged onto INITIAL_MODULE_SETTINGS so any
@@ -1369,6 +1337,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       realBusinessTrips, realVendors, realGAAssets, realMaintenanceTickets, realAssetRelocations, realProcurementOrders,
       realRoles, realRolePermissions, realCalendarEvents,
       realAuditLogs,
+      realDocumentTemplates, realDocuments, realEnpsSurvey, realVendorInvoices,
     ] = await Promise.all([
       tenantApi.listEntities(),
       tenantApi.listOfficeLocations(),
@@ -1416,6 +1385,10 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       tenantApi.listRolePermissions(),
       tenantApi.listCalendarEvents(),
       tenantApi.listAuditTrail(),
+      tenantApi.listDocumentTemplates(),
+      tenantApi.listDocuments(),
+      tenantApi.getEnpsSurvey(),
+      tenantApi.listVendorInvoices(),
     ]);
     setApiEntities(realEntities);
     setApiOfficeLocations(realOfficeLocations);
@@ -1469,24 +1442,45 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setRolePermissions((prev) => ({ ...INITIAL_ROLE_PERMISSIONS, ...prev, ...realRolePermissions }));
     setApiCalendarEvents(realCalendarEvents);
     setApiAuditLogs(realAuditLogs);
+    setApiDocumentTemplates(realDocumentTemplates);
+    setApiDocuments(realDocuments);
+    setApiEnpsSurvey(realEnpsSurvey);
+    setApiVendorInvoices(realVendorInvoices);
   };
 
-  // 34. Vendor Invoices (AP)
-  const [vendorInvoices, setVendorInvoices] = useState<VendorInvoice[]>(() => {
-    const saved = localStorage.getItem('nusahr_vendor_invoices');
-    return saved ? JSON.parse(saved) : INITIAL_VENDOR_INVOICES;
-  });
+  // 34. Vendor Invoices (AP) — real backend data, loaded via
+  // loadTenantOrgData() (user, 2026-11-08: "8. Vendor Invoices (AP)").
+  const [apiVendorInvoices, setApiVendorInvoices] = useState<ApiVendorInvoice[]>([]);
+  const vendorInvoices = useMemo(() => apiVendorInvoices as unknown as VendorInvoice[], [apiVendorInvoices]);
 
   // 35. Audit Trail — real backend data, loaded via loadTenantOrgData()
   // (user, 2026-11-05: "lanjut 7. Audit Log").
   const [apiAuditLogs, setApiAuditLogs] = useState<ApiAuditTrailEntry[]>([]);
   const auditLogs = useMemo(() => apiAuditLogs as unknown as AuditLogEntry[], [apiAuditLogs]);
 
-  // 36. eNPS
-  const [enpsSurvey, setEnpsSurvey] = useState<ENpsSurvey>(() => {
-    const saved = localStorage.getItem('nusahr_enps');
-    return saved ? JSON.parse(saved) : INITIAL_ENPS_SURVEY;
-  });
+  // 36. eNPS — real backend data, loaded via loadTenantOrgData() (user,
+  // 2026-11-08: "6. eNPS"). No UI screen is wired to this feature anywhere
+  // in src/components as of this migration — falls back to an empty survey
+  // shape when the backend has no row yet, same as the old mock default's
+  // shape minus seeded sample responses.
+  const [apiEnpsSurvey, setApiEnpsSurvey] = useState<ApiEnpsSurvey | null>(null);
+  const enpsSurvey = useMemo<ENpsSurvey>(
+    () =>
+      (apiEnpsSurvey as unknown as ENpsSurvey) ?? {
+        id: '',
+        tenantId: currentTenant.id,
+        period: '',
+        title: '',
+        isActive: false,
+        responses: [],
+        totalResponses: 0,
+        promoters: 0,
+        passives: 0,
+        detractors: 0,
+        score: 0,
+      },
+    [apiEnpsSurvey, currentTenant.id]
+  );
 
   // 37. User Signatures
   const [userSignatures, setUserSignatures] = useState<Record<string, string>>(() => {
@@ -1503,15 +1497,8 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [currentTenantId]);
 
 
-  // assets/procurementOrders/businessTrips/vendors/assetMaintenanceTickets/assetRelocations are now derived from real backend data — no mock persistence.
-
-  useEffect(() => {
-    localStorage.setItem('nusahr_documents', JSON.stringify(documents));
-  }, [documents]);
-
-  useEffect(() => {
-    localStorage.setItem('nusahr_templates_v6', JSON.stringify(documentTemplates));
-  }, [documentTemplates]);
+  // assets/procurementOrders/businessTrips/vendors/assetMaintenanceTickets/assetRelocations/
+  // documents/documentTemplates are now derived from real backend data — no mock persistence.
 
   // payrollRecords/salaryComponents/employeeSalaryAssignments are now derived from real backend data — no mock persistence.
 
@@ -2656,18 +2643,18 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // 11. Documents & Digital Signatures
-  const createOfficialDocument = (docData: {
+  const createOfficialDocument = async (docData: {
     type: OfficialDocument['type'];
     templateId?: string;
     title: string;
-    targetEmployeeId: string;
+    targetEmployeeId?: string;
     signeeName: string;
     signeeRole: string;
     contentPreview: string;
     renderedHtml?: string;
     isFromDocxTemplate?: boolean;
     customDocumentNumber?: string;
-  }): OfficialDocument => {
+  }): Promise<OfficialDocument> => {
     const documentNumber =
       docData.customDocumentNumber ||
       generateDocumentNumber(
@@ -2680,18 +2667,15 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const hash = Math.random().toString(36).substring(2, 10);
     const qrVerificationUrl = `https://nusahr.enterprise/verify?doc=${cleanNumber}&h=${hash}`;
 
-    const newDoc: OfficialDocument = {
+    const created = await tenantApi.createDocument({
       ...docData,
-      id: `doc-${Date.now()}`,
-      tenantId: currentTenant.id,
       documentNumber,
       issueDate: new Date().toISOString().split('T')[0],
       qrVerificationUrl,
       status: 'Resmi Diterbitkan',
-    };
-
-    setDocuments((prev) => [newDoc, ...prev]);
-    return newDoc;
+    } as unknown as Omit<ApiOfficialDocument, 'id' | 'tenantId'>);
+    setApiDocuments((prev) => [created, ...prev]);
+    return created as unknown as OfficialDocument;
   };
 
   // 12. Migration Wizard Execution
@@ -3435,7 +3419,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     createOfficialDocument({
       type: 'BAST Aset',
       title: `Berita Acara Serah Terima Aset: ${relocation.assetName}`,
-      targetEmployeeId: relocation.toEmployeeId || 'emp-3',
+      targetEmployeeId: relocation.toEmployeeId,
       signeeName: currentUser.name,
       signeeRole: 'GA Manager',
       contentPreview: `BAST mutasi aset ${relocation.assetName} (${relocation.assetCode}) ke ${relocation.toBuilding} ${relocation.toRoom}.`,
@@ -3443,24 +3427,24 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // 20. Document Templates
-  const addDocumentTemplate = (
+  const addDocumentTemplate = async (
     templateData: Omit<DocumentTemplateConfig, 'id' | 'tenantId'>
-  ): DocumentTemplateConfig => {
-    const newTmpl: DocumentTemplateConfig = {
-      ...templateData,
-      id: `tmpl-${Date.now()}`,
-      tenantId: currentTenant.id,
-    };
-    setDocumentTemplates((prev) => [newTmpl, ...prev]);
-    return newTmpl;
+  ): Promise<DocumentTemplateConfig> => {
+    const created = await tenantApi.createDocumentTemplate(templateData as unknown as Omit<ApiDocumentTemplateConfig, 'id' | 'tenantId'>);
+    setApiDocumentTemplates((prev) => [created, ...prev]);
+    return created as unknown as DocumentTemplateConfig;
   };
 
   const updateDocumentTemplate = (id: string, updates: Partial<DocumentTemplateConfig>) => {
-    setDocumentTemplates((prev) => prev.map((t) => (t.id === id ? { ...t, ...updates } : t)));
+    tenantApi.updateDocumentTemplate(id, updates as Partial<ApiDocumentTemplateConfig>).then((updated) => {
+      setApiDocumentTemplates((prev) => prev.map((t) => (t.id === id ? updated : t)));
+    });
   };
 
   const deleteDocumentTemplate = (id: string) => {
-    setDocumentTemplates((prev) => prev.filter((t) => t.id !== id));
+    tenantApi.deleteDocumentTemplate(id).then(() => {
+      setApiDocumentTemplates((prev) => prev.filter((t) => t.id !== id));
+    });
   };
 
   // 21. Module Settings
@@ -4957,57 +4941,32 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // 34. Procurement Vendor Invoices
   const addVendorInvoice = (invoice: Omit<VendorInvoice, 'id' | 'tenantId' | 'status'>) => {
-    const newInv: VendorInvoice = {
-      ...invoice,
-      id: `inv-${Date.now()}`,
-      tenantId: currentTenant.id,
-      status: 'Belum Bill',
-    };
-    setVendorInvoices((prev) => [newInv, ...prev]);
-    logAuditAction('Procurement AP', 'TAMBAH_INVOICE', newInv.id, `Mencatat tagihan invoice vendor: ${newInv.invoiceNumber} Rp ${newInv.amount.toLocaleString('id-ID')}`);
+    tenantApi
+      .createVendorInvoice({ ...invoice, status: 'Belum Bill' } as unknown as Omit<ApiVendorInvoice, 'id' | 'tenantId'>)
+      .then((created) => {
+        setApiVendorInvoices((prev) => [created, ...prev]);
+        logAuditAction('Procurement AP', 'TAMBAH_INVOICE', created.id, `Mencatat tagihan invoice vendor: ${created.invoiceNumber} Rp ${created.amount.toLocaleString('id-ID')}`);
+      });
   };
 
   const updateVendorInvoiceStatus = (id: string, status: 'Sudah Bill' | 'Belum Bill', paidDate?: string, paymentMethod?: string) => {
-    setVendorInvoices((prev) =>
-      prev.map((inv) =>
-        inv.id === id
-          ? {
-              ...inv,
-              status,
-              paidDate: paidDate || (status === 'Sudah Bill' ? new Date().toISOString().split('T')[0] : undefined),
-              paymentMethod: paymentMethod || inv.paymentMethod,
-            }
-          : inv
-      )
-    );
+    const inv = vendorInvoices.find((v) => v.id === id);
+    if (!inv) return;
+    tenantApi
+      .updateVendorInvoice(id, {
+        status,
+        paidDate: paidDate || (status === 'Sudah Bill' ? new Date().toISOString().split('T')[0] : undefined),
+        paymentMethod: paymentMethod || inv.paymentMethod,
+      })
+      .then((updated) => {
+        setApiVendorInvoices((prev) => prev.map((v) => (v.id === id ? updated : v)));
+      });
   };
 
   // 36. eNPS
   const submitEnpsResponse = (score: number, department: string, feedback?: string) => {
-    setEnpsSurvey((prev) => {
-      const newResponse = {
-        id: `enps-r-${Date.now()}`,
-        score,
-        department,
-        feedback,
-        submittedAt: new Date().toISOString().split('T')[0],
-      };
-      const responses = [...prev.responses, newResponse];
-      const promoters = responses.filter((r) => r.score >= 9).length;
-      const passives = responses.filter((r) => r.score >= 7 && r.score <= 8).length;
-      const detractors = responses.filter((r) => r.score <= 6).length;
-      const total = responses.length;
-      const npsScore = Math.round(((promoters - detractors) / total) * 100);
-
-      return {
-        ...prev,
-        responses,
-        totalResponses: total,
-        promoters,
-        passives,
-        detractors,
-        score: npsScore,
-      };
+    tenantApi.submitEnpsResponse({ score, department, feedback }).then((updated) => {
+      setApiEnpsSurvey(updated);
     });
   };
 
@@ -5126,7 +5085,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         procurementOrders, // real backend data, already tenant-scoped server-side
         addProcurementOrder,
         updateProcurementStatus,
-        documents: documents.filter((d) => d.tenantId === currentTenant.id),
+        documents, // real backend data, already tenant-scoped server-side
         createOfficialDocument,
         executeMigrationImport,
         // Advanced Modules
@@ -5169,7 +5128,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         addMaintenanceTicket,
         updateMaintenanceTicket,
         addAssetRelocation,
-        documentTemplates: documentTemplates.filter((t) => t.tenantId === currentTenant.id),
+        documentTemplates, // real backend data, already tenant-scoped server-side
         addDocumentTemplate,
         updateDocumentTemplate,
         deleteDocumentTemplate,
@@ -5268,7 +5227,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         gaTickets: gaTickets.filter((t) => t.tenantId === currentTenant.id),
         addGaTicket,
         updateGaTicketStatus,
-        vendorInvoices: vendorInvoices.filter((v) => v.tenantId === currentTenant.id),
+        vendorInvoices, // real backend data, already tenant-scoped server-side
         addVendorInvoice,
         updateVendorInvoiceStatus,
         auditLogs, // real backend data, already tenant-scoped server-side
