@@ -29,6 +29,7 @@ import {
   Network,
   BarChart3,
   MapPin,
+  Smile,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -99,6 +100,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { id: 'kpi', label: 'Penilaian (KPI & OKR)', icon: Target },
         { id: 'compliance', label: 'Kepatuhan & Sanksi SP/PHK', icon: AlertTriangle },
         { id: 'offboarding', label: 'Offboarding', icon: UserMinus },
+        { id: 'enps', label: 'Survei eNPS', icon: Smile },
       ],
     },
     {

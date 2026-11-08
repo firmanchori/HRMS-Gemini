@@ -17,6 +17,7 @@ import { OffboardingManagement } from './components/modules/OffboardingManagemen
 import { GaAssetManagement } from './components/modules/GaAssetManagement';
 import { ProcurementManagement } from './components/modules/ProcurementManagement';
 import { DocumentManagement } from './components/modules/DocumentManagement';
+import { EnpsManagement } from './components/modules/EnpsManagement';
 import { PersonaliaManagement } from './components/modules/PersonaliaManagement';
 import { BusinessTripManagement } from './components/modules/BusinessTripManagement';
 import { ApprovalCenter } from './components/modules/ApprovalCenter';
@@ -165,6 +166,8 @@ const MainLayout: React.FC = () => {
         return <RecruitmentManagement />;
       case 'offboarding':
         return <OffboardingManagement />;
+      case 'enps':
+        return <EnpsManagement />;
       case 'assets':
         return <GaAssetManagement />;
       case 'procurement':
