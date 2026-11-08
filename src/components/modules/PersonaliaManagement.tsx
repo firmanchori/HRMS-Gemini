@@ -533,8 +533,8 @@ export const PersonaliaManagement: React.FC = () => {
   const initDefaultSignatories = (emp?: Employee): PersonaliaSignatory[] => {
     const hrEmp = employees.find(
       (e) =>
-        e.department.toLowerCase().includes('human') ||
-        e.department.toLowerCase().includes('hr') ||
+        (e.department || '').toLowerCase().includes('human') ||
+        (e.department || '').toLowerCase().includes('hr') ||
         e.fullName === currentUser?.name
     );
     const creatorName = currentUser?.name || hrEmp?.fullName || 'Aditya Pratama, S.Psi';
@@ -545,14 +545,14 @@ export const PersonaliaManagement: React.FC = () => {
     const mgrEmp = employees.find(
       (e) =>
         e.id !== emp?.id &&
-        (e.position.includes('Head') || e.position.includes('Manager') || e.position.includes('Lead'))
+        ((e.position || '').includes('Head') || (e.position || '').includes('Manager') || (e.position || '').includes('Lead'))
     );
     const mgrName = mgrEmp?.fullName || 'Siti Rahmawati, M.M';
     const mgrRole = mgrEmp?.position || (emp?.department ? `Head of ${emp.department}` : 'Manager Divisi');
     const mgrId = mgrEmp?.id || '';
     const mgrNik = mgrEmp?.nik || '';
 
-    const dirEmp = employees.find((e) => e.position.includes('Director') || e.position.includes('Direktur'));
+    const dirEmp = employees.find((e) => (e.position || '').includes('Director') || (e.position || '').includes('Direktur'));
     const dirName = dirEmp?.fullName || 'Ir. Budi Santoso, MBA';
     const dirRole = dirEmp?.position || 'President Director & CEO';
     const dirId = dirEmp?.id || '';
