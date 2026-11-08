@@ -7,7 +7,7 @@ import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { createApp } from "../app.ts";
 import { db, pool } from "../db/client.ts";
-import { tenants, tenantSubscriptions, users, subscriptionPlans, companyEntities, entityClosure, orgChangeProposals, orgStructureSnapshots, companyDivisions, auditLogEntries } from "../db/schema.ts";
+import { tenants, tenantSubscriptions, users, subscriptionPlans, companyEntities, entityClosure, orgChangeProposals, orgStructureSnapshots, companyDivisions, auditLogEntries, documentTemplates } from "../db/schema.ts";
 
 /**
  * Integration test (real DB, no mocks, per testing-standards.md rule 5):
@@ -49,6 +49,11 @@ afterAll(async () => {
   await db.delete(orgStructureSnapshots).where(eq(orgStructureSnapshots.tenantId, tenantId));
   await db.delete(orgChangeProposals).where(eq(orgChangeProposals.tenantId, tenantId));
   await db.delete(auditLogEntries).where(eq(auditLogEntries.tenantId, tenantId));
+  // The tenant's root entity gets its own copy of the default document
+  // catalog seeded automatically now (server/routes/tenant.ts POST
+  // /entities) — clean that up too, or the FK on document_templates.tenant_id
+  // blocks the tenants delete below.
+  await db.delete(documentTemplates).where(eq(documentTemplates.tenantId, tenantId));
   await db.delete(users).where(eq(users.tenantId, tenantId)); // must go before companyEntities — users.entityId references it
   await db.delete(companyEntities).where(eq(companyEntities.tenantId, tenantId));
   await db.delete(tenantSubscriptions).where(eq(tenantSubscriptions.tenantId, tenantId));

@@ -76,6 +76,7 @@ import { requireTenantAdmin } from "../middleware/auth.ts";
 import { validateBody, validateParams, uuidParam } from "../lib/validate.ts";
 import { computeNewEntityClosureRows, buildEntityTree, applyChangeSet, resolveNikPattern } from "../lib/orgStructure.ts";
 import { logAudit } from "../lib/audit.ts";
+import { seedDefaultDocumentTemplatesForTenant } from "../lib/defaultDocumentTemplates.ts";
 
 export const tenantRouter = Router();
 tenantRouter.use(requireTenantAdmin);
@@ -230,6 +231,12 @@ tenantRouter.post("/entities", validateBody(createEntitySchema), async (req, res
   // The tenant's very first (registration) admin becomes permanently scoped to the holding entity it just created.
   if (!body.parentEntityId && callerUser && callerUser.entityId === null) {
     await db.update(users).set({ entityId: created.id }).where(eq(users.id, callerUser.id));
+    // This is the tenant's holding/root entity being created for the first
+    // time — the one moment a brand-new tenant actually exists in a usable
+    // sense. Give it its own independent copy of the app's default document
+    // catalog (45 templates) right here, same moment as the other one-time
+    // setup above. No-ops if the tenant somehow already has templates.
+    await seedDefaultDocumentTemplatesForTenant(tenantId, { name: created.name, address: created.address });
   }
 
   let createdAdmin: { id: string; name: string; email: string } | null = null;
