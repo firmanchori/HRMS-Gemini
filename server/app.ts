@@ -9,6 +9,8 @@ import { publicRouter } from "./routes/public.ts";
 import { appOwnerRouter } from "./routes/appOwner.ts";
 import { tenantRouter } from "./routes/tenant.ts";
 import { globalLimiter } from "./lib/rateLimit.ts";
+import { log, logError } from "./lib/logger.ts";
+import { pool } from "./db/client.ts";
 
 /**
  * CORS origin allowlist (.claude/security-hardening-rules.md §3, API8):
@@ -40,6 +42,28 @@ export function createApp() {
   app.use(cookieParser());
   app.use(express.json({ limit: "1mb" }));
   app.use(globalLimiter);
+
+  // Operational visibility: log only the requests worth looking at later
+  // (errors, and anything unusually slow) — logging every successful GET
+  // would drown real signal, since a single dashboard load alone fires
+  // ~30 of them.
+  app.use((req, res, next) => {
+    const start = Date.now();
+    res.on("finish", () => {
+      const durationMs = Date.now() - start;
+      if (res.statusCode >= 400 || durationMs > 1000) {
+        log(res.statusCode >= 500 ? "error" : "warn", "request", {
+          method: req.method,
+          path: req.path,
+          status: res.statusCode,
+          durationMs,
+          tenant: req.tenant?.subdomain ?? null,
+        });
+      }
+    });
+    next();
+  });
+
   app.use(resolveTenant);
 
   app.use("/api/auth", authRouter);
@@ -47,16 +71,28 @@ export function createApp() {
   app.use("/api/app-owner", appOwnerRouter);
   app.use("/api/tenant", tenantRouter);
 
-  app.get("/api/health", (_req, res) => {
-    res.json({ ok: true, tenant: _req.tenant?.subdomain ?? "app-owner" });
+  // Liveness vs. readiness: a load balancer or uptime monitor can tell
+  // "process is up" (ok: true, db: false) apart from "fully serving
+  // traffic" (db: true) — ping the pool rather than assuming the process
+  // being alive means the database is reachable.
+  app.get("/api/health", async (_req, res) => {
+    let dbOk = false;
+    try {
+      await pool.query("SELECT 1");
+      dbOk = true;
+    } catch (err) {
+      logError("Health check DB ping failed", err);
+    }
+    res.status(dbOk ? 200 : 503).json({ ok: true, db: dbOk, tenant: _req.tenant?.subdomain ?? "app-owner" });
   });
 
   // Last middleware: catches anything thrown/rejected in a route (including
   // a missing env var like JWT_SECRET) and returns 500 instead of crashing
   // the whole server process.
-  app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-    console.error("[api error]", err);
-    res.status(500).json({ error: "Terjadi kesalahan di server", detail: err.message });
+  app.use((err: Error, req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    logError("Unhandled route error", err, { method: req.method, path: req.path, tenant: req.tenant?.subdomain ?? null });
+    const isProd = process.env.NODE_ENV === "production";
+    res.status(500).json({ error: "Terjadi kesalahan di server", detail: isProd ? undefined : err.message });
   });
 
   return app;
