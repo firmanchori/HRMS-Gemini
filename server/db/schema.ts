@@ -660,6 +660,13 @@ export const officeLocations = pgTable("office_locations", {
   latitude: doublePrecision("latitude"),
   longitude: doublePrecision("longitude"),
   radiusMeters: integer("radius_meters").notNull().default(100),
+  // "circle" (default, existing behavior — radiusMeters around lat/lng) or
+  // "polygon" (user, 2026-11-09: "bisa di custom... kotak bulat, ataupun
+  // menandai titik polygon") for an irregular-shaped compound where a
+  // single-point radius either misses corners or spills onto public
+  // roads. polygonPoints is only read when shapeType is "polygon".
+  shapeType: text("shape_type").notNull().default("circle"),
+  polygonPoints: jsonb("polygon_points").$type<{ lat: number; lng: number }[]>(),
   isActive: boolean("is_active").notNull().default(true),
   notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),

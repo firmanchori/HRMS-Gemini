@@ -1208,6 +1208,8 @@ const officeLocationSchema = z.object({
   latitude: z.number().min(-90).max(90).optional(),
   longitude: z.number().min(-180).max(180).optional(),
   radiusMeters: z.number().int().min(10).max(5000).optional(),
+  shapeType: z.enum(["circle", "polygon"]).optional(),
+  polygonPoints: z.array(z.object({ lat: z.number().min(-90).max(90), lng: z.number().min(-180).max(180) })).min(3).max(50).optional(),
   notes: z.string().trim().max(1000).optional(),
 });
 

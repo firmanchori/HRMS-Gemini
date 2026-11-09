@@ -2000,6 +2000,8 @@ export interface OfficeLocation {
   latitude: number;
   longitude: number;
   radiusMeters: number;
+  shapeType?: 'circle' | 'polygon';
+  polygonPoints?: { lat: number; lng: number }[];
   isActive: boolean;
   notes?: string;
 }
