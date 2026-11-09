@@ -20,7 +20,6 @@ import {
   AlertCircle,
   ZoomIn,
   ZoomOut,
-  Move,
 } from 'lucide-react';
 import { OfficeLocation, OfficeLocationType } from '../../types/hrms';
 
@@ -34,6 +33,55 @@ function latLngToWorldPixel(lat: number, lng: number, zoom: number) {
   const worldY = (0.5 - Math.log((1 + sinLat) / (1 - sinLat)) / (4 * Math.PI)) * scale;
   return { x: worldX, y: worldY };
 }
+
+/**
+ * Static (non-interactive) map preview for the location list cards —
+ * previously an <iframe src="https://www.openstreetmap.org/export/embed.html...">,
+ * which CSP's default-src 'self' blocks outright (no frame-src is set, so
+ * it falls back to default-src) — confirmed via a real browser console
+ * error, not just guessed: "Framing '...openstreetmap.org/' violates...".
+ * An <img> tag isn't subject to that directive at all (img-src already
+ * allowlists server.arcgisonline.com for the interactive map below), so
+ * this renders the same tile provider as a small composited grid instead
+ * of embedding another site's page.
+ */
+const StaticLocationMapThumbnail: React.FC<{ lat: number; lng: number }> = ({ lat, lng }) => {
+  const zoom = 15;
+  const width = 400;
+  const height = 144;
+  const center = latLngToWorldPixel(lat, lng, zoom);
+  const topLeftX = center.x - width / 2;
+  const topLeftY = center.y - height / 2;
+  const numTiles = Math.pow(2, zoom);
+
+  const tiles: { key: string; url: string; left: number; top: number }[] = [];
+  for (let tx = Math.floor(topLeftX / TILE_SIZE); tx <= Math.floor((topLeftX + width) / TILE_SIZE); tx++) {
+    for (let ty = Math.floor(topLeftY / TILE_SIZE); ty <= Math.floor((topLeftY + height) / TILE_SIZE); ty++) {
+      if (ty < 0 || ty >= numTiles) continue;
+      const wrappedX = ((tx % numTiles) + numTiles) % numTiles;
+      tiles.push({
+        key: `${tx}-${ty}`,
+        url: `https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/${zoom}/${ty}/${wrappedX}`,
+        left: Math.round(tx * TILE_SIZE - topLeftX),
+        top: Math.round(ty * TILE_SIZE - topLeftY),
+      });
+    }
+  }
+
+  return (
+    <div className="relative w-full h-36 overflow-hidden bg-slate-200">
+      {tiles.map((t) => (
+        <img key={t.key} src={t.url} alt="" draggable={false} style={{ position: 'absolute', left: t.left, top: t.top, width: TILE_SIZE, height: TILE_SIZE }} className="max-w-none select-none pointer-events-none" />
+      ))}
+      <div className="absolute pointer-events-none" style={{ left: width / 2 - 10, top: height / 2 - 20 }}>
+        <MapPin className="w-5 h-5 text-rose-600 fill-rose-500 drop-shadow" />
+      </div>
+      <div className="absolute bottom-0.5 left-1 text-[8px] text-slate-600 bg-white/70 px-1 rounded pointer-events-none">
+        Esri, HERE, Garmin, © OpenStreetMap contributors
+      </div>
+    </div>
+  );
+};
 
 function worldPixelToLatLng(worldX: number, worldY: number, zoom: number) {
   const scale = TILE_SIZE * Math.pow(2, zoom);
@@ -536,7 +584,7 @@ export const OfficeLocationManagement: React.FC = () => {
       )}
 
       {/* Summary KPI Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3.5">
         <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs">
           <span className="text-[11px] text-slate-500 block">Total Titik Lokasi Kantor</span>
           <span className="text-xl font-bold text-slate-900 mt-0.5 block">{officeLocations.length} Lokasi</span>
@@ -555,16 +603,6 @@ export const OfficeLocationManagement: React.FC = () => {
             {officeLocations.filter((l) => l.type === 'Gudang' || l.type === 'Workshop').length} Fasilitas
           </span>
           <span className="text-[10px] text-slate-400">Logistik, Distribusi & Teknik</span>
-        </div>
-        <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs">
-          <span className="text-[11px] text-slate-500 block">Rata-Rata Radius Absensi</span>
-          <span className="text-xl font-bold font-mono text-emerald-700 mt-0.5 block">
-            {Math.round(
-              officeLocations.reduce((acc, l) => acc + l.radiusMeters, 0) / (officeLocations.length || 1)
-            )}{' '}
-            Meter
-          </span>
-          <span className="text-[10px] text-slate-400">Validasi GPS Presensi</span>
         </div>
       </div>
 
@@ -697,17 +735,12 @@ export const OfficeLocationManagement: React.FC = () => {
                 {/* Visualisasi Titik Lokasi di Peta */}
                 {loc.latitude && loc.longitude ? (
                   <div className="rounded-lg border border-slate-200 overflow-hidden relative">
-                    <iframe
-                      title={`Peta ${loc.name}`}
-                      className="w-full h-36 pointer-events-none"
-                      loading="lazy"
-                      src={`https://www.openstreetmap.org/export/embed.html?bbox=${loc.longitude - 0.006}%2C${loc.latitude - 0.004}%2C${loc.longitude + 0.006}%2C${loc.latitude + 0.004}&layer=mapnik&marker=${loc.latitude}%2C${loc.longitude}`}
-                    />
+                    <StaticLocationMapThumbnail lat={loc.latitude} lng={loc.longitude} />
                     <a
                       href={`https://www.google.com/maps?q=${loc.latitude},${loc.longitude}`}
                       target="_blank"
                       rel="noreferrer"
-                      className="absolute bottom-1.5 right-1.5 px-2 py-1 bg-white/95 hover:bg-white text-slate-700 text-[10px] font-semibold rounded shadow-xs border border-slate-200 flex items-center gap-1"
+                      className="absolute top-1.5 right-1.5 px-2 py-1 bg-white/95 hover:bg-white text-slate-700 text-[10px] font-semibold rounded shadow-xs border border-slate-200 flex items-center gap-1"
                     >
                       <MapPin className="w-3 h-3 text-rose-500" />
                       Buka di Google Maps
@@ -1138,17 +1171,6 @@ export const OfficeLocationManagement: React.FC = () => {
                               📍 Set Tengah
                             </button>
                           </div>
-                        </div>
-
-                        {/* Bottom Instruction Banner */}
-                        <div className="absolute bottom-2.5 left-2.5 right-2.5 bg-slate-900/85 text-white px-3 py-1.5 rounded-lg text-[11px] flex items-center justify-between pointer-events-none">
-                          <span className="flex items-center gap-1.5">
-                            <Move className="w-3.5 h-3.5 text-indigo-300 shrink-0" />
-                            <span>
-                              <strong>Tahan & Geser (Drag)</strong> untuk menggeser peta · <strong>Klik di mana saja</strong> untuk menentukan titik lokasi (Lat/Long otomatis terisi)
-                            </span>
-                          </span>
-                          <span className="font-mono text-emerald-300 font-bold shrink-0 ml-2">GESER & KLIK</span>
                         </div>
                       </div>
                     );
