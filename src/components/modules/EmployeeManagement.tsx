@@ -58,6 +58,7 @@ import { formatRupiah, getTERCategory } from '../../utils/taxCalculator';
 import { EmployeeSelect } from '../common/EmployeeSelect';
 import { CurrencyInput } from '../common/CurrencyInput';
 import { ValidatedDateInput } from '../common/ValidatedDateInput';
+import { ValidatedInput } from '../common/ValidatedInput';
 import { validateBirthDate, validateDateString } from '../../utils/dateValidator';
 import { ScrollableTabNav } from '../common/ScrollableTabNav';
 import { ProbationManagement } from './ProbationManagement';
@@ -837,6 +838,12 @@ export const EmployeeManagement: React.FC = () => {
     }
     if (!newDept.trim()) {
       setFormError('Departemen/Unit / Divisi wajib diisi!');
+      setShowValidationErrors(true);
+      setDossierFormTab('kepegawaian');
+      return;
+    }
+    if (!newPhone.trim()) {
+      setFormError('Nomor HP / WhatsApp wajib diisi!');
       setShowValidationErrors(true);
       setDossierFormTab('kepegawaian');
       return;
@@ -1979,7 +1986,7 @@ export const EmployeeManagement: React.FC = () => {
             </div>
 
             {/* Form Modal Body (Scrollable, Responsive Touch Swipe) */}
-            <form onSubmit={handleSubmitDossierForm} className="flex-1 flex flex-col min-h-0">
+            <form onSubmit={handleSubmitDossierForm} className="flex-1 flex flex-col min-h-0" noValidate>
               <div
                 onTouchStart={handleFormTouchStart}
                 onTouchEnd={handleFormTouchEnd}
@@ -2057,23 +2064,16 @@ export const EmployeeManagement: React.FC = () => {
                       </h4>
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                        <div>
-                          <label className="font-medium text-slate-700 block mb-1">
-                            Nama Lengkap Sesuai KTP *
-                          </label>
-                          <input
-                            type="text"
-                            required
-                            placeholder="Contoh: Dimas Anggara, S.Kom."
-                            value={newName}
-                            onChange={(e) => setNewName(e.target.value)}
-                            className={`w-full px-3 py-2 border rounded font-medium ${
-                              showValidationErrors && !newName.trim()
-                                ? 'border-rose-500 bg-rose-50/30'
-                                : 'border-slate-300'
-                            }`}
-                          />
-                        </div>
+                        <ValidatedInput
+                          label="Nama Lengkap Sesuai KTP"
+                          required
+                          requiredLabel="Nama lengkap karyawan sesuai KTP wajib diisi"
+                          showError={showValidationErrors}
+                          placeholder="Contoh: Dimas Anggara, S.Kom."
+                          value={newName}
+                          onChange={setNewName}
+                          className="font-medium"
+                        />
 
                         <div>
                           <div className="flex items-center justify-between mb-1">
@@ -2128,16 +2128,16 @@ export const EmployeeManagement: React.FC = () => {
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-                        <div>
-                          <label className="font-medium text-slate-700 block mb-1">Nomor HP / WhatsApp *</label>
-                          <input
-                            type="tel"
-                            required
-                            value={newPhone}
-                            onChange={(e) => setNewPhone(e.target.value)}
-                            className="w-full px-3 py-2 border border-slate-300 rounded font-mono"
-                          />
-                        </div>
+                        <ValidatedInput
+                          label="Nomor HP / WhatsApp"
+                          type="tel"
+                          required
+                          requiredLabel="Nomor HP / WhatsApp wajib diisi"
+                          showError={showValidationErrors}
+                          value={newPhone}
+                          onChange={setNewPhone}
+                          className="font-mono"
+                        />
 
                         <div>
                           <label className="font-medium text-slate-700 block mb-1">Klasifikasi Pekerja</label>
@@ -2207,32 +2207,26 @@ export const EmployeeManagement: React.FC = () => {
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                        <div>
-                          <label className="font-medium text-slate-700 block mb-1">Divisi / Departemen/Unit *</label>
-                          <input
-                            type="text"
-                            required
-                            value={newDept}
-                            onChange={(e) => setNewDept(e.target.value)}
-                            className="w-full px-3 py-2 border border-slate-300 rounded font-medium"
-                          />
-                        </div>
+                        <ValidatedInput
+                          label="Divisi / Departemen/Unit"
+                          required
+                          requiredLabel="Departemen/Unit / Divisi wajib diisi"
+                          showError={showValidationErrors}
+                          value={newDept}
+                          onChange={setNewDept}
+                          className="font-medium"
+                        />
 
-                        <div>
-                          <label className="font-medium text-slate-700 block mb-1">Posisi / Jabatan Resmi *</label>
-                          <input
-                            type="text"
-                            required
-                            placeholder="Contoh: Senior DevOps Engineer"
-                            value={newPosition}
-                            onChange={(e) => setNewPosition(e.target.value)}
-                            className={`w-full px-3 py-2 border rounded font-medium ${
-                              showValidationErrors && !newPosition.trim()
-                                ? 'border-rose-500 bg-rose-50/30'
-                                : 'border-slate-300'
-                            }`}
-                          />
-                        </div>
+                        <ValidatedInput
+                          label="Posisi / Jabatan Resmi"
+                          required
+                          requiredLabel="Posisi / Jabatan kerja wajib diisi"
+                          showError={showValidationErrors}
+                          placeholder="Contoh: Senior DevOps Engineer"
+                          value={newPosition}
+                          onChange={setNewPosition}
+                          className="font-medium"
+                        />
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
@@ -2368,17 +2362,16 @@ export const EmployeeManagement: React.FC = () => {
                     </h4>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                      <div>
-                        <label className="font-medium text-slate-700 block mb-1">Nomor NIK KTP (16 Digit) *</label>
-                        <input
-                          type="text"
-                          required
-                          maxLength={16}
-                          value={newNikKtp}
-                          onChange={(e) => setNewNikKtp(e.target.value)}
-                          className="w-full px-3 py-2 border border-slate-300 rounded font-mono font-bold tracking-wider"
-                        />
-                      </div>
+                      <ValidatedInput
+                        label="Nomor NIK KTP (16 Digit)"
+                        required
+                        requiredLabel="Nomor NIK KTP (16 digit) wajib diisi"
+                        showError={showValidationErrors}
+                        maxLength={16}
+                        value={newNikKtp}
+                        onChange={setNewNikKtp}
+                        className="font-mono font-bold tracking-wider"
+                      />
                       <div>
                         <label className="font-medium text-slate-700 block mb-1">Nomor Kartu Keluarga (KK)</label>
                         <input
@@ -2843,17 +2836,16 @@ export const EmployeeManagement: React.FC = () => {
                           </select>
                         </div>
 
-                        <div>
-                          <label className="font-medium text-slate-700 block mb-1 text-xs">Nomor Rekening Payroll *</label>
-                          <input
-                            type="text"
-                            required
-                            placeholder="Contoh: 1234567890"
-                            value={newBankAccount}
-                            onChange={(e) => setNewBankAccount(e.target.value)}
-                            className="w-full px-3 py-2 border border-slate-300 rounded font-mono font-bold text-xs"
-                          />
-                        </div>
+                        <ValidatedInput
+                          label="Nomor Rekening Payroll"
+                          required
+                          requiredLabel="Nomor Rekening Bank Payroll wajib diisi"
+                          showError={showValidationErrors}
+                          placeholder="Contoh: 1234567890"
+                          value={newBankAccount}
+                          onChange={setNewBankAccount}
+                          className="font-mono font-bold text-xs"
+                        />
 
                         <div>
                           <label className="font-medium text-slate-700 block mb-1 text-xs">Nama Pemilik Rekening</label>

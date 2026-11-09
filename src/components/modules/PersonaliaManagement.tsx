@@ -44,6 +44,7 @@ import { PersonaliaActionType, Employee, PersonaliaSignatory, PersonaliaLog, Sys
 import { EmployeeSelect } from '../common/EmployeeSelect';
 import { CurrencyInput } from '../common/CurrencyInput';
 import { ValidatedDateInput } from '../common/ValidatedDateInput';
+import { ValidatedInput, ValidatedTextarea } from '../common/ValidatedInput';
 import { formatRupiah } from '../../utils/taxCalculator';
 import { toRomanNumeral } from '../../utils/documentNumbering';
 import { ModuleDocumentModal } from '../common/ModuleDocumentModal';
@@ -768,14 +769,24 @@ export const PersonaliaManagement: React.FC = () => {
       return;
     }
 
+    if (actionType === 'Pengangkatan Tetap' && !permanentAppointmentDate) {
+      setFormError('Tanggal resmi menjadi karyawan tetap wajib diisi.');
+      return;
+    }
+
+    if (actionType === 'Penetapan Plt' && !actingRoleExpiryDate) {
+      setFormError('Batas akhir penugasan Plt wajib diisi.');
+      return;
+    }
+
     // Validation for flexible signatories
     if (!signatories || signatories.length === 0) {
       setFormError('Minimal satu kolom penandatangan / approval wajib ditentukan.');
       return;
     }
-    const emptySig = signatories.find((s) => !s.label.trim() || !s.name.trim());
+    const emptySig = signatories.find((s) => !s.label.trim() || !s.name.trim() || !(s.role || '').trim());
     if (emptySig) {
-      setFormError('Semua kolom penandatangan wajib dilengkapi keterangan dan nama pejabat.');
+      setFormError('Semua kolom penandatangan wajib dilengkapi keterangan, nama, dan jabatan pejabat.');
       return;
     }
 
@@ -2386,7 +2397,7 @@ export const PersonaliaManagement: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-5 space-y-4 text-xs overflow-y-auto">
+            <form onSubmit={handleSubmit} className="p-5 space-y-4 text-xs overflow-y-auto" noValidate>
               {formError && (
                 <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg flex items-center gap-2 text-rose-800 text-xs font-semibold animate-fadeIn">
                   <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
@@ -2397,8 +2408,10 @@ export const PersonaliaManagement: React.FC = () => {
               {/* Employee Picker */}
               <div>
                 <EmployeeSelect
-                  label="Pilih Karyawan Target *"
+                  label="Pilih Karyawan Target"
                   required
+                  requiredLabel="Pilih karyawan target yang akan diproses personalia"
+                  showError={showValidationErrors}
                   employees={employees}
                   value={targetEmpId}
                   onChange={handleSelectEmployee}
@@ -2547,7 +2560,6 @@ export const PersonaliaManagement: React.FC = () => {
                     <input
                       type="text"
                       readOnly
-                      required
                       value={skDocNumber}
                       title="Nomor SK resmi diterbitkan otomatis oleh sistem penomoran dokumen perusahaan dan bersifat readonly"
                       className="w-full pl-3 pr-8 py-2 border border-slate-200 rounded font-mono font-semibold text-indigo-800 bg-slate-100 cursor-not-allowed select-none text-xs"
@@ -2601,13 +2613,14 @@ export const PersonaliaManagement: React.FC = () => {
                           <option value="__custom__">+ Input Posisi Kustom Baru</option>
                         </select>
                         {(isCustomPos || (newPosition && !availablePositions.includes(newPosition))) && (
-                          <input
-                            type="text"
+                          <ValidatedInput
                             required
+                            requiredLabel="Nama jabatan baru / definitif wajib diisi"
+                            showError={showValidationErrors}
                             value={newPosition}
-                            onChange={(e) => setNewPosition(e.target.value)}
+                            onChange={setNewPosition}
                             placeholder="Ketik nama jabatan baru definitif..."
-                            className="w-full px-3 py-1.5 border border-indigo-300 rounded bg-indigo-50/50 font-medium text-xs text-indigo-950"
+                            className="bg-indigo-50/50 font-medium text-xs text-indigo-950"
                           />
                         )}
                       </div>
@@ -2637,6 +2650,7 @@ export const PersonaliaManagement: React.FC = () => {
                       value={newSalary}
                       onChange={(val) => setNewSalary(val)}
                       required
+                      showError={showValidationErrors}
                       min={currentTenant.umr || 3000000}
                       helperText={`Gaji lama: ${formatRupiah(selectedTargetEmp?.basicSalary || 0)}`}
                     />
@@ -2686,13 +2700,14 @@ export const PersonaliaManagement: React.FC = () => {
                           <option value="__custom__">+ Input Posisi Kustom Baru</option>
                         </select>
                         {(isCustomPos || (newPosition && !availablePositions.includes(newPosition))) && (
-                          <input
-                            type="text"
+                          <ValidatedInput
                             required
+                            requiredLabel="Nama jabatan baru / definitif wajib diisi"
+                            showError={showValidationErrors}
                             value={newPosition}
-                            onChange={(e) => setNewPosition(e.target.value)}
+                            onChange={setNewPosition}
                             placeholder="Ketik jabatan penyesuaian..."
-                            className="w-full px-3 py-1.5 border border-rose-300 rounded bg-rose-50/50 font-medium text-xs text-rose-950"
+                            className="bg-rose-50/50 font-medium text-xs text-rose-950"
                           />
                         )}
                       </div>
@@ -2716,6 +2731,7 @@ export const PersonaliaManagement: React.FC = () => {
                     value={newSalary}
                     onChange={(val) => setNewSalary(val)}
                     required
+                    showError={showValidationErrors}
                     min={currentTenant.umr || 3000000}
                     helperText="Tidak boleh di bawah standar UMR regional"
                   />
@@ -2772,13 +2788,14 @@ export const PersonaliaManagement: React.FC = () => {
                           <option value="__custom__">+ Input Posisi Kustom Baru</option>
                         </select>
                         {(isCustomPos || (newPosition && !availablePositions.includes(newPosition))) && (
-                          <input
-                            type="text"
+                          <ValidatedInput
                             required
+                            requiredLabel="Nama jabatan baru / definitif wajib diisi"
+                            showError={showValidationErrors}
                             value={newPosition}
-                            onChange={(e) => setNewPosition(e.target.value)}
+                            onChange={setNewPosition}
                             placeholder="Ketik posisi divisi tujuan..."
-                            className="w-full px-3 py-1.5 border border-slate-300 rounded bg-white font-medium text-xs"
+                            className="bg-white font-medium text-xs"
                           />
                         )}
                       </div>
@@ -2843,6 +2860,7 @@ export const PersonaliaManagement: React.FC = () => {
                       value={newSalary}
                       onChange={(val) => setNewSalary(val)}
                       required
+                      showError={showValidationErrors}
                       min={currentTenant.umr || 3000000}
                     />
                     <div>
@@ -2874,6 +2892,7 @@ export const PersonaliaManagement: React.FC = () => {
                       value={permanentAppointmentDate}
                       onChange={(val) => setPermanentAppointmentDate(val)}
                       required
+                      showError={showValidationErrors}
                       helperText="Berakhirnya masa probation 3 bulan"
                     />
                     <div>
@@ -2893,6 +2912,7 @@ export const PersonaliaManagement: React.FC = () => {
                     value={newSalary}
                     onChange={(val) => setNewSalary(val)}
                     required
+                    showError={showValidationErrors}
                   />
                 </div>
               )}
@@ -2922,6 +2942,7 @@ export const PersonaliaManagement: React.FC = () => {
                       value={contractEndDate}
                       onChange={(val) => setContractEndDate(val)}
                       required
+                      showError={showValidationErrors}
                       helperText="Batas akhir masa perpanjangan"
                     />
                   </div>
@@ -2966,13 +2987,14 @@ export const PersonaliaManagement: React.FC = () => {
                           <option value="__custom__">+ Input Posisi Kustom Baru</option>
                         </select>
                         {(isCustomPos || (newPosition && !availablePositions.includes(newPosition))) && (
-                          <input
-                            type="text"
+                          <ValidatedInput
                             required
+                            requiredLabel="Nama jabatan baru / definitif wajib diisi"
+                            showError={showValidationErrors}
                             value={newPosition}
-                            onChange={(e) => setNewPosition(e.target.value)}
+                            onChange={setNewPosition}
                             placeholder="Contoh: Plt. Head of Engineering"
-                            className="w-full px-3 py-1.5 border border-cyan-300 rounded bg-cyan-50/50 font-medium text-xs text-cyan-950"
+                            className="bg-cyan-50/50 font-medium text-xs text-cyan-950"
                           />
                         )}
                       </div>
@@ -2983,6 +3005,7 @@ export const PersonaliaManagement: React.FC = () => {
                       value={actingRoleExpiryDate}
                       onChange={(val) => setActingRoleExpiryDate(val)}
                       required
+                      showError={showValidationErrors}
                       helperText="Maksimal 6 bulan sesuai kelaziman korporat"
                     />
                   </div>
@@ -3531,16 +3554,15 @@ export const PersonaliaManagement: React.FC = () => {
 
                       {/* 1. Keterangan / Status Penandatanganan */}
                       <div>
-                        <label className="font-medium text-slate-600 block text-[11px] mb-1">
-                          Keterangan Tanda Tangan *
-                        </label>
-                        <input
-                          type="text"
+                        <ValidatedInput
+                          label="Keterangan Tanda Tangan"
                           required
+                          requiredLabel="Semua kolom penandatangan wajib dilengkapi keterangan"
+                          showError={showValidationErrors}
                           placeholder="Contoh: Dibuat Oleh, Mengetahui, Menyetujui, Disetujui Oleh"
                           value={sig.label}
-                          onChange={(e) => handleUpdateSignatory(idx, 'label', e.target.value)}
-                          className="w-full px-2.5 py-1.5 border border-slate-300 rounded text-xs font-semibold text-slate-900 focus:border-indigo-500 bg-white"
+                          onChange={(val) => handleUpdateSignatory(idx, 'label', val)}
+                          className="font-semibold text-slate-900 bg-white"
                         />
                         {/* Quick preset chips to handle differences like 'Menyetujui' vs 'Disetujui Oleh' */}
                         <div className="flex items-center gap-1 flex-wrap mt-1">
@@ -3580,35 +3602,29 @@ export const PersonaliaManagement: React.FC = () => {
 
                       {/* Manual Name Input (if manual or external) */}
                       {(sig.employeeId === '__manual__' || !employees.some((e) => e.id === sig.employeeId)) && (
-                        <div>
-                          <label className="font-medium text-slate-600 block text-[11px] mb-1">
-                            Nama Lengkap Pejabat *
-                          </label>
-                          <input
-                            type="text"
-                            required
-                            placeholder="Contoh: Ir. Budi Santoso, MBA"
-                            value={sig.name}
-                            onChange={(e) => handleUpdateSignatory(idx, 'name', e.target.value)}
-                            className="w-full px-2.5 py-1.5 border border-indigo-200 rounded text-xs font-semibold text-slate-900 bg-indigo-50/30"
-                          />
-                        </div>
+                        <ValidatedInput
+                          label="Nama Lengkap Pejabat"
+                          required
+                          requiredLabel="Semua kolom penandatangan wajib dilengkapi nama pejabat"
+                          showError={showValidationErrors}
+                          placeholder="Contoh: Ir. Budi Santoso, MBA"
+                          value={sig.name}
+                          onChange={(val) => handleUpdateSignatory(idx, 'name', val)}
+                          className="font-semibold text-slate-900 bg-indigo-50/30"
+                        />
                       )}
 
                       {/* 3. Jabatan / Posisi Resmi */}
-                      <div>
-                        <label className="font-medium text-slate-600 block text-[11px] mb-1">
-                          Jabatan / Peran Resmi *
-                        </label>
-                        <input
-                          type="text"
-                          required
-                          placeholder="Contoh: President Director & CEO"
-                          value={sig.role || ''}
-                          onChange={(e) => handleUpdateSignatory(idx, 'role', e.target.value)}
-                          className="w-full px-2.5 py-1.5 border border-slate-300 rounded text-xs text-slate-800 bg-white"
-                        />
-                      </div>
+                      <ValidatedInput
+                        label="Jabatan / Peran Resmi"
+                        required
+                        requiredLabel="Jabatan / peran resmi penandatangan wajib diisi"
+                        showError={showValidationErrors}
+                        placeholder="Contoh: President Director & CEO"
+                        value={sig.role || ''}
+                        onChange={(val) => handleUpdateSignatory(idx, 'role', val)}
+                        className="text-slate-800 bg-white"
+                      />
                     </div>
                   ))}
                 </div>
@@ -3630,19 +3646,13 @@ export const PersonaliaManagement: React.FC = () => {
               </div>
 
               {/* Dasar Pertimbangan / Alasan SK */}
-              <div>
-                <label className="font-medium text-slate-700 block mb-1">
-                  Dasar Pertimbangan / Alasan Penerbitan SK *
-                </label>
-                <textarea
-                  rows={2}
-                  required
-                  placeholder="Berdasarkan hasil rapat pimpinan dan hasil penilaian kinerja triwulan..."
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-md focus:border-indigo-500"
-                />
-              </div>
+              <ValidatedTextarea
+                label="Dasar Pertimbangan / Alasan Penerbitan SK (Opsional)"
+                rows={2}
+                placeholder="Berdasarkan hasil rapat pimpinan dan hasil penilaian kinerja triwulan... (jika kosong, sistem akan mengisi alasan standar otomatis)"
+                value={reason}
+                onChange={setReason}
+              />
 
               {/* Action Buttons */}
               <div className="pt-3 border-t border-slate-200 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-2.5">
