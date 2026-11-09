@@ -954,7 +954,7 @@ export const AttendanceManagement: React.FC = () => {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-sm font-bold text-slate-900">Pengajuan Koreksi Presensi & Izin</h3>
+              <h3 className="text-sm font-bold text-slate-900">Koreksi Presensi & Izin</h3>
               <p className="text-xs text-slate-500">Lupa absen masuk/pulang, permohonan izin terlambat macet, dan sakit dengan surat dokter.</p>
             </div>
             <button
@@ -962,7 +962,7 @@ export const AttendanceManagement: React.FC = () => {
               className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-xs font-semibold shadow-xs flex items-center gap-1"
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>Ajukan Perbaikan Presensi</span>
+              <span>Input Perbaikan Presensi</span>
             </button>
           </div>
 
@@ -1864,7 +1864,7 @@ export const AttendanceManagement: React.FC = () => {
                   type="submit"
                   className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-semibold shadow-xs"
                 >
-                  Kirim Pengajuan
+                  Simpan Koreksi
                 </button>
               </div>
             </form>
