@@ -29,9 +29,11 @@ import {
   ExternalLink,
   Sparkles,
   Globe,
+  AlertCircle,
 } from 'lucide-react';
 import { UserRole } from '../../types/hrms';
 import { GlobalSearchBar } from './GlobalSearchBar';
+import { ValidatedInput } from '../common/ValidatedInput';
 
 interface HeaderProps {
   onOpenMigrationWizard: () => void;
@@ -187,6 +189,7 @@ export const Header: React.FC<HeaderProps> = ({
   const userAvatarUrl = currentEmployee?.avatar || currentUser.avatarUrl;
 
   // Profile Form Edit State
+  const [profileFormError, setProfileFormError] = useState<string | null>(null);
   const [profileName, setProfileName] = useState(currentUser.name);
   const [profileEmail, setProfileEmail] = useState(currentUser.email);
   const [profilePhone, setProfilePhone] = useState(currentEmployee?.phone || '0812-9876-5432');
@@ -263,6 +266,15 @@ export const Header: React.FC<HeaderProps> = ({
 
   const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!profileName.trim()) {
+      setProfileFormError('Nama lengkap wajib diisi');
+      return;
+    }
+    if (!profileEmail.trim()) {
+      setProfileFormError('Email perusahaan wajib diisi');
+      return;
+    }
+    setProfileFormError(null);
     setProfileSavedToast(true);
     setTimeout(() => {
       setProfileSavedToast(false);
@@ -780,11 +792,17 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
 
             {/* Modal Body */}
-            <form onSubmit={handleSaveProfile} className="p-5 overflow-y-auto space-y-4 text-xs flex-1">
+            <form onSubmit={handleSaveProfile} className="p-5 overflow-y-auto space-y-4 text-xs flex-1" noValidate>
               {profileSavedToast && (
                 <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-xl text-emerald-800 flex items-center gap-2 animate-in zoom-in-95">
                   <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
                   <span className="font-semibold text-xs">Perubahan data profil berhasil disimpan!</span>
+                </div>
+              )}
+              {profileFormError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg flex items-center gap-2 text-rose-800 text-xs font-semibold animate-fadeIn">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                  <span>{profileFormError}</span>
                 </div>
               )}
 
@@ -816,27 +834,32 @@ export const Header: React.FC<HeaderProps> = ({
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="font-semibold text-slate-700 block mb-1">Nama Lengkap *</label>
-                      <input
-                        type="text"
-                        required
-                        value={profileName}
-                        onChange={(e) => setProfileName(e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg font-medium text-slate-800"
-                      />
-                    </div>
+                    <ValidatedInput
+                      label="Nama Lengkap"
+                      required
+                      requiredLabel="Nama lengkap wajib diisi"
+                      showError={!!profileFormError && !profileName.trim()}
+                      value={profileName}
+                      onChange={(val) => {
+                        setProfileName(val);
+                        if (profileFormError) setProfileFormError(null);
+                      }}
+                      className="font-medium text-slate-800"
+                    />
 
-                    <div>
-                      <label className="font-semibold text-slate-700 block mb-1">Email Perusahaan *</label>
-                      <input
-                        type="email"
-                        required
-                        value={profileEmail}
-                        onChange={(e) => setProfileEmail(e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono text-slate-800"
-                      />
-                    </div>
+                    <ValidatedInput
+                      label="Email Perusahaan"
+                      type="email"
+                      required
+                      requiredLabel="Email perusahaan wajib diisi"
+                      showError={!!profileFormError && !profileEmail.trim()}
+                      value={profileEmail}
+                      onChange={(val) => {
+                        setProfileEmail(val);
+                        if (profileFormError) setProfileFormError(null);
+                      }}
+                      className="font-mono text-slate-800"
+                    />
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
