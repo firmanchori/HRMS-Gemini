@@ -286,8 +286,11 @@ export const PayrollManagement: React.FC = () => {
   };
 
   // Reimbursement Actions
+  const [claimSubmitAttempted, setClaimSubmitAttempted] = useState(false);
+
   const handleAddClaim = (e: React.FormEvent) => {
     e.preventDefault();
+    setClaimSubmitAttempted(true);
     if (!claimEmpId || claimAmount <= 0) return;
 
     const newClaim: any = {
@@ -2141,7 +2144,7 @@ export const PayrollManagement: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleAddClaim} className="p-5 space-y-3.5 text-xs">
+            <form onSubmit={handleAddClaim} noValidate className="p-5 space-y-3.5 text-xs">
               <div>
                 <label className="font-semibold text-slate-700 block mb-1">Karyawan Pemohon</label>
                 <EmployeeSelect
@@ -2177,31 +2180,30 @@ export const PayrollManagement: React.FC = () => {
                   value={claimAmount}
                   onChange={setClaimAmount}
                   required
+                  showError={claimSubmitAttempted}
                   min={1000}
                   helperText="Total biaya reimburse yang diajukan"
                 />
                 <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Nomor Struk / Kwitansi</label>
+                  <label className="font-semibold text-slate-700 block mb-1">Nomor Struk / Kwitansi (Opsional)</label>
                   <input
                     type="text"
                     value={claimReceiptNo}
                     onChange={(e) => setClaimReceiptNo(e.target.value)}
-                    placeholder="Contoh: KWT-9921"
+                    placeholder="Contoh: KWT-9921 (kosongkan untuk nomor otomatis)"
                     className="w-full p-2 border border-slate-300 rounded-md font-mono"
-                    required
                   />
                 </div>
               </div>
 
               <div>
-                <label className="font-semibold text-slate-700 block mb-1">Rincian Keperluan</label>
+                <label className="font-semibold text-slate-700 block mb-1">Rincian Keperluan (Opsional)</label>
                 <textarea
                   rows={2}
                   value={claimDesc}
                   onChange={(e) => setClaimDesc(e.target.value)}
                   placeholder="Diagnosa singkat atau rincian perjalanan dinas..."
                   className="w-full p-2 border border-slate-300 rounded-md"
-                  required
                 />
               </div>
 

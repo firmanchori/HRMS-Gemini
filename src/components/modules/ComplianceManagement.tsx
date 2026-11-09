@@ -21,6 +21,7 @@ import {
 import { DisciplinaryLevel, ComplianceRecord, Employee } from '../../types/hrms';
 import { EmployeeSelect } from '../common/EmployeeSelect';
 import { ValidatedDateInput } from '../common/ValidatedDateInput';
+import { ValidatedInput, ValidatedTextarea } from '../common/ValidatedInput';
 import { ModuleDocumentModal } from '../common/ModuleDocumentModal';
 
 export const ComplianceManagement: React.FC = () => {
@@ -38,6 +39,7 @@ export const ComplianceManagement: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [showValidationErrors, setShowValidationErrors] = useState(false);
   const [isDocModalOpen, setIsDocModalOpen] = useState(false);
 
   // Form State
@@ -125,10 +127,15 @@ export const ComplianceManagement: React.FC = () => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setShowValidationErrors(true);
     setFormError(null);
 
     if (!employeeId) {
       setFormError('Pilih karyawan yang akan dikenakan sanksi peringatan.');
+      return;
+    }
+    if (!violationArticle.trim()) {
+      setFormError('Pasal peraturan perusahaan/PKB yang dilanggar wajib diisi.');
       return;
     }
     if (!violationReason.trim()) {
@@ -436,7 +443,7 @@ export const ComplianceManagement: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-5 space-y-4 text-xs overflow-y-auto">
+            <form onSubmit={handleSubmit} noValidate className="p-5 space-y-4 text-xs overflow-y-auto">
               {formError && (
                 <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg flex items-center gap-2 text-rose-800 text-xs font-semibold">
                   <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
@@ -445,15 +452,14 @@ export const ComplianceManagement: React.FC = () => {
               )}
 
               {/* Employee Picker */}
-              <div>
-                <EmployeeSelect
-                  label="Pilih Karyawan yang Dikenakan Sanksi *"
-                  required
-                  employees={employees}
-                  value={employeeId}
-                  onChange={(id) => setEmployeeId(id)}
-                />
-              </div>
+              <EmployeeSelect
+                label="Pilih Karyawan yang Dikenakan Sanksi"
+                required
+                employees={employees}
+                value={employeeId}
+                onChange={(id) => setEmployeeId(id)}
+                showError={showValidationErrors}
+              />
 
               {/* Tingkat Tindakan & Masa Berlaku */}
               <div className="grid grid-cols-2 gap-3">
@@ -489,12 +495,12 @@ export const ComplianceManagement: React.FC = () => {
               {/* Nomor Surat & Tanggal Terbit */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Nomor Surat Keputusan SP *</label>
+                  <label className="font-semibold text-slate-700 block mb-1">Nomor Surat Keputusan SP</label>
                   <input
                     type="text"
-                    required
                     value={letterNumber}
                     onChange={(e) => setLetterNumber(e.target.value)}
+                    placeholder="Nomor resmi dibuat otomatis oleh sistem saat diterbitkan"
                     className="w-full px-3 py-1.5 border border-slate-300 rounded font-mono font-semibold text-rose-700 bg-slate-50"
                   />
                 </div>
@@ -505,38 +511,30 @@ export const ComplianceManagement: React.FC = () => {
                   value={issueDate}
                   onChange={(val) => setIssueDate(val)}
                   required
+                  showError={showValidationErrors}
                   helperText="Format YYYY-MM-DD"
                 />
               </div>
 
-              {/* Dasar Pasal Regulasi */}
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">
-                  Pasal Peraturan Perusahaan (PP) / PKB yang Dilanggar *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={violationArticle}
-                  onChange={(e) => setViolationArticle(e.target.value)}
-                  className="w-full px-3 py-1.5 border border-slate-300 rounded font-medium text-slate-900"
-                />
-              </div>
+              <ValidatedInput
+                label="Pasal Peraturan Perusahaan (PP) / PKB yang Dilanggar"
+                required
+                requiredLabel="Pasal yang dilanggar wajib diisi"
+                value={violationArticle}
+                onChange={setViolationArticle}
+                showError={showValidationErrors}
+              />
 
-              {/* Uraian Pelanggaran & Bukti */}
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">
-                  Uraian Detail Pelanggaran, Kronologi & Bukti Objektif *
-                </label>
-                <textarea
-                  required
-                  rows={3}
-                  placeholder="Jelaskan tanggal/waktu kejadian, bukti rekaman presensi atau laporan manajer divisi, serta peringatan lisan yang telah diberikan sebelumnya..."
-                  value={violationReason}
-                  onChange={(e) => setViolationReason(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-md focus:border-rose-500"
-                />
-              </div>
+              <ValidatedTextarea
+                label="Uraian Detail Pelanggaran, Kronologi & Bukti Objektif"
+                required
+                requiredLabel="Uraian pelanggaran wajib diisi"
+                rows={3}
+                placeholder="Jelaskan tanggal/waktu kejadian, bukti rekaman presensi atau laporan manajer divisi, serta peringatan lisan yang telah diberikan sebelumnya..."
+                value={violationReason}
+                onChange={setViolationReason}
+                showError={showValidationErrors}
+              />
 
               {level === 'PHK' && (
                 <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-rose-900 leading-snug">

@@ -21,6 +21,7 @@ import {
 import { formatRupiah } from '../../utils/taxCalculator';
 import { EmployeeSelect } from '../common/EmployeeSelect';
 import { CurrencyInput } from '../common/CurrencyInput';
+import { ValidatedInput } from '../common/ValidatedInput';
 import { EmployeeLoan, LoanSchemeConfig } from '../../types/hrms';
 import { ModuleDocumentModal } from '../common/ModuleDocumentModal';
 
@@ -170,6 +171,7 @@ export const LoanManagement: React.FC = () => {
 
   // Modal Tambah / Edit Skema Pinjaman
   const [isSchemeModalOpen, setIsSchemeModalOpen] = useState(false);
+  const [schemeSubmitAttempted, setSchemeSubmitAttempted] = useState(false);
   const [editingSchemeId, setEditingSchemeId] = useState<string | null>(null);
   const [schemeForm, setSchemeForm] = useState<Omit<LoanSchemeConfig, 'id'>>({
     code: 'PNJ-BARU',
@@ -1140,7 +1142,8 @@ export const LoanManagement: React.FC = () => {
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                if (!schemeForm.name.trim()) return;
+                setSchemeSubmitAttempted(true);
+                if (!schemeForm.code.trim() || !schemeForm.name.trim()) return;
                 if (editingSchemeId) {
                   const updated = loanSchemes.map((s) =>
                     s.id === editingSchemeId ? { ...schemeForm, id: editingSchemeId } : s
@@ -1159,27 +1162,28 @@ export const LoanManagement: React.FC = () => {
                 setTimeout(() => setLoanNotice(null), 4000);
               }}
               className="p-5 space-y-4 text-xs max-h-[80vh] overflow-y-auto"
+              noValidate
             >
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Kode Skema *</label>
-                  <input
-                    type="text"
-                    required
-                    value={schemeForm.code}
-                    onChange={(e) => setSchemeForm({ ...schemeForm, code: e.target.value.toUpperCase() })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold"
-                  />
-                </div>
+                <ValidatedInput
+                  label="Kode Skema"
+                  required
+                  requiredLabel="Kode skema wajib diisi"
+                  value={schemeForm.code}
+                  onChange={(val) => setSchemeForm({ ...schemeForm, code: val.toUpperCase() })}
+                  showError={schemeSubmitAttempted}
+                  className="font-mono font-bold"
+                />
                 <div className="sm:col-span-2">
-                  <label className="font-semibold text-slate-700 block mb-1">Nama Jenis Pinjaman *</label>
-                  <input
-                    type="text"
+                  <ValidatedInput
+                    label="Nama Jenis Pinjaman"
                     required
+                    requiredLabel="Nama jenis pinjaman wajib diisi"
                     placeholder="Contoh: Pinjaman Darurat Medis / Pinjaman KPR Internal"
                     value={schemeForm.name}
-                    onChange={(e) => setSchemeForm({ ...schemeForm, name: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-semibold"
+                    onChange={(val) => setSchemeForm({ ...schemeForm, name: val })}
+                    showError={schemeSubmitAttempted}
+                    className="font-semibold"
                   />
                 </div>
               </div>
@@ -1518,7 +1522,7 @@ export const LoanManagement: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-5 space-y-4 text-xs">
+            <form onSubmit={handleSubmit} className="p-5 space-y-4 text-xs" noValidate>
               {/* Form Validation Error Notice */}
               {loanFormError && (
                 <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg flex items-center gap-2 text-rose-800 text-xs font-semibold animate-fadeIn">
@@ -1530,6 +1534,8 @@ export const LoanManagement: React.FC = () => {
               <EmployeeSelect
                 label="Pilih Karyawan Pemohon"
                 required
+                requiredLabel="Pilih nama karyawan yang mengajukan pinjaman"
+                showError={!!loanFormError && !employeeId}
                 employees={employees}
                 value={employeeId}
                 onChange={(val) => {
@@ -1605,6 +1611,7 @@ export const LoanManagement: React.FC = () => {
                   if (loanFormError) setLoanFormError(null);
                 }}
                 required
+                showError={!!loanFormError && (!totalAmount || totalAmount < selectedScheme.minLoanAmount || totalAmount > selectedScheme.maxLoanAmount)}
                 min={selectedScheme.minLoanAmount}
                 helperText={`Rentang plafon skema ini: ${formatRupiah(selectedScheme.minLoanAmount)} s/d ${formatRupiah(selectedScheme.maxLoanAmount)}`}
               />
