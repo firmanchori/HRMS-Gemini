@@ -69,6 +69,31 @@ export function clearSession(res: Response) {
 }
 
 /**
+ * Self-heals a session that predates the CSRF feature (2026-11-09):
+ * issueSession only ever mints the csrf cookie at login time, so every
+ * session cookie already live in a browser before that change — still
+ * valid for up to 8h — has no paired csrf cookie and would 403 on its
+ * very next mutating request (confirmed live: "Token CSRF tidak valid
+ * atau hilang" on Clock-In from a session that was logged in earlier).
+ * Run globally, before requireCsrfToken, on every request including
+ * GETs — the frontend's own session check (GET /api/auth/me or
+ * /api/employee/me) fires on every page load, so this mints the missing
+ * cookie before the user ever reaches a mutating action, with no need to
+ * log out and back in.
+ */
+export function ensureCsrfCookie(req: Request, res: Response, next: NextFunction) {
+  if (req.cookies?.[COOKIE_NAME] && !req.cookies?.[CSRF_COOKIE_NAME]) {
+    res.cookie(CSRF_COOKIE_NAME, crypto.randomBytes(32).toString("hex"), {
+      httpOnly: false,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      maxAge: 8 * 60 * 60 * 1000,
+    });
+  }
+  next();
+}
+
+/**
  * Requires the X-CSRF-Token header to match the nusahr_csrf cookie on every
  * state-changing request that carries a session — applied globally in
  * app.ts, not per-router, so no new route can accidentally be added

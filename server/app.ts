@@ -4,7 +4,7 @@ import cors from "cors";
 import helmet from "helmet";
 import cookieParser from "cookie-parser";
 import { resolveTenant } from "./middleware/tenant.ts";
-import { requireCsrfToken } from "./middleware/auth.ts";
+import { requireCsrfToken, ensureCsrfCookie } from "./middleware/auth.ts";
 import { authRouter } from "./routes/auth.ts";
 import { publicRouter } from "./routes/public.ts";
 import { appOwnerRouter } from "./routes/appOwner.ts";
@@ -44,6 +44,7 @@ export function createApp() {
   app.use(cookieParser());
   app.use(express.json({ limit: "1mb" }));
   app.use(globalLimiter);
+  app.use(ensureCsrfCookie);
   app.use(requireCsrfToken);
 
   // Operational visibility: log only the requests worth looking at later

@@ -12,6 +12,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "server:dev": "tsx watch server/index.ts",
+    "predev:all": "lsof -ti:3000,4000 | xargs kill -9 2>/dev/null || true",
     "dev:all": "concurrently -n WEB,API -c blue,green \"npm:dev\" \"npm:server:dev\"",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx server/db/migrate.ts",
