@@ -945,7 +945,20 @@ export const OfficeLocationManagement: React.FC = () => {
                         const wrappedX = ((tx % numTiles) + numTiles) % numTiles;
                         tiles.push({
                           key: `${mapZoom}-${tx}-${ty}`,
-                          url: `https://tile.openstreetmap.org/${mapZoom}/${wrappedX}/${ty}.png`,
+                          // OSM's own tile.openstreetmap.org actively blocks direct
+                          // hotlinking from apps that don't follow its tile usage
+                          // policy (operations.osmfoundation.org/policies/tiles) —
+                          // confirmed via curl returning "x-blocked: Access denied"
+                          // for every tile, which is why the map rendered blank.
+                          // CARTO's basemap CDN was tried next, but it now returns
+                          // "API KEY REQUIRED" placeholder tiles for anonymous use
+                          // (confirmed visually — tiles return HTTP 200 but render
+                          // a watermark, not a map). Esri's World Street Map REST
+                          // tile service stays free and keyless for this volume of
+                          // use, confirmed via curl returning a real 256x256 JPEG.
+                          // Note Esri's tile path is {z}/{row=y}/{col=x}, the
+                          // reverse of the usual {z}/{x}/{y} slippy-map order.
+                          url: `https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/${mapZoom}/${ty}/${wrappedX}`,
                           left: Math.round(tx * TILE_SIZE - topLeftX),
                           top: Math.round(ty * TILE_SIZE - topLeftY),
                         });
@@ -996,6 +1009,11 @@ export const OfficeLocationManagement: React.FC = () => {
                               className="max-w-none select-none pointer-events-none"
                             />
                           ))}
+                        </div>
+
+                        {/* Attribution required by Esri's World Street Map tile usage terms */}
+                        <div className="absolute bottom-0.5 right-1 text-[9px] text-slate-600 bg-white/70 px-1 rounded pointer-events-none">
+                          Esri, HERE, Garmin, © OpenStreetMap contributors
                         </div>
 
                         {/* Subtle Center Crosshair Guide while panning */}
