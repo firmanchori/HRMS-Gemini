@@ -91,6 +91,14 @@ export const EssPortal: React.FC = () => {
   // Clock-in is always for the logged-in employee — ESS is self-service,
   // there is no "pick which employee is clocking in" (user, 2026-11-03).
   const clockEmpId = currentEmp.id;
+  // currentEmp falls back to a hardcoded placeholder (id "emp-001", not a
+  // real UUID) when `employees` hasn't loaded yet or is genuinely empty —
+  // found live, 2026-11-10: clicking Clock-In while that placeholder was
+  // active sent "emp-001" as the :id route param, which the backend's
+  // UUID validation correctly rejected with "Parameter tidak valid", but
+  // the UI gave no indication why. Gate every clock action on this
+  // instead of silently acting on fake data.
+  const hasRealEmployee = employees.some((e) => e.id === clockEmpId);
 
   // Real geofence/time-window/work-type-gated Clock-In/Out (user,
   // 2026-11-09 redesign) — "Pilih clock-in, otomatis deteksi di dalam
@@ -111,6 +119,10 @@ export const EssPortal: React.FC = () => {
   } | null>(null);
 
   async function openClockPopup(mode: 'in' | 'out') {
+    if (!hasRealEmployee) {
+      setClockPopup({ mode, loading: false, submitting: false, coords: null, error: 'Data karyawan belum termuat atau tidak ditemukan. Coba muat ulang halaman.' });
+      return;
+    }
     setClockPopup({ mode, loading: true, error: null, coords: null, submitting: false });
     try {
       const coords = await getBrowserPosition();
@@ -1389,6 +1401,12 @@ export const EssPortal: React.FC = () => {
               </p>
             </div>
 
+            {!hasRealEmployee && (
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-[11px] text-amber-800">
+                Data karyawan belum termuat atau tidak ditemukan untuk akun ini — Clock-In/Out dinonaktifkan sementara. Coba muat ulang halaman.
+              </div>
+            )}
+
             <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl grid grid-cols-2 gap-3 text-center">
               <div>
                 <span className="text-[10px] text-slate-400 uppercase font-semibold block">Clock-In</span>
@@ -1405,7 +1423,7 @@ export const EssPortal: React.FC = () => {
               <button
                 type="button"
                 onClick={() => openClockPopup('in')}
-                disabled={Boolean(todayRecord?.clockIn)}
+                disabled={!hasRealEmployee || Boolean(todayRecord?.clockIn)}
                 className="py-3 rounded-lg font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed"
               >
                 <CheckCircle2 className="w-4 h-4" />
@@ -1414,7 +1432,7 @@ export const EssPortal: React.FC = () => {
               <button
                 type="button"
                 onClick={() => openClockPopup('out')}
-                disabled={!todayRecord?.clockIn || Boolean(todayRecord?.clockOut)}
+                disabled={!hasRealEmployee || !todayRecord?.clockIn || Boolean(todayRecord?.clockOut)}
                 className="py-3 rounded-lg font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed"
               >
                 <Clock className="w-4 h-4" />
