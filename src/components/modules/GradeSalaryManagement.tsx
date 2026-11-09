@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { CurrencyInput } from '../common/CurrencyInput';
 import { ValidatedDateInput } from '../common/ValidatedDateInput';
+import { ValidatedInput } from '../common/ValidatedInput';
 import { validateDateString } from '../../utils/dateValidator';
 
 export const GradeSalaryManagement: React.FC = () => {
@@ -408,7 +409,7 @@ export const GradeSalaryManagement: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleSaveGrade} className="p-5 space-y-4">
+            <form onSubmit={handleSaveGrade} className="p-5 space-y-4" noValidate>
               {/* Form Validation Error Notice */}
               {formError && (
                 <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg flex items-center gap-2 text-rose-800 text-xs font-semibold animate-fadeIn">
@@ -418,22 +419,19 @@ export const GradeSalaryManagement: React.FC = () => {
               )}
 
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Kode Grade *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Contoh: L4 atau M2"
-                    value={gradeForm.gradeCode}
-                    onChange={(e) => {
-                      setGradeForm({ ...gradeForm, gradeCode: e.target.value.toUpperCase() });
-                      if (formError) setFormError(null);
-                    }}
-                    className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:outline-emerald-600 font-mono font-bold"
-                  />
-                </div>
+                <ValidatedInput
+                  label="Kode Grade"
+                  required
+                  requiredLabel="Kode Grade wajib diisi"
+                  showError={!!formError && !gradeForm.gradeCode.trim()}
+                  placeholder="Contoh: L4 atau M2"
+                  value={gradeForm.gradeCode}
+                  onChange={(val) => {
+                    setGradeForm({ ...gradeForm, gradeCode: val.toUpperCase() });
+                    if (formError) setFormError(null);
+                  }}
+                  className="font-mono font-bold"
+                />
 
                 <ValidatedDateInput
                   id="gradeEffectiveDate"
@@ -444,26 +442,23 @@ export const GradeSalaryManagement: React.FC = () => {
                     if (formError) setFormError(null);
                   }}
                   required
+                  showError={!!formError}
                   helperText="Tanggal berlaku struktur grade"
                 />
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Nama Posisi / Deskripsi Band *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Contoh: Principal Specialist / Expert"
-                  value={gradeForm.gradeName}
-                  onChange={(e) => {
-                    setGradeForm({ ...gradeForm, gradeName: e.target.value });
-                    if (formError) setFormError(null);
-                  }}
-                  className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:outline-emerald-600"
-                />
-              </div>
+              <ValidatedInput
+                label="Nama Posisi / Deskripsi Band"
+                required
+                requiredLabel="Nama posisi / deskripsi band wajib diisi"
+                showError={!!formError && !gradeForm.gradeName.trim()}
+                placeholder="Contoh: Principal Specialist / Expert"
+                value={gradeForm.gradeName}
+                onChange={(val) => {
+                  setGradeForm({ ...gradeForm, gradeName: val });
+                  if (formError) setFormError(null);
+                }}
+              />
 
               <div className="space-y-3 p-3 bg-slate-50 border border-slate-200 rounded-xl">
                 <span className="text-xs font-bold text-slate-800 block">Rentang Gaji Pokok (Salary Range)</span>
@@ -478,6 +473,7 @@ export const GradeSalaryManagement: React.FC = () => {
                     }}
                     showTerbilang={false}
                     required
+                    showError={!!formError && gradeForm.minSalary <= 0}
                     min={1000000}
                     helperText="Batas bawah band"
                   />
@@ -491,6 +487,7 @@ export const GradeSalaryManagement: React.FC = () => {
                     }}
                     showTerbilang={false}
                     required
+                    showError={!!formError && gradeForm.midSalary < gradeForm.minSalary}
                     min={gradeForm.minSalary}
                     helperText="Target median band"
                   />
@@ -504,6 +501,7 @@ export const GradeSalaryManagement: React.FC = () => {
                     }}
                     showTerbilang={false}
                     required
+                    showError={!!formError && gradeForm.maxSalary < gradeForm.midSalary}
                     min={gradeForm.midSalary}
                     helperText="Batas atas band"
                   />

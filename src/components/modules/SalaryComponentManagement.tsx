@@ -16,6 +16,7 @@ import {
 import { EmployeeSelect } from '../common/EmployeeSelect';
 import { CurrencyInput } from '../common/CurrencyInput';
 import { ValidatedDateInput } from '../common/ValidatedDateInput';
+import { ValidatedInput, ValidatedSelect } from '../common/ValidatedInput';
 
 export const SalaryComponentManagement: React.FC = () => {
   const {
@@ -430,7 +431,7 @@ export const SalaryComponentManagement: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleCreateComponent} className="p-5 space-y-4">
+            <form onSubmit={handleCreateComponent} className="p-5 space-y-4" noValidate>
               {/* Form Validation Error Notice */}
               {compFormError && (
                 <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg flex items-center gap-2 text-rose-800 text-xs font-semibold animate-fadeIn">
@@ -440,22 +441,19 @@ export const SalaryComponentManagement: React.FC = () => {
               )}
 
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Kode Komponen *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="TUNJ-KOMUNIKASI"
-                    value={compForm.code}
-                    onChange={(e) => {
-                      setCompForm({ ...compForm, code: e.target.value.toUpperCase() });
-                      if (compFormError) setCompFormError(null);
-                    }}
-                    className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold focus:outline-indigo-600"
-                  />
-                </div>
+                <ValidatedInput
+                  label="Kode Komponen"
+                  required
+                  requiredLabel="Kode komponen gaji wajib diisi"
+                  showError={!!compFormError && !compForm.code.trim()}
+                  placeholder="TUNJ-KOMUNIKASI"
+                  value={compForm.code}
+                  onChange={(val) => {
+                    setCompForm({ ...compForm, code: val.toUpperCase() });
+                    if (compFormError) setCompFormError(null);
+                  }}
+                  className="font-mono font-bold"
+                />
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
@@ -475,22 +473,18 @@ export const SalaryComponentManagement: React.FC = () => {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Nama Komponen *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Contoh: Tunjangan Internet & Pulsa"
-                  value={compForm.name}
-                  onChange={(e) => {
-                    setCompForm({ ...compForm, name: e.target.value });
-                    if (compFormError) setCompFormError(null);
-                  }}
-                  className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:outline-indigo-600"
-                />
-              </div>
+              <ValidatedInput
+                label="Nama Komponen"
+                required
+                requiredLabel="Nama komponen gaji wajib diisi"
+                showError={!!compFormError && !compForm.name.trim()}
+                placeholder="Contoh: Tunjangan Internet & Pulsa"
+                value={compForm.name}
+                onChange={(val) => {
+                  setCompForm({ ...compForm, name: val });
+                  if (compFormError) setCompFormError(null);
+                }}
+              />
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -519,6 +513,7 @@ export const SalaryComponentManagement: React.FC = () => {
                       }}
                       showTerbilang={false}
                       required
+                      showError={!!compFormError && compForm.defaultValue < 0}
                       min={0}
                       helperText="Default per bulan"
                     />
@@ -624,7 +619,7 @@ export const SalaryComponentManagement: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleCreateAssignment} className="p-5 space-y-4">
+            <form onSubmit={handleCreateAssignment} className="p-5 space-y-4" noValidate>
               {/* Form Validation Error Notice */}
               {assignFormError && (
                 <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg flex items-center gap-2 text-rose-800 text-xs font-semibold animate-fadeIn">
@@ -633,46 +628,42 @@ export const SalaryComponentManagement: React.FC = () => {
                 </div>
               )}
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Pilih Karyawan *
-                </label>
-                <EmployeeSelect
-                  employees={employees}
-                  selectedEmployeeId={assignForm.employeeId}
-                  onSelect={(id) => {
-                    setAssignForm({ ...assignForm, employeeId: id });
-                    if (assignFormError) setAssignFormError(null);
-                  }}
-                />
-              </div>
+              <EmployeeSelect
+                label="Pilih Karyawan"
+                required
+                requiredLabel="Pilih karyawan penerima tunjangan khusus"
+                showError={!!assignFormError && !assignForm.employeeId}
+                employees={employees}
+                selectedEmployeeId={assignForm.employeeId}
+                onSelect={(id) => {
+                  setAssignForm({ ...assignForm, employeeId: id });
+                  if (assignFormError) setAssignFormError(null);
+                }}
+              />
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Pilih Komponen Gaji / Benefit *
-                </label>
-                <select
-                  required
-                  value={assignForm.componentId}
-                  onChange={(e) => {
-                    const c = salaryComponents.find((sc) => sc.id === e.target.value);
-                    setAssignForm({
-                      ...assignForm,
-                      componentId: e.target.value,
-                      amount: c ? c.defaultValue : assignForm.amount,
-                    });
-                    if (assignFormError) setAssignFormError(null);
-                  }}
-                  className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:outline-indigo-600"
-                >
-                  <option value="">-- Pilih Komponen --</option>
-                  {salaryComponents.map((sc) => (
-                    <option key={sc.id} value={sc.id}>
-                      {sc.name} ({sc.category}) - Default: Rp {sc.defaultValue.toLocaleString('id-ID')}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <ValidatedSelect
+                label="Pilih Komponen Gaji / Benefit"
+                required
+                requiredLabel="Pilih komponen gaji yang akan dialokasikan"
+                showError={!!assignFormError && !assignForm.componentId}
+                value={assignForm.componentId}
+                onChange={(val) => {
+                  const c = salaryComponents.find((sc) => sc.id === val);
+                  setAssignForm({
+                    ...assignForm,
+                    componentId: val,
+                    amount: c ? c.defaultValue : assignForm.amount,
+                  });
+                  if (assignFormError) setAssignFormError(null);
+                }}
+              >
+                <option value="">-- Pilih Komponen --</option>
+                {salaryComponents.map((sc) => (
+                  <option key={sc.id} value={sc.id}>
+                    {sc.name} ({sc.category}) - Default: Rp {sc.defaultValue.toLocaleString('id-ID')}
+                  </option>
+                ))}
+              </ValidatedSelect>
 
               <div className="grid grid-cols-2 gap-3">
                 <CurrencyInput
@@ -698,6 +689,7 @@ export const SalaryComponentManagement: React.FC = () => {
                     if (assignFormError) setAssignFormError(null);
                   }}
                   required
+                  showError={!!assignFormError}
                   helperText="Mulai terhitung di payroll"
                 />
               </div>

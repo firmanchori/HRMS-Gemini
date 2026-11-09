@@ -24,6 +24,7 @@ import {
 import { UserRole, UserAccount, RoleDefinition, OperationPermissions } from '../../types/hrms';
 import { ScrollableTabNav } from '../common/ScrollableTabNav';
 import { EmployeeSelect } from '../common/EmployeeSelect';
+import { ValidatedInput } from '../common/ValidatedInput';
 
 export const RbacManagement: React.FC = () => {
   const {
@@ -46,6 +47,7 @@ export const RbacManagement: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isAddUserModalOpen, setIsAddUserModalOpen] = useState(false);
   const [isAddRoleModalOpen, setIsAddRoleModalOpen] = useState(false);
+  const [roleSubmitAttempted, setRoleSubmitAttempted] = useState(false);
   const [selectedRoleForEdit, setSelectedRoleForEdit] = useState<RoleDefinition | null>(null);
   const [feedbackNotice, setFeedbackNotice] = useState<string | null>(null);
 
@@ -104,6 +106,7 @@ export const RbacManagement: React.FC = () => {
 
   const handleAddRoleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setRoleSubmitAttempted(true);
     if (!newRoleForm.name.trim() || !newRoleForm.key.trim()) return;
 
     const formattedKey = newRoleForm.key.trim().toLowerCase().replace(/\s+/g, '_');
@@ -122,6 +125,7 @@ export const RbacManagement: React.FC = () => {
 
     addRole(newRole, newRoleForm.copyFrom);
     setIsAddRoleModalOpen(false);
+    setRoleSubmitAttempted(false);
     setNewRoleForm({ name: '', key: '', description: '', copyFrom: 'employee' });
     setFeedbackNotice(`Role baru "${newRole.label}" berhasil dibuat dan disimpan.`);
     setTimeout(() => setFeedbackNotice(null), 4000);
@@ -591,37 +595,34 @@ export const RbacManagement: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleAddRoleSubmit} className="p-5 space-y-3.5 text-xs">
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">Nama Role *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Contoh: Finance Supervisor / Site HR"
-                  value={newRoleForm.name}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setNewRoleForm({
-                      ...newRoleForm,
-                      name: val,
-                      key: newRoleForm.key || val.toLowerCase().replace(/\s+/g, '_'),
-                    });
-                  }}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg font-medium focus:outline-indigo-600"
-                />
-              </div>
+            <form onSubmit={handleAddRoleSubmit} className="p-5 space-y-3.5 text-xs" noValidate>
+              <ValidatedInput
+                label="Nama Role"
+                required
+                requiredLabel="Nama role wajib diisi"
+                showError={roleSubmitAttempted}
+                placeholder="Contoh: Finance Supervisor / Site HR"
+                value={newRoleForm.name}
+                onChange={(val) => {
+                  setNewRoleForm({
+                    ...newRoleForm,
+                    name: val,
+                    key: newRoleForm.key || val.toLowerCase().replace(/\s+/g, '_'),
+                  });
+                }}
+                className="font-medium"
+              />
 
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">Kode Unik Role (Slug) *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="finance_supervisor"
-                  value={newRoleForm.key}
-                  onChange={(e) => setNewRoleForm({ ...newRoleForm, key: e.target.value.toLowerCase().replace(/\s+/g, '_') })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono focus:outline-indigo-600"
-                />
-              </div>
+              <ValidatedInput
+                label="Kode Unik Role (Slug)"
+                required
+                requiredLabel="Kode unik role wajib diisi"
+                showError={roleSubmitAttempted}
+                placeholder="finance_supervisor"
+                value={newRoleForm.key}
+                onChange={(val) => setNewRoleForm({ ...newRoleForm, key: val.toLowerCase().replace(/\s+/g, '_') })}
+                className="font-mono"
+              />
 
               <div>
                 <label className="font-semibold text-slate-700 block mb-1">Salin Template Hak Akses Awal</label>
@@ -845,16 +846,18 @@ export const RbacManagement: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleAddUserSubmit} className="p-5 space-y-4 text-xs">
+            <form onSubmit={handleAddUserSubmit} className="p-5 space-y-4 text-xs" noValidate>
               {addUserError && (
                 <div className="px-3 py-2 bg-red-50 border border-red-200 rounded text-red-700 font-medium">{addUserError}</div>
               )}
 
               <EmployeeSelect
-                label="Karyawan *"
+                label="Karyawan"
                 employees={employees}
                 value={linkedEmpId}
                 required
+                requiredLabel="Pilih karyawan yang akan diberi akun login"
+                showError={!!addUserError && !linkedEmpId}
                 onChange={(id) => {
                   setLinkedEmpId(id);
                   const emp = employees.find((e) => e.id === id);
@@ -865,41 +868,40 @@ export const RbacManagement: React.FC = () => {
                 }}
               />
 
-              <div>
-                <label className="font-medium text-slate-700 block mb-1">Nama Lengkap Pengguna *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Contoh: Rian Pratama"
-                  value={newUserName}
-                  onChange={(e) => setNewUserName(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded font-medium"
-                />
-              </div>
+              <ValidatedInput
+                label="Nama Lengkap Pengguna"
+                required
+                requiredLabel="Nama lengkap pengguna wajib diisi"
+                showError={!!addUserError && !newUserName.trim()}
+                placeholder="Contoh: Rian Pratama"
+                value={newUserName}
+                onChange={setNewUserName}
+                className="font-medium"
+              />
 
-              <div>
-                <label className="font-medium text-slate-700 block mb-1">Email Login Perusahaan *</label>
-                <input
-                  type="email"
-                  required
-                  placeholder="rian.pratama@nusantara.id"
-                  value={newUserEmail}
-                  onChange={(e) => setNewUserEmail(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded font-mono"
-                />
-              </div>
+              <ValidatedInput
+                label="Email Login Perusahaan"
+                type="email"
+                required
+                requiredLabel="Email login perusahaan wajib diisi"
+                showError={!!addUserError && !newUserEmail.trim()}
+                placeholder="rian.pratama@nusantara.id"
+                value={newUserEmail}
+                onChange={setNewUserEmail}
+                className="font-mono"
+              />
 
-              <div>
-                <label className="font-medium text-slate-700 block mb-1">Password Awal *</label>
-                <input
-                  type="password"
-                  required
-                  placeholder="Minimal 8 karakter"
-                  value={newUserPassword}
-                  onChange={(e) => setNewUserPassword(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded"
-                />
-              </div>
+              <ValidatedInput
+                label="Password Awal"
+                type="password"
+                required
+                requiredLabel="Password awal wajib diisi (minimal 8 karakter)"
+                validate={(val) => (val && val.length < 8 ? 'Password minimal 8 karakter' : null)}
+                showError={!!addUserError}
+                placeholder="Minimal 8 karakter"
+                value={newUserPassword}
+                onChange={setNewUserPassword}
+              />
 
               <div className="pt-3 border-t border-slate-200 flex justify-end gap-2">
                 <button

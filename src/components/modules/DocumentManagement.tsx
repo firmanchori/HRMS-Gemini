@@ -72,6 +72,7 @@ import { QRCodeView } from '../common/QRCodeView';
 import { OfficialMultiPageDocumentSheet, DocumentSignatory } from '../common/OfficialMultiPageDocumentSheet';
 import { ModuleDocumentModal } from '../common/ModuleDocumentModal';
 import { EmployeeSelect } from '../common/EmployeeSelect';
+import { ValidatedInput, ValidatedTextarea } from '../common/ValidatedInput';
 import {
   parseDocxFile,
   interpolateDocxTemplate,
@@ -746,6 +747,7 @@ export const DocumentManagement: React.FC = () => {
   const [editBodyTemplate, setEditBodyTemplate] = useState(activeTemplate?.defaultBody || '');
   const [editFooterText, setEditFooterText] = useState(activeTemplate?.footerText || 'Dokumen ini sah dan berkekuatan hukum tetap menurut UU ITE No. 11/2008.');
   const [isEditTemplateModalOpen, setIsEditTemplateModalOpen] = useState(false);
+  const [templateSubmitAttempted, setTemplateSubmitAttempted] = useState(false);
   const [editSigneeTitle, setEditSigneeTitle] = useState(activeTemplate?.signeeTitle || currentUser.name);
   const [editSigneeRole, setEditSigneeRole] = useState(activeTemplate?.signeeRole || 'VP of Human Capital');
 
@@ -940,6 +942,17 @@ export const DocumentManagement: React.FC = () => {
 
   const handleSaveStandardTemplate = () => {
     if (!editingTemplateId) return;
+    setTemplateSubmitAttempted(true);
+    if (
+      !editTitleFormat.trim() ||
+      !editNumberingFormat.trim() ||
+      !editSigneeTitle.trim() ||
+      !editSigneeRole.trim() ||
+      !editCompanyName.trim() ||
+      !editBodyTemplate.trim()
+    ) {
+      return;
+    }
 
     updateDocumentTemplate(editingTemplateId, {
       numberingPattern: editNumberingFormat,
@@ -956,6 +969,7 @@ export const DocumentManagement: React.FC = () => {
     });
 
     setIsEditTemplateModalOpen(false);
+    setTemplateSubmitAttempted(false);
 
     setFeedbackMessage({
       type: 'success',
@@ -5399,19 +5413,19 @@ PIHAK PERTAMA memberikan upah pokok sebesar {{gaji_pokok}} ({{gaji_terbilang}}) 
                 handleSaveStandardTemplate();
               }}
               className="p-5 space-y-5 overflow-y-auto text-xs"
+              noValidate
             >
               {/* Bagian 1: Judul Dokumen & Klasifikasi */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="sm:col-span-2">
-                  <label className="font-bold text-slate-800 block mb-1">
-                    Nama / Judul Resmi Naskah Dinas *
-                  </label>
-                  <input
-                    type="text"
+                  <ValidatedInput
+                    label="Nama / Judul Resmi Naskah Dinas"
                     required
+                    requiredLabel="Nama / judul resmi naskah dinas wajib diisi"
+                    showError={templateSubmitAttempted}
                     value={editTitleFormat}
-                    onChange={(e) => setEditTitleFormat(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-semibold text-slate-900 bg-white"
+                    onChange={setEditTitleFormat}
+                    className="font-semibold text-slate-900 bg-white"
                   />
                 </div>
                 <div>
@@ -5434,12 +5448,13 @@ PIHAK PERTAMA memberikan upah pokok sebesar {{gaji_pokok}} ({{gaji_terbilang}}) 
                     {NUMBERING_TOKENS.length} token tersedia — klik di bawah
                   </span>
                 </div>
-                <input
-                  type="text"
+                <ValidatedInput
                   required
+                  requiredLabel="Formula pola penomoran dokumen wajib diisi"
+                  showError={templateSubmitAttempted}
                   value={editNumberingFormat}
-                  onChange={(e) => setEditNumberingFormat(e.target.value)}
-                  className="w-full px-3 py-2 border border-indigo-300 rounded-lg font-mono font-bold text-xs text-indigo-900 bg-white shadow-2xs"
+                  onChange={setEditNumberingFormat}
+                  className="font-mono font-bold text-xs text-indigo-900 bg-white border-indigo-300"
                 />
                 <div className="flex flex-wrap items-center gap-1.5 pt-1">
                   <span className="text-[10px] text-slate-500 font-semibold">Sisipkan Token:</span>
@@ -5479,32 +5494,26 @@ PIHAK PERTAMA memberikan upah pokok sebesar {{gaji_pokok}} ({{gaji_terbilang}}) 
                   </span>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-[11px] font-semibold text-slate-700 block mb-1">
-                      Nama Lengkap Pejabat *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={editSigneeTitle}
-                      onChange={(e) => setEditSigneeTitle(e.target.value)}
-                      placeholder="Contoh: Ir. Budi Santoso, MBA"
-                      className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-semibold text-slate-900 bg-white"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[11px] font-semibold text-slate-700 block mb-1">
-                      Jabatan / Peran Pejabat *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={editSigneeRole}
-                      onChange={(e) => setEditSigneeRole(e.target.value)}
-                      placeholder="Contoh: President Director & CEO"
-                      className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-slate-800 bg-white"
-                    />
-                  </div>
+                  <ValidatedInput
+                    label="Nama Lengkap Pejabat"
+                    required
+                    requiredLabel="Nama lengkap pejabat penandatangan wajib diisi"
+                    showError={templateSubmitAttempted}
+                    value={editSigneeTitle}
+                    onChange={setEditSigneeTitle}
+                    placeholder="Contoh: Ir. Budi Santoso, MBA"
+                    className="font-semibold text-slate-900 bg-white"
+                  />
+                  <ValidatedInput
+                    label="Jabatan / Peran Pejabat"
+                    required
+                    requiredLabel="Jabatan / peran pejabat penandatangan wajib diisi"
+                    showError={templateSubmitAttempted}
+                    value={editSigneeRole}
+                    onChange={setEditSigneeRole}
+                    placeholder="Contoh: President Director & CEO"
+                    className="text-slate-800 bg-white"
+                  />
                 </div>
               </div>
 
@@ -5518,15 +5527,14 @@ PIHAK PERTAMA memberikan upah pokok sebesar {{gaji_pokok}} ({{gaji_terbilang}}) 
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="sm:col-span-2">
-                    <label className="text-[11px] font-semibold text-slate-700 block mb-0.5">
-                      Nama Badan Usaha / PT *
-                    </label>
-                    <input
-                      type="text"
+                    <ValidatedInput
+                      label="Nama Badan Usaha / PT"
                       required
+                      requiredLabel="Nama badan usaha / PT wajib diisi"
+                      showError={templateSubmitAttempted}
                       value={editCompanyName}
-                      onChange={(e) => setEditCompanyName(e.target.value)}
-                      className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-semibold text-slate-900 bg-white"
+                      onChange={setEditCompanyName}
+                      className="font-semibold text-slate-900 bg-white"
                     />
                   </div>
                   <div className="sm:col-span-2">
@@ -5602,12 +5610,14 @@ PIHAK PERTAMA memberikan upah pokok sebesar {{gaji_pokok}} ({{gaji_terbilang}}) 
                   ))}
                 </div>
 
-                <textarea
+                <ValidatedTextarea
                   rows={10}
                   required
+                  requiredLabel="Isi naskah baku & klausul hukum wajib diisi"
+                  showError={templateSubmitAttempted}
                   value={editBodyTemplate}
-                  onChange={(e) => setEditBodyTemplate(e.target.value)}
-                  className="w-full p-3 border border-slate-300 rounded-xl font-mono text-xs text-slate-800 leading-relaxed focus:ring-2 focus:ring-indigo-500 bg-white"
+                  onChange={setEditBodyTemplate}
+                  className="font-mono text-xs text-slate-800 leading-relaxed bg-white"
                   placeholder="Ketik teks klausul surat dengan {{tag_variabel}}..."
                 />
               </div>

@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { EmployeeSelect } from '../common/EmployeeSelect';
 import { ValidatedDateInput } from '../common/ValidatedDateInput';
+import { ValidatedTextarea } from '../common/ValidatedInput';
 import { formatRupiah } from '../../utils/taxCalculator';
 import { ApprovalWorkflowItem, ApprovalDelegation } from '../../types/hrms';
 import { ScrollableTabNav } from '../common/ScrollableTabNav';
@@ -78,6 +79,7 @@ export const ApprovalCenter: React.FC = () => {
   // Review Modal State
   const [selectedItem, setSelectedItem] = useState<ApprovalWorkflowItem | null>(null);
   const [reviewNotes, setReviewNotes] = useState('');
+  const [reviewSubmitAttempted, setReviewSubmitAttempted] = useState(false);
   const [reviewAction, setReviewAction] = useState<'approve' | 'reject'>('approve');
 
   // Delegation Modal State
@@ -89,6 +91,7 @@ export const ApprovalCenter: React.FC = () => {
   const [delegationEnd, setDelegationEnd] = useState('2026-10-31');
   const [delegationReason, setDelegationReason] = useState('Cuti tahunan di luar kota / dinas');
   const [delegationError, setDelegationError] = useState<string | null>(null);
+  const [delegationSubmitAttempted, setDelegationSubmitAttempted] = useState(false);
 
   // Feedback notice state
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
@@ -133,9 +136,12 @@ export const ApprovalCenter: React.FC = () => {
 
   const handleExecuteReview = () => {
     if (!selectedItem) return;
+    setReviewSubmitAttempted(true);
+    if (reviewAction === 'reject' && !reviewNotes.trim()) return;
     reviewApprovalItem(selectedItem.id, reviewAction === 'approve', reviewNotes);
     setSelectedItem(null);
     setReviewNotes('');
+    setReviewSubmitAttempted(false);
     setFeedbackMessage(
       `Pengajuan "${selectedItem.title}" berhasil ${reviewAction === 'approve' ? 'disetujui' : 'ditolak'}.`
     );
@@ -144,6 +150,7 @@ export const ApprovalCenter: React.FC = () => {
   const handleCreateDelegation = (e: React.FormEvent) => {
     e.preventDefault();
     setDelegationError(null);
+    setDelegationSubmitAttempted(true);
 
     if (!principalId || !substituteId) {
       setDelegationError('Pilih pejabat utama dan pejabat pengganti delegasi.');
@@ -161,6 +168,10 @@ export const ApprovalCenter: React.FC = () => {
       setDelegationError('Tanggal akhir delegasi tidak boleh sebelum tanggal mulai.');
       return;
     }
+    if (!delegationReason.trim()) {
+      setDelegationError('Alasan penugasan delegasi wajib diisi.');
+      return;
+    }
 
     setApprovalDelegation({
       principalId,
@@ -172,6 +183,7 @@ export const ApprovalCenter: React.FC = () => {
     });
 
     setIsDelegationModalOpen(false);
+    setDelegationSubmitAttempted(false);
     setFeedbackMessage('Delegasi approver pengganti berhasil diaktifkan.');
   };
 
@@ -869,28 +881,28 @@ export const ApprovalCenter: React.FC = () => {
                 )}
               </div>
 
-              <div>
-                <label className="font-medium text-slate-700 block mb-1">
-                  Catatan / Alasan Putusan {reviewAction === 'reject' && <span className="text-rose-500">*</span>}
-                </label>
-                <textarea
-                  rows={3}
-                  required={reviewAction === 'reject'}
-                  placeholder={
-                    reviewAction === 'approve'
-                      ? 'Catatan persetujuan (opsional)...'
-                      : 'Tuliskan alasan penolakan untuk perbaikan pemohon...'
-                  }
-                  value={reviewNotes}
-                  onChange={(e) => setReviewNotes(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded outline-none"
-                />
-              </div>
+              <ValidatedTextarea
+                label="Catatan / Alasan Putusan"
+                required={reviewAction === 'reject'}
+                requiredLabel="Alasan penolakan wajib diisi agar pemohon bisa memperbaiki pengajuan"
+                rows={3}
+                showError={reviewSubmitAttempted}
+                placeholder={
+                  reviewAction === 'approve'
+                    ? 'Catatan persetujuan (opsional)...'
+                    : 'Tuliskan alasan penolakan untuk perbaikan pemohon...'
+                }
+                value={reviewNotes}
+                onChange={(val) => setReviewNotes(val)}
+              />
 
               <div className="pt-3 border-t border-slate-200 flex justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => setSelectedItem(null)}
+                  onClick={() => {
+                    setSelectedItem(null);
+                    setReviewSubmitAttempted(false);
+                  }}
                   className="px-3 py-2 bg-slate-100 text-slate-700 rounded font-semibold"
                 >
                   Batal
@@ -934,7 +946,7 @@ export const ApprovalCenter: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleCreateDelegation} className="p-5 space-y-4 text-xs">
+            <form onSubmit={handleCreateDelegation} className="p-5 space-y-4 text-xs" noValidate>
               {/* Form Validation Error Notice */}
               {delegationError && (
                 <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg flex items-center gap-2 text-rose-800 text-xs font-semibold animate-fadeIn">
@@ -944,8 +956,9 @@ export const ApprovalCenter: React.FC = () => {
               )}
 
               <EmployeeSelect
-                label="Pejabat Utama yang Berhalangan (Principal) *"
+                label="Pejabat Utama yang Berhalangan (Principal)"
                 required
+                showError={delegationSubmitAttempted}
                 employees={employees}
                 value={principalId}
                 onChange={(val) => {
@@ -955,8 +968,9 @@ export const ApprovalCenter: React.FC = () => {
               />
 
               <EmployeeSelect
-                label="Pejabat Pengganti yang Ditunjuk (Substitute Approver) *"
+                label="Pejabat Pengganti yang Ditunjuk (Substitute Approver)"
                 required
+                showError={delegationSubmitAttempted}
                 employees={employees}
                 value={substituteId}
                 onChange={(val) => {
@@ -975,6 +989,7 @@ export const ApprovalCenter: React.FC = () => {
                     if (delegationError) setDelegationError(null);
                   }}
                   required
+                  showError={delegationSubmitAttempted}
                   helperText="Format YYYY-MM-DD"
                 />
                 <ValidatedDateInput
@@ -987,24 +1002,24 @@ export const ApprovalCenter: React.FC = () => {
                     if (delegationError) setDelegationError(null);
                   }}
                   required
+                  showError={delegationSubmitAttempted}
                   helperText="Format YYYY-MM-DD"
                 />
               </div>
 
-              <div>
-                <label className="font-medium text-slate-700 block mb-1">Alasan Penugasan Delegasi *</label>
-                <textarea
-                  rows={2}
-                  required
-                  placeholder="Sedang mengambil cuti tahunan / dinas luar kota..."
-                  value={delegationReason}
-                  onChange={(e) => {
-                    setDelegationReason(e.target.value);
-                    if (delegationError) setDelegationError(null);
-                  }}
-                  className="w-full px-3 py-2 border border-slate-300 rounded"
-                />
-              </div>
+              <ValidatedTextarea
+                label="Alasan Penugasan Delegasi"
+                required
+                requiredLabel="Alasan penugasan delegasi wajib diisi"
+                rows={2}
+                showError={delegationSubmitAttempted}
+                placeholder="Sedang mengambil cuti tahunan / dinas luar kota..."
+                value={delegationReason}
+                onChange={(val) => {
+                  setDelegationReason(val);
+                  if (delegationError) setDelegationError(null);
+                }}
+              />
 
               <div className="pt-3 border-t border-slate-200 flex justify-end gap-2">
                 <button

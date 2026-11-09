@@ -27,6 +27,7 @@ import { EmployeeSelect } from '../common/EmployeeSelect';
 import { QRCodeView } from '../common/QRCodeView';
 import { CurrencyInput } from '../common/CurrencyInput';
 import { ValidatedDateInput } from '../common/ValidatedDateInput';
+import { ValidatedInput, ValidatedTextarea } from '../common/ValidatedInput';
 import { validateDateRange, validateDateString } from '../../utils/dateValidator';
 import { formatRupiah } from '../../utils/taxCalculator';
 import { BusinessTripRequest } from '../../types/hrms';
@@ -129,6 +130,7 @@ export const BusinessTripManagement: React.FC = () => {
   const [selectedTripForClaim, setSelectedTripForClaim] = useState<BusinessTripRequest | null>(null);
   const [actualExpense, setActualExpense] = useState<number>(0);
   const [receiptNotes, setReceiptNotes] = useState('');
+  const [settlementSubmitAttempted, setSettlementSubmitAttempted] = useState(false);
 
   // Form Validation Errors
   const [sppdFormError, setSppdFormError] = useState<string | null>(null);
@@ -878,7 +880,7 @@ export const BusinessTripManagement: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-5 space-y-4 text-xs">
+            <form onSubmit={handleSubmit} className="p-5 space-y-4 text-xs" noValidate>
               {/* Form Validation Error Notice */}
               {sppdFormError && (
                 <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg flex items-center gap-2 text-rose-800 text-xs font-semibold animate-fadeIn">
@@ -890,6 +892,7 @@ export const BusinessTripManagement: React.FC = () => {
               <EmployeeSelect
                 label="Karyawan yang Ditugaskan"
                 required
+                showError={!!sppdFormError && !employeeId}
                 employees={employees}
                 value={employeeId}
                 onChange={(val) => {
@@ -899,20 +902,19 @@ export const BusinessTripManagement: React.FC = () => {
               />
 
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="font-medium text-slate-700 block mb-1">Kota Tujuan *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Contoh: Surabaya / Bandung"
-                    value={destinationCity}
-                    onChange={(e) => {
-                      setDestinationCity(e.target.value);
-                      if (sppdFormError) setSppdFormError(null);
-                    }}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-md font-semibold text-slate-900"
-                  />
-                </div>
+                <ValidatedInput
+                  label="Kota Tujuan"
+                  required
+                  requiredLabel="Kota tujuan perjalanan dinas wajib diisi"
+                  showError={!!sppdFormError && !destinationCity.trim()}
+                  placeholder="Contoh: Surabaya / Bandung"
+                  value={destinationCity}
+                  onChange={(val) => {
+                    setDestinationCity(val);
+                    if (sppdFormError) setSppdFormError(null);
+                  }}
+                  className="font-semibold text-slate-900"
+                />
 
                 <div>
                   <label className="font-medium text-slate-700 block mb-1">Moda Transportasi</label>
@@ -939,6 +941,7 @@ export const BusinessTripManagement: React.FC = () => {
                     if (sppdFormError) setSppdFormError(null);
                   }}
                   required
+                  showError={!!sppdFormError}
                   helperText="Hari pertama dinas"
                 />
                 <ValidatedDateInput
@@ -951,24 +954,24 @@ export const BusinessTripManagement: React.FC = () => {
                     if (sppdFormError) setSppdFormError(null);
                   }}
                   required
+                  showError={!!sppdFormError}
                   helperText="Hari kepulangan"
                 />
               </div>
 
-              <div>
-                <label className="font-medium text-slate-700 block mb-1">Keperluan / Maksud Tugas Dinas *</label>
-                <textarea
-                  rows={2}
-                  required
-                  placeholder="Contoh: Implementasi sistem server di kantor cabang dan pendampingan audit ISO..."
-                  value={purpose}
-                  onChange={(e) => {
-                    setPurpose(e.target.value);
-                    if (sppdFormError) setSppdFormError(null);
-                  }}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-md"
-                />
-              </div>
+              <ValidatedTextarea
+                label="Keperluan / Maksud Tugas Dinas"
+                required
+                requiredLabel="Keperluan / maksud tugas dinas wajib diisi"
+                showError={!!sppdFormError && !purpose.trim()}
+                rows={2}
+                placeholder="Contoh: Implementasi sistem server di kantor cabang dan pendampingan audit ISO..."
+                value={purpose}
+                onChange={(val) => {
+                  setPurpose(val);
+                  if (sppdFormError) setSppdFormError(null);
+                }}
+              />
 
               {/* Rincian Estimasi Biaya dengan CurrencyInput */}
               <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-3">
@@ -1328,6 +1331,7 @@ export const BusinessTripManagement: React.FC = () => {
                 value={actualExpense}
                 onChange={setActualExpense}
                 required
+                showError={settlementSubmitAttempted}
                 min={10000}
                 helperText="Total seluruh bukti nota, tiket, dan kuitansi pengeluaran"
               />
@@ -1360,7 +1364,10 @@ export const BusinessTripManagement: React.FC = () => {
               <div className="pt-3 border-t border-slate-200 flex justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => setSelectedTripForClaim(null)}
+                  onClick={() => {
+                    setSelectedTripForClaim(null);
+                    setSettlementSubmitAttempted(false);
+                  }}
                   className="px-3 py-2 bg-slate-100 text-slate-700 rounded font-semibold"
                 >
                   Batal
@@ -1368,6 +1375,8 @@ export const BusinessTripManagement: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => {
+                    setSettlementSubmitAttempted(true);
+                    if (!actualExpense || actualExpense < 10000) return;
                     const diff = actualExpense - selectedTripForClaim.estimatedCost;
                     if (diff > 0) {
                       const todayStr = new Date().toISOString().split('T')[0];
@@ -1387,6 +1396,7 @@ export const BusinessTripManagement: React.FC = () => {
                     }
                     setReceiptNotes('');
                     setSelectedTripForClaim(null);
+                    setSettlementSubmitAttempted(false);
                   }}
                   className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-semibold shadow-xs"
                 >
