@@ -27,6 +27,7 @@ import { ProcurementOrder, Vendor } from '../../types/hrms';
 import { formatRupiah } from '../../utils/taxCalculator';
 import { QRCodeView } from '../common/QRCodeView';
 import { EmployeeSelect } from '../common/EmployeeSelect';
+import { ValidatedInput, ValidatedTextarea } from '../common/ValidatedInput';
 import { ScrollableTabNav } from '../common/ScrollableTabNav';
 import { WhatsAppIcon } from '../common/WhatsAppIcon';
 import { printPagesDirectly, exportPagesToPdf } from '../../utils/documentPdfExporter';
@@ -162,6 +163,10 @@ export const ProcurementManagement: React.FC = () => {
   const [vendorName, setVendorName] = useState(vendors[0]?.name || 'PT Mitra Solusi Komputindo');
   const [itemName, setItemName] = useState('');
   const [procurementCategory, setProcurementCategory] = useState<'Pengadaan Barang' | 'Proyek / Jasa Kontrak'>('Pengadaan Barang');
+  const [prSubmitAttempted, setPrSubmitAttempted] = useState(false);
+  const [vendorSubmitAttempted, setVendorSubmitAttempted] = useState(false);
+  const [projectSubmitAttempted, setProjectSubmitAttempted] = useState(false);
+  const [invoiceSubmitAttempted, setInvoiceSubmitAttempted] = useState(false);
   const [quantity, setQuantity] = useState<number>(1);
   const [estimatedCost, setEstimatedCost] = useState<number>(7500000);
   const [requestorEmpId, setRequestorEmpId] = useState(employees[0]?.id || '');
@@ -217,7 +222,8 @@ export const ProcurementManagement: React.FC = () => {
 
   const handleSubmitPR = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!itemName || !vendorName) return;
+    setPrSubmitAttempted(true);
+    if (!itemName.trim() || !vendorName || !quantity || quantity < 1 || !estimatedCost || estimatedCost <= 0) return;
 
     addProcurementOrder({
       vendorId: vendors.find((v) => v.name === vendorName)?.id,
@@ -231,12 +237,14 @@ export const ProcurementManagement: React.FC = () => {
 
     setIsPRModalOpen(false);
     setItemName('');
+    setPrSubmitAttempted(false);
     alert('Pengajuan Purchase Requisition (PR) berhasil dibuat dan diteruskan ke bagian Purchasing!');
   };
 
   const handleAddVendor = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newVenName) return;
+    setVendorSubmitAttempted(true);
+    if (!newVenName.trim() || !newVenNpwp.trim() || !newVenPhone.trim() || !newVenAddress.trim()) return;
 
     addVendor({
       name: newVenName,
@@ -253,12 +261,22 @@ export const ProcurementManagement: React.FC = () => {
 
     setIsVendorModalOpen(false);
     setNewVenName('');
+    setVendorSubmitAttempted(false);
     alert(`Vendor "${newVenName}" berhasil didaftarkan ke direktori supplier rekanan!`);
   };
 
   const handleCreateProject = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!projectForm.projectName) return;
+    setProjectSubmitAttempted(true);
+    if (
+      !projectForm.projectName.trim() ||
+      !projectForm.totalValue ||
+      projectForm.totalValue < 1000000 ||
+      !projectForm.startDate ||
+      !projectForm.endDate
+    ) {
+      return;
+    }
 
     const totalVal = Number(projectForm.totalValue);
     const dpAmount = Math.round((totalVal * Number(projectForm.dpPercent)) / 100);
@@ -284,6 +302,7 @@ export const ProcurementManagement: React.FC = () => {
 
     setProjectContracts([newProject, ...projectContracts]);
     setIsProjectModalOpen(false);
+    setProjectSubmitAttempted(false);
     setProjectForm({
       ...projectForm,
       projectName: '',
@@ -294,8 +313,18 @@ export const ProcurementManagement: React.FC = () => {
 
   const handleCreateInvoice = (e: React.FormEvent) => {
     e.preventDefault();
+    setInvoiceSubmitAttempted(true);
     const selectedVendor = vendors.find((v) => v.id === invoiceForm.vendorId) || vendors[0];
-    if (!invoiceForm.invoiceNumber || !selectedVendor) return;
+    if (
+      !invoiceForm.invoiceNumber.trim() ||
+      !selectedVendor ||
+      !invoiceForm.invoiceDate ||
+      !invoiceForm.dueDate ||
+      !invoiceForm.amount ||
+      invoiceForm.amount < 10000
+    ) {
+      return;
+    }
 
     addVendorInvoice({
       vendorId: selectedVendor.id,
@@ -310,6 +339,7 @@ export const ProcurementManagement: React.FC = () => {
     });
 
     setIsInvoiceModalOpen(false);
+    setInvoiceSubmitAttempted(false);
     setInvoiceForm({
       ...invoiceForm,
       invoiceNumber: '',
@@ -1000,7 +1030,7 @@ export const ProcurementManagement: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleSubmitPR} className="p-5 space-y-3.5 text-xs">
+            <form onSubmit={handleSubmitPR} className="p-5 space-y-3.5 text-xs" noValidate>
               <div>
                 <label className="font-semibold text-slate-700 block mb-1">Jenis Pengadaan</label>
                 <div className="grid grid-cols-2 gap-2">
@@ -1029,17 +1059,15 @@ export const ProcurementManagement: React.FC = () => {
                 </div>
               </div>
 
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">Nama Item / Pekerjaan</label>
-                <input
-                  type="text"
-                  placeholder="Misal: 5 Unit Laptop Developer atau Renovasi Jaringan"
-                  value={itemName}
-                  onChange={(e) => setItemName(e.target.value)}
-                  className="w-full p-2 border border-slate-300 rounded"
-                  required
-                />
-              </div>
+              <ValidatedInput
+                label="Nama Item / Pekerjaan"
+                required
+                requiredLabel="Nama item / pekerjaan wajib diisi"
+                showError={prSubmitAttempted}
+                placeholder="Misal: 5 Unit Laptop Developer atau Renovasi Jaringan"
+                value={itemName}
+                onChange={setItemName}
+              />
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -1056,30 +1084,30 @@ export const ProcurementManagement: React.FC = () => {
                     ))}
                   </select>
                 </div>
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Jumlah (Qty)</label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={quantity}
-                    onChange={(e) => setQuantity(Number(e.target.value))}
-                    className="w-full p-2 border border-slate-300 rounded font-mono"
-                    required
-                  />
-                </div>
+                <ValidatedInput
+                  label="Jumlah (Qty)"
+                  type="number"
+                  min="1"
+                  required
+                  requiredLabel="Jumlah wajib diisi (minimal 1)"
+                  showError={prSubmitAttempted}
+                  value={String(quantity)}
+                  onChange={(val) => setQuantity(Number(val))}
+                  className="font-mono"
+                />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Estimasi Total Biaya (Rp)</label>
-                  <input
-                    type="number"
-                    value={estimatedCost}
-                    onChange={(e) => setEstimatedCost(Number(e.target.value))}
-                    className="w-full p-2 border border-slate-300 rounded font-mono"
-                    required
-                  />
-                </div>
+                <ValidatedInput
+                  label="Estimasi Total Biaya (Rp)"
+                  type="number"
+                  required
+                  requiredLabel="Estimasi total biaya wajib diisi"
+                  showError={prSubmitAttempted}
+                  value={String(estimatedCost)}
+                  onChange={(val) => setEstimatedCost(Number(val))}
+                  className="font-mono"
+                />
                 <div>
                   <label className="font-semibold text-slate-700 block mb-1">Departemen/Unit Pemohon</label>
                   <select
@@ -1142,18 +1170,17 @@ export const ProcurementManagement: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleAddVendor} className="p-5 space-y-3.5 text-xs">
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">Nama Perusahaan Vendor</label>
-                <input
-                  type="text"
-                  placeholder="Contoh: PT Sumber Berkah Mandiri"
-                  value={newVenName}
-                  onChange={(e) => setNewVenName(e.target.value)}
-                  className="w-full p-2 border border-slate-300 rounded font-semibold"
-                  required
-                />
-              </div>
+            <form onSubmit={handleAddVendor} className="p-5 space-y-3.5 text-xs" noValidate>
+              <ValidatedInput
+                label="Nama Perusahaan Vendor"
+                required
+                requiredLabel="Nama perusahaan vendor wajib diisi"
+                showError={vendorSubmitAttempted}
+                placeholder="Contoh: PT Sumber Berkah Mandiri"
+                value={newVenName}
+                onChange={setNewVenName}
+                className="font-semibold"
+              />
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -1170,52 +1197,44 @@ export const ProcurementManagement: React.FC = () => {
                     <option value="Facility & Cleaning Services">Facility & Cleaning Services</option>
                   </select>
                 </div>
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Nomor NPWP</label>
-                  <input
-                    type="text"
-                    value={newVenNpwp}
-                    onChange={(e) => setNewVenNpwp(e.target.value)}
-                    className="w-full p-2 border border-slate-300 rounded font-mono"
-                    required
-                  />
-                </div>
+                <ValidatedInput
+                  label="Nomor NPWP"
+                  required
+                  requiredLabel="Nomor NPWP vendor wajib diisi"
+                  showError={vendorSubmitAttempted}
+                  value={newVenNpwp}
+                  onChange={setNewVenNpwp}
+                  className="font-mono"
+                />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Nama PIC Vendor</label>
-                  <input
-                    type="text"
-                    value={newVenPic}
-                    onChange={(e) => setNewVenPic(e.target.value)}
-                    placeholder="Budi Santoso (Account Manager)"
-                    className="w-full p-2 border border-slate-300 rounded"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Nomor Telepon / WhatsApp</label>
-                  <input
-                    type="text"
-                    value={newVenPhone}
-                    onChange={(e) => setNewVenPhone(e.target.value)}
-                    className="w-full p-2 border border-slate-300 rounded font-mono"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">Alamat Kantor Operasional</label>
-                <textarea
-                  rows={2}
-                  value={newVenAddress}
-                  onChange={(e) => setNewVenAddress(e.target.value)}
-                  className="w-full p-2 border border-slate-300 rounded"
+                <ValidatedInput
+                  label="Nama PIC Vendor (Opsional)"
+                  value={newVenPic}
+                  onChange={setNewVenPic}
+                  placeholder="Budi Santoso (Account Manager)"
+                />
+                <ValidatedInput
+                  label="Nomor Telepon / WhatsApp"
                   required
+                  requiredLabel="Nomor telepon / WhatsApp vendor wajib diisi"
+                  showError={vendorSubmitAttempted}
+                  value={newVenPhone}
+                  onChange={setNewVenPhone}
+                  className="font-mono"
                 />
               </div>
+
+              <ValidatedTextarea
+                label="Alamat Kantor Operasional"
+                required
+                requiredLabel="Alamat kantor operasional vendor wajib diisi"
+                showError={vendorSubmitAttempted}
+                rows={2}
+                value={newVenAddress}
+                onChange={setNewVenAddress}
+              />
 
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-200">
                 <button
@@ -1492,29 +1511,24 @@ export const ProcurementManagement: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleCreateProject} className="p-5 space-y-3.5 text-xs">
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">Nomor Perjanjian / Kontrak</label>
-                <input
-                  type="text"
-                  required
-                  value={projectForm.contractNumber}
-                  onChange={(e) => setProjectForm({ ...projectForm, contractNumber: e.target.value })}
-                  className="w-full p-2 border border-slate-300 rounded font-mono font-semibold"
-                />
-              </div>
+            <form onSubmit={handleCreateProject} className="p-5 space-y-3.5 text-xs" noValidate>
+              <ValidatedInput
+                label="Nomor Perjanjian / Kontrak (Opsional)"
+                value={projectForm.contractNumber}
+                onChange={(val) => setProjectForm({ ...projectForm, contractNumber: val })}
+                className="font-mono font-semibold"
+                helperText="Jika kosong, nomor kontrak akan dibuat otomatis oleh sistem"
+              />
 
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">Nama Paket Pekerjaan / Proyek</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Contoh: Pengadaan Firewall Data Center & Migrasi SD-WAN..."
-                  value={projectForm.projectName}
-                  onChange={(e) => setProjectForm({ ...projectForm, projectName: e.target.value })}
-                  className="w-full p-2 border border-slate-300 rounded"
-                />
-              </div>
+              <ValidatedInput
+                label="Nama Paket Pekerjaan / Proyek"
+                required
+                requiredLabel="Nama paket pekerjaan / proyek wajib diisi"
+                showError={projectSubmitAttempted}
+                placeholder="Contoh: Pengadaan Firewall Data Center & Migrasi SD-WAN..."
+                value={projectForm.projectName}
+                onChange={(val) => setProjectForm({ ...projectForm, projectName: val })}
+              />
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -1532,15 +1546,17 @@ export const ProcurementManagement: React.FC = () => {
                   </select>
                 </div>
                 <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Total Nilai Kontrak (Rp)</label>
-                  <input
+                  <ValidatedInput
+                    label="Total Nilai Kontrak (Rp)"
                     type="number"
                     min="1000000"
                     step="1000000"
                     required
-                    value={projectForm.totalValue}
-                    onChange={(e) => setProjectForm({ ...projectForm, totalValue: Number(e.target.value) })}
-                    className="w-full p-2 border border-slate-300 rounded font-mono font-semibold"
+                    requiredLabel="Total nilai kontrak wajib diisi (minimal Rp 1.000.000)"
+                    showError={projectSubmitAttempted}
+                    value={String(projectForm.totalValue)}
+                    onChange={(val) => setProjectForm({ ...projectForm, totalValue: Number(val) })}
+                    className="font-mono font-semibold"
                   />
                   <span className="text-[10px] text-emerald-600 font-semibold mt-0.5 block">
                     {formatRupiah(projectForm.totalValue)}
@@ -1549,26 +1565,24 @@ export const ProcurementManagement: React.FC = () => {
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Tanggal Mulai Proyek</label>
-                  <input
-                    type="date"
-                    required
-                    value={projectForm.startDate}
-                    onChange={(e) => setProjectForm({ ...projectForm, startDate: e.target.value })}
-                    className="w-full p-2 border border-slate-300 rounded"
-                  />
-                </div>
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Target Selesai (BAST)</label>
-                  <input
-                    type="date"
-                    required
-                    value={projectForm.endDate}
-                    onChange={(e) => setProjectForm({ ...projectForm, endDate: e.target.value })}
-                    className="w-full p-2 border border-slate-300 rounded"
-                  />
-                </div>
+                <ValidatedInput
+                  label="Tanggal Mulai Proyek"
+                  type="date"
+                  required
+                  requiredLabel="Tanggal mulai proyek wajib diisi"
+                  showError={projectSubmitAttempted}
+                  value={projectForm.startDate}
+                  onChange={(val) => setProjectForm({ ...projectForm, startDate: val })}
+                />
+                <ValidatedInput
+                  label="Target Selesai (BAST)"
+                  type="date"
+                  required
+                  requiredLabel="Target selesai (BAST) wajib diisi"
+                  showError={projectSubmitAttempted}
+                  value={projectForm.endDate}
+                  onChange={(val) => setProjectForm({ ...projectForm, endDate: val })}
+                />
               </div>
 
               {/* Milestones distribution */}
@@ -1650,7 +1664,7 @@ export const ProcurementManagement: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleCreateInvoice} className="p-5 space-y-3.5 text-xs">
+            <form onSubmit={handleCreateInvoice} className="p-5 space-y-3.5 text-xs" noValidate>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="font-semibold text-slate-700 block mb-1">Vendor / Rekanan Pengirim</label>
@@ -1683,62 +1697,56 @@ export const ProcurementManagement: React.FC = () => {
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Nomor Invoice Supplier</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Contoh: INV/2026/0991-MSK"
-                    value={invoiceForm.invoiceNumber}
-                    onChange={(e) => setInvoiceForm({ ...invoiceForm, invoiceNumber: e.target.value })}
-                    className="w-full p-2 border border-slate-300 rounded font-mono font-semibold"
-                  />
-                </div>
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Nomor Faktur Pajak (e-Faktur)</label>
-                  <input
-                    type="text"
-                    placeholder="010.000-26.88392100"
-                    value={invoiceForm.taxInvoiceNumber}
-                    onChange={(e) => setInvoiceForm({ ...invoiceForm, taxInvoiceNumber: e.target.value })}
-                    className="w-full p-2 border border-slate-300 rounded font-mono"
-                  />
-                </div>
+                <ValidatedInput
+                  label="Nomor Invoice Supplier"
+                  required
+                  requiredLabel="Nomor invoice supplier wajib diisi"
+                  showError={invoiceSubmitAttempted}
+                  placeholder="Contoh: INV/2026/0991-MSK"
+                  value={invoiceForm.invoiceNumber}
+                  onChange={(val) => setInvoiceForm({ ...invoiceForm, invoiceNumber: val })}
+                  className="font-mono font-semibold"
+                />
+                <ValidatedInput
+                  label="Nomor Faktur Pajak (e-Faktur) (Opsional)"
+                  placeholder="010.000-26.88392100"
+                  value={invoiceForm.taxInvoiceNumber}
+                  onChange={(val) => setInvoiceForm({ ...invoiceForm, taxInvoiceNumber: val })}
+                  className="font-mono"
+                />
               </div>
 
               <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Tanggal Faktur</label>
-                  <input
-                    type="date"
-                    required
-                    value={invoiceForm.invoiceDate}
-                    onChange={(e) => setInvoiceForm({ ...invoiceForm, invoiceDate: e.target.value })}
-                    className="w-full p-2 border border-slate-300 rounded"
-                  />
-                </div>
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Jatuh Tempo</label>
-                  <input
-                    type="date"
-                    required
-                    value={invoiceForm.dueDate}
-                    onChange={(e) => setInvoiceForm({ ...invoiceForm, dueDate: e.target.value })}
-                    className="w-full p-2 border border-slate-300 rounded"
-                  />
-                </div>
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Total Tagihan (IDR)</label>
-                  <input
-                    type="number"
-                    min="10000"
-                    step="10000"
-                    required
-                    value={invoiceForm.amount}
-                    onChange={(e) => setInvoiceForm({ ...invoiceForm, amount: Number(e.target.value) })}
-                    className="w-full p-2 border border-slate-300 rounded font-mono font-semibold"
-                  />
-                </div>
+                <ValidatedInput
+                  label="Tanggal Faktur"
+                  type="date"
+                  required
+                  requiredLabel="Tanggal faktur wajib diisi"
+                  showError={invoiceSubmitAttempted}
+                  value={invoiceForm.invoiceDate}
+                  onChange={(val) => setInvoiceForm({ ...invoiceForm, invoiceDate: val })}
+                />
+                <ValidatedInput
+                  label="Jatuh Tempo"
+                  type="date"
+                  required
+                  requiredLabel="Tanggal jatuh tempo wajib diisi"
+                  showError={invoiceSubmitAttempted}
+                  value={invoiceForm.dueDate}
+                  onChange={(val) => setInvoiceForm({ ...invoiceForm, dueDate: val })}
+                />
+                <ValidatedInput
+                  label="Total Tagihan (IDR)"
+                  type="number"
+                  min="10000"
+                  step="10000"
+                  required
+                  requiredLabel="Total tagihan wajib diisi (minimal Rp 10.000)"
+                  showError={invoiceSubmitAttempted}
+                  value={String(invoiceForm.amount)}
+                  onChange={(val) => setInvoiceForm({ ...invoiceForm, amount: Number(val) })}
+                  className="font-mono font-semibold"
+                />
               </div>
 
               <div>
