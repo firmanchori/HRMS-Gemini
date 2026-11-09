@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useRef } from 'react';
 import { useHrms } from '../../context/HrmsContext';
 import { printPagesDirectly } from '../../utils/documentPdfExporter';
+import { ValidatedTextarea } from '../common/ValidatedInput';
 import {
   History,
   Search,
@@ -146,8 +147,11 @@ export const AuditTrailManagement: React.FC = () => {
     });
   }, [tabFilteredLogs, searchQuery, selectedModule, selectedAction, dateFilter]);
 
+  const [simSubmitAttempted, setSimSubmitAttempted] = useState(false);
+
   const handleSimulateLog = (e: React.FormEvent) => {
     e.preventDefault();
+    setSimSubmitAttempted(true);
     if (!simSummary.trim()) return;
 
     logAuditAction(simModule, simAction, simRecordId, simSummary, [
@@ -799,7 +803,7 @@ export const AuditTrailManagement: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleSimulateLog} className="p-5 space-y-4 text-xs">
+            <form onSubmit={handleSimulateLog} noValidate className="p-5 space-y-4 text-xs">
               <div className="space-y-1">
                 <label className="font-semibold text-slate-700 block">Pilih Modul:</label>
                 <select
@@ -844,17 +848,16 @@ export const AuditTrailManagement: React.FC = () => {
                 />
               </div>
 
-              <div className="space-y-1">
-                <label className="font-semibold text-slate-700 block">Ringkasan Perubahan (Changes Summary):</label>
-                <textarea
-                  rows={3}
-                  value={simSummary}
-                  onChange={(e) => setSimSummary(e.target.value)}
-                  placeholder="Deskripsikan perubahan transaksi secara detail..."
-                  className="w-full p-2.5 border border-slate-300 rounded-lg text-xs"
-                  required
-                />
-              </div>
+              <ValidatedTextarea
+                label="Ringkasan Perubahan (Changes Summary):"
+                required
+                requiredLabel="Ringkasan perubahan wajib diisi"
+                rows={3}
+                value={simSummary}
+                onChange={setSimSummary}
+                showError={simSubmitAttempted}
+                placeholder="Deskripsikan perubahan transaksi secara detail..."
+              />
 
               <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-lg text-[11px] text-indigo-900 leading-relaxed">
                 Log ini akan dicatat atas nama akun aktif <strong>{currentUser?.name || 'Administrator'}</strong> dengan timestamp saat ini dan langsung muncul di tabel audit.

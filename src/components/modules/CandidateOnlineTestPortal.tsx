@@ -69,6 +69,7 @@ export const CandidateOnlineTestPortal: React.FC<CandidateOnlineTestPortalProps>
 
   // State submit
   const [submittedUrlInput, setSubmittedUrlInput] = useState(test?.submittedUrl || '');
+  const [submitAttempted, setSubmitAttempted] = useState(false);
   const [submittedNotesInput, setSubmittedNotesInput] = useState(test?.submittedNotes || '');
   const [isSubmitConfirmOpen, setIsSubmitConfirmOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -138,11 +139,9 @@ export const CandidateOnlineTestPortal: React.FC<CandidateOnlineTestPortalProps>
 
   const handleSubmitTest = (e: React.FormEvent) => {
     e.preventDefault();
+    setSubmitAttempted(true);
     if (!candidate || !test) return;
-    if (!submittedUrlInput.trim()) {
-      alert('Mohon cantumkan tautan / link hasil pengerjaan tes Anda!');
-      return;
-    }
+    if (!submittedUrlInput.trim()) return;
 
     setIsSubmitting(true);
     setTimeout(() => {
@@ -603,7 +602,7 @@ export const CandidateOnlineTestPortal: React.FC<CandidateOnlineTestPortalProps>
             </div>
 
             {/* FORM SUBMIT HASIL TES NYATA */}
-            <form onSubmit={handleSubmitTest} className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
+            <form onSubmit={handleSubmitTest} noValidate className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
               <div className="pb-3 border-b border-slate-800">
                 <h3 className="font-bold text-white text-sm flex items-center gap-2">
                   <Send className="w-4 h-4 text-emerald-400" />
@@ -621,15 +620,23 @@ export const CandidateOnlineTestPortal: React.FC<CandidateOnlineTestPortalProps>
                   </label>
                   <input
                     type="url"
-                    required
                     value={submittedUrlInput}
                     onChange={(e) => setSubmittedUrlInput(e.target.value)}
+                    onBlur={() => setSubmitAttempted(true)}
                     placeholder="https://github.com/username/project-submission atau https://drive.google.com/..."
-                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white font-mono text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none placeholder:text-slate-500"
+                    className={`w-full px-3.5 py-2.5 bg-slate-950 border rounded-xl text-white font-mono text-xs focus:ring-2 focus:outline-none placeholder:text-slate-500 ${
+                      submitAttempted && !submittedUrlInput.trim() ? 'border-rose-500 focus:ring-rose-500' : 'border-slate-700 focus:ring-indigo-500'
+                    }`}
                   />
-                  <span className="text-[10px] text-slate-400 mt-0.5 block">
-                    Pastikan tautan dapat diakses publik atau izin akses disetel ke "Anyone with link can view".
-                  </span>
+                  {submitAttempted && !submittedUrlInput.trim() ? (
+                    <span className="text-[10px] text-rose-400 mt-0.5 flex items-center gap-1">
+                      <AlertCircle className="w-3 h-3 shrink-0" /> Tautan hasil pengerjaan wajib diisi
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-slate-400 mt-0.5 block">
+                      Pastikan tautan dapat diakses publik atau izin akses disetel ke "Anyone with link can view".
+                    </span>
+                  )}
                 </div>
 
                 <div>

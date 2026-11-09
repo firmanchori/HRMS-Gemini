@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { EmployeeSelect } from '../common/EmployeeSelect';
 import type { ProbationEvaluationCategory } from '../../types/hrms';
+import { ValidatedTextarea } from '../common/ValidatedInput';
 
 function genCategoryId() {
   return `cat-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -90,9 +91,12 @@ export const ProbationManagement: React.FC = () => {
     setIsModalOpen(true);
   };
 
+  const [evalSubmitAttempted, setEvalSubmitAttempted] = useState(false);
+
   const handleSubmitEvaluation = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedEmpId || !activeTemplate) return;
+    setEvalSubmitAttempted(true);
+    if (!selectedEmpId || !activeTemplate || !notes.trim()) return;
 
     const scores = activeTemplate.categories.map((c) => ({ categoryId: c.id, label: c.label, score: categoryScores[c.id] ?? 0 }));
     const overallScore = Math.round(scores.reduce((sum, s) => sum + s.score, 0) / Math.max(1, scores.length));
@@ -517,7 +521,7 @@ export const ProbationManagement: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleSubmitEvaluation} className="p-5 space-y-4">
+            <form onSubmit={handleSubmitEvaluation} noValidate className="p-5 space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
                   Karyawan yang Dievaluasi *
@@ -528,6 +532,11 @@ export const ProbationManagement: React.FC = () => {
                   onSelect={(id) => setSelectedEmpId(id)}
                   placeholder="Pilih karyawan probation..."
                 />
+                {evalSubmitAttempted && !selectedEmpId && (
+                  <p className="text-[11px] font-medium text-rose-600 flex items-center gap-1 mt-1">
+                    <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> Karyawan wajib dipilih
+                  </p>
+                )}
               </div>
 
               {/* Score Range Inputs — kategori mengikuti template evaluasi yang sedang berlaku (Pengaturan > Template Evaluasi) */}
@@ -601,19 +610,16 @@ export const ProbationManagement: React.FC = () => {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Catatan Kualitatif / Alasan Evaluasi *
-                </label>
-                <textarea
-                  required
-                  rows={2}
-                  placeholder="Catatan performa, kelebihan, dan aspek yang perlu dipertahankan..."
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:outline-emerald-600"
-                />
-              </div>
+              <ValidatedTextarea
+                label="Catatan Kualitatif / Alasan Evaluasi"
+                required
+                requiredLabel="Catatan evaluasi wajib diisi"
+                rows={2}
+                placeholder="Catatan performa, kelebihan, dan aspek yang perlu dipertahankan..."
+                value={notes}
+                onChange={setNotes}
+                showError={evalSubmitAttempted}
+              />
 
               <div className="pt-2 flex justify-end gap-2 border-t border-slate-100">
                 <button
