@@ -1,3 +1,5 @@
+import { getCsrfHeader } from "../shared/csrf";
+
 // Relative by default so requests go through this page's own origin (dev
 // server proxies /api/* to the backend — see vite.config.ts) and stay
 // same-site for the session cookie. Override via VITE_API_BASE when the API
@@ -14,7 +16,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
     credentials: "include",
-    headers: { "Content-Type": "application/json", ...options.headers },
+    headers: { "Content-Type": "application/json", ...getCsrfHeader(), ...options.headers },
   });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new ApiError(body.error || `Request failed (${res.status})`, res.status, body.details);

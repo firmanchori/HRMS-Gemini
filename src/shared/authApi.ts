@@ -5,6 +5,8 @@
  * automatically, so these calls don't need to know or care which context
  * they're running in.
  */
+import { getCsrfHeader } from "./csrf";
+
 // Relative by default — see src/tenant/api.ts for why (same-site cookie via the dev proxy).
 const API_BASE = import.meta.env.VITE_API_BASE || "";
 
@@ -18,7 +20,7 @@ async function post<T>(path: string, body?: unknown): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     method: "POST",
     credentials: "include",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...getCsrfHeader() },
     body: body ? JSON.stringify(body) : undefined,
   });
   const json = await res.json().catch(() => ({}));

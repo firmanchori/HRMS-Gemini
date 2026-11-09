@@ -1,3 +1,5 @@
+import { getCsrfHeader } from "../shared/csrf";
+
 // Relative by default — see src/tenant/api.ts for why (same-site cookie via the dev proxy).
 const API_BASE = import.meta.env.VITE_API_BASE || "";
 
@@ -11,7 +13,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
     credentials: "include", // sends/receives the httpOnly session cookie
-    headers: { "Content-Type": "application/json", ...options.headers },
+    headers: { "Content-Type": "application/json", ...getCsrfHeader(), ...options.headers },
   });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {

@@ -4,6 +4,8 @@
  * tenant_admin sessions, this is for the employee_accounts session type
  * added to close the "tidak ada role karyawan sungguhan" finding.
  */
+import { getCsrfHeader } from '../shared/csrf';
+
 const API_BASE = import.meta.env.VITE_API_BASE || '';
 
 export class EmployeeApiError extends Error {
@@ -15,7 +17,7 @@ export class EmployeeApiError extends Error {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...getCsrfHeader() },
     ...init,
   });
   const json = await res.json().catch(() => ({}));

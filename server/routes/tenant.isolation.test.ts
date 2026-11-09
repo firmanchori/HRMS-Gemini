@@ -6,6 +6,7 @@ import request from "supertest";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { createApp } from "../app.ts";
+import { withCsrf } from "../lib/testCsrf.ts";
 import { db, pool } from "../db/client.ts";
 import { tenants, tenantSubscriptions, users, subscriptionPlans, companyEntities, entityClosure, orgChangeProposals, orgStructureSnapshots, companyDivisions, auditLogEntries, documentTemplates } from "../db/schema.ts";
 
@@ -34,7 +35,7 @@ beforeAll(async () => {
   const passwordHash = await bcrypt.hash(ADMIN_PASSWORD, 10);
   await db.insert(users).values({ tenantId, role: "tenant_admin", name: "Org Test Admin", email: ADMIN_EMAIL, passwordHash });
 
-  agent = request.agent(app);
+  agent = withCsrf(request.agent(app));
   const loginRes = await agent.post("/api/auth/login").set("Origin", `http://${SUBDOMAIN}.${baseDomain}`).send({ email: ADMIN_EMAIL, password: ADMIN_PASSWORD });
   expect(loginRes.status).toBe(200);
 });
@@ -93,7 +94,7 @@ describe("entity visibility — vertical only, never sibling-to-sibling", () => 
     const anakBId = anakBRes.body.id;
 
     // Anak A's own admin logs in to create Anak A's child — the holding's admin has no authority over Anak A's descendants.
-    const anakAAdminAgent = request.agent(app);
+    const anakAAdminAgent = withCsrf(request.agent(app));
     const anakAAdminCreds = { email: anakARes.body.admin.email, password: CHILD_ADMIN_PASSWORD };
     const anakALoginRes = await anakAAdminAgent.post("/api/auth/login").set("Origin", origin).send(anakAAdminCreds);
     expect(anakALoginRes.status).toBe(200);

@@ -1,8 +1,10 @@
 import type { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
+import crypto from "node:crypto";
 import { getPermission, type PermissionAction } from "../lib/permissions.ts";
 
 const COOKIE_NAME = "nusahr_session";
+const CSRF_COOKIE_NAME = "nusahr_csrf";
 
 interface SessionPayload {
   // For role "employee" this holds employee_accounts.id, not employees.id
@@ -42,10 +44,50 @@ export function issueSession(res: Response, payload: SessionPayload) {
     secure: process.env.NODE_ENV === "production",
     maxAge: 8 * 60 * 60 * 1000,
   });
+
+  // Double-submit CSRF token (security review, user 2026-11-09: "CSRF juga
+  // perlu di cek lagi"). SameSite=Lax + the strict CORS origin allowlist in
+  // app.ts already block the cross-site credentialed JSON POST a classic
+  // CSRF attack needs, but that relies on every browser actually enforcing
+  // SameSite correctly — this is the explicit token mechanism as defense in
+  // depth on top of it, not instead of it. Deliberately NOT httpOnly: the
+  // frontend must be able to read it to echo it back in X-CSRF-Token; a
+  // cross-site attacker can't read it either way (that's what SameSite +
+  // CORS block), but a classic CSRF form/img-tag attack can't read ANY
+  // cookie at all, so it could never echo the right value regardless.
+  res.cookie(CSRF_COOKIE_NAME, crypto.randomBytes(32).toString("hex"), {
+    httpOnly: false,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    maxAge: 8 * 60 * 60 * 1000,
+  });
 }
 
 export function clearSession(res: Response) {
   res.clearCookie(COOKIE_NAME);
+  res.clearCookie(CSRF_COOKIE_NAME);
+}
+
+/**
+ * Requires the X-CSRF-Token header to match the nusahr_csrf cookie on every
+ * state-changing request that carries a session — applied globally in
+ * app.ts, not per-router, so no new route can accidentally be added
+ * without this protection. Skipped automatically for requests with no
+ * session cookie at all (login/signup/forgot-password — there's no token
+ * to check yet at that point, and CORS + the body being JSON-only already
+ * cover pre-session endpoints).
+ */
+export function requireCsrfToken(req: Request, res: Response, next: NextFunction) {
+  const isMutating = ["POST", "PUT", "PATCH", "DELETE"].includes(req.method);
+  const hasSession = Boolean(req.cookies?.[COOKIE_NAME]);
+  if (!isMutating || !hasSession) return next();
+
+  const cookieToken = req.cookies?.[CSRF_COOKIE_NAME];
+  const headerToken = req.get("X-CSRF-Token");
+  if (!cookieToken || !headerToken || cookieToken !== headerToken) {
+    return res.status(403).json({ error: "Token CSRF tidak valid atau hilang" });
+  }
+  next();
 }
 
 const MFA_TICKET_COOKIE = "nusahr_mfa_ticket";
