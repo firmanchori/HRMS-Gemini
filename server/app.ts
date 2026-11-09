@@ -8,6 +8,7 @@ import { authRouter } from "./routes/auth.ts";
 import { publicRouter } from "./routes/public.ts";
 import { appOwnerRouter } from "./routes/appOwner.ts";
 import { tenantRouter } from "./routes/tenant.ts";
+import { employeeRouter } from "./routes/employee.ts";
 import { globalLimiter } from "./lib/rateLimit.ts";
 import { log, logError } from "./lib/logger.ts";
 import { pool } from "./db/client.ts";
@@ -70,6 +71,7 @@ export function createApp() {
   app.use("/api", publicRouter);
   app.use("/api/app-owner", appOwnerRouter);
   app.use("/api/tenant", tenantRouter);
+  app.use("/api/employee", employeeRouter);
 
   // Liveness vs. readiness: a load balancer or uptime monitor can tell
   // "process is up" (ok: true, db: false) apart from "fully serving

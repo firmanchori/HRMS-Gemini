@@ -36,7 +36,7 @@ const loginSchema = z.object({
  * tell "repeated wrong password against one real account" apart from
  * "scanning random emails" in the resulting log.
  */
-async function logLoginAttempt(params: {
+export async function logLoginAttempt(params: {
   tenantId: string | null;
   actorUserId: string | null;
   email: string;
@@ -52,6 +52,37 @@ async function logLoginAttempt(params: {
   });
 }
 
+/**
+ * Shared by every login endpoint (admin, employee) — see the lockout
+ * comment in /login below for why this exists alongside authLimiter.
+ * Only counts reason "invalid_credentials" (an actual wrong-password
+ * guess) toward the threshold — NOT a tenant-status rejection like
+ * "tenant_Suspended" or "account_disabled", which happen with a fully
+ * correct password and carry no brute-force signal at all; counting
+ * those meant a suspended tenant's admin trying to log in a few times
+ * (or a flaky CI re-running this suite, which deliberately exercises
+ * that exact rejection path) could lock out the real password check.
+ */
+export async function isAccountLockedOut(tenantId: string | null, email: string): Promise<boolean> {
+  const recentFailuresSince = new Date(Date.now() - LOCKOUT_WINDOW_MINUTES * 60 * 1000);
+  const tenantFilter = tenantId ? eq(auditLogEntries.tenantId, tenantId) : isNull(auditLogEntries.tenantId);
+  const [{ count: recentFailures }] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(auditLogEntries)
+    .where(
+      and(
+        eq(auditLogEntries.action, "auth.login_failed"),
+        sql`${auditLogEntries.details}->>'email' = ${email}`,
+        sql`${auditLogEntries.details}->>'reason' = 'invalid_credentials'`,
+        tenantFilter,
+        gte(auditLogEntries.createdAt, recentFailuresSince)
+      )
+    );
+  return Number(recentFailures) >= LOCKOUT_THRESHOLD;
+}
+
+export { LOCKOUT_WINDOW_MINUTES };
+
 /** Single login endpoint: context (App Owner vs tenant admin) comes from the resolved subdomain. */
 authRouter.post("/login", authLimiter, validateBody(loginSchema), async (req, res) => {
   const { email, password } = req.body;
@@ -64,20 +95,7 @@ authRouter.post("/login", authLimiter, validateBody(loginSchema), async (req, re
   // log rows /login already writes, so no new table is needed. Checked
   // before the password itself so repeated guesses against a real account
   // get locked out even once the attacker finds the right IP-spread.
-  const recentFailuresSince = new Date(Date.now() - LOCKOUT_WINDOW_MINUTES * 60 * 1000);
-  const tenantFilter = tenantId ? eq(auditLogEntries.tenantId, tenantId) : isNull(auditLogEntries.tenantId);
-  const [{ count: recentFailures }] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(auditLogEntries)
-    .where(
-      and(
-        eq(auditLogEntries.action, "auth.login_failed"),
-        sql`${auditLogEntries.details}->>'email' = ${email}`,
-        tenantFilter,
-        gte(auditLogEntries.createdAt, recentFailuresSince)
-      )
-    );
-  if (Number(recentFailures) >= LOCKOUT_THRESHOLD) {
+  if (await isAccountLockedOut(tenantId, email)) {
     return res.status(429).json({ error: `Terlalu banyak percobaan login gagal untuk akun ini. Coba lagi dalam ${LOCKOUT_WINDOW_MINUTES} menit.` });
   }
 

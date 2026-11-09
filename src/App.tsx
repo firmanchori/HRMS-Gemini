@@ -33,8 +33,10 @@ import { CandidateOnlineTestPortal } from './components/modules/CandidateOnlineT
 import { LoginScreen } from './components/auth/LoginScreen';
 import { authApi } from './shared/authApi';
 import { UserRole } from './types/hrms';
+import { EmployeeApp } from './employee/EmployeeApp';
+import { employeeApi } from './employee/api';
 
-const MainLayout: React.FC = () => {
+const MainLayout: React.FC<{ onSwitchToEmployeeLogin: () => void }> = ({ onSwitchToEmployeeLogin }) => {
   const { activeModule, setActiveModule, setCurrentUserRole, setCurrentSessionUser, loadTenantOrgData } = useHrms();
 
   // Deteksi jika link tes online pelamar sedang dibuka via URL query param (?testToken=...)
@@ -228,6 +230,7 @@ const MainLayout: React.FC = () => {
           setIsAuthenticated(true);
           loadTenantOrgData().catch((err) => console.error('Gagal memuat data struktur organisasi:', err));
         }}
+        onSwitchToEmployeeLogin={onSwitchToEmployeeLogin}
       />
     );
   }
@@ -295,9 +298,41 @@ const MainLayout: React.FC = () => {
 };
 
 export default function App() {
+  // "checking" avoids a flash of the admin login screen while we find out
+  // whether the browser's session cookie actually belongs to an employee
+  // instead — authApi.me() 401s for an employee session (it looks up the
+  // id in `users`, which an employee_accounts row never matches), so a
+  // failure here specifically means "try the employee session next", not
+  // "definitely no session at all".
+  const [mode, setMode] = useState<'checking' | 'admin' | 'employee'>('checking');
+
+  useEffect(() => {
+    authApi
+      .me()
+      .then(() => setMode('admin'))
+      .catch(() => {
+        employeeApi
+          .me()
+          .then(() => setMode('employee'))
+          .catch(() => setMode('admin'));
+      });
+  }, []);
+
+  if (mode === 'checking') {
+    return (
+      <div className="flex h-screen w-screen items-center justify-center bg-slate-100">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-300 border-t-indigo-600" />
+      </div>
+    );
+  }
+
+  if (mode === 'employee') {
+    return <EmployeeApp onSwitchToAdminLogin={() => setMode('admin')} />;
+  }
+
   return (
     <HrmsProvider>
-      <MainLayout />
+      <MainLayout onSwitchToEmployeeLogin={() => setMode('employee')} />
     </HrmsProvider>
   );
 }

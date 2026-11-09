@@ -4,9 +4,10 @@ import { authApi, AuthApiError, type DevAccount } from '../../shared/authApi';
 
 interface LoginScreenProps {
   onLoginSuccess: (user: { id: string; name: string; email: string }, role?: string) => void;
+  onSwitchToEmployeeLogin?: () => void;
 }
 
-export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
+export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, onSwitchToEmployeeLogin }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -247,6 +248,16 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                 ))}
               </div>
             </div>
+          )}
+
+          {!awaitingMfaCode && onSwitchToEmployeeLogin && (
+            <button
+              type="button"
+              onClick={onSwitchToEmployeeLogin}
+              className="w-full text-center text-[11px] text-slate-500 hover:text-slate-700 pt-1"
+            >
+              Masuk sebagai Karyawan (ESS/MSS)
+            </button>
           )}
         </div>
 

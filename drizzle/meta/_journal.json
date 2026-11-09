@@ -274,6 +274,13 @@
       "when": 1794183496364,
       "tag": "0038_magenta_galactus",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1794237948691,
+      "tag": "0039_glamorous_speed",
+      "breakpoints": true
     }
   ]
 }

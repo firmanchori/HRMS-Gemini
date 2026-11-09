@@ -1,12 +1,18 @@
 import type { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
+import { getPermission, type PermissionAction } from "../lib/permissions.ts";
 
 const COOKIE_NAME = "nusahr_session";
 
 interface SessionPayload {
+  // For role "employee" this holds employee_accounts.id, not employees.id
+  // — employeeId below is the HR record itself, used to query
+  // attendance/leave rows, which are keyed by employees.id.
   userId: string;
-  role: "app_owner" | "tenant_admin";
+  role: "app_owner" | "tenant_admin" | "employee";
   tenantId: string | null;
+  employeeId?: string;
+  roleKey?: string;
 }
 
 declare global {
@@ -136,4 +142,47 @@ export function requireTenantAdmin(req: Request, res: Response, next: NextFuncti
   }
   req.session = session;
   next();
+}
+
+/**
+ * Only a logged-in employee (real ESS/MSS login, server/routes/employee.ts)
+ * — same tenant-match and Active-tenant re-check as requireTenantAdmin,
+ * since an employee session is just as capable of outliving a suspension
+ * if nothing re-checks it on every request.
+ */
+export function requireEmployeeSession(req: Request, res: Response, next: NextFunction) {
+  const session = readSession(req);
+  if (!session || session.role !== "employee") {
+    return res.status(401).json({ error: "Harus login sebagai karyawan" });
+  }
+  if (!req.tenant || session.tenantId !== req.tenant.id) {
+    return res.status(403).json({ error: "Sesi tidak cocok dengan subdomain ini" });
+  }
+  if (req.tenant.status !== "Active") {
+    return res.status(403).json({ error: "Akun perusahaan Anda tidak lagi aktif" });
+  }
+  req.session = session;
+  next();
+}
+
+/**
+ * Gates an employee route by the real role_permission_entries matrix
+ * (RbacManagement.tsx's own matrix, now actually enforced server-side
+ * instead of only hiding/showing UI) — this is the piece that was
+ * missing entirely: hasPermission()/getRolePermission() used to only
+ * ever be called from inside the RBAC settings screen itself, never from
+ * any route that actually gates an action.
+ */
+export function requirePermission(moduleKey: string, action: PermissionAction) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    const session = req.session;
+    if (!session || session.role !== "employee" || !session.roleKey) {
+      return res.status(403).json({ error: "Tidak memiliki izin untuk tindakan ini" });
+    }
+    const permission = await getPermission(session.tenantId!, moduleKey, session.roleKey);
+    if (!permission[action]) {
+      return res.status(403).json({ error: "Anda tidak memiliki izin untuk tindakan ini" });
+    }
+    next();
+  };
 }

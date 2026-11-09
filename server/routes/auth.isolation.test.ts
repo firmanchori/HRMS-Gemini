@@ -3,10 +3,10 @@ config({ path: ".env.local" });
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
-import { eq } from "drizzle-orm";
+import { eq, and, inArray, sql } from "drizzle-orm";
 import { createApp } from "../app.ts";
 import { db, pool } from "../db/client.ts";
-import { tenants } from "../db/schema.ts";
+import { tenants, auditLogEntries } from "../db/schema.ts";
 
 /**
  * Regression test for the subdomain isolation rule (testing-standards.md
@@ -96,6 +96,19 @@ describe("login blocks non-Active tenants even with correct credentials", () => 
     });
     afterAll(async () => {
       await db.update(tenants).set({ status: "Active" }).where(eq(tenants.subdomain, TENANT_SUBDOMAIN));
+      // This suite deliberately produces several auth.login_failed rows
+      // against these long-lived seeded fixture accounts (not throwaway
+      // per-test ones) — left uncleaned, repeated runs within the same
+      // 15-minute lockout window accumulate past the threshold and start
+      // locking out the suite's own legitimate-password assertions.
+      await db
+        .delete(auditLogEntries)
+        .where(
+          and(
+            inArray(auditLogEntries.action, ["auth.login_failed", "auth.login_success"]),
+            sql`${auditLogEntries.details}->>'email' in (${TENANT_ADMIN_EMAIL}, ${APP_OWNER_EMAIL})`
+          )
+        );
       await pool.end();
     });
 

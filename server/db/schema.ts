@@ -9,6 +9,7 @@ import {
   pgEnum,
   primaryKey,
   doublePrecision,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 
 export const tenantStatusEnum = pgEnum("tenant_status", [
@@ -1451,6 +1452,39 @@ export const rolePermissionEntries = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [primaryKey({ columns: [table.tenantId, table.moduleKey, table.roleKey] })]
+);
+
+/**
+ * Real employee login accounts — closing the "RBAC granular tidak
+ * ditegakkan / tidak ada role karyawan sungguhan" finding from the
+ * security review (user, 2026-11-09). Until now `employees` was pure HR
+ * record data with no credentials at all; ESS/MSS only ever worked by
+ * reusing the tenant_admin's own session and swapping a client-side
+ * "currentUser" persona — meaning the server never actually distinguished
+ * an employee from the admin. This table is a deliberately separate
+ * record from `employees` (same pattern as `users` vs `employees`): the
+ * HR record and its login credentials have different lifecycles — an
+ * employee can exist for months before anyone enables ESS login for them.
+ * roleKey is NOT a DB foreign key into role_definitions (whose own PK is
+ * the composite (tenantId, id), and a tenant may reference a system role
+ * like "employee"/"manager" that only exists as a frontend fallback and
+ * was never actually inserted as a row) — it's resolved against
+ * role_permission_entries at permission-check time, defaulting to
+ * deny-all when no matching row exists (see server/lib/permissions.ts).
+ */
+export const employeeAccounts = pgTable(
+  "employee_accounts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+    employeeId: uuid("employee_id").references(() => employees.id).notNull().unique(),
+    email: text("email").notNull(),
+    passwordHash: text("password_hash").notNull(),
+    roleKey: text("role_key").notNull().default("employee"),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [uniqueIndex("employee_accounts_tenant_email_idx").on(table.tenantId, table.email)]
 );
 
 // ---------------------------------------------------------------------------

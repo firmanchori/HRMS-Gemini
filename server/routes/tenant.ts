@@ -65,6 +65,7 @@ import {
   procurementOrders,
   roleDefinitions,
   rolePermissionEntries,
+  employeeAccounts,
   companyCalendarEvents,
   auditTrailEntries,
   documentTemplates,
@@ -78,6 +79,7 @@ import { rejectBreachedPassword } from "../middleware/passwordCheck.ts";
 import { computeNewEntityClosureRows, buildEntityTree, applyChangeSet, resolveNikPattern } from "../lib/orgStructure.ts";
 import { logAudit } from "../lib/audit.ts";
 import { seedDefaultDocumentTemplatesForTenant } from "../lib/defaultDocumentTemplates.ts";
+import { ensureDefaultEmployeeRbac } from "../lib/permissions.ts";
 
 export const tenantRouter = Router();
 tenantRouter.use(requireTenantAdmin);
@@ -3009,6 +3011,77 @@ tenantRouter.put("/rbac-permissions/:moduleKey/:roleKey", validateBody(rolePermi
   }
   const [created] = await db.insert(rolePermissionEntries).values({ ...req.body, tenantId, moduleKey, roleKey }).returning();
   res.status(201).json(created);
+});
+
+// ---------------------------------------------------------------------------
+// Employee Accounts — real ESS/MSS logins (user, 2026-11-09: "RBAC granular
+// tidak ditegakkan / tidak ada role karyawan sungguhan"). An admin enables
+// login for an employee here, which is deliberately a separate step from
+// the employee existing as an HR record — see server/db/schema.ts's
+// employeeAccounts comment for why these are two different tables.
+// ---------------------------------------------------------------------------
+
+tenantRouter.get("/employee-accounts", async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
+  if (visibleEmployeeIds.length === 0) return res.json([]);
+  const rows = await db
+    .select({ id: employeeAccounts.id, employeeId: employeeAccounts.employeeId, email: employeeAccounts.email, roleKey: employeeAccounts.roleKey, isActive: employeeAccounts.isActive, createdAt: employeeAccounts.createdAt })
+    .from(employeeAccounts)
+    .where(and(eq(employeeAccounts.tenantId, tenantId), inArray(employeeAccounts.employeeId, visibleEmployeeIds)));
+  res.json(rows);
+});
+
+const createEmployeeAccountSchema = z.object({
+  employeeId: z.string().uuid(),
+  email: z.string().trim().toLowerCase().email(),
+  password: z.string().min(8).max(200),
+  roleKey: z.string().trim().min(1).max(100).default("employee"),
+});
+
+tenantRouter.post("/employee-accounts", validateBody(createEmployeeAccountSchema), rejectBreachedPassword((req) => req.body.password), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
+  if (!visibleEmployeeIds.includes(req.body.employeeId)) return res.status(403).json({ error: "Karyawan di luar ruang lingkup Anda" });
+
+  const [existing] = await db.select().from(employeeAccounts).where(eq(employeeAccounts.employeeId, req.body.employeeId)).limit(1);
+  if (existing) return res.status(400).json({ error: "Karyawan ini sudah memiliki akun login" });
+  const [existingEmail] = await db.select().from(employeeAccounts).where(and(eq(employeeAccounts.tenantId, tenantId), eq(employeeAccounts.email, req.body.email))).limit(1);
+  if (existingEmail) return res.status(400).json({ error: "Email tersebut sudah digunakan untuk akun karyawan lain" });
+
+  await ensureDefaultEmployeeRbac(tenantId);
+  const passwordHash = await bcrypt.hash(req.body.password, 10);
+  const [created] = await db
+    .insert(employeeAccounts)
+    .values({ tenantId, employeeId: req.body.employeeId, email: req.body.email, passwordHash, roleKey: req.body.roleKey })
+    .returning({ id: employeeAccounts.id, employeeId: employeeAccounts.employeeId, email: employeeAccounts.email, roleKey: employeeAccounts.roleKey, isActive: employeeAccounts.isActive, createdAt: employeeAccounts.createdAt });
+  await logAudit({ actorUserId: req.session!.userId, tenantId, action: "employee_account.created", details: { employeeId: req.body.employeeId, email: req.body.email } });
+  res.status(201).json(created);
+});
+
+const updateEmployeeAccountSchema = z.object({
+  roleKey: z.string().trim().min(1).max(100).optional(),
+  isActive: z.boolean().optional(),
+  password: z.string().min(8).max(200).optional(),
+});
+
+tenantRouter.put("/employee-accounts/:id", validateParams(uuidParam("id")), validateBody(updateEmployeeAccountSchema), rejectBreachedPassword((req) => req.body.password), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
+  const [existing] = await db.select().from(employeeAccounts).where(and(eq(employeeAccounts.id, req.params.id), eq(employeeAccounts.tenantId, tenantId))).limit(1);
+  if (!existing || !visibleEmployeeIds.includes(existing.employeeId)) return res.status(404).json({ error: "Akun karyawan tidak ditemukan" });
+
+  const { password, ...rest } = req.body as z.infer<typeof updateEmployeeAccountSchema>;
+  const patch: Partial<typeof employeeAccounts.$inferInsert> = { ...rest };
+  if (password) patch.passwordHash = await bcrypt.hash(password, 10);
+
+  const [updated] = await db
+    .update(employeeAccounts)
+    .set(patch)
+    .where(eq(employeeAccounts.id, existing.id))
+    .returning({ id: employeeAccounts.id, employeeId: employeeAccounts.employeeId, email: employeeAccounts.email, roleKey: employeeAccounts.roleKey, isActive: employeeAccounts.isActive, createdAt: employeeAccounts.createdAt });
+  await logAudit({ actorUserId: req.session!.userId, tenantId, action: "employee_account.updated", details: { employeeAccountId: existing.id, passwordChanged: Boolean(password) } });
+  res.json(updated);
 });
 
 // ---------------------------------------------------------------------------
