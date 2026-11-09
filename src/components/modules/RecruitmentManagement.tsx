@@ -1081,7 +1081,7 @@ export const RecruitmentManagement: React.FC = () => {
   // 7. Talent Pool
   const [activeTab, setActiveTab] = useState<
     'fptk' | 'sourcing' | 'pipeline' | 'offering' | 'decision' | 'onboarding' | 'talent_pool'
-  >('pipeline');
+  >('fptk');
 
   // Pipeline sub-view mode: Board vs Table
   const [pipelineViewMode, setPipelineViewMode] = useState<'board' | 'table'>('board');
