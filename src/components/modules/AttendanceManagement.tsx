@@ -38,6 +38,7 @@ import {
 } from '../../types/hrms';
 import { EmployeeSelect } from '../common/EmployeeSelect';
 import { ValidatedDateInput } from '../common/ValidatedDateInput';
+import { ValidatedInput, ValidatedTextarea } from '../common/ValidatedInput';
 import { validateDateRange, validateDateString } from '../../utils/dateValidator';
 import { formatRupiah, calculateOvertimePay } from '../../utils/taxCalculator';
 import { CompanyCalendarManagement } from './CompanyCalendarManagement';
@@ -1430,7 +1431,7 @@ export const AttendanceManagement: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleLeaveSubmit} className="p-5 space-y-4 text-xs">
+            <form onSubmit={handleLeaveSubmit} className="p-5 space-y-4 text-xs" noValidate>
               {/* Form Validation Error Notice */}
               {leaveFormError && (
                 <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg flex items-center gap-2 text-rose-800 text-xs font-semibold animate-fadeIn">
@@ -1442,6 +1443,8 @@ export const AttendanceManagement: React.FC = () => {
               <EmployeeSelect
                 label="Pilih Karyawan Pemohon"
                 required
+                requiredLabel="Pilih nama karyawan yang mengajukan cuti"
+                showError={!!leaveFormError && !leaveEmpId}
                 employees={employees}
                 value={leaveEmpId}
                 onChange={(val) => {
@@ -1476,6 +1479,7 @@ export const AttendanceManagement: React.FC = () => {
                     if (leaveFormError) setLeaveFormError(null);
                   }}
                   required
+                  showError={!!leaveFormError}
                   helperText="Awal periode cuti"
                 />
                 <ValidatedDateInput
@@ -1488,6 +1492,7 @@ export const AttendanceManagement: React.FC = () => {
                     if (leaveFormError) setLeaveFormError(null);
                   }}
                   required
+                  showError={!!leaveFormError}
                   helperText="Akhir periode cuti"
                 />
               </div>
@@ -1546,7 +1551,7 @@ export const AttendanceManagement: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleOvertimeInputSubmit} className="p-5 space-y-4 text-xs">
+            <form onSubmit={handleOvertimeInputSubmit} className="p-5 space-y-4 text-xs" noValidate>
               {overtimeFormError && (
                 <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg flex items-center gap-2 text-rose-800 text-xs font-semibold animate-fadeIn">
                   <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
@@ -1558,6 +1563,8 @@ export const AttendanceManagement: React.FC = () => {
               <EmployeeSelect
                 label="Pilih Karyawan"
                 required
+                requiredLabel="Pilih nama karyawan yang akan diinput lemburnya"
+                showError={!!overtimeFormError && !overtimeEmpId}
                 employees={employees.filter((e) => e.canOvertime !== false)}
                 value={overtimeEmpId}
                 onChange={(val) => {
@@ -1572,30 +1579,31 @@ export const AttendanceManagement: React.FC = () => {
                 value={overtimeDate}
                 onChange={setOvertimeDate}
                 required
+                showError={!!overtimeFormError}
                 helperText="Format YYYY-MM-DD"
               />
 
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="font-medium text-slate-700 block mb-1">Jam Mulai *</label>
-                  <input
-                    type="time"
-                    required
-                    value={overtimeStartTime}
-                    onChange={(e) => setOvertimeStartTime(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="font-medium text-slate-700 block mb-1">Jam Selesai *</label>
-                  <input
-                    type="time"
-                    required
-                    value={overtimeEndTime}
-                    onChange={(e) => setOvertimeEndTime(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded font-mono"
-                  />
-                </div>
+                <ValidatedInput
+                  label="Jam Mulai"
+                  type="time"
+                  required
+                  requiredLabel="Jam mulai lembur wajib diisi"
+                  showError={!!overtimeFormError}
+                  value={overtimeStartTime}
+                  onChange={setOvertimeStartTime}
+                  className="font-mono"
+                />
+                <ValidatedInput
+                  label="Jam Selesai"
+                  type="time"
+                  required
+                  requiredLabel="Jam selesai lembur wajib diisi (harus setelah jam mulai)"
+                  showError={!!overtimeFormError}
+                  value={overtimeEndTime}
+                  onChange={setOvertimeEndTime}
+                  className="font-mono"
+                />
               </div>
 
               <div>
@@ -1660,7 +1668,7 @@ export const AttendanceManagement: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleShiftSwapSubmit} className="p-5 space-y-4 text-xs">
+            <form onSubmit={handleShiftSwapSubmit} className="p-5 space-y-4 text-xs" noValidate>
               {/* Form Validation Error Notice */}
               {swapFormError && (
                 <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg flex items-center gap-2 text-rose-800 text-xs font-semibold animate-fadeIn">
@@ -1672,6 +1680,8 @@ export const AttendanceManagement: React.FC = () => {
               <EmployeeSelect
                 label="Karyawan Pemohon (Requester)"
                 required
+                requiredLabel="Pilih pemohon dan karyawan target pertukaran shift"
+                showError={!!swapFormError && !swapRequesterId}
                 employees={employees}
                 value={swapRequesterId}
                 onChange={(val) => {
@@ -1683,6 +1693,8 @@ export const AttendanceManagement: React.FC = () => {
               <EmployeeSelect
                 label="Karyawan Mitra Tukar (Target Partner)"
                 required
+                requiredLabel="Pilih pemohon dan karyawan target pertukaran shift"
+                showError={!!swapFormError && !swapTargetId}
                 employees={employees}
                 value={swapTargetId}
                 onChange={(val) => {
@@ -1701,6 +1713,7 @@ export const AttendanceManagement: React.FC = () => {
                     if (swapFormError) setSwapFormError(null);
                   }}
                   required
+                  showError={!!swapFormError}
                   helperText="Tanggal jadwal asli pemohon"
                 />
                 <ValidatedDateInput
@@ -1712,21 +1725,18 @@ export const AttendanceManagement: React.FC = () => {
                     if (swapFormError) setSwapFormError(null);
                   }}
                   required
+                  showError={!!swapFormError}
                   helperText="Tanggal jadwal pengganti"
                 />
               </div>
 
-              <div>
-                <label className="font-medium text-slate-700 block mb-1">Alasan Pertukaran *</label>
-                <textarea
-                  rows={2}
-                  required
-                  value={swapReason}
-                  onChange={(e) => setSwapReason(e.target.value)}
-                  placeholder="Keterangan penyesuaian jam..."
-                  className="w-full px-3 py-2 border border-slate-300 rounded"
-                />
-              </div>
+              <ValidatedTextarea
+                label="Alasan Pertukaran (Opsional)"
+                rows={2}
+                value={swapReason}
+                onChange={setSwapReason}
+                placeholder="Keterangan penyesuaian jam... (jika kosong, sistem akan mengisi keterangan standar otomatis)"
+              />
 
               <div className="pt-3 border-t border-slate-200 flex justify-end gap-2">
                 <button
@@ -1767,7 +1777,7 @@ export const AttendanceManagement: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleCorrectionSubmit} className="p-5 space-y-4 text-xs">
+            <form onSubmit={handleCorrectionSubmit} className="p-5 space-y-4 text-xs" noValidate>
               {/* Form Validation Error Notice */}
               {corrFormError && (
                 <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg flex items-center gap-2 text-rose-800 text-xs font-semibold animate-fadeIn">
@@ -1779,6 +1789,8 @@ export const AttendanceManagement: React.FC = () => {
               <EmployeeSelect
                 label="Pilih Karyawan"
                 required
+                requiredLabel="Pilih karyawan yang mengajukan koreksi"
+                showError={!!corrFormError && !corrEmpId}
                 employees={employees}
                 value={corrEmpId}
                 onChange={(val) => {
@@ -1813,6 +1825,7 @@ export const AttendanceManagement: React.FC = () => {
                       if (corrFormError) setCorrFormError(null);
                     }}
                     required
+                    showError={!!corrFormError}
                     validateMode="pastOnly"
                     helperText="Maksimal hari ini (tidak boleh masa depan)"
                   />
@@ -1840,17 +1853,13 @@ export const AttendanceManagement: React.FC = () => {
                 </div>
               </div>
 
-              <div>
-                <label className="font-medium text-slate-700 block mb-1">Alasan Terlewat / Izin *</label>
-                <textarea
-                  rows={2}
-                  required
-                  value={corrReason}
-                  onChange={(e) => setCorrReason(e.target.value)}
-                  placeholder="Keterangan kronologi kejadian..."
-                  className="w-full px-3 py-2 border border-slate-300 rounded"
-                />
-              </div>
+              <ValidatedTextarea
+                label="Alasan Terlewat / Izin (Opsional)"
+                rows={2}
+                value={corrReason}
+                onChange={setCorrReason}
+                placeholder="Keterangan kronologi kejadian... (jika kosong, sistem akan mengisi keterangan standar otomatis)"
+              />
 
               <div className="pt-3 border-t border-slate-200 flex justify-end gap-2">
                 <button
