@@ -74,6 +74,7 @@ import {
 } from "../db/schema.ts";
 import { requireTenantAdmin } from "../middleware/auth.ts";
 import { validateBody, validateParams, uuidParam } from "../lib/validate.ts";
+import { rejectBreachedPassword } from "../middleware/passwordCheck.ts";
 import { computeNewEntityClosureRows, buildEntityTree, applyChangeSet, resolveNikPattern } from "../lib/orgStructure.ts";
 import { logAudit } from "../lib/audit.ts";
 import { seedDefaultDocumentTemplatesForTenant } from "../lib/defaultDocumentTemplates.ts";
@@ -171,7 +172,7 @@ const createEntitySchema = z.object({
   admin: createEntityAdminSchema.optional(),
 });
 
-tenantRouter.post("/entities", validateBody(createEntitySchema), async (req, res) => {
+tenantRouter.post("/entities", validateBody(createEntitySchema), rejectBreachedPassword((req) => req.body.admin?.password), async (req, res) => {
   const tenantId = req.session!.tenantId!;
   const body = req.body as z.infer<typeof createEntitySchema>;
 
@@ -386,7 +387,7 @@ const createUserSchema = z.object({
   password: z.string().min(8).max(200),
 });
 
-tenantRouter.post("/users", validateBody(createUserSchema), async (req, res) => {
+tenantRouter.post("/users", validateBody(createUserSchema), rejectBreachedPassword((req) => req.body.password), async (req, res) => {
   const tenantId = req.session!.tenantId!;
   const body = req.body as z.infer<typeof createUserSchema>;
 

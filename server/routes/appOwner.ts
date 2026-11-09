@@ -32,6 +32,7 @@ import { sendTenantActivatedEmail, sendPasswordResetEmail, sendContactReplyEmail
 import { createEmailChangeRequest } from "./auth.ts";
 import { resolveEffectiveMonthlyPrice } from "./public.ts";
 import { validateBody, validateParams, validateQuery, uuidParam } from "../lib/validate.ts";
+import { rejectBreachedPassword } from "../middleware/passwordCheck.ts";
 import { calculatePricing, computeMonthlyReference, computeDisplayReference, expandModuleCodes, expandModuleRows, type ModulePricing } from "../lib/pricing.ts";
 import { proratedAddonCharge } from "../lib/proration.ts";
 import { buildInvoice } from "../lib/invoicing.ts";
@@ -906,7 +907,7 @@ const createTenantSchema = z.discriminatedUnion("mode", [
   }),
 ]);
 
-appOwnerRouter.post("/tenants", validateBody(createTenantSchema), async (req, res) => {
+appOwnerRouter.post("/tenants", validateBody(createTenantSchema), rejectBreachedPassword((req) => req.body.adminPassword), async (req, res) => {
   const { tenantName, subdomain, adminName, adminEmail, adminPassword } = req.body;
 
   const [existing] = await db.select().from(tenants).where(eq(tenants.subdomain, subdomain)).limit(1);

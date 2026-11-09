@@ -1,9 +1,9 @@
 import { Router } from "express";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, gte, sql } from "drizzle-orm";
 import { db } from "../db/client.ts";
-import { users, passwordResetTokens, emailChangeRequests } from "../db/schema.ts";
+import { users, passwordResetTokens, emailChangeRequests, auditLogEntries } from "../db/schema.ts";
 import QRCode from "qrcode";
 import { issueSession, clearSession, readSession, issueMfaTicket, readMfaTicket, clearMfaTicket, requireAnySession } from "../middleware/auth.ts";
 import { generateToken, hashToken } from "../lib/token.ts";
@@ -13,8 +13,12 @@ import { authLimiter } from "../lib/rateLimit.ts";
 import { logAudit } from "../lib/audit.ts";
 import { encryptSecret, decryptSecret } from "../lib/crypto.ts";
 import { generateTotpSecret, totpOtpauthUrl, verifyTotpCode, generateBackupCodes, hashBackupCode, consumeBackupCode } from "../lib/totp.ts";
+import { rejectBreachedPassword } from "../middleware/passwordCheck.ts";
 
 export const authRouter = Router();
+
+const LOCKOUT_WINDOW_MINUTES = 15;
+const LOCKOUT_THRESHOLD = 5;
 
 const loginSchema = z.object({
   email: z.string().trim().toLowerCase().email(),
@@ -53,6 +57,29 @@ authRouter.post("/login", authLimiter, validateBody(loginSchema), async (req, re
   const { email, password } = req.body;
   const tenantId = req.tenant?.id ?? null;
   const ip = req.ip ?? "unknown";
+
+  // Credential-stuffing / brute-force lockout: authLimiter above throttles
+  // by IP, which a distributed stuffing run simply routes around — this
+  // counts failures against this one account instead, from the very audit
+  // log rows /login already writes, so no new table is needed. Checked
+  // before the password itself so repeated guesses against a real account
+  // get locked out even once the attacker finds the right IP-spread.
+  const recentFailuresSince = new Date(Date.now() - LOCKOUT_WINDOW_MINUTES * 60 * 1000);
+  const tenantFilter = tenantId ? eq(auditLogEntries.tenantId, tenantId) : isNull(auditLogEntries.tenantId);
+  const [{ count: recentFailures }] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(auditLogEntries)
+    .where(
+      and(
+        eq(auditLogEntries.action, "auth.login_failed"),
+        sql`${auditLogEntries.details}->>'email' = ${email}`,
+        tenantFilter,
+        gte(auditLogEntries.createdAt, recentFailuresSince)
+      )
+    );
+  if (Number(recentFailures) >= LOCKOUT_THRESHOLD) {
+    return res.status(429).json({ error: `Terlalu banyak percobaan login gagal untuk akun ini. Coba lagi dalam ${LOCKOUT_WINDOW_MINUTES} menit.` });
+  }
 
   const role = req.tenant ? "tenant_admin" : "app_owner";
   const whereClause = req.tenant
@@ -297,7 +324,7 @@ const resetPasswordSchema = z.object({
   newPassword: z.string().min(8).max(200),
 });
 
-authRouter.post("/reset-password/:token", authLimiter, validateBody(resetPasswordSchema), async (req, res) => {
+authRouter.post("/reset-password/:token", authLimiter, validateBody(resetPasswordSchema), rejectBreachedPassword((req) => req.body.newPassword), async (req, res) => {
   const { newPassword } = req.body;
 
   const tokenHash = hashToken(req.params.token);

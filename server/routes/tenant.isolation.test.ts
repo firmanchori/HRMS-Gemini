@@ -63,11 +63,18 @@ afterAll(async () => {
 
 const origin = `http://${SUBDOMAIN}.${baseDomain}`;
 
-/** Every child entity must bundle exactly one admin for it — see tenant.ts's provisioning rule. */
+/**
+ * Every child entity must bundle exactly one admin for it — see tenant.ts's
+ * provisioning rule. Deliberately NOT "ChangeMe123!" (this repo's shared
+ * dev-seed password, inserted directly by seed scripts that bypass this
+ * route entirely) — these go through POST /entities, which now rejects
+ * known-breached passwords via HIBP, and "ChangeMe123!" is breached.
+ */
+const CHILD_ADMIN_PASSWORD = "Qz7#nK4vTxw9Lm2p";
 let adminSeq = 0;
 function childAdminPayload() {
   adminSeq += 1;
-  return { name: `Admin Anak ${adminSeq}`, email: `admin-anak-${adminSeq}@orgtest.local`, password: "ChangeMe123!" };
+  return { name: `Admin Anak ${adminSeq}`, email: `admin-anak-${adminSeq}@orgtest.local`, password: CHILD_ADMIN_PASSWORD };
 }
 
 let holdingId: string;
@@ -87,7 +94,7 @@ describe("entity visibility — vertical only, never sibling-to-sibling", () => 
 
     // Anak A's own admin logs in to create Anak A's child — the holding's admin has no authority over Anak A's descendants.
     const anakAAdminAgent = request.agent(app);
-    const anakAAdminCreds = { email: anakARes.body.admin.email, password: "ChangeMe123!" };
+    const anakAAdminCreds = { email: anakARes.body.admin.email, password: CHILD_ADMIN_PASSWORD };
     const anakALoginRes = await anakAAdminAgent.post("/api/auth/login").set("Origin", origin).send(anakAAdminCreds);
     expect(anakALoginRes.status).toBe(200);
     const cucuCRes = await anakAAdminAgent.post("/api/tenant/entities").set("Origin", origin).send({ name: "Cucu C", code: "CUCUC", parentEntityId: anakAId, admin: childAdminPayload() });

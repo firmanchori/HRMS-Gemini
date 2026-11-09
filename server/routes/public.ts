@@ -19,6 +19,7 @@ import { sendSignupPendingEmail } from "../lib/email.ts";
 import { logAudit } from "../lib/audit.ts";
 import { validateBody } from "../lib/validate.ts";
 import { publicWriteLimiter } from "../lib/rateLimit.ts";
+import { rejectBreachedPassword } from "../middleware/passwordCheck.ts";
 import {
   resolvePromoDiscount,
   recordPromoUsage,
@@ -187,7 +188,7 @@ const signupSchema = z.object({
  * reports. App Owner reviews it (approve activates, reject stays pending)
  * instead of blindly trusting an "Activate" click with no evidence.
  */
-publicRouter.post("/signup", publicWriteLimiter, validateBody(signupSchema), async (req, res) => {
+publicRouter.post("/signup", publicWriteLimiter, validateBody(signupSchema), rejectBreachedPassword((req) => req.body.adminPassword), async (req, res) => {
   const {
     tenantName,
     subdomain,
