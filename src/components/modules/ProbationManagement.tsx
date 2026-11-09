@@ -23,7 +23,11 @@ export const ProbationManagement: React.FC = () => {
     submitProbationEvaluation,
     reviewProbationEvaluation,
     currentUser,
+    moduleSettings,
   } = useHrms();
+
+  // H- berapa hari sebelum jatuh tempo karyawan masuk daftar reminder — dulu hardcode 14, sekarang diatur di Pengaturan Karyawan (user, 2026-11-09).
+  const reminderDaysBefore = moduleSettings.employee.probationReminderDaysBefore ?? 14;
 
   const [activeTab, setActiveTab] = useState<'monitoring' | 'evaluations'>('monitoring');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -39,11 +43,6 @@ export const ProbationManagement: React.FC = () => {
   const [extensionMonths, setExtensionMonths] = useState(3);
   const [notes, setNotes] = useState('');
 
-  // Filter employees currently on probation
-  const probationEmployees = employees.filter(
-    (e) => e.probationStatus === 'Sedang Berjalan' || e.employmentType === 'Kontrak' || e.probationEndDate
-  );
-
   const calculateHMinus = (endDate?: string) => {
     if (!endDate) return null;
     const end = new Date(endDate).getTime();
@@ -51,6 +50,17 @@ export const ProbationManagement: React.FC = () => {
     const diffDays = Math.ceil((end - now) / (1000 * 3600 * 24));
     return diffDays;
   };
+
+  // Hanya karyawan yang masuk jendela reminder (H- sesuai Pengaturan
+  // Karyawan, termasuk yang sudah lewat jatuh tempo) yang muncul di sini —
+  // bukan semua karyawan kontrak/probation tanpa memandang tanggal (user,
+  // 2026-11-09: "notif atau daftar ditabel yang muncul sesuai dengan
+  // pengaturan tersebut").
+  const probationEmployees = employees.filter((e) => {
+    if (e.probationStatus !== 'Sedang Berjalan' && e.employmentType !== 'Kontrak' && !e.probationEndDate) return false;
+    const diffDays = calculateHMinus(e.probationEndDate);
+    return diffDays !== null && diffDays <= reminderDaysBefore;
+  });
 
   const handleOpenEvaluationModal = (empId: string) => {
     setSelectedEmpId(empId);
@@ -101,7 +111,7 @@ export const ProbationManagement: React.FC = () => {
             </h1>
           </div>
           <p className="text-xs text-slate-500 mt-1">
-            Penilaian kinerja probation, reminder otomatis H-14 jatuh tempo, dan keputusan pengangkatan tetap atau terminasi
+            Penilaian kinerja probation, reminder otomatis H-{reminderDaysBefore} jatuh tempo, dan keputusan pengangkatan tetap atau terminasi
           </p>
         </div>
 
@@ -153,7 +163,7 @@ export const ProbationManagement: React.FC = () => {
           <div className="p-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
             <div className="flex items-center gap-2 text-xs font-semibold text-slate-700">
               <Calendar className="w-4 h-4 text-emerald-600" />
-              <span>Daftar Karyawan dalam Masa Percobaan (Reminder H-14 Aktif)</span>
+              <span>Daftar Karyawan dalam Masa Percobaan (Reminder H-{reminderDaysBefore} Aktif)</span>
             </div>
             <div className="text-xs text-slate-400">
               Standard Percobaan: 3 Bulan sesuai UU Ketenagakerjaan
@@ -163,7 +173,7 @@ export const ProbationManagement: React.FC = () => {
           <div className="divide-y divide-slate-200">
             {probationEmployees.map((emp) => {
               const diffDays = calculateHMinus(emp.probationEndDate || '2026-11-15');
-              const isUrgent = diffDays !== null && diffDays <= 14 && diffDays >= 0;
+              const isUrgent = diffDays !== null && diffDays <= reminderDaysBefore && diffDays >= 0;
               const isExpired = diffDays !== null && diffDays < 0;
 
               return (

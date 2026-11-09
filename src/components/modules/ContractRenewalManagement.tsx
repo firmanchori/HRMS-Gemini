@@ -28,7 +28,11 @@ export const ContractRenewalManagement: React.FC = () => {
     submitContractReview,
     reviewContractReview,
     currentUser,
+    moduleSettings,
   } = useHrms();
+
+  // H- berapa hari sebelum jatuh tempo karyawan masuk daftar reminder — dulu hardcode 30, sekarang diatur di Pengaturan Karyawan (user, 2026-11-09).
+  const reminderDaysBefore = moduleSettings.employee.contractRenewalReminderDaysBefore ?? 30;
 
   const [activeTab, setActiveTab] = useState<'monitoring' | 'history'>('monitoring');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -42,15 +46,22 @@ export const ContractRenewalManagement: React.FC = () => {
   const [formError, setFormError] = useState<string | null>(null);
   const [showValidationErrors, setShowValidationErrors] = useState(false);
 
-  // PKWT employees
-  const contractEmployees = employees.filter((e) => e.employmentType === 'Kontrak' || e.contractEndDate);
-
   const calculateHMinus = (endDate?: string) => {
     if (!endDate) return null;
     const end = new Date(endDate).getTime();
     const now = Date.now();
     return Math.ceil((end - now) / (1000 * 3600 * 24));
   };
+
+  // Hanya karyawan yang masuk jendela reminder (H- sesuai Pengaturan
+  // Karyawan, termasuk yang sudah lewat jatuh tempo) — bukan semua
+  // karyawan PKWT tanpa memandang tanggal (user, 2026-11-09: "notif atau
+  // daftar ditabel yang muncul sesuai dengan pengaturan tersebut").
+  const contractEmployees = employees.filter((e) => {
+    if (e.employmentType !== 'Kontrak' && !e.contractEndDate) return false;
+    const diffDays = calculateHMinus(e.contractEndDate);
+    return diffDays !== null && diffDays <= reminderDaysBefore;
+  });
 
   const handleOpenReview = (empId: string) => {
     setSelectedEmpId(empId);
@@ -110,7 +121,7 @@ export const ContractRenewalManagement: React.FC = () => {
             </h1>
           </div>
           <p className="text-xs text-slate-500 mt-1">
-            Monitoring masa berakhir kontrak PKWT H-30, alur persetujuan perpanjangan, alih status tetap, atau terminasi
+            Monitoring masa berakhir kontrak PKWT H-{reminderDaysBefore}, alur persetujuan perpanjangan, alih status tetap, atau terminasi
           </p>
         </div>
 
@@ -147,7 +158,7 @@ export const ContractRenewalManagement: React.FC = () => {
           }`}
         >
           <Clock className="w-4 h-4" />
-          <span>Monitoring Kontrak Jatuh Tempo (H-30)</span>
+          <span>Monitoring Kontrak Jatuh Tempo (H-{reminderDaysBefore})</span>
           <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded-full text-[10px]">
             {contractEmployees.length} Karyawan
           </span>
@@ -181,7 +192,7 @@ export const ContractRenewalManagement: React.FC = () => {
           <div className="divide-y divide-slate-200">
             {contractEmployees.map((emp) => {
               const diffDays = calculateHMinus(emp.contractEndDate || '2026-11-30');
-              const isUrgent = diffDays !== null && diffDays <= 30 && diffDays >= 0;
+              const isUrgent = diffDays !== null && diffDays <= reminderDaysBefore && diffDays >= 0;
               const isExpired = diffDays !== null && diffDays < 0;
 
               return (

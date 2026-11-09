@@ -331,6 +331,8 @@ export const EmployeeManagement: React.FC = () => {
   const [settNikPrefix, setSettNikPrefix] = useState(moduleSettings.employee.nikPrefix || 'NTM');
   const [settProbation, setSettProbation] = useState(moduleSettings.employee.probationDurationMonths || 3);
   const [settRetire, setSettRetire] = useState(moduleSettings.employee.defaultRetirementAge || 58);
+  const [settProbationReminderDays, setSettProbationReminderDays] = useState(moduleSettings.employee.probationReminderDaysBefore ?? 14);
+  const [settContractReminderDays, setSettContractReminderDays] = useState(moduleSettings.employee.contractRenewalReminderDaysBefore ?? 30);
 
   // Form Validation State
   const [formError, setFormError] = useState<string | null>(null);
@@ -429,7 +431,7 @@ export const EmployeeManagement: React.FC = () => {
       detailsGrid: [
         { label: 'Nomor Induk Karyawan (NIK)', value: emp.nik },
         { label: 'Jabatan / Posisi Kerja', value: emp.position },
-        { label: 'Divisi / Departemen', value: emp.department },
+        { label: 'Divisi / Departemen/Unit', value: emp.department },
         { label: 'Grade Golongan', value: emp.grade || 'M1' },
         { label: 'Status Hubungan Kerja', value: emp.employmentType },
         { label: 'Tanggal Mulai Bertugas', value: emp.joinDate },
@@ -834,7 +836,7 @@ export const EmployeeManagement: React.FC = () => {
       return;
     }
     if (!newDept.trim()) {
-      setFormError('Departemen / Divisi wajib diisi!');
+      setFormError('Departemen/Unit / Divisi wajib diisi!');
       setShowValidationErrors(true);
       setDossierFormTab('kepegawaian');
       return;
@@ -990,6 +992,8 @@ export const EmployeeManagement: React.FC = () => {
       nikPrefix: settNikPrefix,
       probationDurationMonths: Number(settProbation),
       defaultRetirementAge: Number(settRetire),
+      probationReminderDaysBefore: Number(settProbationReminderDays),
+      contractRenewalReminderDaysBefore: Number(settContractReminderDays),
     });
     setFeedbackMessage({
       type: 'success',
@@ -1086,7 +1090,7 @@ export const EmployeeManagement: React.FC = () => {
           }`}
         >
           <Award className="w-3.5 h-3.5" />
-          <span>Evaluasi Probation (H-14)</span>
+          <span>Evaluasi Probation (H-{moduleSettings.employee.probationReminderDaysBefore ?? 14})</span>
         </button>
 
         <button
@@ -1098,7 +1102,7 @@ export const EmployeeManagement: React.FC = () => {
           }`}
         >
           <FileClock className="w-3.5 h-3.5" />
-          <span>Kontrak PKWT (H-30)</span>
+          <span>Kontrak PKWT (H-{moduleSettings.employee.contractRenewalReminderDaysBefore ?? 30})</span>
         </button>
 
         <button
@@ -1184,7 +1188,7 @@ export const EmployeeManagement: React.FC = () => {
                   onChange={(e) => setFilterDept(e.target.value)}
                   className="w-full text-xs border border-slate-300 rounded-lg py-2 px-3 bg-white font-medium text-slate-700 outline-none focus:border-indigo-500 cursor-pointer shadow-2xs"
                 >
-                  <option value="all">Semua Departemen</option>
+                  <option value="all">Semua Departemen/Unit</option>
                   {departments.map((d) => (
                     <option key={d} value={d}>
                       {d}
@@ -1354,7 +1358,7 @@ export const EmployeeManagement: React.FC = () => {
                   <tr>
                     <th className="py-2.5 px-3 font-semibold">Foto & Nama Karyawan</th>
                     <th className="py-2.5 px-3 font-semibold">Status & No. Kontrak</th>
-                    <th className="py-2.5 px-3 font-semibold">Departemen & Jabatan</th>
+                    <th className="py-2.5 px-3 font-semibold">Departemen/Unit & Jabatan</th>
                     <th className="py-2.5 px-3 font-semibold hidden xl:table-cell">Kependudukan (KTP/KK)</th>
                     <th className="py-2.5 px-3 font-semibold text-center hidden 2xl:table-cell">PTKP (TER 2024)</th>
                     <th className="py-2.5 px-3 font-semibold text-right hidden lg:table-cell">Gaji Pokok</th>
@@ -1536,6 +1540,42 @@ export const EmployeeManagement: React.FC = () => {
                     className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono"
                   />
                   <span className="text-[10px] text-slate-400 mt-0.5 block">Tahun usia untuk otomatisasi notifikasi purnabakti</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 pt-3 border-t border-slate-200">
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">
+                    Notifikasi Jatuh Tempo Probation
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <span className="text-slate-400 font-mono">H-</span>
+                    <input
+                      type="number"
+                      min={1}
+                      value={settProbationReminderDays}
+                      onChange={(e) => setSettProbationReminderDays(Number(e.target.value))}
+                      className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono"
+                    />
+                  </div>
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">Karyawan muncul di daftar reminder probation sejak H- ini</span>
+                </div>
+
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">
+                    Notifikasi Jatuh Tempo PKWT
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <span className="text-slate-400 font-mono">H-</span>
+                    <input
+                      type="number"
+                      min={1}
+                      value={settContractReminderDays}
+                      onChange={(e) => setSettContractReminderDays(Number(e.target.value))}
+                      className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono"
+                    />
+                  </div>
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">Karyawan muncul di daftar reminder PKWT sejak H- ini</span>
                 </div>
               </div>
 
@@ -2168,7 +2208,7 @@ export const EmployeeManagement: React.FC = () => {
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                         <div>
-                          <label className="font-medium text-slate-700 block mb-1">Divisi / Departemen *</label>
+                          <label className="font-medium text-slate-700 block mb-1">Divisi / Departemen/Unit *</label>
                           <input
                             type="text"
                             required
@@ -3717,7 +3757,7 @@ export const EmployeeManagement: React.FC = () => {
                         <strong className="text-slate-900 text-xs">{selectedEmployee.position}</strong>
                       </div>
                       <div>
-                        <span className="text-slate-500 block text-[11px]">Divisi / Departemen</span>
+                        <span className="text-slate-500 block text-[11px]">Divisi / Departemen/Unit</span>
                         <strong className="text-slate-800 text-xs">{selectedEmployee.department}</strong>
                       </div>
                       <div>

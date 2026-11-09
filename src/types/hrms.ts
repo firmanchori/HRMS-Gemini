@@ -1414,6 +1414,10 @@ export interface ModuleSettingsConfig {
     defaultRetirementAge: number;
     mandatoryDocs: string[];
     flexibleNik?: FlexibleNikSettings;
+    // H- notifikasi (user, 2026-11-09) — berapa hari sebelum jatuh tempo
+    // probation/PKWT karyawan mulai muncul di daftar reminder.
+    probationReminderDaysBefore?: number;
+    contractRenewalReminderDaysBefore?: number;
   };
   attendance: {
     lateGracePeriodMins: number;
