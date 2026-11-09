@@ -4,12 +4,15 @@ import bcrypt from "bcryptjs";
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "../db/client.ts";
 import { users, passwordResetTokens, emailChangeRequests } from "../db/schema.ts";
-import { issueSession, clearSession, readSession } from "../middleware/auth.ts";
+import QRCode from "qrcode";
+import { issueSession, clearSession, readSession, issueMfaTicket, readMfaTicket, clearMfaTicket, requireAnySession } from "../middleware/auth.ts";
 import { generateToken, hashToken } from "../lib/token.ts";
 import { sendPasswordResetEmail, sendEmailChangeConfirmation } from "../lib/email.ts";
 import { validateBody } from "../lib/validate.ts";
 import { authLimiter } from "../lib/rateLimit.ts";
 import { logAudit } from "../lib/audit.ts";
+import { encryptSecret, decryptSecret } from "../lib/crypto.ts";
+import { generateTotpSecret, totpOtpauthUrl, verifyTotpCode, generateBackupCodes, hashBackupCode, consumeBackupCode } from "../lib/totp.ts";
 
 export const authRouter = Router();
 
@@ -77,9 +80,133 @@ authRouter.post("/login", authLimiter, validateBody(loginSchema), async (req, re
     return res.status(403).json({ error: statusMessages[req.tenant.status] ?? "Akun perusahaan Anda tidak aktif." });
   }
 
+  // A correct password isn't the whole login when MFA is enabled — issue
+  // only a short-lived pending ticket, never the real session cookie, so a
+  // stolen/guessed password alone still can't reach anything. The actual
+  // session is only minted by /mfa/verify-login once the TOTP/backup code
+  // also checks out.
+  if (user.totpEnabled) {
+    await logLoginAttempt({ tenantId, actorUserId: user.id, email, outcome: "success", reason: "password_ok_awaiting_mfa", ip });
+    issueMfaTicket(res, { userId: user.id, role: user.role, tenantId: user.tenantId });
+    return res.json({ mfaRequired: true });
+  }
+
   await logLoginAttempt({ tenantId, actorUserId: user.id, email, outcome: "success", ip });
   issueSession(res, { userId: user.id, role: user.role, tenantId: user.tenantId });
   res.json({ id: user.id, name: user.name, email: user.email, role: user.role });
+});
+
+const mfaVerifyLoginSchema = z.object({
+  code: z.string().trim().min(6).max(12),
+});
+
+/** Second step of login when the account has MFA enabled — consumes the pending ticket from /login and, on a correct TOTP or backup code, issues the real session. */
+authRouter.post("/mfa/verify-login", authLimiter, validateBody(mfaVerifyLoginSchema), async (req, res) => {
+  const { code } = req.body;
+  const ticket = readMfaTicket(req);
+  if (!ticket) return res.status(401).json({ error: "Sesi verifikasi kedaluwarsa, silakan login ulang" });
+
+  const [user] = await db.select().from(users).where(eq(users.id, ticket.userId)).limit(1);
+  if (!user || !user.totpEnabled || !user.totpSecretEncrypted) {
+    clearMfaTicket(res);
+    return res.status(401).json({ error: "Sesi verifikasi tidak valid, silakan login ulang" });
+  }
+
+  const ip = req.ip ?? "unknown";
+  const secret = decryptSecret(user.totpSecretEncrypted);
+  let valid = verifyTotpCode(secret, code);
+
+  if (!valid && user.totpBackupCodesHash?.length) {
+    const remaining = consumeBackupCode(user.totpBackupCodesHash, code);
+    if (remaining) {
+      valid = true;
+      await db.update(users).set({ totpBackupCodesHash: remaining }).where(eq(users.id, user.id));
+    }
+  }
+
+  if (!valid) {
+    await logLoginAttempt({ tenantId: user.tenantId, actorUserId: user.id, email: user.email, outcome: "failure", reason: "invalid_mfa_code", ip });
+    return res.status(401).json({ error: "Kode verifikasi salah" });
+  }
+
+  clearMfaTicket(res);
+  issueSession(res, { userId: user.id, role: user.role, tenantId: user.tenantId });
+  res.json({ id: user.id, name: user.name, email: user.email, role: user.role });
+});
+
+/** Current MFA status for the logged-in account — drives the UI's "aktif/tidak aktif" state, replacing the hardcoded claim that used to sit in Header.tsx. */
+authRouter.get("/mfa/status", requireAnySession, async (req, res) => {
+  const [user] = await db.select().from(users).where(eq(users.id, req.session!.userId)).limit(1);
+  if (!user) return res.status(401).json({ error: "Belum login" });
+  res.json({ enabled: user.totpEnabled });
+});
+
+/**
+ * Starts (or restarts) enrollment: generates a fresh secret, stores it
+ * encrypted right away, but leaves totpEnabled false — a half-finished
+ * enrollment (user never scans the QR, or scans it wrong) must never lock
+ * anyone out, and never silently turns MFA on either. /mfa/confirm is the
+ * only route that flips totpEnabled to true.
+ */
+authRouter.post("/mfa/setup", requireAnySession, async (req, res) => {
+  const [user] = await db.select().from(users).where(eq(users.id, req.session!.userId)).limit(1);
+  if (!user) return res.status(401).json({ error: "Belum login" });
+  if (user.totpEnabled) return res.status(400).json({ error: "MFA sudah aktif untuk akun ini. Matikan dulu sebelum mengatur ulang." });
+
+  const secret = generateTotpSecret();
+  await db.update(users).set({ totpSecretEncrypted: encryptSecret(secret) }).where(eq(users.id, user.id));
+
+  const otpauthUrl = totpOtpauthUrl(secret, user.email, "NusaHR");
+  const qrCodeDataUrl = await QRCode.toDataURL(otpauthUrl);
+  res.json({ secret, otpauthUrl, qrCodeDataUrl });
+});
+
+const mfaConfirmSchema = z.object({
+  code: z.string().trim().min(6).max(12),
+});
+
+/** Completes enrollment: the code must actually match the secret /mfa/setup just stored, proving the user really scanned/entered it, before MFA is turned on. Returns the one-time backup codes — only their hashes are ever stored. */
+authRouter.post("/mfa/confirm", requireAnySession, validateBody(mfaConfirmSchema), async (req, res) => {
+  const { code } = req.body;
+  const [user] = await db.select().from(users).where(eq(users.id, req.session!.userId)).limit(1);
+  if (!user) return res.status(401).json({ error: "Belum login" });
+  if (user.totpEnabled) return res.status(400).json({ error: "MFA sudah aktif untuk akun ini." });
+  if (!user.totpSecretEncrypted) return res.status(400).json({ error: "Belum ada proses pengaturan MFA yang berjalan. Mulai dari /mfa/setup." });
+
+  const secret = decryptSecret(user.totpSecretEncrypted);
+  if (!verifyTotpCode(secret, code)) {
+    return res.status(400).json({ error: "Kode verifikasi salah" });
+  }
+
+  const backupCodes = generateBackupCodes();
+  await db
+    .update(users)
+    .set({ totpEnabled: true, totpBackupCodesHash: backupCodes.map(hashBackupCode) })
+    .where(eq(users.id, user.id));
+  await logAudit({ actorUserId: user.id, tenantId: user.tenantId, action: "auth.mfa_enabled", details: {} });
+
+  res.json({ ok: true, backupCodes });
+});
+
+const mfaDisableSchema = z.object({
+  password: z.string().min(1).max(200),
+});
+
+/** Turning MFA off requires the current password again — otherwise a hijacked already-open session (e.g. an unattended unlocked laptop) could silently downgrade the account's own protection. */
+authRouter.post("/mfa/disable", requireAnySession, validateBody(mfaDisableSchema), async (req, res) => {
+  const { password } = req.body;
+  const [user] = await db.select().from(users).where(eq(users.id, req.session!.userId)).limit(1);
+  if (!user || !user.passwordHash || !(await bcrypt.compare(password, user.passwordHash))) {
+    return res.status(401).json({ error: "Password salah" });
+  }
+
+  await db
+    .update(users)
+    .set({ totpEnabled: false, totpSecretEncrypted: null, totpBackupCodesHash: null })
+    .where(eq(users.id, user.id));
+  await logAudit({ actorUserId: user.id, tenantId: user.tenantId, action: "auth.mfa_disabled", details: {} });
+
+  res.json({ ok: true });
 });
 
 // The one password every account seeded by this repo's dev tooling uses

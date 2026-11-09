@@ -42,6 +42,55 @@ export function clearSession(res: Response) {
   res.clearCookie(COOKIE_NAME);
 }
 
+const MFA_TICKET_COOKIE = "nusahr_mfa_ticket";
+
+interface MfaTicketPayload {
+  userId: string;
+  role: "app_owner" | "tenant_admin";
+  tenantId: string | null;
+  purpose: "mfa_pending";
+}
+
+/**
+ * A second-factor-pending ticket, issued instead of a real session once the
+ * password has checked out but the account still needs its TOTP code. Kept
+ * short-lived and in its own cookie so a correct password alone never grants
+ * a usable session — /mfa/verify-login is the only route that can turn this
+ * into a real session cookie.
+ */
+export function issueMfaTicket(res: Response, payload: Omit<MfaTicketPayload, "purpose">) {
+  const token = jwt.sign({ ...payload, purpose: "mfa_pending" }, secret(), { expiresIn: "5m" });
+  res.cookie(MFA_TICKET_COOKIE, token, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    maxAge: 5 * 60 * 1000,
+  });
+}
+
+export function readMfaTicket(req: Request): MfaTicketPayload | null {
+  const token = req.cookies?.[MFA_TICKET_COOKIE];
+  if (!token) return null;
+  try {
+    const payload = jwt.verify(token, secret()) as MfaTicketPayload;
+    return payload.purpose === "mfa_pending" ? payload : null;
+  } catch {
+    return null;
+  }
+}
+
+export function clearMfaTicket(res: Response) {
+  res.clearCookie(MFA_TICKET_COOKIE);
+}
+
+/** Any logged-in account, App Owner or tenant admin — for self-service actions like managing one's own MFA that don't need the tenant/App-Owner boundary checks. */
+export function requireAnySession(req: Request, res: Response, next: NextFunction) {
+  const session = readSession(req);
+  if (!session) return res.status(401).json({ error: "Harus login" });
+  req.session = session;
+  next();
+}
+
 export function readSession(req: Request): SessionPayload | null {
   const token = req.cookies?.[COOKIE_NAME];
   if (!token) return null;

@@ -231,6 +231,19 @@ export const users = pgTable("users", {
   name: text("name").notNull(),
   email: text("email").notNull(),
   passwordHash: text("password_hash"),
+  // TOTP 2FA (RFC 6238) — opt-in, added 2026-11-09 after a security review
+  // found the app's UI claiming "2FA aktif" when no such mechanism existed
+  // anywhere. totpSecretEncrypted holds an AES-256-GCM-encrypted base32
+  // secret (never plaintext at rest — see server/lib/crypto.ts), set as
+  // soon as enrollment starts but totpEnabled stays false until the user
+  // confirms a real code, so a half-finished enrollment never locks anyone
+  // out. totpBackupCodesHash stores only SHA-256 hashes of one-time
+  // recovery codes (same non-reversible pattern as password reset tokens)
+  // — the plaintext codes are shown to the user exactly once at
+  // confirmation time and never stored.
+  totpSecretEncrypted: text("totp_secret_encrypted"),
+  totpEnabled: boolean("totp_enabled").notNull().default(false),
+  totpBackupCodesHash: jsonb("totp_backup_codes_hash").$type<string[]>(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 

@@ -267,6 +267,13 @@
       "when": 1794152800000,
       "tag": "0037_add_tenant_fk_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1794183496364,
+      "tag": "0038_magenta_galactus",
+      "breakpoints": true
     }
   ]
 }

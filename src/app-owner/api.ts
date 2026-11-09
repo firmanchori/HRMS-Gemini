@@ -293,9 +293,13 @@ export interface DashboardSummary {
   estimatedMonthlyRevenueIdr: number;
 }
 
+export type LoginResult = Me | { mfaRequired: true };
+
 export const api = {
   login: (email: string, password: string) =>
-    request<Me>("/api/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
+    request<LoginResult>("/api/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
+  verifyMfaLogin: (code: string) =>
+    request<Me>("/api/auth/mfa/verify-login", { method: "POST", body: JSON.stringify({ code }) }),
   logout: () => request<{ ok: true }>("/api/auth/logout", { method: "POST" }),
   forgotPassword: (email: string) =>
     request<{ ok: true }>("/api/auth/forgot-password", { method: "POST", body: JSON.stringify({ email }) }),
@@ -305,6 +309,12 @@ export const api = {
       body: JSON.stringify({ newPassword }),
     }),
   confirmEmail: (token: string) => request<{ ok: true }>(`/api/auth/confirm-email/${token}`, { method: "POST" }),
+  mfaStatus: () => request<{ enabled: boolean }>("/api/auth/mfa/status"),
+  mfaSetup: () => request<{ secret: string; otpauthUrl: string; qrCodeDataUrl: string }>("/api/auth/mfa/setup", { method: "POST" }),
+  mfaConfirm: (code: string) =>
+    request<{ ok: true; backupCodes: string[] }>("/api/auth/mfa/confirm", { method: "POST", body: JSON.stringify({ code }) }),
+  mfaDisable: (password: string) =>
+    request<{ ok: true }>("/api/auth/mfa/disable", { method: "POST", body: JSON.stringify({ password }) }),
 
   getPlans: () => request<Plan[]>("/api/plans"),
   getPublicModules: () => request<{ code: string; name: string; description: string | null }[]>("/api/modules"),

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Lock, Mail, Eye, EyeOff, ShieldCheck, AlertCircle, ArrowRight, FlaskConical } from 'lucide-react';
+import { Lock, Mail, Eye, EyeOff, ShieldCheck, AlertCircle, ArrowRight, FlaskConical, KeyRound } from 'lucide-react';
 import { authApi, AuthApiError, type DevAccount } from '../../shared/authApi';
 
 interface LoginScreenProps {
@@ -13,6 +13,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [devAccounts, setDevAccounts] = useState<DevAccount[]>([]);
+  // Set only after the password step comes back with { mfaRequired: true } — switches the form to the code-entry step instead of finishing login.
+  const [awaitingMfaCode, setAwaitingMfaCode] = useState(false);
+  const [mfaCode, setMfaCode] = useState('');
 
   useEffect(() => {
     // Dev/test convenience only — the backend returns 404 outside development, so this silently does nothing in production.
@@ -35,12 +38,30 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
     setErrorMessage(null);
     setIsLoading(true);
     try {
-      const user = await authApi.login(email, password);
+      const result = await authApi.login(email, password);
+      if ('mfaRequired' in result) {
+        setAwaitingMfaCode(true);
+        return;
+      }
       // The real backend only issues one role for this context (tenant_admin);
       // mapped to the mock RBAC's full-access role until per-employee accounts exist.
-      onLoginSuccess(user, 'super_admin');
+      onLoginSuccess(result, 'super_admin');
     } catch (err) {
       setErrorMessage(err instanceof AuthApiError ? err.message : 'Gagal masuk, coba lagi.');
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function handleVerifyMfa(e: React.FormEvent) {
+    e.preventDefault();
+    setErrorMessage(null);
+    setIsLoading(true);
+    try {
+      const user = await authApi.verifyMfaLogin(mfaCode);
+      onLoginSuccess(user, 'super_admin');
+    } catch (err) {
+      setErrorMessage(err instanceof AuthApiError ? err.message : 'Gagal memverifikasi kode.');
     } finally {
       setIsLoading(false);
     }
@@ -81,6 +102,58 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
             </div>
           )}
 
+          {awaitingMfaCode ? (
+            <form onSubmit={handleVerifyMfa} className="space-y-3.5">
+              <p className="text-xs text-slate-600 leading-snug">
+                Masukkan kode 6 digit dari aplikasi autentikator Anda, atau salah satu kode cadangan Anda.
+              </p>
+              <div className="space-y-1">
+                <label className="block text-xs font-semibold text-slate-700">
+                  Kode Verifikasi <span className="text-rose-500">*</span>
+                </label>
+                <div className="relative rounded-md shadow-2xs">
+                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
+                    <KeyRound className="w-4 h-4" />
+                  </div>
+                  <input
+                    type="text"
+                    required
+                    autoFocus
+                    value={mfaCode}
+                    onChange={(e) => setMfaCode(e.target.value)}
+                    className="w-full rounded-md border border-slate-300 py-2 pl-9 pr-3 text-xs font-medium text-slate-900 placeholder:text-slate-400 focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600 focus:outline-none transition-colors font-mono tracking-widest"
+                    placeholder="123456"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md text-xs font-bold shadow-xs hover:shadow transition-all flex items-center justify-center gap-2 disabled:opacity-70 mt-2"
+              >
+                {isLoading ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Memverifikasi...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Verifikasi</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => { setAwaitingMfaCode(false); setMfaCode(''); setErrorMessage(null); }}
+                className="w-full text-center text-[11px] text-slate-500 hover:text-slate-700"
+              >
+                Kembali ke login
+              </button>
+            </form>
+          ) : (
           <form onSubmit={handleSubmit} className="space-y-3.5">
             <div className="space-y-1">
               <label className="block text-xs font-semibold text-slate-700">
@@ -144,8 +217,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
               )}
             </button>
           </form>
+          )}
 
-          {devAccounts.length > 0 && (
+          {!awaitingMfaCode && devAccounts.length > 0 && (
             <div className="pt-3 border-t border-slate-200">
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5 mb-2">
                 <FlaskConical className="w-3 h-3" /> Akun Uji Coba (klik untuk isi otomatis)

@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useHrms } from '../../context/HrmsContext';
+import { authApi, AuthApiError } from '../../shared/authApi';
 import {
   Building2,
   ShieldCheck,
@@ -197,6 +198,68 @@ export const Header: React.FC<HeaderProps> = ({
   const [notifyWhatsapp, setNotifyWhatsapp] = useState(true);
   const [notifyBrowser, setNotifyBrowser] = useState(false);
   const [profileSavedToast, setProfileSavedToast] = useState(false);
+
+  // Real MFA state — backed by server/routes/auth.ts's /mfa/* routes, not a
+  // mock. null = not loaded yet, so the UI doesn't briefly claim "off"
+  // before the status request returns.
+  const [mfaEnabled, setMfaEnabled] = useState<boolean | null>(null);
+  const [mfaLoading, setMfaLoading] = useState(false);
+  const [mfaError, setMfaError] = useState<string | null>(null);
+  const [mfaSetupData, setMfaSetupData] = useState<{ secret: string; otpauthUrl: string; qrCodeDataUrl: string } | null>(null);
+  const [mfaConfirmCode, setMfaConfirmCode] = useState('');
+  const [mfaBackupCodes, setMfaBackupCodes] = useState<string[] | null>(null);
+  const [mfaDisablePassword, setMfaDisablePassword] = useState('');
+  const [showMfaDisableForm, setShowMfaDisableForm] = useState(false);
+
+  useEffect(() => {
+    if (!isProfileModalOpen) return;
+    authApi.mfaStatus().then((s) => setMfaEnabled(s.enabled)).catch(() => setMfaEnabled(null));
+  }, [isProfileModalOpen]);
+
+  const handleStartMfaSetup = async () => {
+    setMfaError(null);
+    setMfaLoading(true);
+    try {
+      const data = await authApi.mfaSetup();
+      setMfaSetupData(data);
+    } catch (err) {
+      setMfaError(err instanceof AuthApiError ? err.message : 'Gagal memulai pengaturan MFA.');
+    } finally {
+      setMfaLoading(false);
+    }
+  };
+
+  const handleConfirmMfaSetup = async () => {
+    setMfaError(null);
+    setMfaLoading(true);
+    try {
+      const result = await authApi.mfaConfirm(mfaConfirmCode);
+      setMfaBackupCodes(result.backupCodes);
+      setMfaEnabled(true);
+      setMfaSetupData(null);
+      setMfaConfirmCode('');
+    } catch (err) {
+      setMfaError(err instanceof AuthApiError ? err.message : 'Kode verifikasi salah.');
+    } finally {
+      setMfaLoading(false);
+    }
+  };
+
+  const handleDisableMfa = async () => {
+    setMfaError(null);
+    setMfaLoading(true);
+    try {
+      await authApi.mfaDisable(mfaDisablePassword);
+      setMfaEnabled(false);
+      setShowMfaDisableForm(false);
+      setMfaDisablePassword('');
+      setMfaBackupCodes(null);
+    } catch (err) {
+      setMfaError(err instanceof AuthApiError ? err.message : 'Password salah.');
+    } finally {
+      setMfaLoading(false);
+    }
+  };
 
   const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
@@ -814,9 +877,103 @@ export const Header: React.FC<HeaderProps> = ({
               {/* TAB 2: KEAMANAN & SANDI */}
               {profileTab === 'security' && (
                 <div className="space-y-3.5">
-                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-xs flex items-center gap-2">
-                    <ShieldCheck className="w-4 h-4 text-amber-600 shrink-0" />
-                    <span>Autentikasi Dua Faktor (2FA) dan Audit Keamanan Enterprise aktif untuk akun ini.</span>
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+                    <div className="flex items-start gap-2">
+                      <ShieldCheck className={`w-4 h-4 shrink-0 mt-0.5 ${mfaEnabled ? 'text-emerald-600' : 'text-slate-400'}`} />
+                      <div className="text-xs">
+                        <div className="font-semibold text-slate-800">
+                          Autentikasi Dua Faktor (2FA):{' '}
+                          {mfaEnabled === null ? 'Memeriksa...' : mfaEnabled ? (
+                            <span className="text-emerald-700">Aktif</span>
+                          ) : (
+                            <span className="text-slate-500">Tidak Aktif</span>
+                          )}
+                        </div>
+                        <div className="text-[11px] text-slate-500 mt-0.5">
+                          Gunakan aplikasi autentikator (Google Authenticator, Authy, dll) untuk lapisan keamanan tambahan saat login.
+                        </div>
+                      </div>
+                    </div>
+
+                    {mfaError && (
+                      <div className="text-[11px] text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-2 py-1.5">{mfaError}</div>
+                    )}
+
+                    {mfaBackupCodes && (
+                      <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-[11px] text-amber-900 space-y-1.5">
+                        <div className="font-semibold">Simpan kode cadangan ini — hanya ditampilkan sekali:</div>
+                        <div className="grid grid-cols-2 gap-1 font-mono">
+                          {mfaBackupCodes.map((c) => <span key={c}>{c}</span>)}
+                        </div>
+                      </div>
+                    )}
+
+                    {mfaEnabled === false && !mfaSetupData && (
+                      <button
+                        type="button"
+                        onClick={handleStartMfaSetup}
+                        disabled={mfaLoading}
+                        className="text-xs font-semibold text-indigo-600 hover:underline disabled:opacity-50"
+                      >
+                        Aktifkan 2FA
+                      </button>
+                    )}
+
+                    {mfaSetupData && (
+                      <div className="space-y-2 border-t border-slate-200 pt-2.5">
+                        <img src={mfaSetupData.qrCodeDataUrl} alt="QR kode 2FA" className="w-32 h-32 border border-slate-200 rounded-lg" />
+                        <div className="text-[11px] text-slate-500">
+                          Pindai dengan aplikasi autentikator, atau masukkan manual: <span className="font-mono">{mfaSetupData.secret}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={mfaConfirmCode}
+                            onChange={(e) => setMfaConfirmCode(e.target.value)}
+                            placeholder="Kode 6 digit"
+                            className="flex-1 px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-mono"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleConfirmMfaSetup}
+                            disabled={mfaLoading || mfaConfirmCode.length < 6}
+                            className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-semibold disabled:opacity-50"
+                          >
+                            Konfirmasi
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {mfaEnabled === true && !showMfaDisableForm && (
+                      <button
+                        type="button"
+                        onClick={() => setShowMfaDisableForm(true)}
+                        className="text-xs font-semibold text-rose-600 hover:underline"
+                      >
+                        Matikan 2FA
+                      </button>
+                    )}
+
+                    {showMfaDisableForm && (
+                      <div className="flex items-center gap-2 border-t border-slate-200 pt-2.5">
+                        <input
+                          type="password"
+                          value={mfaDisablePassword}
+                          onChange={(e) => setMfaDisablePassword(e.target.value)}
+                          placeholder="Konfirmasi dengan kata sandi"
+                          className="flex-1 px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleDisableMfa}
+                          disabled={mfaLoading || !mfaDisablePassword}
+                          className="px-3 py-1.5 bg-rose-600 text-white rounded-lg text-xs font-semibold disabled:opacity-50"
+                        >
+                          Matikan
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   <div>
