@@ -1,4 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
+import DOMPurify, { type Config as DOMPurifyConfig } from 'dompurify';
 import { Download, FileText, Printer, CheckCircle2, QrCode, ShieldCheck, Loader2, X } from 'lucide-react';
 import { QRCodeView } from './QRCodeView';
 import { WhatsAppIcon } from './WhatsAppIcon';
@@ -155,6 +156,29 @@ interface OfficialMultiPageDocumentSheetProps {
   editorRef?: React.RefObject<HTMLDivElement | null>;
 }
 
+/**
+ * Allowlist matches what this function's own markdown-ish conversion
+ * produces (b/i/mark/div/br/table...), plus the tags mammoth.js's DOCX
+ * conversion commonly emits (p/strong/em/ul/ol/li/h1-h6/span/img) — never
+ * script/iframe/object/svg/form or any event-handler attribute. Found
+ * missing during a security review (user, 2026-11-09): this content comes
+ * from a tenant_admin-editable template body AND from parsed DOCX
+ * uploads, and was being written via dangerouslySetInnerHTML/innerHTML
+ * with zero sanitization — a stored-XSS path reachable by anyone who can
+ * edit a document template, executing for every other user in that
+ * tenant who later opens the generated document.
+ */
+const SANITIZE_CONFIG: DOMPurifyConfig = {
+  ALLOWED_TAGS: [
+    'b', 'i', 'strong', 'em', 'u', 'mark', 'span', 'div', 'br', 'hr', 'p',
+    'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li',
+    'table', 'thead', 'tbody', 'tfoot', 'tr', 'th', 'td', 'img', 'a',
+  ],
+  ALLOWED_ATTR: ['class', 'style', 'colspan', 'rowspan', 'src', 'alt', 'href', 'title'],
+  ALLOWED_URI_REGEXP: /^(?:(?:https?|data):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
+  RETURN_TRUSTED_TYPE: false,
+};
+
 const parseDocumentContentToHtml = (content: string, highlightTags: boolean = false): string => {
   if (!content) return '';
 
@@ -186,7 +210,11 @@ const parseDocumentContentToHtml = (content: string, highlightTags: boolean = fa
   html = html.replace(/<br\s*\/?>\s*(<\/?(table|thead|tbody|tr|th|td))/gi, '$1');
   html = html.replace(/(<\/?(table|thead|tbody|tr|th|td)[^>]*>)\s*<br\s*\/?>/gi, '$1');
 
-  return html;
+  // Sanitize last, after the markdown-ish conversion above has produced its
+  // own (trusted) tags — strips anything else the source content itself
+  // contained (script/iframe/event handlers/javascript: URLs/etc), from
+  // either a hand-typed template body or a parsed DOCX upload.
+  return DOMPurify.sanitize(html, SANITIZE_CONFIG);
 };
 
 export const OfficialMultiPageDocumentSheet: React.FC<OfficialMultiPageDocumentSheetProps> = ({
