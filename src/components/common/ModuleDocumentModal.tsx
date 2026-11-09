@@ -426,7 +426,7 @@ const ModuleDocumentModalContent: React.FC<ModuleDocumentModalProps> = ({
                 <div className="text-[10px] text-slate-500 grid grid-cols-2 gap-1 pt-1 border-t border-slate-200/60 mt-1">
                   <span>NIK: <strong className="text-slate-700">{targetEmployee.nik}</strong></span>
                   <span>Jabatan: <strong className="text-slate-700">{targetEmployee.position}</strong></span>
-                  <span>Departemen: <strong className="text-slate-700">{targetEmployee.department}</strong></span>
+                  <span>Departemen/Unit: <strong className="text-slate-700">{targetEmployee.department}</strong></span>
                   <span>Status: <strong className="text-slate-700">{targetEmployee.employmentType}</strong></span>
                 </div>
               )}

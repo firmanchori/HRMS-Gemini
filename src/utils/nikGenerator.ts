@@ -65,7 +65,7 @@ export const NIK_TOKEN_CATALOG: NikTokenDefinition[] = [
   },
   {
     token: '{DEPT}',
-    label: 'Kode Departemen',
+    label: 'Kode Departemen/Unit',
     example: 'ENG',
     description: 'Singkatan departemen karyawan jika diisi (contoh: HC, ENG, FIN)',
   },

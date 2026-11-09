@@ -33,7 +33,7 @@ export const KNOWN_VARIABLE_DESCRIPTIONS: Record<string, KnownVariableMeta> = {
 
   // 2. Kepegawaian & Penempatan
   jabatan: { label: 'Jabatan / Posisi Kerja', example: 'Lead Cloud Architect', category: 'Kepegawaian & Kontrak' },
-  departemen: { label: 'Departemen / Divisi', example: 'Engineering & Technology', category: 'Kepegawaian & Kontrak' },
+  departemen: { label: 'Departemen/Unit / Divisi', example: 'Engineering & Technology', category: 'Kepegawaian & Kontrak' },
   grade: { label: 'Grade Golongan', example: 'L3', category: 'Kepegawaian & Kontrak' },
   status_kerja: { label: 'Status Hubungan Kerja', example: 'Karyawan Tetap (PKWTT)', category: 'Kepegawaian & Kontrak' },
   tanggal_mulai: { label: 'Tanggal Mulai Bertugas / Kontrak', example: '01 Januari 2026', category: 'Kepegawaian & Kontrak' },
@@ -454,14 +454,14 @@ export const NUMBERING_TOKEN_REGISTRY: NumberingTokenInfo[] = [
   {
     token: '{DEPT_CODE}',
     category: 'Organisasi & Entitas',
-    label: 'Kode Departemen / Divisi',
+    label: 'Kode Departemen/Unit / Divisi',
     description: 'Kode divisi penerbit dokumen (HRD, HC, GA, FIN, LEGAL). Alias: {DEPT}',
     example: 'HRD',
   },
   {
     token: '{DEPT}',
     category: 'Organisasi & Entitas',
-    label: 'Kode Departemen – Alias',
+    label: 'Kode Departemen/Unit – Alias',
     description: 'Singkatan dari {DEPT_CODE}. Menampilkan kode departemen penerbit',
     example: 'HRD',
     isAlias: true,

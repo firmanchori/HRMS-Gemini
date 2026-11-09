@@ -127,8 +127,8 @@ export const GRADE_SALARY_SCALES: Record<string, GradeSalaryScale> = {
     defaultPositionAllowance: 6000000,
     recommendedRole: 'Department Head',
     defaultApprovalAuthorities: [
-      'Approval Cuti & Izin Seluruh Departemen',
-      'Approval Lembur Seluruh Departemen',
+      'Approval Cuti & Izin Seluruh Departemen/Unit',
+      'Approval Lembur Seluruh Departemen/Unit',
       'Approval Reimbursement & Klaim Finansial (s/d Rp 50 Juta)',
       'Approval Pengajuan Lembur & SPPD Dinas',
       'Akses Penuh Analytics & Anggaran Divisi',
@@ -759,7 +759,7 @@ export const PersonaliaManagement: React.FC = () => {
     }
 
     if (actionType === 'Mutasi' && !newDepartment.trim()) {
-      setFormError('Departemen tujuan mutasi wajib ditentukan.');
+      setFormError('Departemen/Unit tujuan mutasi wajib ditentukan.');
       return;
     }
 
@@ -1402,7 +1402,7 @@ export const PersonaliaManagement: React.FC = () => {
                   <option value="all">Semua Jenis Tindakan Personalia (8 Jenis)</option>
                   <option value="Promosi">Promosi Jabatan / Grade</option>
                   <option value="Demosi">Demosi Jabatan</option>
-                  <option value="Mutasi">Mutasi Antar Departemen</option>
+                  <option value="Mutasi">Mutasi Antar Departemen/Unit</option>
                   <option value="Rotasi Cabang">Rotasi Cabang / Site</option>
                   <option value="Penyesuaian Gaji">Penyesuaian Gaji Pokok</option>
                   <option value="Pengangkatan Tetap">Pengangkatan Karyawan Tetap (PKWTT)</option>
@@ -2041,7 +2041,7 @@ export const PersonaliaManagement: React.FC = () => {
                           <option value="Regular Employee">Regular Employee (Self-Service ESS)</option>
                           <option value="Supervisor">Supervisor (Approver Tim Level 1)</option>
                           <option value="Unit Manager">Unit Manager (Approver Operasional)</option>
-                          <option value="Department Head">Department Head (Kepala Departemen)</option>
+                          <option value="Department Head">Department Head (Kepala Departemen/Unit)</option>
                           <option value="Director">Director (Direksi / Pimpinan Tertinggi)</option>
                         </select>
                       </div>
@@ -2506,7 +2506,7 @@ export const PersonaliaManagement: React.FC = () => {
                   className="w-full px-3 py-2 border border-indigo-300 rounded-md bg-white font-semibold text-slate-900 shadow-xs outline-none focus:ring-2 focus:ring-indigo-500"
                 >
                   <option value="Promosi">1. Promosi (Promotion) — Kenaikan Jabatan & Tanggung Jawab (Karier Naik)</option>
-                  <option value="Mutasi">2. Mutasi / Transfer (Lateral Move) — Perpindahan Posisi / Departemen Setara</option>
+                  <option value="Mutasi">2. Mutasi / Transfer (Lateral Move) — Perpindahan Posisi / Departemen/Unit Setara</option>
                   <option value="Demosi">3. Demosi (Demotion) — Penurunan Jabatan / Evaluasi Disipliner</option>
                   <option value="Penetapan Plt">4. Penugasan Sementara (Secondment / Acting Role / Plt)</option>
                   <option value="Pengangkatan Tetap">5. Perubahan Status (Status Change) — PKWT Kontrak ke PKWTT Tetap</option>
@@ -2731,7 +2731,7 @@ export const PersonaliaManagement: React.FC = () => {
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="font-medium text-slate-700 block mb-1">Departemen / Divisi Tujuan *</label>
+                      <label className="font-medium text-slate-700 block mb-1">Departemen/Unit / Divisi Tujuan *</label>
                       <select
                         value={newDepartment}
                         onChange={(e) => setNewDepartment(e.target.value)}

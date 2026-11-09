@@ -401,7 +401,7 @@ export const CandidateOnlineTestPortal: React.FC<CandidateOnlineTestPortalProps>
               </span>
             </div>
             <span className="text-[11px] text-slate-400">
-              Formasi: {vacancy?.title || 'Posisi Formasi'} • Departemen: {vacancy?.department || 'Divisi'}
+              Formasi: {vacancy?.title || 'Posisi Formasi'} • Departemen/Unit: {vacancy?.department || 'Divisi'}
             </span>
           </div>
         </div>

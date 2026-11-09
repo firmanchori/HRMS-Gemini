@@ -222,7 +222,7 @@ export const EnpsManagement: React.FC = () => {
               </div>
 
               <div>
-                <label className="font-semibold text-slate-700 block mb-1">Departemen Responden *</label>
+                <label className="font-semibold text-slate-700 block mb-1">Departemen/Unit Responden *</label>
                 <input
                   list="enps-department-options"
                   value={department}

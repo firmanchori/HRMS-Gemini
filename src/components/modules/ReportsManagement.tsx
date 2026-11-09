@@ -818,7 +818,7 @@ export const ReportsManagement: React.FC = () => {
               <table className="w-full text-left text-xs">
                 <thead className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
                   <tr>
-                    <th className="py-2.5 px-3">Departemen Pemohon</th>
+                    <th className="py-2.5 px-3">Departemen/Unit Pemohon</th>
                     <th className="py-2.5 px-3 text-center">Total Pengajuan</th>
                     <th className="py-2.5 px-3 text-center">Disetujui</th>
                     <th className="py-2.5 px-3 text-center">Menunggu Review</th>
@@ -987,7 +987,7 @@ export const ReportsManagement: React.FC = () => {
                 <thead className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
                   <tr>
                     <th className="py-2.5 px-3">Nama Karyawan</th>
-                    <th className="py-2.5 px-3">Posisi & Departemen</th>
+                    <th className="py-2.5 px-3">Posisi & Departemen/Unit</th>
                     <th className="py-2.5 px-3">Jalur Masuk</th>
                     <th className="py-2.5 px-3">Tanggal Join</th>
                     <th className="py-2.5 px-3">Status Checklist</th>
@@ -1071,7 +1071,7 @@ export const ReportsManagement: React.FC = () => {
                 <span className="text-xs text-blue-600 font-semibold">Master Jabatan</span>
               </div>
               <p className="text-[10px] text-slate-400">
-                {orgData.totalDivisions} Divisi · {orgData.totalDepartments} Departemen
+                {orgData.totalDivisions} Divisi · {orgData.totalDepartments} Departemen/Unit
               </p>
             </div>
 
@@ -1104,7 +1104,7 @@ export const ReportsManagement: React.FC = () => {
               <div>
                 <h3 className="text-sm font-bold text-slate-900 flex items-center gap-1.5">
                   <Building2 className="w-4 h-4 text-emerald-600" />
-                  <span>Sebaran Headcount & Status Karyawan per Departemen</span>
+                  <span>Sebaran Headcount & Status Karyawan per Departemen/Unit</span>
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
                   Komposisi karyawan tetap (PKWTT), kontrak (PKWT), dan magang di masing-masing departemen.
@@ -1116,7 +1116,7 @@ export const ReportsManagement: React.FC = () => {
               <table className="w-full text-left text-xs">
                 <thead className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
                   <tr>
-                    <th className="py-2.5 px-3">Departemen</th>
+                    <th className="py-2.5 px-3">Departemen/Unit</th>
                     <th className="py-2.5 px-3 text-center">Headcount Karyawan</th>
                     <th className="py-2.5 px-3 text-center">Karyawan Tetap</th>
                     <th className="py-2.5 px-3 text-center">Karyawan Kontrak</th>
@@ -1166,7 +1166,7 @@ export const ReportsManagement: React.FC = () => {
                 <thead className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
                   <tr>
                     <th className="py-2.5 px-3">Nama Posisi / Jabatan</th>
-                    <th className="py-2.5 px-3">Departemen & Divisi</th>
+                    <th className="py-2.5 px-3">Departemen/Unit & Divisi</th>
                     <th className="py-2.5 px-3">Grade Level</th>
                     <th className="py-2.5 px-3 text-center">Target Formasi</th>
                     <th className="py-2.5 px-3 text-center">Status Okupansi</th>

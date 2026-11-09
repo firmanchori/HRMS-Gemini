@@ -355,7 +355,7 @@ export const OrgChartManagement: React.FC = () => {
                     <div>
                       <div className="font-semibold text-slate-900 text-sm">{pos.title}</div>
                       <div className="text-xs text-slate-500">
-                        Departemen: {pos.department} • Level: L{pos.level}
+                        Departemen/Unit: {pos.department} • Level: L{pos.level}
                       </div>
                       <div className="text-xs text-slate-400 mt-0.5">
                         Lapor ke: {supervisor ? `${supervisor.title} (${supEmployee?.fullName || 'Belum terisi'})` : 'Puncak'}

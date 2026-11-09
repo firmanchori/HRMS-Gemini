@@ -3703,7 +3703,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       })
       .then((created) => {
         setApiDepartments((prev) => [...prev, created]);
-        logAuditAction('Struktur Departemen', 'TAMBAH_DEPARTEMEN', created.id, `Menambahkan departemen: ${created.name}`);
+        logAuditAction('Struktur Departemen/Unit', 'TAMBAH_DEPARTEMEN', created.id, `Menambahkan departemen: ${created.name}`);
       })
       .catch((err) => console.error('Gagal menambahkan departemen:', err));
   };
@@ -3713,7 +3713,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       .updateDepartment(id, { code: updates.code, name: updates.name, headTitle: updates.headTitle, description: updates.description })
       .then((updated) => {
         setApiDepartments((prev) => prev.map((d) => (d.id === id ? updated : d)));
-        logAuditAction('Struktur Departemen', 'UPDATE_DEPARTEMEN', id, `Memperbarui departemen ${id}`);
+        logAuditAction('Struktur Departemen/Unit', 'UPDATE_DEPARTEMEN', id, `Memperbarui departemen ${id}`);
       })
       .catch((err) => console.error('Gagal memperbarui departemen:', err));
   };
@@ -3723,7 +3723,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       .deleteDepartment(id)
       .then(() => {
         setApiDepartments((prev) => prev.filter((d) => d.id !== id));
-        logAuditAction('Struktur Departemen', 'HAPUS_DEPARTEMEN', id, `Menghapus departemen ${id}`);
+        logAuditAction('Struktur Departemen/Unit', 'HAPUS_DEPARTEMEN', id, `Menghapus departemen ${id}`);
       })
       .catch((err) => console.error('Gagal menghapus departemen:', err));
   };

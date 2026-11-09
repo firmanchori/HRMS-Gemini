@@ -1081,7 +1081,7 @@ export const ProcurementManagement: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Departemen Pemohon</label>
+                  <label className="font-semibold text-slate-700 block mb-1">Departemen/Unit Pemohon</label>
                   <select
                     value={department}
                     onChange={(e) => setDepartment(e.target.value)}

@@ -390,7 +390,7 @@ export const OffboardingManagement: React.FC = () => {
                       <div className="flex items-center justify-between text-[10px] mb-1">
                         <span className="font-bold text-slate-700">{pct}% Selesai</span>
                         <span className="text-slate-400">
-                          {pct === 100 ? 'Siap Ditutup' : '4 Departemen'}
+                          {pct === 100 ? 'Siap Ditutup' : '4 Departemen/Unit'}
                         </span>
                       </div>
                       <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden">

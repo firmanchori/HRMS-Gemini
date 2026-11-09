@@ -2343,7 +2343,7 @@ export const PayrollManagement: React.FC = () => {
                     <span className="text-slate-900">{selectedEmployee.position}</span>
                   </div>
                   <div className="flex">
-                    <span className="w-24 text-slate-500">Departemen:</span>
+                    <span className="w-24 text-slate-500">Departemen/Unit:</span>
                     <span className="text-slate-900">{selectedEmployee.department}</span>
                   </div>
                 </div>

@@ -109,7 +109,7 @@ export const ComplianceManagement: React.FC = () => {
         { label: 'Masa Berlaku S/D', value: rec.validUntil },
         { label: 'Karyawan Terperiksa', value: emp?.fullName || '-' },
         { label: 'NIK Karyawan', value: emp?.nik || '-' },
-        { label: 'Divisi / Departemen', value: emp?.department || '-' },
+        { label: 'Divisi / Departemen/Unit', value: emp?.department || '-' },
         { label: 'Pejabat Penandatangan', value: rec.signedBy },
       ],
       contentParagraphs: [

@@ -546,7 +546,7 @@ export const ShiftRosterManagement: React.FC = () => {
             <select value={deptFilter} onChange={(e) => setDeptFilter(e.target.value)} className="px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white">
               {departments.map((d) => (
                 <option key={d} value={d}>
-                  {d === 'Semua' ? 'Semua Departemen' : d}
+                  {d === 'Semua' ? 'Semua Departemen/Unit' : d}
                 </option>
               ))}
             </select>
@@ -760,7 +760,7 @@ export const ShiftRosterManagement: React.FC = () => {
               <tr className="bg-slate-50 text-slate-600">
                 <th className="px-2 py-2 text-center border-b border-r border-slate-200 w-10">No</th>
                 <th className="sticky left-0 z-10 bg-slate-50 text-left px-3 py-2 min-w-[180px] border-b border-r border-slate-200">Nama</th>
-                <th className="px-2 py-2 text-left border-b border-r border-slate-200 min-w-[110px]">Departemen</th>
+                <th className="px-2 py-2 text-left border-b border-r border-slate-200 min-w-[110px]">Departemen/Unit</th>
                 {days.map((d) => {
                   const weekend = d.getDay() === 0 || d.getDay() === 6;
                   return (

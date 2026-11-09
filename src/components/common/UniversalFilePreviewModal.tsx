@@ -336,7 +336,7 @@ ${currentTenant.name}`;
                     <strong className="text-slate-900">{partyName || '-'}</strong>
                   </div>
                   <div className="flex flex-col sm:flex-row sm:items-baseline">
-                    <span className="text-slate-500 w-44 shrink-0 font-medium">Jabatan / Departemen</span>
+                    <span className="text-slate-500 w-44 shrink-0 font-medium">Jabatan / Departemen/Unit</span>
                     <span className="hidden sm:inline text-slate-400 mr-2 font-mono">:</span>
                     <span className="text-slate-800 font-semibold">{partyRole || '-'}</span>
                   </div>

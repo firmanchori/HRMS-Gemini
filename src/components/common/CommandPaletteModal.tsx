@@ -61,7 +61,7 @@ const ALL_MODULES: ModuleDefinition[] = [
     id: 'organization',
     name: 'Struktur Organisasi',
     group: 'Operasional & Personalia',
-    description: 'Bagan organisasi interaktif, relasi korporasi Holding/Anak/Cucu, pengaturan Divisi & Departemen fleksibel',
+    description: 'Bagan organisasi interaktif, relasi korporasi Holding/Anak/Cucu, pengaturan Divisi & Departemen/Unit fleksibel',
     keywords: ['organisasi', 'struktur', 'tree', 'bagan', 'holding', 'anak perusahaan', 'cucu perusahaan', 'divisi', 'departemen', 'jabatan', 'posisi'],
     icon: Network,
   },

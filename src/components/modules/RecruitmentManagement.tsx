@@ -1975,7 +1975,7 @@ export const RecruitmentManagement: React.FC = () => {
         role: nextConfig?.roleLabel || 'Mengetahui',
         employeeId: defaultEmp?.id || '',
         name: defaultEmp ? defaultEmp.fullName : 'Manager Terkait',
-        title: nextConfig?.roleLabel || defaultEmp?.position || 'Departemen Manager',
+        title: nextConfig?.roleLabel || defaultEmp?.position || 'Departemen/Unit Manager',
         nik: defaultEmp?.nik,
         avatar: defaultEmp?.avatar,
         withDegree: true,
@@ -3657,7 +3657,7 @@ Nama Berkas: ${fileName} (${candidate.cvFileSize || '1.2 MB'})
     // Auto-compose external job description wording
     const descText = req.mainResponsibilities
       ? `Ringkasan Tugas & Tanggung Jawab Utama:\n${req.mainResponsibilities}\n\nPosisi ini akan berkolaborasi erat dengan tim ${req.department} untuk memastikan tercapainya target operasional dan keberhasilan strategi perusahaan.`
-      : `Membuka kesempatan berkarir untuk posisi ${req.position} jenjang ${req.grade} pada Departemen ${req.department}. Kebutuhan formasi: ${req.headcount} orang.`;
+      : `Membuka kesempatan berkarir untuk posisi ${req.position} jenjang ${req.grade} pada Departemen/Unit ${req.department}. Kebutuhan formasi: ${req.headcount} orang.`;
     setVacDescription(descText);
 
     setVacLinkedReqId(req.id);
@@ -4863,7 +4863,7 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
           title: 'Lead Technical User / Engineering',
           department: 'Technology & AI',
           email: 'budi.santoso@nusantara.id',
-          role: 'User Interviewer (Departemen)',
+          role: 'User Interviewer (Departemen/Unit)',
           status: 'Terkonfirmasi',
           recommendation: 'Sangat cocok',
           scorecardRatings: {},
@@ -5872,7 +5872,7 @@ PT Nusantara Multi Talenta Tbk`);
     const vac = vacancies.find((v) => v.id === candidate.jobVacancyId);
     setCandidateForAgreement(candidate);
     setAgreementRole(candidate.offeringPosition || vac?.title || 'Posisi Jabatan');
-    setAgreementUnitKerja(candidate.offeringUnitKerja || vac?.department || 'Departemen Operasional');
+    setAgreementUnitKerja(candidate.offeringUnitKerja || vac?.department || 'Departemen/Unit Operasional');
     setAgreementStartDate(
       candidate.offeringStartDate ||
       candidate.joinedDate ||
@@ -6819,7 +6819,7 @@ PT Nusantara Multi Talenta Tbk`);
                       <thead className="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200 uppercase tracking-wider text-[11px]">
                         <tr>
                           <th className="py-3.5 px-4 font-bold text-slate-700">No. Dokumen & Anggaran</th>
-                          <th className="py-3.5 px-4 font-bold text-slate-700">Posisi & Departemen</th>
+                          <th className="py-3.5 px-4 font-bold text-slate-700">Posisi & Departemen/Unit</th>
                           <th className="py-3.5 px-4 font-bold text-slate-700">Jenjang Grade</th>
                           <th className="py-3.5 px-4 font-bold text-slate-700">Formasi & Kebutuhan</th>
                           <th className="py-3.5 px-4 font-bold text-slate-700">Target Masuk</th>
@@ -9598,7 +9598,7 @@ PT Nusantara Multi Talenta Tbk`);
                     {/* Task Checklist Items */}
                     <div className="space-y-2 pt-1">
                       <span className="text-xs font-bold text-slate-800 block">
-                        Daftar Penugasan Departemen & Checklist Aksi:
+                        Daftar Penugasan Departemen/Unit & Checklist Aksi:
                       </span>
                       <div className="space-y-2">
                         {(Array.isArray(process.tasks) ? process.tasks : []).map((task) => {
@@ -10388,7 +10388,7 @@ PT Nusantara Multi Talenta Tbk`);
                   </div>
                   <div>
                     <label className="font-semibold text-slate-700 block mb-1">
-                      Departemen / Divisi Pemohon *
+                      Departemen/Unit / Divisi Pemohon *
                     </label>
                     <SearchableSelect
                       required
@@ -10398,7 +10398,7 @@ PT Nusantara Multi Talenta Tbk`);
                         setFptkDept(val);
                         setFptkReportingDept(val);
                       }}
-                      placeholder="-- Pilih Departemen / Divisi --"
+                      placeholder="-- Pilih Departemen/Unit / Divisi --"
                     />
                   </div>
                 </div>
@@ -11059,7 +11059,7 @@ PT Nusantara Multi Talenta Tbk`);
                               handleUpdateSignatory(sig.id, {
                                 employeeId: emp.id,
                                 name: sig.withDegree !== false ? emp.fullName : emp.rawName,
-                                title: emp.position || 'Departemen Head',
+                                title: emp.position || 'Departemen/Unit Head',
                                 nik: emp.nik,
                                 avatar: emp.avatar,
                               });
@@ -11232,7 +11232,7 @@ PT Nusantara Multi Talenta Tbk`);
                     <span className="font-bold text-slate-900 text-xs">{previewFptk.position}</span>
                   </div>
                   <div>
-                    <span className="text-[10px] font-semibold text-slate-400 block uppercase">Departemen / Divisi</span>
+                    <span className="text-[10px] font-semibold text-slate-400 block uppercase">Departemen/Unit / Divisi</span>
                     <span className="font-medium text-slate-800">{previewFptk.department}</span>
                   </div>
                   <div>
@@ -11582,7 +11582,7 @@ PT Nusantara Multi Talenta Tbk`);
                   <span className="font-bold text-slate-900">{trackingFptk.position}</span>
                 </div>
                 <div>
-                  <span className="text-[10px] text-slate-400 block uppercase font-medium">Departemen</span>
+                  <span className="text-[10px] text-slate-400 block uppercase font-medium">Departemen/Unit</span>
                   <span className="font-semibold text-slate-800">{trackingFptk.department}</span>
                 </div>
                 <div>
@@ -11818,7 +11818,7 @@ PT Nusantara Multi Talenta Tbk`);
                   </span>
                 </div>
                 <div className="text-[11px] text-slate-600">
-                  Departemen: <span className="font-medium text-slate-800">{retractModalFptk.department}</span> • Formasi: {retractModalFptk.headcount} Orang
+                  Departemen/Unit: <span className="font-medium text-slate-800">{retractModalFptk.department}</span> • Formasi: {retractModalFptk.headcount} Orang
                 </div>
                 <p className="text-[11px] text-amber-800 mt-1 leading-relaxed">
                   ⚠️ Perhatian: Mencabut FPTK ini akan mengubah statusnya menjadi <strong>Dicabut (Retracted)</strong> dan secara otomatis menutup publikasi lowongan aktif yang terhubung dengan formasi ini.
@@ -11985,7 +11985,7 @@ PT Nusantara Multi Talenta Tbk`);
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div>
-                      <label className="font-semibold text-slate-700 block mb-1">Departemen / Divisi</label>
+                      <label className="font-semibold text-slate-700 block mb-1">Departemen/Unit / Divisi</label>
                       <input
                         type="text"
                         required
@@ -18182,7 +18182,7 @@ PT Nusantara Multi Talenta Tbk`);
                   </span>
                 </div>
                 <div className="text-right">
-                  <span className="text-[10px] text-slate-500 block">Departemen Formasi</span>
+                  <span className="text-[10px] text-slate-500 block">Departemen/Unit Formasi</span>
                   <span className="font-semibold text-teal-900 bg-white px-2 py-0.5 rounded border border-teal-200 text-xs">
                     {vacancies.find((v) => v.id === mcuCandidate.jobVacancyId)?.department || 'Umum'}
                   </span>
@@ -18738,7 +18738,7 @@ PT Nusantara Multi Talenta Tbk`);
                         <span className="text-teal-900 font-bold">{vacancies.find((v) => v.id === mcuCandidate.jobVacancyId)?.title || "Posisi Terpilih"}</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="font-semibold text-slate-600 w-28 shrink-0">Departemen</span>
+                        <span className="font-semibold text-slate-600 w-28 shrink-0">Departemen/Unit</span>
                         <span>:</span>
                         <span className="text-slate-800">{vacancies.find((v) => v.id === mcuCandidate.jobVacancyId)?.department || "Umum"}</span>
                       </div>
@@ -19560,7 +19560,7 @@ PT Nusantara Multi Talenta Tbk`);
                     <div className="sm:text-right">
                       <span className="text-slate-500 block">Posisi / Jabatan yang Ditawarkan:</span>
                       <span className="font-bold text-blue-900 text-xs">{vacancyTitle}</span>
-                      <span className="text-slate-600 block">Departemen: {departmentTitle}</span>
+                      <span className="text-slate-600 block">Departemen/Unit: {departmentTitle}</span>
                     </div>
                   </div>
 
@@ -20261,7 +20261,7 @@ PT Nusantara Multi Talenta Tbk`);
 
                   <div>
                     <label className="font-semibold text-slate-700 block mb-1">
-                      Unit Kerja / Departemen <span className="text-rose-500">*</span>
+                      Unit Kerja / Departemen/Unit <span className="text-rose-500">*</span>
                     </label>
                     <input
                       type="text"
@@ -20919,7 +20919,7 @@ PT Nusantara Multi Talenta Tbk`);
                     </div>
 
                     <div>
-                      <label className="font-semibold text-slate-700 block mb-1">Departemen Pelaksana *</label>
+                      <label className="font-semibold text-slate-700 block mb-1">Departemen/Unit Pelaksana *</label>
                       <select
                         value={newTmplDept}
                         onChange={(e) => setNewTmplDept(e.target.value as any)}
@@ -21080,7 +21080,7 @@ PT Nusantara Multi Talenta Tbk`);
                             )}
                           </div>
                           <p className="text-[11px] text-slate-500">
-                            Kategori: {item.category} · Departemen Pelaksana: {item.targetDepartment}
+                            Kategori: {item.category} · Departemen/Unit Pelaksana: {item.targetDepartment}
                           </p>
                           {item.subItems && item.subItems.length > 0 && (
                             <div className="mt-1.5 p-2 rounded-lg bg-slate-50/80 border border-slate-200/90 text-[11px] space-y-1">
@@ -21169,7 +21169,7 @@ PT Nusantara Multi Talenta Tbk`);
                   <span className="font-bold text-slate-900">{activeActionProcess.employeeName}</span>
                 </div>
                 <div className="flex justify-between text-slate-600 text-[11px]">
-                  <span>Posisi & Departemen:</span>
+                  <span>Posisi & Departemen/Unit:</span>
                   <span>{activeActionProcess.position} · {activeActionProcess.department}</span>
                 </div>
               </div>
@@ -22499,7 +22499,7 @@ PT Nusantara Multi Talenta Tbk`);
                         <div className="p-2.5 bg-white rounded-lg border border-slate-200 space-y-0.5">
                           <span className="text-[10px] text-slate-400 font-bold uppercase block">Posisi yang Dilamar</span>
                           <p className="font-bold text-slate-900 text-xs">{details.appliedPosition}</p>
-                          <p className="text-[11px] text-slate-500">Departemen: {details.department}</p>
+                          <p className="text-[11px] text-slate-500">Departemen/Unit: {details.department}</p>
                         </div>
 
                         <div className="p-2.5 bg-white rounded-lg border border-slate-200 space-y-0.5">

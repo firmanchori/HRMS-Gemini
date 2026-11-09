@@ -886,7 +886,7 @@ export const CompanyCalendarManagement: React.FC = () => {
                 <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
                   <tr>
                     <th className="py-2.5 px-4">Karyawan</th>
-                    <th className="py-2.5 px-4">Jabatan & Departemen</th>
+                    <th className="py-2.5 px-4">Jabatan & Departemen/Unit</th>
                     <th className="py-2.5 px-4 text-center">Bucket 1 (Cuti Bersama)</th>
                     <th className="py-2.5 px-4 text-center">Bucket 2 (Cuti Pribadi)</th>
                     <th className="py-2.5 px-4 text-center">Total Hak Cuti Aktif</th>

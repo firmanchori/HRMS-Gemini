@@ -860,7 +860,7 @@ export const OrganizationManagement: React.FC = () => {
       } else if (!isDraftStep3Valid) {
         showToast('Lengkapi minimal 1 Divisi (Kode & Nama) pada Tahap 3 terlebih dahulu.');
       } else if (!isDraftStep4Valid) {
-        showToast('Lengkapi data Departemen pada Tahap 4 (atau pilih opsi Langsung ke Jabatan/Bypass).');
+        showToast('Lengkapi data Departemen/Unit pada Tahap 4 (atau pilih opsi Langsung ke Jabatan/Bypass).');
       }
     }
   };
@@ -1293,7 +1293,7 @@ export const OrganizationManagement: React.FC = () => {
         headTitle: departmentFormData.headTitle.trim(),
         description: departmentFormData.description.trim(),
       });
-      showToast(`Departemen ${departmentFormData.name} berhasil diperbarui.`);
+      showToast(`Departemen/Unit ${departmentFormData.name} berhasil diperbarui.`);
     } else {
       addDepartment({
         entityId: currentEntityId,
@@ -1304,7 +1304,7 @@ export const OrganizationManagement: React.FC = () => {
         description: departmentFormData.description.trim(),
         createdAt: new Date().toISOString().split('T')[0],
       });
-      showToast(`Departemen baru ${departmentFormData.name} berhasil ditambahkan.`);
+      showToast(`Departemen/Unit baru ${departmentFormData.name} berhasil ditambahkan.`);
     }
     setIsDepartmentModalOpen(false);
   };
@@ -1951,7 +1951,7 @@ export const OrganizationManagement: React.FC = () => {
             </div>
             {hasDept ? (
               <div className="bg-slate-50 p-1.5 rounded-lg border border-slate-100">
-                <div className="text-[9px] text-slate-400 uppercase font-semibold">Departemen</div>
+                <div className="text-[9px] text-slate-400 uppercase font-semibold">Departemen/Unit</div>
                 <div className="font-bold text-slate-900 font-mono text-xs">{entDepartments.length}</div>
               </div>
             ) : (
@@ -2720,7 +2720,7 @@ export const OrganizationManagement: React.FC = () => {
               }`}
             >
               <Briefcase className="w-4 h-4" />
-              <span>Setup Departemen</span>
+              <span>Setup Departemen/Unit</span>
               <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${
                 structureSubTab === 'departments' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'
               }`}>
@@ -2789,12 +2789,12 @@ export const OrganizationManagement: React.FC = () => {
                       <span className="text-xs text-slate-500 font-medium">Entitas: <b>{currentEntity.name}</b></span>
                     </div>
                     <h3 className="text-base font-bold text-slate-900">
-                      Fleksibilitas Penggunaan Level Departemen
+                      Fleksibilitas Penggunaan Level Departemen/Unit
                     </h3>
                     <p className="text-xs text-slate-600 max-w-2xl leading-relaxed">
                       {useDeptLevel
-                        ? 'Saat ini entitas ini menggunakan struktur organisasi 3-tingkat: Divisi membawahi Departemen, dan Departemen membawahi Posisi/Jabatan. Cocok untuk unit skala besar dengan spesialisasi tinggi.'
-                        : 'Entitas ini beroperasi dalam mode Struktur Ramping: Seluruh posisi/jabatan langsung berada di bawah naungan Divisi tanpa perlu membuat Departemen. Lebih lincah, minim birokrasi, dan cocok untuk unit bisnis lean.'}
+                        ? 'Saat ini entitas ini menggunakan struktur organisasi 3-tingkat: Divisi membawahi Departemen/Unit, dan Departemen/Unit membawahi Posisi/Jabatan. Cocok untuk unit skala besar dengan spesialisasi tinggi.'
+                        : 'Entitas ini beroperasi dalam mode Struktur Ramping: Seluruh posisi/jabatan langsung berada di bawah naungan Divisi tanpa perlu membuat Departemen/Unit. Lebih lincah, minim birokrasi, dan cocok untuk unit bisnis lean.'}
                     </p>
                   </div>
 
@@ -2802,7 +2802,7 @@ export const OrganizationManagement: React.FC = () => {
                   <div className="flex items-center gap-3 shrink-0 bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
                     <div className="text-right">
                       <span className="block text-xs font-bold text-slate-900">
-                        {useDeptLevel ? 'Gunakan Departemen' : 'Bypass Departemen (Ramping)'}
+                        {useDeptLevel ? 'Gunakan Departemen/Unit' : 'Bypass Departemen/Unit (Ramping)'}
                       </span>
                       <span className="text-[10px] text-slate-400">Klik untuk beralih</span>
                     </div>
@@ -2959,7 +2959,7 @@ export const OrganizationManagement: React.FC = () => {
                     <div>
                       <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
                         <Briefcase className="w-4 h-4 text-emerald-600" />
-                        Daftar Master Departemen ({entityDepartments.length} Departemen Aktif)
+                        Daftar Master Departemen/Unit ({entityDepartments.length} Departemen/Unit Aktif)
                       </h3>
                       <span className="text-[11px] text-slate-500">Unit operasional teknis di bawah naungan Divisi. Klik kartu untuk preview detail departemen.</span>
                     </div>
@@ -2981,7 +2981,7 @@ export const OrganizationManagement: React.FC = () => {
                         className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-colors shrink-0"
                       >
                         <Plus className="w-3.5 h-3.5" />
-                        <span>Tambah Departemen</span>
+                        <span>Tambah Departemen/Unit</span>
                       </button>
                     )}
                   </div>
@@ -3036,7 +3036,7 @@ export const OrganizationManagement: React.FC = () => {
                     <Info className="w-6 h-6" />
                   </div>
                   <h4 className="text-sm font-bold text-amber-950">
-                    Level Departemen Dinonaktifkan (Mode Struktur Ramping Aktif)
+                    Level Departemen/Unit Dinonaktifkan (Mode Struktur Ramping Aktif)
                   </h4>
                   <p className="text-xs text-amber-800 max-w-lg mx-auto leading-relaxed">
                     Entitas ini beroperasi dalam mode tanpa level departemen. Seluruh posisi/jabatan langsung terhubung ke Divisi induk tanpa memerlukan hierarki perantara.
@@ -3049,7 +3049,7 @@ export const OrganizationManagement: React.FC = () => {
                     }}
                     className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-semibold shadow-xs"
                   >
-                    Aktifkan Level Departemen Sekarang
+                    Aktifkan Level Departemen/Unit Sekarang
                   </button>
                 </div>
               )}
@@ -3717,7 +3717,7 @@ export const OrganizationManagement: React.FC = () => {
                                   </span>
                                 </div>
                                 <div className="flex items-center justify-between text-[11px]">
-                                  <span className="text-slate-400">Departemen:</span>
+                                  <span className="text-slate-400">Departemen/Unit:</span>
                                   <span className="text-slate-700 truncate max-w-[180px]">
                                     {useDeptLevel ? pos.department : <span className="text-amber-700 font-semibold">Direct to Division</span>}
                                   </span>
@@ -3805,7 +3805,7 @@ export const OrganizationManagement: React.FC = () => {
                           <th className="py-3 px-4">Formasi Kursi & ID</th>
                           <th className="py-3 px-4">Tipe Jalur Komando</th>
                           <th className="py-3 px-4">Level Tier</th>
-                          <th className="py-3 px-4">Divisi & Departemen</th>
+                          <th className="py-3 px-4">Divisi & Departemen/Unit</th>
                           <th className="py-3 px-4">Lapor Ke (Atasan)</th>
                           <th className="py-3 px-4">Penetapan Karyawan (Assign Jabatan)</th>
                           <th className="py-3 px-4 text-center"></th>
@@ -4182,7 +4182,7 @@ export const OrganizationManagement: React.FC = () => {
                   </span>
                   <h4 className="text-base font-bold text-slate-900 mt-1">{previewPosition.title}</h4>
                   <div className="text-slate-600 text-xs mt-0.5">
-                    Divisi: <b>{previewPosition.division || currentEntity.name}</b> {useDeptLevel ? `• Departemen: ${previewPosition.department}` : '• Struktur Ramping (Direct to Div)'}
+                    Divisi: <b>{previewPosition.division || currentEntity.name}</b> {useDeptLevel ? `• Departemen/Unit: ${previewPosition.department}` : '• Struktur Ramping (Direct to Div)'}
                   </div>
                 </div>
 
@@ -4666,7 +4666,7 @@ export const OrganizationManagement: React.FC = () => {
                     {useDeptLevel && (
                       <div className="space-y-2">
                         <label className="font-bold text-slate-800 block text-xs uppercase tracking-wider">
-                          Departemen di Bawah Naungan Divisi Ini ({childDepts.length}):
+                          Departemen/Unit di Bawah Naungan Divisi Ini ({childDepts.length}):
                         </label>
                         <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden bg-slate-50/50">
                           {childDepts.map((dept) => (
@@ -4807,7 +4807,7 @@ export const OrganizationManagement: React.FC = () => {
                   <div className="flex items-center gap-2 text-[11px] text-slate-400">
                     <span className="font-mono text-emerald-400 font-bold">{previewDepartment.code}</span>
                     <span>•</span>
-                    <span>Master Departemen</span>
+                    <span>Master Departemen/Unit</span>
                   </div>
                 </div>
               </div>
@@ -4829,7 +4829,7 @@ export const OrganizationManagement: React.FC = () => {
                       {previewDepartment.code}
                     </span>
                     <span className="text-[10px] uppercase font-bold text-emerald-700 bg-white px-2 py-0.5 rounded border border-emerald-200">
-                      Departemen
+                      Departemen/Unit
                     </span>
                   </div>
                   <div className="inline-flex items-center gap-1.5 text-[11px] bg-white/80 px-2.5 py-1 rounded-lg border border-emerald-100 self-start sm:self-auto max-w-full min-w-0">
@@ -4925,7 +4925,7 @@ export const OrganizationManagement: React.FC = () => {
                       if (confirm(`Hapus departemen ${previewDepartment.name}?`)) {
                         deleteDepartment(previewDepartment.id);
                         setPreviewDepartment(null);
-                        showToast(`Departemen ${previewDepartment.name} telah dihapus.`);
+                        showToast(`Departemen/Unit ${previewDepartment.name} telah dihapus.`);
                       }
                     }}
                     className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
@@ -5040,7 +5040,7 @@ export const OrganizationManagement: React.FC = () => {
                   <span className="font-semibold text-slate-800 text-xs">{previewMasterJobPosition.division || '-'}</span>
                 </div>
                 <div>
-                  <span className="text-slate-400 text-[10px] block">Departemen Default:</span>
+                  <span className="text-slate-400 text-[10px] block">Departemen/Unit Default:</span>
                   <span className="font-semibold text-slate-800 text-xs">{previewMasterJobPosition.department || '-'}</span>
                 </div>
                 <div className="col-span-2 pt-2 border-t border-slate-200/60">
@@ -5263,7 +5263,7 @@ export const OrganizationManagement: React.FC = () => {
                       </div>
                       <div className="bg-white p-2 rounded-lg border border-indigo-100">
                         <span className="text-base font-bold text-emerald-700">{previewProposal.payload.newDepartments?.length || 0}</span>
-                        <span className="block text-[10px] text-slate-500">Departemen</span>
+                        <span className="block text-[10px] text-slate-500">Departemen/Unit</span>
                       </div>
                       <div className="bg-white p-2 rounded-lg border border-indigo-100">
                         <span className="text-base font-bold text-slate-800">{previewProposal.payload.newNodes?.length || 0}</span>
@@ -5520,7 +5520,7 @@ export const OrganizationManagement: React.FC = () => {
               {previewSnapshot.departments.length > 0 && (
                 <div className="space-y-1.5">
                   <label className="font-bold text-slate-800 block text-xs">
-                    Departemen Terdaftar pada Versi Ini ({previewSnapshot.departments.length}):
+                    Departemen/Unit Terdaftar pada Versi Ini ({previewSnapshot.departments.length}):
                   </label>
                   <div className="grid grid-cols-2 gap-2">
                     {previewSnapshot.departments.map((dept) => (
@@ -6113,7 +6113,7 @@ export const OrganizationManagement: React.FC = () => {
                         <div className="font-bold text-slate-900">{tpl.label}</div>
                         <div className="text-slate-500 mt-0.5">{tpl.description}</div>
                         <div className="text-[10px] text-indigo-600 font-semibold mt-1">
-                          {tpl.divisions.length} Divisi • {tpl.departments.length} Departemen • {tpl.positions.length} Jabatan • {tpl.grades.length} Grade · Lihat detail →
+                          {tpl.divisions.length} Divisi • {tpl.departments.length} Departemen/Unit • {tpl.positions.length} Jabatan • {tpl.grades.length} Grade · Lihat detail →
                         </div>
                       </button>
                     ))}
@@ -6282,7 +6282,7 @@ export const OrganizationManagement: React.FC = () => {
                 )}
 
                 <p className="text-slate-500">
-                  Mode ini hanya membuka kunci entitas setelah mengarsipkan struktur saat ini — editan dilakukan langsung di tab Setup Divisi/Departemen/Jabatan/Grade, bukan di dalam modal ini.
+                  Mode ini hanya membuka kunci entitas setelah mengarsipkan struktur saat ini — editan dilakukan langsung di tab Setup Divisi/Departemen/Unit/Jabatan/Grade, bukan di dalam modal ini.
                 </p>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -6521,7 +6521,7 @@ export const OrganizationManagement: React.FC = () => {
             <div className="p-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
               <h3 className="font-bold text-sm flex items-center gap-2">
                 <Briefcase className="w-4 h-4 text-emerald-400" />
-                <span>{departmentFormData.id ? 'Edit Departemen' : 'Tambah Departemen Baru'}</span>
+                <span>{departmentFormData.id ? 'Edit Departemen/Unit' : 'Tambah Departemen/Unit Baru'}</span>
               </h3>
               <button onClick={() => setIsDepartmentModalOpen(false)} className="text-slate-400 hover:text-white">
                 <X className="w-5 h-5" />
@@ -6531,7 +6531,7 @@ export const OrganizationManagement: React.FC = () => {
             <form onSubmit={handleSubmitDepartment} className="flex flex-col flex-1 overflow-hidden min-h-0">
               <div className="p-4 sm:p-5 space-y-3.5 text-xs overflow-y-auto flex-1">
                 <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Nama Departemen *</label>
+                  <label className="font-semibold text-slate-700 block mb-1">Nama Departemen/Unit *</label>
                   <input
                     type="text"
                     required
@@ -6544,7 +6544,7 @@ export const OrganizationManagement: React.FC = () => {
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="font-semibold text-slate-700 block mb-1">Kode Departemen *</label>
+                    <label className="font-semibold text-slate-700 block mb-1">Kode Departemen/Unit *</label>
                     <input
                       type="text"
                       required
@@ -6569,7 +6569,7 @@ export const OrganizationManagement: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Deskripsi Departemen</label>
+                  <label className="font-semibold text-slate-700 block mb-1">Deskripsi Departemen/Unit</label>
                   <textarea
                     rows={2}
                     placeholder="Uraian teknis operasional..."
@@ -6593,7 +6593,7 @@ export const OrganizationManagement: React.FC = () => {
                   type="submit"
                   className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-lg shadow-xs text-xs transition-colors"
                 >
-                  {departmentFormData.id ? 'Perbarui Departemen' : 'Simpan Departemen'}
+                  {departmentFormData.id ? 'Perbarui Departemen/Unit' : 'Simpan Departemen/Unit'}
                 </button>
               </div>
             </form>
@@ -6711,7 +6711,7 @@ export const OrganizationManagement: React.FC = () => {
               <div className="grid grid-cols-2 gap-3">
                 {useDeptLevel && (
                   <div>
-                    <label className="font-semibold text-slate-700 block mb-1">Departemen</label>
+                    <label className="font-semibold text-slate-700 block mb-1">Departemen/Unit</label>
                     <select
                       value={positionFormData.department}
                       onChange={(e) => setPositionFormData({ ...positionFormData, department: e.target.value })}
@@ -6948,13 +6948,13 @@ export const OrganizationManagement: React.FC = () => {
 
                 {useDeptLevel ? (
                   <div>
-                    <label className="font-semibold text-slate-700 block mb-1">Departemen</label>
+                    <label className="font-semibold text-slate-700 block mb-1">Departemen/Unit</label>
                     <select
                       value={masterPositionFormData.department}
                       onChange={(e) => setMasterPositionFormData({ ...masterPositionFormData, department: e.target.value })}
                       className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white text-xs font-medium focus:outline-slate-800"
                     >
-                      <option value="">Pilih Departemen...</option>
+                      <option value="">Pilih Departemen/Unit...</option>
                       {(() => {
                         const activeDivObj = entityDivisions.find((d) => d.name === masterPositionFormData.division);
                         const availableDepts = activeDivObj
@@ -6968,9 +6968,9 @@ export const OrganizationManagement: React.FC = () => {
                   </div>
                 ) : (
                   <div>
-                    <label className="font-semibold text-slate-700 block mb-1">Struktur Departemen</label>
+                    <label className="font-semibold text-slate-700 block mb-1">Struktur Departemen/Unit</label>
                     <div className="px-3 py-2 bg-slate-100 border border-slate-200 rounded-lg text-slate-500 text-[11px] font-medium">
-                      Mode Ramping (Bypass Departemen)
+                      Mode Ramping (Bypass Departemen/Unit)
                     </div>
                   </div>
                 )}
@@ -7460,7 +7460,7 @@ export const OrganizationManagement: React.FC = () => {
                 ) : (
                   <Briefcase className="w-3.5 h-3.5" />
                 )}
-                <span>4. Rancangan Departemen</span>
+                <span>4. Rancangan Departemen/Unit</span>
                 <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${
                   draftActiveTab === 'departments' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'
                 }`}>
@@ -7540,7 +7540,7 @@ export const OrganizationManagement: React.FC = () => {
                     <div className="p-3 bg-indigo-50/70 rounded-xl border border-indigo-200 text-[11px] text-indigo-950 flex items-start gap-2">
                       <Sparkles className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
                       <span>
-                        <b>Panduan Step-by-Step Restrukturisasi:</b> Proses pengajuan dilakukan bertahap (1. Data SK &rarr; 2. Grade &rarr; 3. Divisi &rarr; 4. Departemen &rarr; 5. Jabatan). Setiap tahap wajib diselesaikan sebelum dapat melanjutkan ke tahap berikutnya. Anda dapat menyimpan draf kapan saja untuk dilanjutkan nanti.
+                        <b>Panduan Step-by-Step Restrukturisasi:</b> Proses pengajuan dilakukan bertahap (1. Data SK &rarr; 2. Grade &rarr; 3. Divisi &rarr; 4. Departemen/Unit &rarr; 5. Jabatan). Setiap tahap wajib diselesaikan sebelum dapat melanjutkan ke tahap berikutnya. Anda dapat menyimpan draf kapan saja untuk dilanjutkan nanti.
                       </span>
                     </div>
 
@@ -7916,7 +7916,7 @@ export const OrganizationManagement: React.FC = () => {
                         </div>
                         <h4 className="font-bold text-sm text-white mt-0.5">Rancangan Draft Divisi Baru</h4>
                         <p className="text-[11px] text-slate-300 leading-relaxed mt-0.5 max-w-xl">
-                          Divisi wajib diisi. Daftar divisi ini akan secara otomatis menjadi pilihan dropdown Divisi pada tahap Departemen dan Jabatan.
+                          Divisi wajib diisi. Daftar divisi ini akan secara otomatis menjadi pilihan dropdown Divisi pada tahap Departemen/Unit dan Jabatan.
                         </p>
                       </div>
 
@@ -8073,7 +8073,7 @@ export const OrganizationManagement: React.FC = () => {
                             : 'bg-slate-200 text-slate-400 cursor-not-allowed'
                         }`}
                       >
-                        <span>Lanjut ke Tahap 4: Rancangan Departemen</span>
+                        <span>Lanjut ke Tahap 4: Rancangan Departemen/Unit</span>
                         <ArrowRight className="w-4 h-4" />
                       </button>
                     </div>
@@ -8085,7 +8085,7 @@ export const OrganizationManagement: React.FC = () => {
                   <div className="space-y-4">
                     {/* Department Option Selector Card */}
                     <div className="p-4 bg-emerald-50/80 border border-emerald-300 rounded-xl space-y-2.5 shadow-xs">
-                      <span className="font-bold text-xs text-emerald-950 block">Pilihan Struktur Departemen:</span>
+                      <span className="font-bold text-xs text-emerald-950 block">Pilihan Struktur Departemen/Unit:</span>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                         <label
                           className={`p-3 rounded-lg border cursor-pointer transition-all flex items-start gap-2.5 ${
@@ -8102,7 +8102,7 @@ export const OrganizationManagement: React.FC = () => {
                             className="mt-0.5 text-emerald-600"
                           />
                           <div>
-                            <span className="font-bold text-xs text-slate-900 block">Gunakan Opsi Departemen</span>
+                            <span className="font-bold text-xs text-slate-900 block">Gunakan Opsi Departemen/Unit</span>
                             <span className="text-[11px] text-slate-600">
                               Organisasi memiliki unit kerja departemen di bawah divisi sebelum hierarki jabatan.
                             </span>
@@ -8124,7 +8124,7 @@ export const OrganizationManagement: React.FC = () => {
                             className="mt-0.5 text-emerald-600"
                           />
                           <div>
-                            <span className="font-bold text-xs text-slate-900 block">Langsung ke Jabatan (Bypass Departemen)</span>
+                            <span className="font-bold text-xs text-slate-900 block">Langsung ke Jabatan (Bypass Departemen/Unit)</span>
                             <span className="text-[11px] text-slate-600">
                               Mode struktur ramping. Seluruh posisi jabatan langsung bernaung di bawah divisi.
                             </span>
@@ -8138,7 +8138,7 @@ export const OrganizationManagement: React.FC = () => {
                       <Sparkles className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
                       <div>
                         <span className="font-bold block">Rekomendasi:</span>
-                        Pakai Departemen hanya jika divisi Anda punya lebih dari ±8 orang atau sub-fungsi yang jelas (misal HR → Recruitment & People Development). Untuk tim kecil, pilih mode Ramping agar struktur tidak terlalu berjenjang.
+                        Pakai Departemen/Unit hanya jika divisi Anda punya lebih dari ±8 orang atau sub-fungsi yang jelas (misal HR → Recruitment & People Development). Untuk tim kecil, pilih mode Ramping agar struktur tidak terlalu berjenjang.
                       </div>
                     </div>
 
@@ -8149,7 +8149,7 @@ export const OrganizationManagement: React.FC = () => {
                           <Check className="w-6 h-6" />
                         </div>
                         <div className="max-w-md mx-auto">
-                          <h4 className="font-bold text-sm text-slate-900">Mode Ramping Aktif (Bypass Departemen)</h4>
+                          <h4 className="font-bold text-sm text-slate-900">Mode Ramping Aktif (Bypass Departemen/Unit)</h4>
                           <p className="text-xs text-slate-500 mt-1 leading-relaxed">
                             Level departemen dinonaktifkan pada rancangan struktur ini. Seluruh isian departemen diabaikan dan Anda dapat langsung melanjutkan ke tahap 5 perancangan jabatan & posisi.
                           </p>
@@ -8174,10 +8174,10 @@ export const OrganizationManagement: React.FC = () => {
                                 Tahap 4 dari 5
                               </span>
                               <span className="text-xs text-emerald-300 font-medium">
-                                Total {draftDepartments.length} Departemen Terdaftar
+                                Total {draftDepartments.length} Departemen/Unit Terdaftar
                               </span>
                             </div>
-                            <h4 className="font-bold text-sm text-white mt-0.5">Rancangan Draft Departemen Baru</h4>
+                            <h4 className="font-bold text-sm text-white mt-0.5">Rancangan Draft Departemen/Unit Baru</h4>
                             <p className="text-[11px] text-slate-300 leading-relaxed mt-0.5 max-w-xl">
                               Definisikan departemen di bawah naungan divisi yang telah dibuat pada tahap 3. Pilihan divisi induk diambil langsung dari draf divisi.
                             </p>
@@ -8214,7 +8214,7 @@ export const OrganizationManagement: React.FC = () => {
                               className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-bold text-xs flex items-center gap-1.5 shadow-xs transition-colors shrink-0"
                             >
                               <Plus className="w-4 h-4" />
-                              <span>Tambah Draft Departemen</span>
+                              <span>Tambah Draft Departemen/Unit</span>
                             </button>
                           </div>
                         </div>
@@ -8229,7 +8229,7 @@ export const OrganizationManagement: React.FC = () => {
                                     {idx + 1}
                                   </span>
                                   <span className="font-bold text-xs text-slate-800">
-                                    Draft Departemen #{idx + 1}
+                                    Draft Departemen/Unit #{idx + 1}
                                   </span>
                                   <span className="font-mono text-[11px] font-bold px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded border border-emerald-200">
                                     {dept.code || 'NO-CODE'}
@@ -8240,7 +8240,7 @@ export const OrganizationManagement: React.FC = () => {
                                   type="button"
                                   onClick={() => setDraftDepartments(draftDepartments.filter((_, i) => i !== idx))}
                                   className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors flex items-center gap-1 text-[11px]"
-                                  title="Hapus Departemen dari Draf"
+                                  title="Hapus Departemen/Unit dari Draf"
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
                                   <span>Hapus</span>
@@ -8249,7 +8249,7 @@ export const OrganizationManagement: React.FC = () => {
 
                               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                 <div>
-                                  <label className="font-semibold text-slate-700 block mb-1">Kode Departemen *</label>
+                                  <label className="font-semibold text-slate-700 block mb-1">Kode Departemen/Unit *</label>
                                   <input
                                     type="text"
                                     required
@@ -8265,7 +8265,7 @@ export const OrganizationManagement: React.FC = () => {
                                 </div>
 
                                 <div>
-                                  <label className="font-semibold text-slate-700 block mb-1">Nama Departemen *</label>
+                                  <label className="font-semibold text-slate-700 block mb-1">Nama Departemen/Unit *</label>
                                   <input
                                     type="text"
                                     required
@@ -8300,7 +8300,7 @@ export const OrganizationManagement: React.FC = () => {
                               </div>
 
                               <div>
-                                <label className="font-semibold text-slate-700 block mb-1">Keterangan / Deskripsi Departemen</label>
+                                <label className="font-semibold text-slate-700 block mb-1">Keterangan / Deskripsi Departemen/Unit</label>
                                 <input
                                   type="text"
                                   placeholder="Uraian teknis operasional departemen..."
@@ -8319,9 +8319,9 @@ export const OrganizationManagement: React.FC = () => {
                           {draftDepartments.length === 0 && (
                             <div className="p-8 text-center bg-slate-50 border border-dashed border-slate-300 rounded-xl text-slate-500">
                               <Briefcase className="w-8 h-8 text-slate-400 mx-auto mb-2" />
-                              <p className="font-semibold text-xs">Belum ada usulan Departemen dalam draft.</p>
+                              <p className="font-semibold text-xs">Belum ada usulan Departemen/Unit dalam draft.</p>
                               <p className="text-[11px] text-slate-400 mt-0.5">
-                                Klik "Gunakan Data Lama" atau klik "+ Tambah Draft Departemen Baru".
+                                Klik "Gunakan Data Lama" atau klik "+ Tambah Draft Departemen/Unit Baru".
                               </p>
                             </div>
                           )}
@@ -8526,7 +8526,7 @@ export const OrganizationManagement: React.FC = () => {
 
                             {draftUseDeptLevel ? (
                               <div>
-                                <label className="font-semibold text-slate-700 block mb-1">Departemen (Sesuai Tahap 4) *</label>
+                                <label className="font-semibold text-slate-700 block mb-1">Departemen/Unit (Sesuai Tahap 4) *</label>
                                 <select
                                   value={node.department || ''}
                                   onChange={(e) => {
@@ -8536,7 +8536,7 @@ export const OrganizationManagement: React.FC = () => {
                                   }}
                                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-medium focus:outline-violet-600 bg-white"
                                 >
-                                  <option value="">Pilih Departemen...</option>
+                                  <option value="">Pilih Departemen/Unit...</option>
                                   {(() => {
                                     const activeDivObj = draftDivisions.find(d => d.name === node.division);
                                     const availableDepts = activeDivObj
@@ -8550,7 +8550,7 @@ export const OrganizationManagement: React.FC = () => {
                               </div>
                             ) : (
                               <div>
-                                <label className="font-semibold text-slate-700 block mb-1">Struktur Departemen</label>
+                                <label className="font-semibold text-slate-700 block mb-1">Struktur Departemen/Unit</label>
                                 <div className="px-3 py-2 bg-slate-100 border border-slate-200 rounded-lg text-slate-500 text-[11px] font-medium">
                                   Mode Ramping (Direct to Division)
                                 </div>

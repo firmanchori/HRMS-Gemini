@@ -142,7 +142,7 @@ export const AttendanceManagement: React.FC = () => {
         { label: 'Jam Usulan Masuk', value: corr.proposedClockIn || '-' },
         { label: 'Jam Usulan Pulang', value: corr.proposedClockOut || '-' },
         { label: 'NIK Karyawan', value: emp?.nik || '-' },
-        { label: 'Departemen', value: emp?.department || '-' },
+        { label: 'Departemen/Unit', value: emp?.department || '-' },
       ],
       contentParagraphs: [
         `Dengan ini karyawan mengajukan permohonan koreksi pencatatan presensi kerja untuk jenis "${corr.type}" pada tanggal ${corr.date}.`,
