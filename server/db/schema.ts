@@ -943,6 +943,29 @@ export const onboardingChecklistTemplates = pgTable("onboarding_checklist_templa
 export const probationRecommendationEnum = pgEnum("probation_recommendation", ["Lulus", "Perpanjang Probation", "Tidak Lulus"]);
 export const probationStatusEnum = pgEnum("probation_status", ["Draft", "Menunggu Approval", "Disetujui", "Ditolak"]);
 
+/**
+ * Custom probation evaluation form (user, 2026-11-09: "Form Penilaian
+ * Evaluasi Akhir Probation bisa custum untuk daftar kategori dan
+ * pertanyaannya. Ada masa berlaku dan bisa di tambah terus.") —
+ * categories is the full custom question/category list (jsonb, no fixed
+ * shape: {id, label}[]), validFrom/validUntil give it a validity window,
+ * and nothing here is ever updated in place after creation — a tenant
+ * just keeps adding new template versions over time ("ditambah terus"),
+ * so every evaluation stays tied to the exact form it was actually
+ * filled out against (templateId on probationEvaluations below), even
+ * after a newer template becomes current.
+ */
+export const probationEvaluationTemplates = pgTable("probation_evaluation_templates", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  name: text("name").notNull(),
+  categories: jsonb("categories").notNull().$type<{ id: string; label: string }[]>(),
+  validFrom: text("valid_from").notNull(),
+  validUntil: text("valid_until"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 /** Probation (masa percobaan) evaluation — Manajemen Karyawan sub-menu. */
 export const probationEvaluations = pgTable("probation_evaluations", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -950,10 +973,18 @@ export const probationEvaluations = pgTable("probation_evaluations", {
   employeeId: uuid("employee_id").references(() => employees.id).notNull(),
   supervisorId: uuid("supervisor_id").references(() => employees.id),
   evaluationDate: timestamp("evaluation_date", { withTimezone: true }).defaultNow().notNull(),
-  technicalSkillScore: integer("technical_skill_score").notNull(),
-  disciplineScore: integer("discipline_score").notNull(),
-  teamworkScore: integer("teamwork_score").notNull(),
-  initiativeScore: integer("initiative_score").notNull(),
+  // Legacy fixed categories — nullable now that scoring comes from a
+  // custom template's categoryScores instead; kept only so pre-existing
+  // rows (filled out before this feature existed) still render.
+  technicalSkillScore: integer("technical_skill_score"),
+  disciplineScore: integer("discipline_score"),
+  teamworkScore: integer("teamwork_score"),
+  initiativeScore: integer("initiative_score"),
+  // Which template this evaluation was actually filled out against, and
+  // its per-category scores ({categoryId, label, score}[]) — the custom
+  // replacement for the 4 fixed columns above.
+  templateId: uuid("template_id").references(() => probationEvaluationTemplates.id),
+  categoryScores: jsonb("category_scores").$type<{ categoryId: string; label: string; score: number }[]>(),
   overallScore: integer("overall_score").notNull(),
   recommendation: probationRecommendationEnum("recommendation").notNull(),
   extensionDurationMonths: integer("extension_duration_months"),

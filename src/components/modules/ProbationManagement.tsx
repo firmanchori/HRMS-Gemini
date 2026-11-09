@@ -15,6 +15,11 @@ import {
   UserX,
 } from 'lucide-react';
 import { EmployeeSelect } from '../common/EmployeeSelect';
+import type { ProbationEvaluationCategory } from '../../types/hrms';
+
+function genCategoryId() {
+  return `cat-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+}
 
 export const ProbationManagement: React.FC = () => {
   const {
@@ -24,24 +29,41 @@ export const ProbationManagement: React.FC = () => {
     reviewProbationEvaluation,
     currentUser,
     moduleSettings,
+    probationEvaluationTemplates,
+    addProbationEvaluationTemplate,
   } = useHrms();
 
   // H- berapa hari sebelum jatuh tempo karyawan masuk daftar reminder — dulu hardcode 14, sekarang diatur di Pengaturan Karyawan (user, 2026-11-09).
   const reminderDaysBefore = moduleSettings.employee.probationReminderDaysBefore ?? 14;
 
-  const [activeTab, setActiveTab] = useState<'monitoring' | 'evaluations'>('monitoring');
+  // Template evaluasi yang sedang berlaku hari ini — "ada masa berlaku dan
+  // bisa di tambah terus" (user, 2026-11-09): dari seluruh riwayat template
+  // yang pernah dibuat, yang dipakai adalah yang isActive dan tanggal hari
+  // ini ada di antara validFrom..validUntil (validUntil kosong = tanpa
+  // batas akhir). Kalau beberapa cocok sekaligus, pakai yang paling baru.
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const activeTemplate = [...probationEvaluationTemplates]
+    .filter((t) => t.isActive && t.validFrom <= todayStr && (!t.validUntil || t.validUntil >= todayStr))
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))[0] || null;
+
+  const [activeTab, setActiveTab] = useState<'monitoring' | 'evaluations' | 'templates'>('monitoring');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
   // Form State
   const [selectedEmpId, setSelectedEmpId] = useState('');
-  const [technicalSkillScore, setTechnicalSkillScore] = useState(85);
-  const [disciplineScore, setDisciplineScore] = useState(90);
-  const [teamworkScore, setTeamworkScore] = useState(88);
-  const [initiativeScore, setInitiativeScore] = useState(82);
+  const [categoryScores, setCategoryScores] = useState<Record<string, number>>({});
   const [recommendation, setRecommendation] = useState<'Lulus' | 'Perpanjang Probation' | 'Tidak Lulus'>('Lulus');
   const [extensionMonths, setExtensionMonths] = useState(3);
   const [notes, setNotes] = useState('');
+
+  // Template Builder Form State
+  const [newTemplateName, setNewTemplateName] = useState('');
+  const [newTemplateValidFrom, setNewTemplateValidFrom] = useState(todayStr);
+  const [newTemplateValidUntil, setNewTemplateValidUntil] = useState('');
+  const [newTemplateCategories, setNewTemplateCategories] = useState<ProbationEvaluationCategory[]>([
+    { id: genCategoryId(), label: '' },
+  ]);
 
   const calculateHMinus = (endDate?: string) => {
     if (!endDate) return null;
@@ -64,28 +86,23 @@ export const ProbationManagement: React.FC = () => {
 
   const handleOpenEvaluationModal = (empId: string) => {
     setSelectedEmpId(empId);
+    setCategoryScores(Object.fromEntries((activeTemplate?.categories || []).map((c) => [c.id, 75])));
     setIsModalOpen(true);
   };
 
   const handleSubmitEvaluation = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedEmpId) return;
+    if (!selectedEmpId || !activeTemplate) return;
 
-    const overallScore = Math.round(
-      (technicalSkillScore * 0.35) +
-      (disciplineScore * 0.25) +
-      (teamworkScore * 0.20) +
-      (initiativeScore * 0.20)
-    );
+    const scores = activeTemplate.categories.map((c) => ({ categoryId: c.id, label: c.label, score: categoryScores[c.id] ?? 0 }));
+    const overallScore = Math.round(scores.reduce((sum, s) => sum + s.score, 0) / Math.max(1, scores.length));
 
     submitProbationEvaluation({
       employeeId: selectedEmpId,
       supervisorId: currentUser.id,
       evaluationDate: new Date().toISOString().split('T')[0],
-      technicalSkillScore,
-      disciplineScore,
-      teamworkScore,
-      initiativeScore,
+      templateId: activeTemplate.id,
+      categoryScores: scores,
       overallScore,
       recommendation,
       extensionDurationMonths: recommendation === 'Perpanjang Probation' ? extensionMonths : undefined,
@@ -153,6 +170,21 @@ export const ProbationManagement: React.FC = () => {
           <span>Riwayat & Status Keputusan Evaluasi</span>
           <span className="px-1.5 py-0.5 bg-indigo-100 text-indigo-700 rounded-full text-[10px]">
             {probationEvaluations.length}
+          </span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('templates')}
+          className={`flex items-center gap-2 pb-3 px-3 text-xs font-semibold border-b-2 transition-colors ${
+            activeTab === 'templates'
+              ? 'border-indigo-600 text-indigo-600'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <Award className="w-4 h-4" />
+          <span>Template Evaluasi</span>
+          <span className="px-1.5 py-0.5 bg-indigo-100 text-indigo-700 rounded-full text-[10px]">
+            {probationEvaluationTemplates.length}
           </span>
         </button>
       </div>
@@ -271,11 +303,19 @@ export const ProbationManagement: React.FC = () => {
                       Catatan Evaluator: "{ev.notes}"
                     </p>
 
-                    <div className="flex items-center gap-4 text-[11px] text-slate-400 mt-2">
-                      <span>Teknis: <b>{ev.technicalSkillScore}</b></span>
-                      <span>Disiplin: <b>{ev.disciplineScore}</b></span>
-                      <span>Teamwork: <b>{ev.teamworkScore}</b></span>
-                      <span>Inisiatif: <b>{ev.initiativeScore}</b></span>
+                    <div className="flex items-center gap-4 text-[11px] text-slate-400 mt-2 flex-wrap">
+                      {ev.categoryScores && ev.categoryScores.length > 0 ? (
+                        ev.categoryScores.map((cs) => (
+                          <span key={cs.categoryId}>{cs.label}: <b>{cs.score}</b></span>
+                        ))
+                      ) : (
+                        <>
+                          <span>Teknis: <b>{ev.technicalSkillScore}</b></span>
+                          <span>Disiplin: <b>{ev.disciplineScore}</b></span>
+                          <span>Teamwork: <b>{ev.teamworkScore}</b></span>
+                          <span>Inisiatif: <b>{ev.initiativeScore}</b></span>
+                        </>
+                      )}
                       <span>• Tanggal Evaluasi: {ev.evaluationDate}</span>
                     </div>
                   </div>
@@ -316,6 +356,145 @@ export const ProbationManagement: React.FC = () => {
         </div>
       )}
 
+      {/* Tab 3: Template Evaluasi — custom kategori/pertanyaan, masa berlaku, riwayat ditambah terus (user, 2026-11-09) */}
+      {activeTab === 'templates' && (
+        <div className="space-y-4">
+          <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-xs space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-700">Buat Template Evaluasi Baru</span>
+              {activeTemplate && (
+                <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full text-[10px] font-semibold">
+                  Template Aktif Saat Ini: {activeTemplate.name}
+                </span>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="text-[11px] font-semibold text-slate-600 block mb-1">Nama Template *</label>
+                <input
+                  type="text"
+                  value={newTemplateName}
+                  onChange={(e) => setNewTemplateName(e.target.value)}
+                  placeholder="mis. Evaluasi Probation 2027"
+                  className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs"
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-semibold text-slate-600 block mb-1">Berlaku Mulai *</label>
+                <input
+                  type="date"
+                  value={newTemplateValidFrom}
+                  onChange={(e) => setNewTemplateValidFrom(e.target.value)}
+                  className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs"
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-semibold text-slate-600 block mb-1">Berlaku Sampai (opsional)</label>
+                <input
+                  type="date"
+                  value={newTemplateValidUntil}
+                  onChange={(e) => setNewTemplateValidUntil(e.target.value)}
+                  className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-[11px] font-semibold text-slate-600 block">Daftar Kategori / Pertanyaan Penilaian *</label>
+              {newTemplateCategories.map((cat, idx) => (
+                <div key={cat.id} className="flex items-center gap-2">
+                  <span className="text-[11px] text-slate-400 w-5 shrink-0">{idx + 1}.</span>
+                  <input
+                    type="text"
+                    value={cat.label}
+                    onChange={(e) =>
+                      setNewTemplateCategories((prev) => prev.map((c) => (c.id === cat.id ? { ...c, label: e.target.value } : c)))
+                    }
+                    placeholder="mis. Kemampuan Teknis & Hasil Kerja"
+                    className="flex-1 px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setNewTemplateCategories((prev) => prev.filter((c) => c.id !== cat.id))}
+                    disabled={newTemplateCategories.length <= 1}
+                    className="p-1.5 text-rose-500 hover:bg-rose-50 rounded disabled:opacity-30 disabled:cursor-not-allowed"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => setNewTemplateCategories((prev) => [...prev, { id: genCategoryId(), label: '' }])}
+                className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-700"
+              >
+                + Tambah Kategori
+              </button>
+            </div>
+
+            <div className="pt-2 flex justify-end">
+              <button
+                type="button"
+                disabled={!newTemplateName.trim() || !newTemplateValidFrom || newTemplateCategories.some((c) => !c.label.trim())}
+                onClick={() => {
+                  addProbationEvaluationTemplate({
+                    name: newTemplateName.trim(),
+                    categories: newTemplateCategories.map((c) => ({ id: c.id, label: c.label.trim() })),
+                    validFrom: newTemplateValidFrom,
+                    validUntil: newTemplateValidUntil || undefined,
+                    isActive: true,
+                  });
+                  setNewTemplateName('');
+                  setNewTemplateValidUntil('');
+                  setNewTemplateCategories([{ id: genCategoryId(), label: '' }]);
+                }}
+                className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-lg shadow-xs disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Simpan Template
+              </button>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
+            <div className="p-4 border-b border-slate-200 bg-slate-50 text-xs font-semibold text-slate-700">
+              Riwayat Template Evaluasi ({probationEvaluationTemplates.length})
+            </div>
+            <div className="divide-y divide-slate-200">
+              {[...probationEvaluationTemplates]
+                .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+                .map((t) => {
+                  const isCurrentlyActive = t.id === activeTemplate?.id;
+                  return (
+                    <div key={t.id} className="p-4">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-slate-900 text-sm">{t.name}</span>
+                        {isCurrentlyActive && (
+                          <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded text-[10px] font-bold">Berlaku Saat Ini</span>
+                        )}
+                        <span className="text-[11px] text-slate-400">
+                          Berlaku: {t.validFrom} s/d {t.validUntil || 'Tanpa Batas'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 flex-wrap mt-1.5 text-[11px] text-slate-500">
+                        {t.categories.map((c) => (
+                          <span key={c.id} className="px-2 py-0.5 bg-slate-100 rounded">{c.label}</span>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+
+              {probationEvaluationTemplates.length === 0 && (
+                <div className="p-8 text-center text-slate-400 text-xs">
+                  Belum ada Template Evaluasi — buat yang pertama di atas.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal: Form Input Evaluasi */}
       {isModalOpen && (
         <div
@@ -351,70 +530,34 @@ export const ProbationManagement: React.FC = () => {
                 />
               </div>
 
-              {/* Score Range Inputs */}
-              <div className="space-y-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
-                <div className="text-xs font-bold text-slate-700">Skor Kompetensi (Skala 0 - 100)</div>
-
-                <div>
-                  <div className="flex justify-between text-xs text-slate-600 mb-1">
-                    <span>1. Kemampuan Teknis & Hasil Kerja (Bobot 35%)</span>
-                    <span className="font-bold text-emerald-700">{technicalSkillScore}</span>
+              {/* Score Range Inputs — kategori mengikuti template evaluasi yang sedang berlaku (Pengaturan > Template Evaluasi) */}
+              {activeTemplate ? (
+                <div className="space-y-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+                  <div className="text-xs font-bold text-slate-700">
+                    Skor Kompetensi (Skala 0 - 100) — Template: {activeTemplate.name}
                   </div>
-                  <input
-                    type="range"
-                    min="40"
-                    max="100"
-                    value={technicalSkillScore}
-                    onChange={(e) => setTechnicalSkillScore(Number(e.target.value))}
-                    className="w-full accent-emerald-600 cursor-pointer"
-                  />
+                  {activeTemplate.categories.map((cat, idx) => (
+                    <div key={cat.id}>
+                      <div className="flex justify-between text-xs text-slate-600 mb-1">
+                        <span>{idx + 1}. {cat.label}</span>
+                        <span className="font-bold text-emerald-700">{categoryScores[cat.id] ?? 75}</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        value={categoryScores[cat.id] ?? 75}
+                        onChange={(e) => setCategoryScores((prev) => ({ ...prev, [cat.id]: Number(e.target.value) }))}
+                        className="w-full accent-emerald-600 cursor-pointer"
+                      />
+                    </div>
+                  ))}
                 </div>
-
-                <div>
-                  <div className="flex justify-between text-xs text-slate-600 mb-1">
-                    <span>2. Kedisiplinan & Kehadiran (Bobot 25%)</span>
-                    <span className="font-bold text-emerald-700">{disciplineScore}</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="40"
-                    max="100"
-                    value={disciplineScore}
-                    onChange={(e) => setDisciplineScore(Number(e.target.value))}
-                    className="w-full accent-emerald-600 cursor-pointer"
-                  />
+              ) : (
+                <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800">
+                  Belum ada Template Evaluasi yang berlaku hari ini. Buat dulu di tab <strong>Template Evaluasi</strong> sebelum mengisi formulir ini.
                 </div>
-
-                <div>
-                  <div className="flex justify-between text-xs text-slate-600 mb-1">
-                    <span>3. Kerja Sama Tim & Komunikasi (Bobot 20%)</span>
-                    <span className="font-bold text-emerald-700">{teamworkScore}</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="40"
-                    max="100"
-                    value={teamworkScore}
-                    onChange={(e) => setTeamworkScore(Number(e.target.value))}
-                    className="w-full accent-emerald-600 cursor-pointer"
-                  />
-                </div>
-
-                <div>
-                  <div className="flex justify-between text-xs text-slate-600 mb-1">
-                    <span>4. Inisiatif & Adaptabilitas (Bobot 20%)</span>
-                    <span className="font-bold text-emerald-700">{initiativeScore}</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="40"
-                    max="100"
-                    value={initiativeScore}
-                    onChange={(e) => setInitiativeScore(Number(e.target.value))}
-                    className="w-full accent-emerald-600 cursor-pointer"
-                  />
-                </div>
-              </div>
+              )}
 
               {/* Recommendation */}
               <div>
@@ -482,7 +625,8 @@ export const ProbationManagement: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-lg shadow-xs"
+                  disabled={!activeTemplate}
+                  className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-lg shadow-xs disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   Simpan & Teruskan ke Approval
                 </button>

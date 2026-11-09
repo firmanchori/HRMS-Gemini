@@ -351,16 +351,24 @@ export interface OnboardingChecklistTemplateItem {
   subItems: string[];
 }
 
+export interface ProbationCategoryScore {
+  categoryId: string;
+  label: string;
+  score: number;
+}
+
 export interface ProbationEvaluation {
   id: string;
   tenantId: string;
   employeeId: string;
   supervisorId: string | null;
   evaluationDate: string;
-  technicalSkillScore: number;
-  disciplineScore: number;
-  teamworkScore: number;
-  initiativeScore: number;
+  technicalSkillScore: number | null;
+  disciplineScore: number | null;
+  teamworkScore: number | null;
+  initiativeScore: number | null;
+  templateId?: string | null;
+  categoryScores?: ProbationCategoryScore[] | null;
   overallScore: number;
   recommendation: "Lulus" | "Perpanjang Probation" | "Tidak Lulus";
   extensionDurationMonths: number | null;
@@ -368,6 +376,22 @@ export interface ProbationEvaluation {
   status: "Draft" | "Menunggu Approval" | "Disetujui" | "Ditolak";
   approvedBy: string | null;
   skDocNumber: string | null;
+}
+
+export interface ProbationEvaluationCategory {
+  id: string;
+  label: string;
+}
+
+export interface ProbationEvaluationTemplate {
+  id: string;
+  tenantId: string;
+  name: string;
+  categories: ProbationEvaluationCategory[];
+  validFrom: string;
+  validUntil: string | null;
+  isActive: boolean;
+  createdAt: string;
 }
 
 export interface ContractRenewalReview {
@@ -1065,6 +1089,10 @@ export const tenantApi = {
     request<ProbationEvaluation>("/api/tenant/probation-evaluations", { method: "POST", body: JSON.stringify(data) }),
   updateProbationEvaluation: (id: string, data: Partial<ProbationEvaluation>) =>
     request<ProbationEvaluation>(`/api/tenant/probation-evaluations/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+
+  listProbationEvaluationTemplates: () => request<ProbationEvaluationTemplate[]>("/api/tenant/probation-evaluation-templates"),
+  createProbationEvaluationTemplate: (data: Omit<ProbationEvaluationTemplate, "id" | "tenantId" | "createdAt">) =>
+    request<ProbationEvaluationTemplate>("/api/tenant/probation-evaluation-templates", { method: "POST", body: JSON.stringify(data) }),
 
   listContractRenewalReviews: () => request<ContractRenewalReview[]>("/api/tenant/contract-renewal-reviews"),
   createContractRenewalReview: (data: Omit<ContractRenewalReview, "id" | "tenantId">) =>

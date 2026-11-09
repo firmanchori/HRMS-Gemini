@@ -39,6 +39,7 @@ import {
   interviewTypeSettings,
   onboardingChecklistTemplates,
   probationEvaluations,
+  probationEvaluationTemplates,
   contractRenewalReviews,
   tenantModuleSettings,
   approvalItems,
@@ -1943,6 +1944,35 @@ async function resolveVisibleEmployeeIds(req: Request, tenantId: string): Promis
  * one entity's admin could see and create records against another
  * sibling entity's employees.
  */
+// ---------------------------------------------------------------------------
+// Probation Evaluation Templates — custom categories/questions with a
+// validity window (user, 2026-11-09). Append-only by design: no PUT/DELETE,
+// a tenant just keeps creating new versions ("bisa di tambah terus"), so
+// past evaluations stay tied to the exact template they were filled out
+// against even once a newer one becomes current.
+// ---------------------------------------------------------------------------
+
+tenantRouter.get("/probation-evaluation-templates", async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const rows = await db.select().from(probationEvaluationTemplates).where(eq(probationEvaluationTemplates.tenantId, tenantId));
+  res.json(rows);
+});
+
+const probationEvaluationTemplateSchema = z.object({
+  name: z.string().trim().min(2).max(200),
+  categories: z.array(z.object({ id: z.string().trim().min(1).max(100), label: z.string().trim().min(1).max(300) })).min(1).max(30),
+  validFrom: z.string().trim().min(1).max(20),
+  validUntil: z.string().trim().max(20).optional(),
+  isActive: z.boolean().optional(),
+});
+
+tenantRouter.post("/probation-evaluation-templates", validateBody(probationEvaluationTemplateSchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [created] = await db.insert(probationEvaluationTemplates).values({ ...req.body, tenantId }).returning();
+  await logAudit({ actorUserId: req.session!.userId, tenantId, action: "probation_evaluation_template.create", details: { templateId: created.id } });
+  res.status(201).json(created);
+});
+
 tenantRouter.get("/probation-evaluations", async (req, res) => {
   const tenantId = req.session!.tenantId!;
   const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
@@ -1954,10 +1984,14 @@ const probationEvaluationSchema = z.object({
   employeeId: z.string().uuid(),
   supervisorId: z.string().uuid().optional(),
   evaluationDate: zDateTime().optional(),
-  technicalSkillScore: z.number().int().min(0).max(100),
-  disciplineScore: z.number().int().min(0).max(100),
-  teamworkScore: z.number().int().min(0).max(100),
-  initiativeScore: z.number().int().min(0).max(100),
+  // Legacy fixed categories — optional now; a custom-template evaluation
+  // (templateId + categoryScores) doesn't populate these at all.
+  technicalSkillScore: z.number().int().min(0).max(100).optional(),
+  disciplineScore: z.number().int().min(0).max(100).optional(),
+  teamworkScore: z.number().int().min(0).max(100).optional(),
+  initiativeScore: z.number().int().min(0).max(100).optional(),
+  templateId: z.string().uuid().optional(),
+  categoryScores: z.array(z.object({ categoryId: z.string(), label: z.string(), score: z.number().int().min(0).max(100) })).optional(),
   overallScore: z.number().int().min(0).max(100),
   recommendation: z.enum(["Lulus", "Perpanjang Probation", "Tidak Lulus"]),
   extensionDurationMonths: z.number().int().min(0).optional(),

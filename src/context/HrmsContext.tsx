@@ -18,6 +18,7 @@ import {
   type OnboardingChecklistTemplateItem as ApiOnboardingChecklistTemplateItem,
   type Employee as ApiEmployee,
   type ProbationEvaluation as ApiProbationEvaluation,
+  type ProbationEvaluationTemplate as ApiProbationEvaluationTemplate,
   type ContractRenewalReview as ApiContractRenewalReview,
   type ApprovalWorkflowItem as ApiApprovalWorkflowItem,
   type ApprovalDelegation as ApiApprovalDelegation,
@@ -98,6 +99,7 @@ import {
   OrgChangeProposal,
   OrgStructureSnapshot,
   ProbationEvaluation,
+  ProbationEvaluationTemplate,
   ContractRenewalReview,
   CompanyCalendarEvent,
   GradeSalaryRange,
@@ -507,6 +509,8 @@ interface HrmsContextType {
   probationEvaluations: ProbationEvaluation[];
   submitProbationEvaluation: (evaluation: Omit<ProbationEvaluation, 'id' | 'tenantId' | 'status'>) => void;
   reviewProbationEvaluation: (id: string, approved: boolean) => void;
+  probationEvaluationTemplates: ProbationEvaluationTemplate[];
+  addProbationEvaluationTemplate: (template: Omit<ProbationEvaluationTemplate, 'id' | 'tenantId' | 'createdAt'>) => void;
 
   // 29. Contract Renewal (PKWT)
   contractReviews: ContractRenewalReview[];
@@ -1223,6 +1227,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // 28. Probation Evaluations & 29. Contract Reviews — real backend data,
   // hydrated via loadTenantOrgData() (Manajemen Karyawan sub-menus).
   const [probationEvaluations, setProbationEvaluations] = useState<ProbationEvaluation[]>([]);
+  const [probationEvaluationTemplates, setProbationEvaluationTemplates] = useState<ProbationEvaluationTemplate[]>([]);
   const [contractReviews, setContractReviews] = useState<ContractRenewalReview[]>([]);
 
   // 30. Calendar Events — real backend data, loaded via loadTenantOrgData()
@@ -1327,7 +1332,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       realEntities, realOfficeLocations, realDivisions, realDepartments, realPositions, realOrgNodes, realGrades,
       realUsers, realJobRequisitions, realVacancies, realCandidates, realOnboardingProcesses,
       realCompetencyTestTypes, realInterviewTypes, realOnboardingChecklistTemplates, realEmployees,
-      realProbationEvaluations, realContractReviews, realModuleSettings,
+      realProbationEvaluations, realProbationEvaluationTemplates, realContractReviews, realModuleSettings,
       realApprovalItems, realApprovalDelegations,
       realWorkShifts, realEmployeeSchedules, realShiftSwapRequests, realAttendanceRecords, realAttendanceCorrections, realOvertimeRequests,
       realOrgSnapshots,
@@ -1357,6 +1362,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       tenantApi.listOnboardingChecklistTemplates(),
       tenantApi.listEmployees(),
       tenantApi.listProbationEvaluations(),
+      tenantApi.listProbationEvaluationTemplates(),
       tenantApi.listContractRenewalReviews(),
       tenantApi.getModuleSettings(),
       tenantApi.listApprovalItems(),
@@ -1408,6 +1414,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setOnboardingChecklistTemplates(realOnboardingChecklistTemplates.map(toMockChecklistTemplate));
     setApiEmployees(realEmployees);
     setProbationEvaluations(realProbationEvaluations.map(toMockProbationEvaluation));
+    setProbationEvaluationTemplates(realProbationEvaluationTemplates as unknown as ProbationEvaluationTemplate[]);
     setContractReviews(realContractReviews.map(toMockContractReview));
     setModuleSettings((prev) => {
       const merged = { ...prev };
@@ -4666,11 +4673,23 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const toMockProbationEvaluation = (r: ApiProbationEvaluation): ProbationEvaluation => ({
     ...r,
     supervisorId: r.supervisorId || '',
+    technicalSkillScore: r.technicalSkillScore ?? undefined,
+    disciplineScore: r.disciplineScore ?? undefined,
+    teamworkScore: r.teamworkScore ?? undefined,
+    initiativeScore: r.initiativeScore ?? undefined,
+    templateId: r.templateId ?? undefined,
+    categoryScores: r.categoryScores ?? undefined,
     extensionDurationMonths: r.extensionDurationMonths ?? undefined,
     notes: r.notes || '',
     approvedBy: r.approvedBy || undefined,
     skDocNumber: r.skDocNumber || undefined,
   });
+
+  const addProbationEvaluationTemplate = (template: Omit<ProbationEvaluationTemplate, 'id' | 'tenantId' | 'createdAt'>) => {
+    tenantApi.createProbationEvaluationTemplate(template as Omit<ApiProbationEvaluationTemplate, 'id' | 'tenantId' | 'createdAt'>).then((created) => {
+      setProbationEvaluationTemplates((prev) => [created as unknown as ProbationEvaluationTemplate, ...prev]);
+    });
+  };
 
   const submitProbationEvaluation = (evaluation: Omit<ProbationEvaluation, 'id' | 'tenantId' | 'status'>) => {
     tenantApi.createProbationEvaluation({ ...evaluation, status: 'Menunggu Approval' } as Omit<ApiProbationEvaluation, 'id' | 'tenantId'>).then((created) => {
@@ -5219,6 +5238,8 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         probationEvaluations, // real backend data, already tenant-scoped server-side
         submitProbationEvaluation,
         reviewProbationEvaluation,
+        probationEvaluationTemplates,
+        addProbationEvaluationTemplate,
         contractReviews, // real backend data, already tenant-scoped server-side
         submitContractReview,
         reviewContractReview,

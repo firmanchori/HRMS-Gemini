@@ -1725,16 +1725,43 @@ export interface OrgStructureSnapshot {
 }
 
 // 28. Probation Evaluation
+export interface ProbationEvaluationCategory {
+  id: string;
+  label: string;
+}
+
+/** Custom probation evaluation form (user, 2026-11-09) — append-only: a tenant keeps creating new versions instead of editing one in place, so past evaluations stay tied to the exact template they were filled out against. */
+export interface ProbationEvaluationTemplate {
+  id: string;
+  tenantId: string;
+  name: string;
+  categories: ProbationEvaluationCategory[];
+  validFrom: string;
+  validUntil?: string;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface ProbationCategoryScore {
+  categoryId: string;
+  label: string;
+  score: number;
+}
+
 export interface ProbationEvaluation {
   id: string;
   tenantId: string;
   employeeId: string;
   supervisorId: string;
   evaluationDate: string;
-  technicalSkillScore: number;
-  disciplineScore: number;
-  teamworkScore: number;
-  initiativeScore: number;
+  // Legacy fixed categories — only ever populated on evaluations filled
+  // out before the custom-template feature existed.
+  technicalSkillScore?: number;
+  disciplineScore?: number;
+  teamworkScore?: number;
+  initiativeScore?: number;
+  templateId?: string;
+  categoryScores?: ProbationCategoryScore[];
   overallScore: number;
   recommendation: 'Lulus' | 'Perpanjang Probation' | 'Tidak Lulus';
   extensionDurationMonths?: number;
