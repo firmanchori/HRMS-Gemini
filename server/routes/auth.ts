@@ -9,6 +9,7 @@ import { generateToken, hashToken } from "../lib/token.ts";
 import { sendPasswordResetEmail, sendEmailChangeConfirmation } from "../lib/email.ts";
 import { validateBody } from "../lib/validate.ts";
 import { authLimiter } from "../lib/rateLimit.ts";
+import { logAudit } from "../lib/audit.ts";
 
 export const authRouter = Router();
 
@@ -17,9 +18,38 @@ const loginSchema = z.object({
   password: z.string().min(1).max(200),
 });
 
+/**
+ * Logs every login attempt (success and failure) — found missing during
+ * the security review (user, 2026-11-09): there was no record anywhere of
+ * failed attempts, so a brute-force or credential-stuffing run against
+ * this endpoint would leave no trace to investigate afterward, only the
+ * rate limiter's in-memory counter (which isn't queryable and resets).
+ * Never logs the password itself. actorUserId is the matched user's id
+ * when the email exists (even on a wrong-password failure) — lets you
+ * tell "repeated wrong password against one real account" apart from
+ * "scanning random emails" in the resulting log.
+ */
+async function logLoginAttempt(params: {
+  tenantId: string | null;
+  actorUserId: string | null;
+  email: string;
+  outcome: "success" | "failure";
+  reason?: string;
+  ip: string;
+}) {
+  await logAudit({
+    actorUserId: params.actorUserId,
+    tenantId: params.tenantId,
+    action: params.outcome === "success" ? "auth.login_success" : "auth.login_failed",
+    details: { email: params.email, reason: params.reason, ip: params.ip },
+  });
+}
+
 /** Single login endpoint: context (App Owner vs tenant admin) comes from the resolved subdomain. */
 authRouter.post("/login", authLimiter, validateBody(loginSchema), async (req, res) => {
   const { email, password } = req.body;
+  const tenantId = req.tenant?.id ?? null;
+  const ip = req.ip ?? "unknown";
 
   const role = req.tenant ? "tenant_admin" : "app_owner";
   const whereClause = req.tenant
@@ -28,6 +58,7 @@ authRouter.post("/login", authLimiter, validateBody(loginSchema), async (req, re
 
   const [user] = await db.select().from(users).where(whereClause).limit(1);
   if (!user || !user.passwordHash || !(await bcrypt.compare(password, user.passwordHash))) {
+    await logLoginAttempt({ tenantId, actorUserId: user?.id ?? null, email, outcome: "failure", reason: "invalid_credentials", ip });
     return res.status(401).json({ error: "Email atau password salah" });
   }
 
@@ -42,9 +73,11 @@ authRouter.post("/login", authLimiter, validateBody(loginSchema), async (req, re
       Expired: "Masa aktif langganan perusahaan Anda sudah berakhir.",
       Cancelled: "Akun perusahaan Anda sudah tidak aktif.",
     };
+    await logLoginAttempt({ tenantId, actorUserId: user.id, email, outcome: "failure", reason: `tenant_${req.tenant.status}`, ip });
     return res.status(403).json({ error: statusMessages[req.tenant.status] ?? "Akun perusahaan Anda tidak aktif." });
   }
 
+  await logLoginAttempt({ tenantId, actorUserId: user.id, email, outcome: "success", ip });
   issueSession(res, { userId: user.id, role: user.role, tenantId: user.tenantId });
   res.json({ id: user.id, name: user.name, email: user.email, role: user.role });
 });
