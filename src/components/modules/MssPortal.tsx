@@ -23,6 +23,8 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { ScrollableTabNav } from '../common/ScrollableTabNav';
+import { ValidatedSelect, ValidatedTextarea } from '../common/ValidatedInput';
+import { ValidatedDateInput } from '../common/ValidatedDateInput';
 import { formatRupiah } from '../../utils/taxCalculator';
 import { ApprovalWorkflowItem, AttendanceRecord, Employee } from '../../types/hrms';
 
@@ -107,6 +109,7 @@ export const MssPortal: React.FC = () => {
   const [delegationEndDate, setDelegationEndDate] = useState(
     new Date(Date.now() + 86400000 * 7).toISOString().split('T')[0]
   );
+  const [delegationSubmitAttempted, setDelegationSubmitAttempted] = useState(false);
 
   // Team Subordinates: Get employees in the same department or subordinates
   const teamMembers = employees.slice(0, 8); // Demo team members
@@ -128,13 +131,13 @@ export const MssPortal: React.FC = () => {
     setSelectedItemIds((prev) => prev.filter((i) => i !== id));
   };
 
+  const [rejectSubmitAttempted, setRejectSubmitAttempted] = useState(false);
+
   const handleRejectConfirm = (e: React.FormEvent) => {
     e.preventDefault();
+    setRejectSubmitAttempted(true);
     if (!rejectingItem) return;
-    if (!rejectNotes.trim()) {
-      alert('Alasan penolakan wajib diisi untuk catatan transparansi ke karyawan.');
-      return;
-    }
+    if (!rejectNotes.trim()) return;
 
     reviewApprovalItem(rejectingItem.id, false, rejectNotes.trim());
     setNoticeMessage(`Permohonan "${rejectingItem.title}" telah ditolak dengan catatan.`);
@@ -632,8 +635,11 @@ export const MssPortal: React.FC = () => {
           </p>
 
           <form
+            noValidate
             onSubmit={(e) => {
               e.preventDefault();
+              setDelegationSubmitAttempted(true);
+              if (!delegateToId || !delegationStartDate || !delegationEndDate) return;
               setApprovalDelegation({
                 principalId: currentUser?.employeeId || employees[0]?.id || 'emp-1',
                 substituteId: delegateToId,
@@ -647,45 +653,39 @@ export const MssPortal: React.FC = () => {
             }}
             className="space-y-3.5 pt-2"
           >
-            <div>
-              <label className="font-semibold text-slate-700 block mb-1">
-                Pilih Manajer Pengganti (Deputy Approver) *
-              </label>
-              <select
-                value={delegateToId}
-                onChange={(e) => setDelegateToId(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white font-medium"
-              >
-                {employees.map((e) => (
-                  <option key={e.id} value={e.id}>
-                    {e.fullName} ({e.nik} - {e.department})
-                  </option>
-                ))}
-              </select>
-            </div>
+            <ValidatedSelect
+              label="Pilih Manajer Pengganti (Deputy Approver)"
+              required
+              requiredLabel="Manajer pengganti wajib dipilih"
+              value={delegateToId}
+              onChange={setDelegateToId}
+              showError={delegationSubmitAttempted}
+            >
+              <option value="">— Pilih Manajer —</option>
+              {employees.map((e) => (
+                <option key={e.id} value={e.id}>
+                  {e.fullName} ({e.nik} - {e.department})
+                </option>
+              ))}
+            </ValidatedSelect>
 
             <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">Mulai Tanggal *</label>
-                <input
-                  type="date"
-                  required
-                  value={delegationStartDate}
-                  onChange={(e) => setDelegationStartDate(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                />
-              </div>
-
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">Sampai Tanggal *</label>
-                <input
-                  type="date"
-                  required
-                  value={delegationEndDate}
-                  onChange={(e) => setDelegationEndDate(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                />
-              </div>
+              <ValidatedDateInput
+                label="Mulai Tanggal"
+                required
+                showError={delegationSubmitAttempted}
+                value={delegationStartDate}
+                onChange={setDelegationStartDate}
+                maxDate={delegationEndDate || undefined}
+              />
+              <ValidatedDateInput
+                label="Sampai Tanggal"
+                required
+                showError={delegationSubmitAttempted}
+                value={delegationEndDate}
+                onChange={setDelegationEndDate}
+                minDate={delegationStartDate || undefined}
+              />
             </div>
 
             <div className="pt-2 flex items-center justify-between">
@@ -729,23 +729,18 @@ export const MssPortal: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleRejectConfirm} className="p-5 space-y-3.5 text-xs">
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">
-                  Alasan Penolakan (Wajib Diisi) *
-                </label>
-                <textarea
-                  rows={3}
-                  required
-                  placeholder="Contoh: Jadwal bertabrakan dengan sprint release critical / Lampiran nota tidak lengkap..."
-                  value={rejectNotes}
-                  onChange={(e) => setRejectNotes(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-rose-600"
-                />
-                <span className="text-[10px] text-slate-400 mt-1 block">
-                  Catatan ini akan dikirimkan langsung ke pemohon pada portal ESS mereka.
-                </span>
-              </div>
+            <form onSubmit={handleRejectConfirm} noValidate className="p-5 space-y-3.5 text-xs">
+              <ValidatedTextarea
+                label="Alasan Penolakan (Wajib Diisi)"
+                required
+                requiredLabel="Alasan penolakan wajib diisi untuk catatan transparansi ke karyawan"
+                rows={3}
+                placeholder="Contoh: Jadwal bertabrakan dengan sprint release critical / Lampiran nota tidak lengkap..."
+                value={rejectNotes}
+                onChange={setRejectNotes}
+                showError={rejectSubmitAttempted}
+                helperText="Catatan ini akan dikirimkan langsung ke pemohon pada portal ESS mereka."
+              />
 
               <div className="pt-2 flex justify-end gap-2 border-t border-slate-100">
                 <button

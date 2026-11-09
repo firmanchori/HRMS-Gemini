@@ -21,6 +21,7 @@ import {
   Info,
 } from 'lucide-react';
 import { ValidatedDateInput } from '../common/ValidatedDateInput';
+import { ValidatedInput, ValidatedTextarea } from '../common/ValidatedInput';
 import { ScrollableTabNav } from '../common/ScrollableTabNav';
 
 export const CompanyCalendarManagement: React.FC = () => {
@@ -177,6 +178,7 @@ export const CompanyCalendarManagement: React.FC = () => {
 
   const handleAddEmployeeLeave = (e: React.FormEvent) => {
     e.preventDefault();
+    setShowValidationErrors(true);
     if (!selectedDayDate) return;
     if (!dayLeaveForm.employeeId) {
       setFormError('Pilih karyawan terlebih dahulu.');
@@ -1013,7 +1015,7 @@ export const CompanyCalendarManagement: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleAddEvent} className="p-5 space-y-4">
+            <form onSubmit={handleAddEvent} noValidate className="p-5 space-y-4">
               {/* Form Validation Error Notice */}
               {formError && (
                 <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg flex items-center gap-2 text-rose-800 text-xs font-semibold animate-fadeIn">
@@ -1022,26 +1024,18 @@ export const CompanyCalendarManagement: React.FC = () => {
                 </div>
               )}
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Nama Hari Libur / Cuti Bersama *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Contoh: Cuti Bersama Hari Raya Waisak"
-                  value={eventForm.title}
-                  onChange={(e) => {
-                    setEventForm({ ...eventForm, title: e.target.value });
-                    if (formError) setFormError(null);
-                  }}
-                  className={`w-full text-xs px-3 py-2 border rounded-lg focus:outline-blue-600 ${
-                    showValidationErrors && !eventForm.title.trim()
-                      ? 'border-rose-500 bg-rose-50/20'
-                      : 'border-slate-300'
-                  }`}
-                />
-              </div>
+              <ValidatedInput
+                label="Nama Hari Libur / Cuti Bersama"
+                required
+                requiredLabel="Nama hari libur wajib diisi"
+                placeholder="Contoh: Cuti Bersama Hari Raya Waisak"
+                value={eventForm.title}
+                onChange={(v) => {
+                  setEventForm({ ...eventForm, title: v });
+                  if (formError) setFormError(null);
+                }}
+                showError={showValidationErrors}
+              />
 
               <div className="grid grid-cols-2 gap-3">
                 <ValidatedDateInput
@@ -1259,20 +1253,16 @@ export const CompanyCalendarManagement: React.FC = () => {
 
             {/* Action 1: Add Holiday / Cuti Bersama */}
             {dayModalTab === 'event' && (
-              <form onSubmit={handleAddEvent} className="p-5 space-y-3 text-xs">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Nama Hari Libur / Cuti Bersama *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Contoh: Libur Pilkada Serentak / Event Perusahaan"
-                    value={eventForm.title}
-                    onChange={(e) => setEventForm({ ...eventForm, title: e.target.value })}
-                    className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:outline-blue-600"
-                  />
-                </div>
+              <form onSubmit={handleAddEvent} noValidate className="p-5 space-y-3 text-xs">
+                <ValidatedInput
+                  label="Nama Hari Libur / Cuti Bersama"
+                  required
+                  requiredLabel="Nama hari libur wajib diisi"
+                  placeholder="Contoh: Libur Pilkada Serentak / Event Perusahaan"
+                  value={eventForm.title}
+                  onChange={(v) => setEventForm({ ...eventForm, title: v })}
+                  showError={showValidationErrors}
+                />
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
@@ -1357,7 +1347,7 @@ export const CompanyCalendarManagement: React.FC = () => {
 
             {/* Action 2: Input Employee Leave */}
             {dayModalTab === 'leave' && (
-              <form onSubmit={handleAddEmployeeLeave} className="p-5 space-y-3 text-xs">
+              <form onSubmit={handleAddEmployeeLeave} noValidate className="p-5 space-y-3 text-xs">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
                     Pilih Karyawan *
@@ -1409,19 +1399,16 @@ export const CompanyCalendarManagement: React.FC = () => {
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Alasan / Keperluan Cuti *
-                  </label>
-                  <textarea
-                    rows={2}
-                    required
-                    placeholder="Contoh: Acara keluarga di luar kota / Istirahat sakit flu..."
-                    value={dayLeaveForm.reason}
-                    onChange={(e) => setDayLeaveForm({ ...dayLeaveForm, reason: e.target.value })}
-                    className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:outline-emerald-600"
-                  />
-                </div>
+                <ValidatedTextarea
+                  label="Alasan / Keperluan Cuti"
+                  required
+                  requiredLabel="Alasan cuti wajib diisi"
+                  rows={2}
+                  placeholder="Contoh: Acara keluarga di luar kota / Istirahat sakit flu..."
+                  value={dayLeaveForm.reason}
+                  onChange={(v) => setDayLeaveForm({ ...dayLeaveForm, reason: v })}
+                  showError={showValidationErrors}
+                />
 
                 <div className="pt-2 flex justify-end gap-2 border-t border-slate-100">
                   <button

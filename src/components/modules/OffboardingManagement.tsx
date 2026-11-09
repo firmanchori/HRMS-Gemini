@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { formatRupiah, calculateSeverancePay } from '../../utils/taxCalculator';
 import { ValidatedDateInput } from '../common/ValidatedDateInput';
+import { ValidatedSelect } from '../common/ValidatedInput';
 import { ModuleDocumentModal } from '../common/ModuleDocumentModal';
 import { OffboardingRecord } from '../../types/hrms';
 
@@ -904,7 +905,7 @@ export const OffboardingManagement: React.FC = () => {
                 <X className="w-4 h-4 text-slate-400 hover:text-white" />
               </button>
             </div>
-            <form onSubmit={handleSubmit} className="p-5 space-y-4 text-xs">
+            <form onSubmit={handleSubmit} noValidate className="p-5 space-y-4 text-xs">
               {/* Form Validation Error Notice */}
               {formError && (
                 <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg flex items-center gap-2 text-rose-800 text-xs font-semibold animate-fadeIn">
@@ -913,24 +914,24 @@ export const OffboardingManagement: React.FC = () => {
                 </div>
               )}
 
-              <div>
-                <label className="font-medium text-slate-700 block mb-1">Pilih Karyawan *</label>
-                <select
-                  required
-                  value={employeeId}
-                  onChange={(e) => {
-                    setEmployeeId(e.target.value);
-                    if (formError) setFormError(null);
-                  }}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-md bg-white font-medium"
-                >
-                  {employees.map((emp) => (
-                    <option key={emp.id} value={emp.id}>
-                      {emp.fullName} ({emp.nik}) - Bergabung: {emp.joinDate}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <ValidatedSelect
+                label="Pilih Karyawan"
+                required
+                requiredLabel="Karyawan wajib dipilih"
+                value={employeeId}
+                onChange={(v) => {
+                  setEmployeeId(v);
+                  if (formError) setFormError(null);
+                }}
+                showError={showValidationErrors}
+              >
+                <option value="">— Pilih Karyawan —</option>
+                {employees.map((emp) => (
+                  <option key={emp.id} value={emp.id}>
+                    {emp.fullName} ({emp.nik}) - Bergabung: {emp.joinDate}
+                  </option>
+                ))}
+              </ValidatedSelect>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>

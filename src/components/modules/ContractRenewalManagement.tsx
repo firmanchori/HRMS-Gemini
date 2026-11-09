@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { EmployeeSelect } from '../common/EmployeeSelect';
 import { ValidatedDateInput } from '../common/ValidatedDateInput';
+import { ValidatedTextarea } from '../common/ValidatedInput';
 import { CurrencyInput } from '../common/CurrencyInput';
 import { formatRupiah } from '../../utils/taxCalculator';
 import { ModuleDocumentModal } from '../common/ModuleDocumentModal';
@@ -352,7 +353,7 @@ export const ContractRenewalManagement: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-5 space-y-4">
+            <form onSubmit={handleSubmit} noValidate className="p-5 space-y-4">
               {/* Form Validation Error Notice */}
               {formError && (
                 <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg flex items-center gap-2 text-rose-800 text-xs font-semibold animate-fadeIn">
@@ -438,26 +439,19 @@ export const ContractRenewalManagement: React.FC = () => {
                 </div>
               )}
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Catatan Rekomendasi Evaluasi *
-                </label>
-                <textarea
-                  required
-                  rows={3}
-                  placeholder="Alasan perpanjangan atau pertimbangan pengangkatan tetap..."
-                  value={notes}
-                  onChange={(e) => {
-                    setNotes(e.target.value);
-                    if (formError) setFormError(null);
-                  }}
-                  className={`w-full text-xs px-3 py-2 border rounded-lg focus:outline-blue-600 ${
-                    showValidationErrors && !notes.trim()
-                      ? 'border-rose-500 bg-rose-50/20'
-                      : 'border-slate-300'
-                  }`}
-                />
-              </div>
+              <ValidatedTextarea
+                label="Catatan Rekomendasi Evaluasi"
+                required
+                requiredLabel="Catatan rekomendasi wajib diisi"
+                rows={3}
+                placeholder="Alasan perpanjangan atau pertimbangan pengangkatan tetap..."
+                value={notes}
+                onChange={(v) => {
+                  setNotes(v);
+                  if (formError) setFormError(null);
+                }}
+                showError={showValidationErrors}
+              />
 
               <div className="pt-2 flex justify-end gap-2 border-t border-slate-100">
                 <button

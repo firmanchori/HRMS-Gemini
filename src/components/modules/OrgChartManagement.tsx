@@ -19,6 +19,7 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import { ValidatedDateInput } from '../common/ValidatedDateInput';
+import { ValidatedInput, ValidatedTextarea } from '../common/ValidatedInput';
 
 export const OrgChartManagement: React.FC = () => {
   const {
@@ -38,6 +39,7 @@ export const OrgChartManagement: React.FC = () => {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [isProposalModalOpen, setIsProposalModalOpen] = useState(false);
   const [proposalError, setProposalError] = useState<string | null>(null);
+  const [showValidationErrors, setShowValidationErrors] = useState(false);
 
   // Proposal Form State
   const [proposalForm, setProposalForm] = useState({
@@ -57,6 +59,7 @@ export const OrgChartManagement: React.FC = () => {
 
   const handleCreateProposal = (e: React.FormEvent) => {
     e.preventDefault();
+    setShowValidationErrors(true);
     setProposalError(null);
 
     if (!proposalForm.proposalTitle.trim()) {
@@ -468,7 +471,7 @@ export const OrgChartManagement: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleCreateProposal} className="p-5 space-y-4">
+            <form onSubmit={handleCreateProposal} noValidate className="p-5 space-y-4">
               {/* Form Validation Error Notice */}
               {proposalError && (
                 <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg flex items-center gap-2 text-rose-800 text-xs font-semibold animate-fadeIn">
@@ -477,22 +480,18 @@ export const OrgChartManagement: React.FC = () => {
                 </div>
               )}
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Judul Usulan Perubahan *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Contoh: Pembentukan Sub-Divisi AI & Cloud Architecture"
-                  value={proposalForm.proposalTitle}
-                  onChange={(e) => {
-                    setProposalForm({ ...proposalForm, proposalTitle: e.target.value });
-                    if (proposalError) setProposalError(null);
-                  }}
-                  className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:outline-indigo-600"
-                />
-              </div>
+              <ValidatedInput
+                label="Judul Usulan Perubahan"
+                required
+                requiredLabel="Judul usulan wajib diisi"
+                placeholder="Contoh: Pembentukan Sub-Divisi AI & Cloud Architecture"
+                value={proposalForm.proposalTitle}
+                onChange={(v) => {
+                  setProposalForm({ ...proposalForm, proposalTitle: v });
+                  if (proposalError) setProposalError(null);
+                }}
+                showError={showValidationErrors}
+              />
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -520,23 +519,21 @@ export const OrgChartManagement: React.FC = () => {
                     if (proposalError) setProposalError(null);
                   }}
                   required
+                  showError={showValidationErrors}
                   helperText="Format YYYY-MM-DD"
                 />
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Uraian Alasan Bisnis & Dampak Organisasi *
-                </label>
-                <textarea
-                  required
-                  rows={3}
-                  placeholder="Jelaskan rasionalisasi beban kerja, efisiensi operasional, dan atasan yang ditunjuk..."
-                  value={proposalForm.description}
-                  onChange={(e) => setProposalForm({ ...proposalForm, description: e.target.value })}
-                  className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:outline-indigo-600"
-                />
-              </div>
+              <ValidatedTextarea
+                label="Uraian Alasan Bisnis & Dampak Organisasi"
+                required
+                requiredLabel="Uraian alasan bisnis wajib diisi"
+                rows={3}
+                placeholder="Jelaskan rasionalisasi beban kerja, efisiensi operasional, dan atasan yang ditunjuk..."
+                value={proposalForm.description}
+                onChange={(v) => setProposalForm({ ...proposalForm, description: v })}
+                showError={showValidationErrors}
+              />
 
               <div className="p-3 bg-amber-50 rounded-lg border border-amber-200 text-[11px] text-amber-800 flex items-start gap-2">
                 <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600" />
