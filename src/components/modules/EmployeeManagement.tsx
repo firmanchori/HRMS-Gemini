@@ -3809,6 +3809,62 @@ export const EmployeeManagement: React.FC = () => {
                           })}
                         </div>
                       </div>
+
+                      {/* Pengaturan Tipe Kehadiran & Wajib Swafoto per-karyawan (user, 2026-11-09: pindah dari toggle tenant-wide di Presensi) */}
+                      <div className="sm:col-span-2 bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-2">
+                        <div>
+                          <span className="text-slate-700 font-bold block text-xs">Opsi Clock-In yang Diizinkan</span>
+                          <span className="text-slate-500 text-[10px]">
+                            Menentukan pilihan apa saja yang muncul saat karyawan ini clock-in di ESS. WFO hanya bisa di dalam radius lokasi; WFA & Perjalanan Dinas bisa di luar radius.
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap gap-2 pt-1">
+                          {(['WFO', 'WFA', 'Perjalanan Dinas'] as const).map((opt) => {
+                            const current: ('WFO' | 'WFA' | 'Perjalanan Dinas')[] =
+                              selectedEmployee.allowedWorkTypes && selectedEmployee.allowedWorkTypes.length > 0
+                                ? selectedEmployee.allowedWorkTypes
+                                : ['WFO', 'WFA', 'Perjalanan Dinas'];
+                            const isOn = current.includes(opt);
+                            return (
+                              <button
+                                key={opt}
+                                type="button"
+                                onClick={() => {
+                                  const next = isOn ? current.filter((o) => o !== opt) : [...current, opt];
+                                  const updatedFields = { allowedWorkTypes: next };
+                                  updateEmployee(selectedEmployee.id, updatedFields);
+                                  setSelectedEmployee({ ...selectedEmployee, ...updatedFields });
+                                }}
+                                className={`px-3 py-1.5 rounded-lg border text-[11px] font-semibold transition-colors ${
+                                  isOn ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
+                                }`}
+                              >
+                                {opt}
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        <div className="flex items-center justify-between pt-2 border-t border-slate-200">
+                          <div>
+                            <span className="text-slate-700 font-bold block text-xs">Wajib Swafoto (Selfie) saat Clock-In & Clock-Out</span>
+                            <span className="text-slate-500 text-[10px]">Karyawan wajib mengambil foto dari kamera sebagai bukti kehadiran.</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const next = !selectedEmployee.requireSelfieCamera;
+                              const updatedFields = { requireSelfieCamera: next };
+                              updateEmployee(selectedEmployee.id, updatedFields);
+                              setSelectedEmployee({ ...selectedEmployee, ...updatedFields });
+                            }}
+                            className={`shrink-0 relative w-10 h-5.5 rounded-full transition-colors ${selectedEmployee.requireSelfieCamera ? 'bg-indigo-600' : 'bg-slate-300'}`}
+                          >
+                            <span className={`absolute top-0.5 w-4.5 h-4.5 bg-white rounded-full shadow transition-transform ${selectedEmployee.requireSelfieCamera ? 'translate-x-[20px]' : 'translate-x-0.5'}`} />
+                          </button>
+                        </div>
+                      </div>
+
                       <div>
                         <span className="text-slate-500 block text-[11px]">Status Ketenagakerjaan</span>
                         <strong className="text-emerald-700 text-xs">

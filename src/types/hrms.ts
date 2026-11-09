@@ -173,6 +173,8 @@ export interface Employee {
   directSupervisor?: string;
   branchLocation?: string;
   officeLocationIds?: string[]; // Penugasan lokasi kantor (bisa 1 atau lebih)
+  allowedWorkTypes?: ('WFO' | 'WFA' | 'Perjalanan Dinas')[]; // Opsi clock-in yang diizinkan untuk karyawan ini
+  requireSelfieCamera?: boolean; // Wajib swafoto kamera saat clock-in & clock-out
   joinDate: string;
   status: 'Aktif' | 'Cuti Panjang' | 'Resign' | 'PHK';
   remainingLeaveDays: number;

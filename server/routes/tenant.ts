@@ -1360,25 +1360,36 @@ tenantRouter.get("/employees/inactive", async (req, res) => {
  * bank, allowances, education, family, emergency contacts, ...) rides in
  * `details`, same pattern as candidates/jobVacancies/onboardingProcesses.
  */
+// Every .optional() field below maps to a nullable DB column — also
+// .nullable(), not just .optional(): mergeRowIntoMock() (HrmsContext.tsx)
+// round-trips a real DB row's `null`s straight back into the mock
+// Employee object's fields, and buildEmployeeApiPayload sends them as
+// explicit `null`, not `undefined`, on the next save. .optional() alone
+// accepts a MISSING key but rejects an explicit `null` value, so any
+// employee with an empty avatar/candidateId/etc. 400'd on every edit
+// through this screen — found live while verifying an unrelated change
+// (user, 2026-11-09), confirmed as pre-existing by reproducing it against
+// the office-location-assignment checkboxes too, which this commit never
+// touched.
 const employeeSchema = z.object({
   entityId: z.string().uuid(),
   nik: z.string().trim().min(1).max(50),
   fullName: z.string().trim().min(2).max(200),
-  email: z.string().trim().email().optional(),
-  phone: z.string().trim().max(50).optional(),
-  avatar: z.string().trim().max(2000).optional(),
-  employmentType: z.string().trim().max(50).optional(),
-  positionId: z.string().uuid().optional(),
-  divisionId: z.string().uuid().optional(),
-  departmentId: z.string().uuid().optional(),
-  orgNodeId: z.string().uuid().optional(),
-  managerId: z.string().uuid().optional(),
-  candidateId: z.string().uuid().optional(),
-  status: z.string().trim().max(50).optional(),
-  basicSalary: z.number().int().min(0).optional(),
-  joinDate: zDateTime().optional(),
-  resignDate: zDateTime().optional(),
-  resignReason: z.string().trim().max(500).optional(),
+  email: z.string().trim().email().optional().nullable(),
+  phone: z.string().trim().max(50).optional().nullable(),
+  avatar: z.string().trim().max(2000).optional().nullable(),
+  employmentType: z.string().trim().max(50).optional().nullable(),
+  positionId: z.string().uuid().optional().nullable(),
+  divisionId: z.string().uuid().optional().nullable(),
+  departmentId: z.string().uuid().optional().nullable(),
+  orgNodeId: z.string().uuid().optional().nullable(),
+  managerId: z.string().uuid().optional().nullable(),
+  candidateId: z.string().uuid().optional().nullable(),
+  status: z.string().trim().max(50).optional().nullable(),
+  basicSalary: z.number().int().min(0).optional().nullable(),
+  joinDate: zDateTime().optional().nullable(),
+  resignDate: zDateTime().optional().nullable(),
+  resignReason: z.string().trim().max(500).optional().nullable(),
   details: z.record(z.string(), z.unknown()).optional(),
 });
 
