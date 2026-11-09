@@ -1108,9 +1108,23 @@ export const attendanceRecords = pgTable("attendance_records", {
   lateMinutes: integer("late_minutes").notNull().default(0),
   notes: text("notes"),
   shiftId: text("shift_id"),
-  // WFO/WFH/WFA — dipilih wajib sebelum clock-in di ESS (user, 2026-11-03).
-  // Radius geofencing GPS hanya ditegakkan untuk WFO.
+  // WFO/WFA/Perjalanan Dinas — dipilih wajib sebelum clock-in di ESS
+  // (user, 2026-11-03, redesigned 2026-11-09). Radius geofencing GPS
+  // hanya ditegakkan (wajib di dalam radius) untuk WFO; WFA & Perjalanan
+  // Dinas boleh di luar radius — statusnya tetap direkam (lihat kolom
+  // *InsideRadius di bawah), hanya tidak memblokir clock-in/out.
   workType: text("work_type"),
+  // Setiap clock-in & clock-out merekam titik GPS-nya sendiri (bisa beda
+  // tempat) dan apakah titik itu berada di dalam radius/area salah satu
+  // lokasi kantor yang ditugaskan ke karyawan ini — user, 2026-11-09:
+  // "informasi didalam radius ataupun diluar baik clock in dan clock out
+  // tercatat status beserta lat long nya".
+  clockInLat: doublePrecision("clock_in_lat"),
+  clockInLng: doublePrecision("clock_in_lng"),
+  clockInInsideRadius: boolean("clock_in_inside_radius"),
+  clockOutLat: doublePrecision("clock_out_lat"),
+  clockOutLng: doublePrecision("clock_out_lng"),
+  clockOutInsideRadius: boolean("clock_out_inside_radius"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 

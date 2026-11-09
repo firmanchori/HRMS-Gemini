@@ -465,6 +465,23 @@ export interface AttendanceRecord {
   workType: "WFO" | "WFH" | "WFA" | null;
 }
 
+export interface EssClockInCheck {
+  insideRadius: boolean;
+  hasAssignedLocations: boolean;
+  allowedWorkTypes: ('WFO' | 'WFA' | 'Perjalanan Dinas')[];
+  requireSelfieCamera: boolean;
+  withinTimeWindow: boolean;
+  windowStart: string;
+  windowEnd: string;
+}
+
+export interface EssClockOutCheck {
+  insideRadius: boolean;
+  withinTimeWindow: boolean;
+  windowStart: string;
+  windowEnd: string;
+}
+
 export interface AttendanceCorrectionRequest {
   id: string;
   tenantId: string;
@@ -1099,6 +1116,18 @@ export const tenantApi = {
     request<AttendanceRecord>(`/api/tenant/attendance-records/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   upsertAttendanceRecord: (data: Omit<AttendanceRecord, "id" | "tenantId">) =>
     request<AttendanceRecord>("/api/tenant/attendance-records/upsert", { method: "POST", body: JSON.stringify(data) }),
+
+  // Real geofence/time-window/work-type-gated Clock-In/Out (user, 2026-11-09
+  // ESS redesign) — distinct from upsertAttendanceRecord above, which is
+  // the unvalidated raw admin edit still used by manual HR corrections.
+  checkEssClockIn: (employeeId: string, lat: number, lng: number) =>
+    request<EssClockInCheck>(`/api/tenant/employees/${employeeId}/attendance/clock-in/check`, { method: "POST", body: JSON.stringify({ lat, lng }) }),
+  checkEssClockOut: (employeeId: string, lat: number, lng: number) =>
+    request<EssClockOutCheck>(`/api/tenant/employees/${employeeId}/attendance/clock-out/check`, { method: "POST", body: JSON.stringify({ lat, lng }) }),
+  essClockIn: (employeeId: string, lat: number, lng: number, workType: 'WFO' | 'WFA' | 'Perjalanan Dinas') =>
+    request<AttendanceRecord>(`/api/tenant/employees/${employeeId}/attendance/clock-in`, { method: "POST", body: JSON.stringify({ lat, lng, workType }) }),
+  essClockOut: (employeeId: string, lat: number, lng: number) =>
+    request<AttendanceRecord>(`/api/tenant/employees/${employeeId}/attendance/clock-out`, { method: "POST", body: JSON.stringify({ lat, lng }) }),
 
   listAttendanceCorrections: () => request<AttendanceCorrectionRequest[]>("/api/tenant/attendance-corrections"),
   createAttendanceCorrection: (data: Omit<AttendanceCorrectionRequest, "id" | "tenantId">) =>

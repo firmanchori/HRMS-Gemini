@@ -57,6 +57,27 @@ export interface AttendanceRecord {
   status: string;
   workType: string | null;
   notes: string | null;
+  clockInInsideRadius: boolean | null;
+  clockOutInsideRadius: boolean | null;
+}
+
+export type WorkType = 'WFO' | 'WFA' | 'Perjalanan Dinas';
+
+export interface ClockInCheckResult {
+  insideRadius: boolean;
+  hasAssignedLocations: boolean;
+  allowedWorkTypes: WorkType[];
+  requireSelfieCamera: boolean;
+  withinTimeWindow: boolean;
+  windowStart: string;
+  windowEnd: string;
+}
+
+export interface ClockOutCheckResult {
+  insideRadius: boolean;
+  withinTimeWindow: boolean;
+  windowStart: string;
+  windowEnd: string;
 }
 
 export interface LeaveRequest {
@@ -77,8 +98,14 @@ export const employeeApi = {
   logout: () => request<{ ok: true }>('/api/auth/logout', { method: 'POST' }),
   me: () => request<EmployeeProfile>('/api/employee/me'),
   getAttendance: () => request<AttendanceRecord[]>('/api/employee/attendance'),
-  clock: (body: { date: string; clockIn?: string; clockOut?: string; workType: 'WFO' | 'WFH' | 'WFA'; notes?: string }) =>
-    request<AttendanceRecord>('/api/employee/attendance/clock', { method: 'POST', body: JSON.stringify(body) }),
+  checkClockIn: (lat: number, lng: number) =>
+    request<ClockInCheckResult>('/api/employee/attendance/clock-in/check', { method: 'POST', body: JSON.stringify({ lat, lng }) }),
+  checkClockOut: (lat: number, lng: number) =>
+    request<ClockOutCheckResult>('/api/employee/attendance/clock-out/check', { method: 'POST', body: JSON.stringify({ lat, lng }) }),
+  clockIn: (lat: number, lng: number, workType: WorkType) =>
+    request<AttendanceRecord>('/api/employee/attendance/clock-in', { method: 'POST', body: JSON.stringify({ lat, lng, workType }) }),
+  clockOut: (lat: number, lng: number) =>
+    request<AttendanceRecord>('/api/employee/attendance/clock-out', { method: 'POST', body: JSON.stringify({ lat, lng }) }),
   getLeave: () => request<LeaveRequest[]>('/api/employee/leave'),
   submitLeave: (body: { leaveType: string; startDate: string; endDate: string; totalDays: number; reason?: string }) =>
     request<LeaveRequest>('/api/employee/leave', { method: 'POST', body: JSON.stringify(body) }),

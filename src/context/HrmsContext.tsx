@@ -236,6 +236,7 @@ interface HrmsContextType {
 
   // 2. Attendance & Leave
   attendance: AttendanceRecord[];
+  setAttendance: React.Dispatch<React.SetStateAction<AttendanceRecord[]>>;
   leaveRequests: LeaveRequest[];
   clockIn: (employeeId: string, notes?: string, workType?: 'WFO' | 'WFH' | 'WFA') => void;
   clockOut: (employeeId: string, notes?: string) => void;
@@ -5053,6 +5054,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         deleteEmployee,
         processPersonaliaAction,
         attendance, // real backend data, already tenant-scoped server-side
+        setAttendance,
         leaveRequests, // real backend data, already tenant-scoped server-side
         clockIn,
         clockOut,

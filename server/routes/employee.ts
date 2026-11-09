@@ -10,6 +10,7 @@ import { authLimiter } from "../lib/rateLimit.ts";
 import { logAudit } from "../lib/audit.ts";
 import { logLoginAttempt, isAccountLockedOut, LOCKOUT_WINDOW_MINUTES } from "./auth.ts";
 import { getPermission } from "../lib/permissions.ts";
+import { checkClockIn, checkClockOut, performClockIn, performClockOut, ClockError } from "../lib/attendanceClock.ts";
 
 /**
  * Real employee (ESS) / manager (MSS) login and the first real,
@@ -83,30 +84,71 @@ employeeRouter.get("/attendance", requirePermission("attendance", "view"), async
   res.json(records);
 });
 
-const clockSchema = z.object({
-  date: z.string().trim().min(1).max(20),
-  clockIn: z.string().trim().max(10).optional(),
-  clockOut: z.string().trim().max(10).optional(),
-  workType: z.enum(["WFO", "WFH", "WFA"]),
-  notes: z.string().trim().max(1000).optional(),
+/**
+ * "jam mulai clock in dan batas clock-in" (user, 2026-11-09) — a hard
+ * window, not just a late-flag: outside it, clock-in/out is refused
+ * outright. Compares against the server's local clock (same assumption
+ * the rest of this app already makes about running in WIB — e.g.
+ * Header.tsx's "Hari ini, {time} WIB" — not a new one introduced here).
+ */
+const geoCheckSchema = z.object({
+  lat: z.number().min(-90).max(90),
+  lng: z.number().min(-180).max(180),
 });
 
-/** Upsert by (own employeeId, date) — the same "find today's row or create it" shape as the admin-side /attendance-records/upsert, but the employeeId is always the session's own, never client-supplied. */
-employeeRouter.post("/attendance/clock", requirePermission("attendance", "create"), validateBody(clockSchema), async (req, res) => {
+/**
+ * Pre-flight check the ESS popup calls the moment "Clock In"/"Clock Out"
+ * is pressed, before showing the WFO/WFA/Perjalanan Dinas options — "Pilih
+ * clock-in, otomatis deteksi di dalam radius atau diluar radius. Muncul
+ * informasi..." (user, 2026-11-09). Read-only: never trust this result
+ * for the actual commit, which re-derives everything server-side again.
+ */
+employeeRouter.post("/attendance/clock-in/check", requirePermission("attendance", "create"), validateBody(geoCheckSchema), async (req, res) => {
   const session = req.session!;
-  const employeeId = session.employeeId!;
-  const [existing] = await db
-    .select()
-    .from(attendanceRecords)
-    .where(and(eq(attendanceRecords.tenantId, session.tenantId!), eq(attendanceRecords.employeeId, employeeId), eq(attendanceRecords.date, req.body.date)))
-    .limit(1);
-
-  if (existing) {
-    const [updated] = await db.update(attendanceRecords).set(req.body).where(eq(attendanceRecords.id, existing.id)).returning();
-    return res.json(updated);
+  try {
+    res.json(await checkClockIn(session.tenantId!, session.employeeId!, req.body.lat, req.body.lng));
+  } catch (err) {
+    if (err instanceof ClockError) return res.status(err.status).json({ error: err.message });
+    throw err;
   }
-  const [created] = await db.insert(attendanceRecords).values({ ...req.body, employeeId, tenantId: session.tenantId! }).returning();
-  res.status(201).json(created);
+});
+
+employeeRouter.post("/attendance/clock-out/check", requirePermission("attendance", "create"), validateBody(geoCheckSchema), async (req, res) => {
+  const session = req.session!;
+  res.json(await checkClockOut(session.tenantId!, session.employeeId!, req.body.lat, req.body.lng));
+});
+
+const clockInSchema = z.object({
+  lat: z.number().min(-90).max(90),
+  lng: z.number().min(-180).max(180),
+  workType: z.enum(["WFO", "WFA", "Perjalanan Dinas"]),
+});
+
+/** employeeId always the session's own, never client-supplied — the actual rule enforcement lives in lib/attendanceClock.ts, shared with the admin-context equivalent in tenant.ts. */
+employeeRouter.post("/attendance/clock-in", requirePermission("attendance", "create"), validateBody(clockInSchema), async (req, res) => {
+  const session = req.session!;
+  try {
+    const result = await performClockIn(session.tenantId!, session.employeeId!, req.body.lat, req.body.lng, req.body.workType);
+    res.status(201).json(result);
+  } catch (err) {
+    if (err instanceof ClockError) return res.status(err.status).json({ error: err.message });
+    throw err;
+  }
+});
+
+const clockOutSchema = z.object({
+  lat: z.number().min(-90).max(90),
+  lng: z.number().min(-180).max(180),
+});
+
+employeeRouter.post("/attendance/clock-out", requirePermission("attendance", "create"), validateBody(clockOutSchema), async (req, res) => {
+  const session = req.session!;
+  try {
+    res.json(await performClockOut(session.tenantId!, session.employeeId!, req.body.lat, req.body.lng));
+  } catch (err) {
+    if (err instanceof ClockError) return res.status(err.status).json({ error: err.message });
+    throw err;
+  }
 });
 
 // --- Own Leave Requests ---

@@ -1429,6 +1429,11 @@ export interface ModuleSettingsConfig {
     maxSickWithDoctorNoteDaysMonthly?: number;
     maxForgotClockInMonthly?: number;
     maxForgotClockOutMonthly?: number;
+    // Jendela waktu Clock-In/Out ESS (user, 2026-11-09) — di luar jendela ini, clock-in/out ditolak.
+    clockInWindowStart?: string; // "HH:mm"
+    clockInWindowEnd?: string;
+    clockOutWindowStart?: string;
+    clockOutWindowEnd?: string;
   };
   payroll: {
     cutoffDate: number;

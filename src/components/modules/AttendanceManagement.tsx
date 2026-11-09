@@ -268,6 +268,12 @@ export const AttendanceManagement: React.FC = () => {
   const [maxForgotInMonthly, setMaxForgotInMonthly] = useState(moduleSettings.attendance.maxForgotClockInMonthly ?? 2);
   const [maxForgotOutMonthly, setMaxForgotOutMonthly] = useState(moduleSettings.attendance.maxForgotClockOutMonthly ?? 2);
 
+  // Jendela waktu Clock-In/Out ESS (user, 2026-11-09)
+  const [clockInWindowStart, setClockInWindowStart] = useState(moduleSettings.attendance.clockInWindowStart || '06:00');
+  const [clockInWindowEnd, setClockInWindowEnd] = useState(moduleSettings.attendance.clockInWindowEnd || '10:00');
+  const [clockOutWindowStart, setClockOutWindowStart] = useState(moduleSettings.attendance.clockOutWindowStart || '16:00');
+  const [clockOutWindowEnd, setClockOutWindowEnd] = useState(moduleSettings.attendance.clockOutWindowEnd || '22:00');
+
   // Filtered attendance for HR view
   const filteredAttendance = attendance.filter((a) => {
     const matchesDate = !selectedDate || a.date === selectedDate;
@@ -420,6 +426,10 @@ export const AttendanceManagement: React.FC = () => {
       maxSickWithDoctorNoteDaysMonthly: Number(maxSickWithNoteMonthly),
       maxForgotClockInMonthly: Number(maxForgotInMonthly),
       maxForgotClockOutMonthly: Number(maxForgotOutMonthly),
+      clockInWindowStart,
+      clockInWindowEnd,
+      clockOutWindowStart,
+      clockOutWindowEnd,
     });
     setSettingsNotice('Pengaturan Presensi, Toleransi Bulanan & Shift berhasil diperbarui!');
     setTimeout(() => setSettingsNotice(null), 4000);
@@ -1303,6 +1313,31 @@ export const AttendanceManagement: React.FC = () => {
                     <span className="text-[11px] text-slate-500 font-semibold shrink-0">Kali / Bln</span>
                   </div>
                   <span className="text-[10px] text-slate-400 mt-1 block">Maks. kuota koreksi lupa absen pulang</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <h3 className="font-bold text-slate-800 text-xs uppercase tracking-wide">Jendela Waktu Clock-In & Clock-Out (ESS)</h3>
+              <p className="text-[11px] text-slate-500 -mt-2">Di luar jendela waktu ini, karyawan tidak bisa clock-in/clock-out dari ESS.</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="bg-white p-3 rounded-lg border border-slate-200">
+                  <label className="font-semibold text-slate-800 block mb-1.5">Jendela Clock-In</label>
+                  <div className="flex items-center gap-2">
+                    <input type="time" value={clockInWindowStart} onChange={(e) => setClockInWindowStart(e.target.value)} className="w-full px-2.5 py-1.5 border border-slate-300 rounded font-mono font-bold text-indigo-700" />
+                    <span className="text-slate-400 text-xs">s/d</span>
+                    <input type="time" value={clockInWindowEnd} onChange={(e) => setClockInWindowEnd(e.target.value)} className="w-full px-2.5 py-1.5 border border-slate-300 rounded font-mono font-bold text-indigo-700" />
+                  </div>
+                  <span className="text-[10px] text-slate-400 mt-1 block">Jam mulai & batas akhir boleh clock-in</span>
+                </div>
+                <div className="bg-white p-3 rounded-lg border border-slate-200">
+                  <label className="font-semibold text-slate-800 block mb-1.5">Jendela Clock-Out</label>
+                  <div className="flex items-center gap-2">
+                    <input type="time" value={clockOutWindowStart} onChange={(e) => setClockOutWindowStart(e.target.value)} className="w-full px-2.5 py-1.5 border border-slate-300 rounded font-mono font-bold text-indigo-700" />
+                    <span className="text-slate-400 text-xs">s/d</span>
+                    <input type="time" value={clockOutWindowEnd} onChange={(e) => setClockOutWindowEnd(e.target.value)} className="w-full px-2.5 py-1.5 border border-slate-300 rounded font-mono font-bold text-indigo-700" />
+                  </div>
+                  <span className="text-[10px] text-slate-400 mt-1 block">Jam mulai & batas akhir boleh clock-out</span>
                 </div>
               </div>
             </div>

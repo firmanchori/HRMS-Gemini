@@ -9,7 +9,6 @@ import {
   FileText,
   CheckCircle2,
   AlertCircle,
-  Camera,
   Send,
   Plane,
   Wallet,
@@ -27,6 +26,23 @@ import { ScrollableTabNav } from '../common/ScrollableTabNav';
 import { formatRupiah } from '../../utils/taxCalculator';
 import { CurrencyInput } from '../common/CurrencyInput';
 import { REIMBURSEMENT_CATEGORIES, ReimbursementCategory } from '../../types/hrms';
+import { tenantApi, ApiError, type EssClockInCheck, type EssClockOutCheck } from '../../tenant/api';
+
+type EssWorkType = 'WFO' | 'WFA' | 'Perjalanan Dinas';
+
+function getBrowserPosition(): Promise<{ lat: number; lng: number }> {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error('Perangkat/browser ini tidak mendukung GPS.'));
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      (err) => reject(new Error(`Gagal mendapatkan lokasi GPS: ${err.message}`)),
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  });
+}
 
 export const EssPortal: React.FC = () => {
   const {
@@ -37,10 +53,8 @@ export const EssPortal: React.FC = () => {
     submitLeaveRequest,
     loans,
     addLoan,
-    clockIn,
-    clockOut,
-    moduleSettings,
-    officeLocations,
+    attendance,
+    setAttendance,
     reimbursementClaims,
     addReimbursementClaim,
     overtimeRequests,
@@ -68,7 +82,7 @@ export const EssPortal: React.FC = () => {
       annualLeaveBalance: 12,
     };
 
-  const [activeTab, setActiveTab] = useState<'form' | 'status' | 'slip' | 'presensi'>('form');
+  const [activeTab, setActiveTab] = useState<'form' | 'status' | 'slip' | 'presensi'>('presensi');
   const [submissionCategory, setSubmissionCategory] = useState<
     'cuti' | 'lembur' | 'koreksi_presensi' | 'reimburse' | 'sppd' | 'kasbon'
   >('cuti');
@@ -77,23 +91,60 @@ export const EssPortal: React.FC = () => {
   // Clock-in is always for the logged-in employee — ESS is self-service,
   // there is no "pick which employee is clocking in" (user, 2026-11-03).
   const clockEmpId = currentEmp.id;
-  const [clockWorkType, setClockWorkType] = useState<'WFO' | 'WFH' | 'WFA' | ''>('');
-  const [simulatedDistanceMeters, setSimulatedDistanceMeters] = useState<number>(18);
-  const gpsRadius = moduleSettings?.attendance?.gpsRadiusMeters || 100;
 
-  // Lokasi penugasan tidak ditampilkan ke karyawan — cukup tahu apakah posisi
-  // GPS sekarang berada dalam radius SALAH SATU lokasi kantor yang
-  // ditugaskan atau tidak (user, 2026-11-03: "misal ada 2 lokasi apakah
-  // masuk di salah satu radius lokasi atau tidak sudah cukup"). Hanya
-  // relevan untuk WFO — WFH/WFA tidak perlu dekat kantor.
-  const assignedClockLocations = (() => {
-    const matched = officeLocations.filter((loc) => loc.isActive && currentEmp?.officeLocationIds?.includes(loc.id));
-    if (matched.length > 0) return matched;
-    return officeLocations.filter((loc) => loc.isActive);
-  })();
-  const nearestLocationRadius = assignedClockLocations.length > 0 ? Math.max(...assignedClockLocations.map((l) => l.radiusMeters)) : gpsRadius;
-  const isWithinAnyOfficeRadius = assignedClockLocations.some((loc) => simulatedDistanceMeters <= loc.radiusMeters);
-  const isWithinRadius = clockWorkType !== 'WFO' || isWithinAnyOfficeRadius;
+  // Real geofence/time-window/work-type-gated Clock-In/Out (user,
+  // 2026-11-09 redesign) — "Pilih clock-in, otomatis deteksi di dalam
+  // radius atau diluar radius... Muncul opsi WFA, WFO dan Perjalanan
+  // Dinas (Sesuai pengaturan)... klik confirm muncul informasi sukses
+  // absen." No more distance slider/simulation — a real GPS reading via
+  // navigator.geolocation, checked server-side against whichever office
+  // location(s) are actually assigned to this employee.
+  const [clockPopup, setClockPopup] = useState<{
+    mode: 'in' | 'out';
+    loading: boolean;
+    error: string | null;
+    coords: { lat: number; lng: number } | null;
+    checkIn?: EssClockInCheck;
+    checkOut?: EssClockOutCheck;
+    selectedWorkType?: EssWorkType;
+    submitting: boolean;
+  } | null>(null);
+
+  async function openClockPopup(mode: 'in' | 'out') {
+    setClockPopup({ mode, loading: true, error: null, coords: null, submitting: false });
+    try {
+      const coords = await getBrowserPosition();
+      if (mode === 'in') {
+        const checkIn = await tenantApi.checkEssClockIn(clockEmpId, coords.lat, coords.lng);
+        setClockPopup({ mode, loading: false, error: null, coords, checkIn, submitting: false, selectedWorkType: checkIn.allowedWorkTypes[0] });
+      } else {
+        const checkOut = await tenantApi.checkEssClockOut(clockEmpId, coords.lat, coords.lng);
+        setClockPopup({ mode, loading: false, error: null, coords, checkOut, submitting: false });
+      }
+    } catch (err) {
+      setClockPopup({ mode, loading: false, submitting: false, coords: null, error: err instanceof ApiError || err instanceof Error ? err.message : 'Gagal memuat status presensi.' });
+    }
+  }
+
+  async function confirmClockPopup() {
+    if (!clockPopup || !clockPopup.coords) return;
+    setClockPopup({ ...clockPopup, submitting: true, error: null });
+    try {
+      if (clockPopup.mode === 'in') {
+        if (!clockPopup.selectedWorkType) throw new Error('Pilih jenis kehadiran terlebih dahulu.');
+        const updated = await tenantApi.essClockIn(clockEmpId, clockPopup.coords.lat, clockPopup.coords.lng, clockPopup.selectedWorkType);
+        setAttendance((prev) => (prev.some((a) => a.id === updated.id) ? prev.map((a) => (a.id === updated.id ? (updated as unknown as typeof a) : a)) : [updated as unknown as (typeof prev)[number], ...prev]));
+        setNoticeMessage(`Clock-in (${clockPopup.selectedWorkType}) berhasil tercatat!`);
+      } else {
+        const updated = await tenantApi.essClockOut(clockEmpId, clockPopup.coords.lat, clockPopup.coords.lng);
+        setAttendance((prev) => prev.map((a) => (a.id === updated.id ? (updated as unknown as typeof a) : a)));
+        setNoticeMessage('Clock-out berhasil tercatat!');
+      }
+      setClockPopup(null);
+    } catch (err) {
+      setClockPopup({ ...clockPopup, submitting: false, error: err instanceof ApiError || err instanceof Error ? err.message : 'Gagal menyimpan presensi.' });
+    }
+  }
 
   // Forms State
   const [leaveForm, setLeaveForm] = useState({
@@ -569,6 +620,18 @@ export const EssPortal: React.FC = () => {
       {/* Row 2: Standard Enterprise Scrollable Tab Navigation (With Icons) */}
       <ScrollableTabNav>
         <button
+          onClick={() => setActiveTab('presensi')}
+          className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
+            activeTab === 'presensi'
+              ? 'border-indigo-600 text-indigo-600 font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+          }`}
+        >
+          <Clock className="w-4 h-4" />
+          <span>Clock-In</span>
+        </button>
+
+        <button
           onClick={() => setActiveTab('form')}
           className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
             activeTab === 'form'
@@ -613,17 +676,6 @@ export const EssPortal: React.FC = () => {
           <span>Slip Gaji & Dokumen Saya</span>
         </button>
 
-        <button
-          onClick={() => setActiveTab('presensi')}
-          className={`pb-3 pt-2 px-3 sm:px-4 text-xs font-semibold transition-all flex items-center gap-2 shrink-0 border-b-2 -mb-px ${
-            activeTab === 'presensi'
-              ? 'border-indigo-600 text-indigo-600 font-bold'
-              : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
-          }`}
-        >
-          <Camera className="w-4 h-4" />
-          <span>ESS Clock-In (GPS)</span>
-        </button>
       </ScrollableTabNav>
 
       {/* TAB 1: FORM PENGAJUAN MANDIRI */}
@@ -1325,158 +1377,146 @@ export const EssPortal: React.FC = () => {
       )}
 
       {/* TAB 4: ESS CLOCK-IN (GPS) */}
-      {activeTab === 'presensi' && (
-        <div className="max-w-xl mx-auto bg-white border border-slate-200 rounded-xl p-6 shadow-xs space-y-5">
-          <div className="text-center space-y-1">
-            <h3 className="text-base font-bold text-slate-900">Employee Self-Service (ESS) Clock-In (GPS)</h3>
-            <p className="text-xs text-slate-500">
-              Presensi untuk <strong>{currentEmp.fullName}</strong> ({currentEmp.nik}) — pilih jenis kehadiran, validasi geofencing GPS (untuk WFO) & swafoto biometrik kamera.
-            </p>
-          </div>
-
-          {/* Jenis Kehadiran — wajib dipilih sebelum bisa clock-in (user, 2026-11-03) */}
-          <div>
-            <label className="font-semibold text-slate-700 block mb-1.5 text-xs">Jenis Kehadiran *</label>
-            <div className="grid grid-cols-3 gap-2">
-              {([
-                { id: 'WFO', label: 'WFO', desc: 'Kerja dari Kantor' },
-                { id: 'WFH', label: 'WFH', desc: 'Kerja dari Rumah' },
-                { id: 'WFA', label: 'WFA', desc: 'Kerja dari Mana Saja' },
-              ] as const).map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => setClockWorkType(t.id)}
-                  className={`p-2.5 rounded-lg border text-center transition-all ${
-                    clockWorkType === t.id
-                      ? 'bg-indigo-600 border-indigo-600 text-white shadow-xs'
-                      : 'bg-white border-slate-200 text-slate-600 hover:border-indigo-300'
-                  }`}
-                >
-                  <div className="text-xs font-bold">{t.label}</div>
-                  <div className={`text-[10px] mt-0.5 ${clockWorkType === t.id ? 'text-indigo-100' : 'text-slate-400'}`}>{t.desc}</div>
-                </button>
-              ))}
+      {activeTab === 'presensi' && (() => {
+        const today = new Date().toISOString().slice(0, 10);
+        const todayRecord = attendance.find((a) => a.employeeId === clockEmpId && a.date === today);
+        return (
+          <div className="max-w-xl mx-auto bg-white border border-slate-200 rounded-xl p-6 shadow-xs space-y-5">
+            <div className="text-center space-y-1">
+              <h3 className="text-base font-bold text-slate-900">Clock-In</h3>
+              <p className="text-xs text-slate-500">
+                Presensi untuk <strong>{currentEmp.fullName}</strong> ({currentEmp.nik})
+              </p>
             </div>
-          </div>
 
-          {/* Status Radius Kantor — hanya relevan & ditampilkan untuk WFO.
-              Lokasi penugasan spesifik tidak ditampilkan, cukup status
-              lolos/tidak terhadap salah satu lokasi kantor aktif (user,
-              2026-11-03). */}
-          {clockWorkType === 'WFO' && (
-            <div className="p-3.5 bg-indigo-50/70 border border-indigo-200 rounded-xl space-y-2.5">
-              <div className="flex items-center justify-between">
-                <div className="text-xs font-bold text-indigo-950 flex items-center gap-1.5">
-                  <MapPin className="w-3.5 h-3.5 text-indigo-600" />
-                  <span>Validasi Radius Kantor</span>
-                </div>
-                <span
-                  className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded ${
-                    isWithinAnyOfficeRadius ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white'
-                  }`}
-                >
-                  {isWithinAnyOfficeRadius ? 'Dalam Radius' : 'Di Luar Radius'}
-                </span>
+            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl grid grid-cols-2 gap-3 text-center">
+              <div>
+                <span className="text-[10px] text-slate-400 uppercase font-semibold block">Clock-In</span>
+                <span className="text-lg font-bold font-mono text-slate-900">{todayRecord?.clockIn || '--:--'}</span>
+                {todayRecord?.workType && <span className="text-[10px] text-indigo-600 font-semibold block">{todayRecord.workType}</span>}
               </div>
-
-              {/* Simulasi Posisi GPS Karyawan — demo prototype; di produksi nyata posisi ini otomatis dari GPS device. */}
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between text-[11px]">
-                  <span className="text-slate-600 font-medium">Deteksi Jarak GPS ke lokasi kantor terdekat:</span>
-                  <span className={`font-mono font-bold ${isWithinAnyOfficeRadius ? 'text-emerald-700' : 'text-rose-600'}`}>
-                    {simulatedDistanceMeters}m
-                  </span>
-                </div>
-                <input
-                  type="range"
-                  min={5}
-                  max={Math.max(nearestLocationRadius * 2, 300)}
-                  value={simulatedDistanceMeters}
-                  onChange={(e) => setSimulatedDistanceMeters(Number(e.target.value))}
-                  className="w-full accent-indigo-600 cursor-pointer h-1.5"
-                  title="Simulasi posisi GPS (demo) — di produksi nyata posisi GPS terdeteksi otomatis"
-                />
-                <div className="flex items-center gap-1.5 text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
-                  <span className="shrink-0">⚙</span>
-                  <span>
-                    Radius ditetapkan oleh HR/Admin di <strong>Menu Lokasi Kantor</strong>, cukup berada dalam radius salah satu lokasi aktif.{' '}
-                    <em>(Slider di atas hanya simulasi posisi GPS untuk keperluan demo.)</em>
-                  </span>
-                </div>
-              </div>
-            </div>
-          )}
-
-          <div className="p-4 bg-slate-900 text-white rounded-xl text-center space-y-3">
-            <div className="relative w-48 h-36 mx-auto rounded-lg overflow-hidden border-2 border-indigo-500 bg-slate-800 flex items-center justify-center">
-              <Camera className="w-8 h-8 text-indigo-400" />
-              <div className="absolute bottom-2 left-2 right-2 text-[10px] bg-slate-900/80 py-0.5 rounded text-indigo-300 font-mono">
-                ✓ Face Recognition OK
+              <div>
+                <span className="text-[10px] text-slate-400 uppercase font-semibold block">Clock-Out</span>
+                <span className="text-lg font-bold font-mono text-slate-900">{todayRecord?.clockOut || '--:--'}</span>
               </div>
             </div>
 
-            {clockWorkType ? (
-              <div
-                className={`text-xs font-mono flex items-center justify-center gap-1 ${
-                  isWithinRadius ? 'text-emerald-400' : 'text-rose-400'
-                }`}
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => openClockPopup('in')}
+                disabled={Boolean(todayRecord?.clockIn)}
+                className="py-3 rounded-lg font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed"
               >
-                <MapPin className="w-3.5 h-3.5 shrink-0" />
-                <span>
-                  {clockWorkType !== 'WFO'
-                    ? `Jenis Kehadiran: ${clockWorkType} (tidak perlu validasi lokasi kantor)`
-                    : isWithinRadius
-                    ? `Lokasi Valid (Dalam Radius Kantor)`
-                    : `Di Luar Radius Kantor`}
-                </span>
+                <CheckCircle2 className="w-4 h-4" />
+                <span>Clock-In</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => openClockPopup('out')}
+                disabled={!todayRecord?.clockIn || Boolean(todayRecord?.clockOut)}
+                className="py-3 rounded-lg font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed"
+              >
+                <Clock className="w-4 h-4" />
+                <span>Clock-Out</span>
+              </button>
+            </div>
+
+            {/* Clock-In/Out Popup — GPS detect -> show status -> (clock-in only) pick WFO/WFA/Perjalanan Dinas -> confirm (user, 2026-11-09) */}
+            {clockPopup && (
+              <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center z-50 p-4" onClick={() => !clockPopup.submitting && setClockPopup(null)}>
+                <div className="bg-white rounded-xl shadow-2xl max-w-sm w-full p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
+                  <h4 className="font-bold text-slate-900 text-sm">{clockPopup.mode === 'in' ? 'Clock-In' : 'Clock-Out'}</h4>
+
+                  {clockPopup.loading && (
+                    <div className="py-6 text-center text-xs text-slate-500 flex flex-col items-center gap-2">
+                      <div className="w-6 h-6 border-2 border-slate-300 border-t-indigo-600 rounded-full animate-spin" />
+                      <span>Mendeteksi lokasi GPS...</span>
+                    </div>
+                  )}
+
+                  {clockPopup.error && (
+                    <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-lg text-[11px] text-rose-700 flex items-start gap-1.5">
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                      <span>{clockPopup.error}</span>
+                    </div>
+                  )}
+
+                  {!clockPopup.loading && clockPopup.mode === 'in' && clockPopup.checkIn && (
+                    <>
+                      <div className={`p-2.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 ${clockPopup.checkIn.insideRadius ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'}`}>
+                        <MapPin className="w-3.5 h-3.5 shrink-0" />
+                        <span>Anda terdeteksi {clockPopup.checkIn.insideRadius ? 'DI DALAM' : 'DI LUAR'} radius lokasi kantor.</span>
+                      </div>
+                      {!clockPopup.checkIn.withinTimeWindow && (
+                        <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-lg text-[11px] text-rose-700">
+                          Clock-in hanya diizinkan pukul {clockPopup.checkIn.windowStart} - {clockPopup.checkIn.windowEnd}.
+                        </div>
+                      )}
+                      <div>
+                        <label className="text-xs font-semibold text-slate-700 block mb-1.5">Jenis Kehadiran</label>
+                        <div className="grid grid-cols-3 gap-1.5">
+                          {clockPopup.checkIn.allowedWorkTypes.map((wt) => {
+                            const disabled = wt === 'WFO' && !clockPopup.checkIn!.insideRadius;
+                            return (
+                              <button
+                                key={wt}
+                                type="button"
+                                disabled={disabled}
+                                onClick={() => setClockPopup({ ...clockPopup, selectedWorkType: wt })}
+                                className={`p-2 rounded-lg border text-[11px] font-bold transition-colors ${
+                                  disabled
+                                    ? 'bg-slate-50 border-slate-200 text-slate-300 cursor-not-allowed'
+                                    : clockPopup.selectedWorkType === wt
+                                    ? 'bg-indigo-600 border-indigo-600 text-white'
+                                    : 'bg-white border-slate-200 text-slate-600 hover:border-indigo-300'
+                                }`}
+                              >
+                                {wt}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        {clockPopup.checkIn.requireSelfieCamera && (
+                          <p className="text-[10px] text-amber-600 mt-1.5">⚠ Akun ini memerlukan swafoto kamera saat clock-in (fitur pengambilan foto belum tersedia di versi ini).</p>
+                        )}
+                      </div>
+                    </>
+                  )}
+
+                  {!clockPopup.loading && clockPopup.mode === 'out' && clockPopup.checkOut && (
+                    <>
+                      <div className={`p-2.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 ${clockPopup.checkOut.insideRadius ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'}`}>
+                        <MapPin className="w-3.5 h-3.5 shrink-0" />
+                        <span>Anda terdeteksi {clockPopup.checkOut.insideRadius ? 'DI DALAM' : 'DI LUAR'} radius lokasi kantor.</span>
+                      </div>
+                      {!clockPopup.checkOut.withinTimeWindow && (
+                        <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-lg text-[11px] text-rose-700">
+                          Clock-out hanya diizinkan pukul {clockPopup.checkOut.windowStart} - {clockPopup.checkOut.windowEnd}.
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  <div className="flex gap-2 pt-1">
+                    <button type="button" onClick={() => setClockPopup(null)} disabled={clockPopup.submitting} className="flex-1 py-2 rounded-lg border border-slate-200 text-slate-600 text-xs font-semibold hover:bg-slate-50 disabled:opacity-50">
+                      Batal
+                    </button>
+                    <button
+                      type="button"
+                      onClick={confirmClockPopup}
+                      disabled={clockPopup.loading || clockPopup.submitting || (clockPopup.mode === 'in' && !clockPopup.selectedWorkType)}
+                      className="flex-1 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {clockPopup.submitting ? 'Menyimpan...' : 'Confirm'}
+                    </button>
+                  </div>
+                </div>
               </div>
-            ) : (
-              <div className="text-xs font-mono text-amber-400">Pilih jenis kehadiran (WFO/WFH/WFA) terlebih dahulu.</div>
             )}
           </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <button
-              type="button"
-              disabled={!clockWorkType || !isWithinRadius}
-              onClick={() => {
-                if (clockEmpId && clockWorkType && isWithinRadius) {
-                  clockIn(clockEmpId, `Presensi ESS (${clockWorkType})`, clockWorkType);
-                  setNoticeMessage(`Clock-in Masuk Kerja (${clockWorkType}) berhasil tercatat!`);
-                }
-              }}
-              className={`py-3 rounded-lg font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-1.5 ${
-                clockWorkType && isWithinRadius
-                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                  : 'bg-slate-200 text-slate-400 cursor-not-allowed'
-              }`}
-            >
-              <CheckCircle2 className="w-4 h-4" />
-              <span>Clock-In Masuk Kerja</span>
-            </button>
-
-            <button
-              type="button"
-              disabled={!clockWorkType || !isWithinRadius}
-              onClick={() => {
-                if (clockEmpId && clockWorkType && isWithinRadius) {
-                  clockOut(clockEmpId, `Clock-out ESS (${clockWorkType})`);
-                  setNoticeMessage(`Clock-out Pulang Kerja (${clockWorkType}) berhasil tercatat!`);
-                }
-              }}
-              className={`py-3 rounded-lg font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-1.5 ${
-                clockWorkType && isWithinRadius
-                  ? 'bg-indigo-600 hover:bg-indigo-700 text-white'
-                  : 'bg-slate-200 text-slate-400 cursor-not-allowed'
-              }`}
-            >
-              <Clock className="w-4 h-4" />
-              <span>Clock-Out Pulang Kerja</span>
-            </button>
-          </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 };

@@ -80,6 +80,7 @@ import { computeNewEntityClosureRows, buildEntityTree, applyChangeSet, resolveNi
 import { logAudit } from "../lib/audit.ts";
 import { seedDefaultDocumentTemplatesForTenant } from "../lib/defaultDocumentTemplates.ts";
 import { ensureDefaultEmployeeRbac } from "../lib/permissions.ts";
+import { checkClockIn, checkClockOut, performClockIn, performClockOut, ClockError } from "../lib/attendanceClock.ts";
 
 export const tenantRouter = Router();
 tenantRouter.use(requireTenantAdmin);
@@ -1402,6 +1403,11 @@ tenantRouter.post("/employees", validateBody(employeeSchema), async (req, res) =
   res.status(201).json(created);
 });
 
+const geoCheckBodySchema = z.object({
+  lat: z.number().min(-90).max(90),
+  lng: z.number().min(-180).max(180),
+});
+
 tenantRouter.put("/employees/:id", validateParams(uuidParam("id")), validateBody(employeeSchema.partial()), async (req, res) => {
   const tenantId = req.session!.tenantId!;
   const visibleEntityIds = await resolveVisibleEntityIds(req, tenantId);
@@ -1427,6 +1433,64 @@ tenantRouter.delete("/employees/:id", validateParams(uuidParam("id")), async (re
   if (!deleted) return res.status(404).json({ error: "Karyawan tidak ditemukan" });
   await logAudit({ actorUserId: req.session!.userId, tenantId, action: "employee.delete", details: { employeeId: deleted.id } });
   res.json({ ok: true });
+});
+
+// ---------------------------------------------------------------------------
+// Admin-context Clock-In/Out — EssPortal.tsx's "view as employee"
+// simulation still runs under the tenant_admin's own session (user,
+// 2026-11-09 ESS redesign scope: the real employee-session app from the
+// RBAC phase is a separate, minimal surface most users haven't switched
+// to yet), so it needs its OWN route into the exact same rules a real
+// employee session gets — an explicit :employeeId, checked against this
+// admin's visibility scope, instead of session.employeeId. All the actual
+// logic lives in lib/attendanceClock.ts so both callers can never drift
+// apart on what counts as "inside radius" or "within the time window".
+// ---------------------------------------------------------------------------
+
+tenantRouter.post("/employees/:id/attendance/clock-in/check", validateParams(uuidParam("id")), validateBody(geoCheckBodySchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
+  if (!visibleEmployeeIds.includes(req.params.id)) return res.status(404).json({ error: "Karyawan tidak ditemukan" });
+  try {
+    res.json(await checkClockIn(tenantId, req.params.id, req.body.lat, req.body.lng));
+  } catch (err) {
+    if (err instanceof ClockError) return res.status(err.status).json({ error: err.message });
+    throw err;
+  }
+});
+
+tenantRouter.post("/employees/:id/attendance/clock-out/check", validateParams(uuidParam("id")), validateBody(geoCheckBodySchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
+  if (!visibleEmployeeIds.includes(req.params.id)) return res.status(404).json({ error: "Karyawan tidak ditemukan" });
+  res.json(await checkClockOut(tenantId, req.params.id, req.body.lat, req.body.lng));
+});
+
+const adminClockInBodySchema = geoCheckBodySchema.extend({ workType: z.enum(["WFO", "WFA", "Perjalanan Dinas"]) });
+
+tenantRouter.post("/employees/:id/attendance/clock-in", validateParams(uuidParam("id")), validateBody(adminClockInBodySchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
+  if (!visibleEmployeeIds.includes(req.params.id)) return res.status(404).json({ error: "Karyawan tidak ditemukan" });
+  try {
+    const result = await performClockIn(tenantId, req.params.id, req.body.lat, req.body.lng, req.body.workType);
+    res.status(201).json(result);
+  } catch (err) {
+    if (err instanceof ClockError) return res.status(err.status).json({ error: err.message });
+    throw err;
+  }
+});
+
+tenantRouter.post("/employees/:id/attendance/clock-out", validateParams(uuidParam("id")), validateBody(geoCheckBodySchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
+  if (!visibleEmployeeIds.includes(req.params.id)) return res.status(404).json({ error: "Karyawan tidak ditemukan" });
+  try {
+    res.json(await performClockOut(tenantId, req.params.id, req.body.lat, req.body.lng));
+  } catch (err) {
+    if (err instanceof ClockError) return res.status(err.status).json({ error: err.message });
+    throw err;
+  }
 });
 
 // ---------------------------------------------------------------------------
