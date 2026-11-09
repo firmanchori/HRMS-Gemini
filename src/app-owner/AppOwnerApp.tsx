@@ -36,14 +36,18 @@ import { BankAccountsTab } from "./BankAccountsTab";
 import { InvoicesTab, InvoiceDetailModal } from "./InvoicesTab";
 import { NumberInput, maskLeadingZero } from "./NumberInput";
 import { ConfirmButton } from "./ConfirmButton";
+import { ValidatedInput } from "../components/common/ValidatedInput";
 
 function ForgotPasswordForm({ onBack }: { onBack: () => void }) {
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [submitAttempted, setSubmitAttempted] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setSubmitAttempted(true);
+    if (!email.trim()) return;
     setLoading(true);
     try {
       await api.forgotPassword(email);
@@ -65,15 +69,17 @@ function ForgotPasswordForm({ onBack }: { onBack: () => void }) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-3">
+    <form onSubmit={handleSubmit} noValidate className="space-y-3">
       <p className="text-xs text-slate-500">Masukkan email Anda, kami kirim tautan untuk mengatur ulang password.</p>
-      <input
+      <ValidatedInput
         type="email"
         required
+        requiredLabel="Email wajib diisi"
+        validate={(v) => (v.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) ? "Format email tidak valid" : null)}
         value={email}
-        onChange={(e) => setEmail(e.target.value)}
+        onChange={setEmail}
+        showError={submitAttempted}
         placeholder="email@perusahaan.com"
-        className="w-full rounded-md border border-slate-300 py-2 px-3 text-xs focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600 focus:outline-none"
       />
       <button
         type="submit"
@@ -99,9 +105,13 @@ function LoginView({ onLoggedIn }: { onLoggedIn: (me: Me) => void }) {
   // Set only after the password step comes back with { mfaRequired: true } — switches the form to the code-entry step instead of finishing login.
   const [awaitingMfaCode, setAwaitingMfaCode] = useState(false);
   const [mfaCode, setMfaCode] = useState("");
+  const [submitAttempted, setSubmitAttempted] = useState(false);
+  const [mfaSubmitAttempted, setMfaSubmitAttempted] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setSubmitAttempted(true);
+    if (!email.trim() || !password.trim()) return;
     setErrorMessage(null);
     setIsLoading(true);
     try {
@@ -120,6 +130,8 @@ function LoginView({ onLoggedIn }: { onLoggedIn: (me: Me) => void }) {
 
   async function handleVerifyMfa(e: React.FormEvent) {
     e.preventDefault();
+    setMfaSubmitAttempted(true);
+    if (!mfaCode.trim()) return;
     setErrorMessage(null);
     setIsLoading(true);
     try {
@@ -170,24 +182,21 @@ function LoginView({ onLoggedIn }: { onLoggedIn: (me: Me) => void }) {
           )}
 
           {awaitingMfaCode ? (
-            <form onSubmit={handleVerifyMfa} className="space-y-3.5">
+            <form onSubmit={handleVerifyMfa} noValidate className="space-y-3.5">
               <p className="text-xs text-slate-600 leading-snug">
                 Masukkan kode 6 digit dari aplikasi autentikator Anda, atau salah satu kode cadangan Anda.
               </p>
-              <div className="space-y-1">
-                <label className="block text-xs font-semibold text-slate-700">
-                  Kode Verifikasi <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  autoFocus
-                  value={mfaCode}
-                  onChange={(e) => setMfaCode(e.target.value)}
-                  className="w-full rounded-md border border-slate-300 py-2 px-3 text-xs font-medium text-slate-900 placeholder:text-slate-400 focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600 focus:outline-none transition-colors font-mono tracking-widest"
-                  placeholder="123456"
-                />
-              </div>
+              <ValidatedInput
+                label="Kode Verifikasi"
+                required
+                requiredLabel="Kode verifikasi wajib diisi"
+                autoFocus
+                value={mfaCode}
+                onChange={setMfaCode}
+                showError={mfaSubmitAttempted}
+                placeholder="123456"
+                className="font-mono tracking-widest"
+              />
               <button
                 type="submit"
                 disabled={isLoading}
@@ -214,50 +223,35 @@ function LoginView({ onLoggedIn }: { onLoggedIn: (me: Me) => void }) {
               </button>
             </form>
           ) : (
-          <form onSubmit={handleSubmit} className="space-y-3.5">
-            <div className="space-y-1">
-              <label className="block text-xs font-semibold text-slate-700">
-                Email <span className="text-rose-500">*</span>
-              </label>
-              <div className="relative rounded-md shadow-2xs">
-                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
-                  <Mail className="w-4 h-4" />
-                </div>
-                <input
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full rounded-md border border-slate-300 py-2 pl-9 pr-3 text-xs font-medium text-slate-900 placeholder:text-slate-400 focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600 focus:outline-none transition-colors"
-                />
-              </div>
-            </div>
+          <form onSubmit={handleSubmit} noValidate className="space-y-3.5">
+            <ValidatedInput
+              label="Email"
+              type="email"
+              required
+              requiredLabel="Email wajib diisi"
+              validate={(v) => (v.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) ? "Format email tidak valid" : null)}
+              value={email}
+              onChange={setEmail}
+              showError={submitAttempted}
+              icon={<Mail className="w-4 h-4" />}
+            />
 
-            <div className="space-y-1">
-              <label className="block text-xs font-semibold text-slate-700">
-                Kata Sandi <span className="text-rose-500">*</span>
-              </label>
-              <div className="relative rounded-md shadow-2xs">
-                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
-                  <Lock className="w-4 h-4" />
-                </div>
-                <input
-                  type={showPassword ? "text" : "password"}
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full rounded-md border border-slate-300 py-2 pl-9 pr-9 text-xs font-medium text-slate-900 placeholder:text-slate-400 focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600 focus:outline-none transition-colors font-mono"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 hover:text-slate-600"
-                  tabIndex={-1}
-                >
+            <ValidatedInput
+              label="Kata Sandi"
+              type={showPassword ? "text" : "password"}
+              required
+              requiredLabel="Kata sandi wajib diisi"
+              value={password}
+              onChange={setPassword}
+              showError={submitAttempted}
+              icon={<Lock className="w-4 h-4" />}
+              className="font-mono"
+              rightElement={
+                <button type="button" onClick={() => setShowPassword(!showPassword)} className="text-slate-400 hover:text-slate-600" tabIndex={-1}>
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
-              </div>
-            </div>
+              }
+            />
 
             <button
               type="submit"

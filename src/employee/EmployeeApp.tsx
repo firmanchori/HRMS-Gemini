@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Lock, Mail, Eye, EyeOff, AlertCircle, ArrowRight, LogOut, User, Clock, CalendarDays, CheckSquare, ArrowLeft } from 'lucide-react';
 import { employeeApi, EmployeeApiError, type EmployeeProfile, type AttendanceRecord, type LeaveRequest } from './api';
+import { ValidatedInput } from '../components/common/ValidatedInput';
+import { ValidatedDateInput } from '../components/common/ValidatedDateInput';
 
 /**
  * Minimal, real ESS/MSS portal backed by server/routes/employee.ts — the
@@ -45,9 +47,12 @@ const EmployeeLoginScreen: React.FC<{ onLoginSuccess: (profile: EmployeeProfile)
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [submitAttempted, setSubmitAttempted] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setSubmitAttempted(true);
+    if (!email.trim() || !password.trim()) return;
     setErrorMessage(null);
     setIsLoading(true);
     try {
@@ -83,24 +88,34 @@ const EmployeeLoginScreen: React.FC<{ onLoginSuccess: (profile: EmployeeProfile)
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-3.5">
-            <div className="space-y-1">
-              <label className="block text-xs font-semibold text-slate-700">Email</label>
-              <div className="relative rounded-md shadow-2xs">
-                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400"><Mail className="w-4 h-4" /></div>
-                <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="w-full rounded-md border border-slate-300 py-2 pl-9 pr-3 text-xs font-medium text-slate-900 focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 focus:outline-none" />
-              </div>
-            </div>
-            <div className="space-y-1">
-              <label className="block text-xs font-semibold text-slate-700">Kata Sandi</label>
-              <div className="relative rounded-md shadow-2xs">
-                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400"><Lock className="w-4 h-4" /></div>
-                <input type={showPassword ? 'text' : 'password'} required value={password} onChange={(e) => setPassword(e.target.value)} className="w-full rounded-md border border-slate-300 py-2 pl-9 pr-9 text-xs font-medium text-slate-900 focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 focus:outline-none font-mono" />
-                <button type="button" onClick={() => setShowPassword((p) => !p)} className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 hover:text-slate-600" tabIndex={-1}>
+          <form onSubmit={handleSubmit} noValidate className="space-y-3.5">
+            <ValidatedInput
+              label="Email"
+              type="email"
+              required
+              requiredLabel="Email wajib diisi"
+              validate={(v) => (v.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) ? 'Format email tidak valid' : null)}
+              value={email}
+              onChange={setEmail}
+              showError={submitAttempted}
+              icon={<Mail className="w-4 h-4" />}
+            />
+            <ValidatedInput
+              label="Kata Sandi"
+              type={showPassword ? 'text' : 'password'}
+              required
+              requiredLabel="Kata sandi wajib diisi"
+              value={password}
+              onChange={setPassword}
+              showError={submitAttempted}
+              icon={<Lock className="w-4 h-4" />}
+              className="font-mono"
+              rightElement={
+                <button type="button" onClick={() => setShowPassword((p) => !p)} className="text-slate-400 hover:text-slate-600" tabIndex={-1}>
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
-              </div>
-            </div>
+              }
+            />
             <button type="submit" disabled={isLoading} className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md text-xs font-bold shadow-xs hover:shadow transition-all flex items-center justify-center gap-2 disabled:opacity-70 mt-2">
               {isLoading ? <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <><span>Masuk</span><ArrowRight className="w-4 h-4" /></>}
             </button>
@@ -197,11 +212,25 @@ const PresensiTab: React.FC<{ canCreate: boolean }> = ({ canCreate }) => {
     setErrorMessage(null);
     setIsClocking(true);
     try {
-      const time = new Date().toTimeString().slice(0, 5);
-      await employeeApi.clock({ date: today, workType: 'WFO', ...(type === 'in' ? { clockIn: time } : { clockOut: time, clockIn: todayRecord?.clockIn ?? undefined }) });
+      const coords = await new Promise<{ lat: number; lng: number }>((resolve, reject) => {
+        if (!navigator.geolocation) return reject(new Error('Perangkat ini tidak mendukung GPS.'));
+        navigator.geolocation.getCurrentPosition(
+          (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+          (err) => reject(new Error(`Gagal mendapatkan lokasi GPS: ${err.message}`)),
+          { enableHighAccuracy: true, timeout: 10000 }
+        );
+      });
+      if (type === 'in') {
+        const check = await employeeApi.checkClockIn(coords.lat, coords.lng);
+        const workType = check.insideRadius && check.allowedWorkTypes.includes('WFO') ? 'WFO' : check.allowedWorkTypes[0];
+        if (!workType) throw new Error('Tidak ada opsi kehadiran yang diizinkan untuk akun Anda.');
+        await employeeApi.clockIn(coords.lat, coords.lng, workType);
+      } else {
+        await employeeApi.clockOut(coords.lat, coords.lng);
+      }
       load();
     } catch (err) {
-      setErrorMessage(err instanceof EmployeeApiError ? err.message : 'Gagal mencatat presensi.');
+      setErrorMessage(err instanceof EmployeeApiError || err instanceof Error ? err.message : 'Gagal mencatat presensi.');
     } finally {
       setIsClocking(false);
     }
@@ -255,14 +284,19 @@ const CutiTab: React.FC<{ canCreate: boolean }> = ({ canCreate }) => {
   const load = () => employeeApi.getLeave().then(setRequests).catch(() => {}).finally(() => setIsLoading(false));
   useEffect(() => { load(); }, []);
 
+  const [submitAttempted, setSubmitAttempted] = useState(false);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setSubmitAttempted(true);
+    if (!form.startDate || !form.endDate) return;
     setErrorMessage(null);
     setIsSubmitting(true);
     try {
       const days = Math.max(1, Math.round((new Date(form.endDate).getTime() - new Date(form.startDate).getTime()) / 86400000) + 1);
       await employeeApi.submitLeave({ ...form, totalDays: days });
       setForm({ leaveType: LEAVE_TYPES[0], startDate: '', endDate: '', reason: '' });
+      setSubmitAttempted(false);
       load();
     } catch (err) {
       setErrorMessage(err instanceof EmployeeApiError ? err.message : 'Gagal mengajukan cuti.');
@@ -274,15 +308,15 @@ const CutiTab: React.FC<{ canCreate: boolean }> = ({ canCreate }) => {
   return (
     <div className="space-y-4">
       {canCreate && (
-        <form onSubmit={handleSubmit} className="bg-white border border-slate-200 rounded-xl p-5 space-y-3">
+        <form onSubmit={handleSubmit} noValidate className="bg-white border border-slate-200 rounded-xl p-5 space-y-3">
           <h2 className="font-bold text-sm text-slate-800">Ajukan Cuti</h2>
           {errorMessage && <div className="text-[11px] text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-2 py-1.5">{errorMessage}</div>}
           <select value={form.leaveType} onChange={(e) => setForm({ ...form, leaveType: e.target.value })} className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs">
             {LEAVE_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
           <div className="grid grid-cols-2 gap-2">
-            <input type="date" required value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} className="px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs" />
-            <input type="date" required value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })} className="px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs" />
+            <ValidatedDateInput required showError={submitAttempted} value={form.startDate} onChange={(v) => setForm({ ...form, startDate: v })} maxDate={form.endDate || undefined} />
+            <ValidatedDateInput required showError={submitAttempted} value={form.endDate} onChange={(v) => setForm({ ...form, endDate: v })} minDate={form.startDate || undefined} />
           </div>
           <textarea value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} placeholder="Alasan (opsional)" className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs" rows={2} />
           <button type="submit" disabled={isSubmitting} className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-semibold disabled:opacity-50">Ajukan</button>
