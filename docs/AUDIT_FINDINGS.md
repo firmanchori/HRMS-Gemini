@@ -26,23 +26,23 @@ state hidup di React context + simulasi `localStorage` per-browser.
 
 ## 1. Approval Engine (Pengaturan & Alur Approval) — PRIORITAS TERTINGGI
 
-- [ ] **(Critical)** Tidak ada layar **pengaturan** untuk mendefinisikan jumlah level,
+- [x] **(Critical)** Tidak ada layar **pengaturan** untuk mendefinisikan jumlah level,
   approver per level, dan approver per kategori request (Cuti, SPPD, Pinjaman, dst)
   sebelum proses approve dipakai. Level & role approver di-*hardcode* langsung di
   `src/context/HrmsContext.tsx` per kategori (Cuti level1 `manager` totalLevels 2 ~L1512;
   Pinjaman `payroll_admin` totalLevels 2 ~L1802; dst). Eskalasi level-2+ juga hardcode
   `nextLevel === 2 ? 'director' : 'super_admin'` (`HrmsContext.tsx:3031`), tidak sadar
   kategori (padahal label SPPD level-2 adalah "Finance").
-- [ ] **(Critical)** Approver **tidak pernah dihitung dari hierarki organisasi nyata**
+- [x] **(Critical)** Approver **tidak pernah dihitung dari hierarki organisasi nyata**
   (`OrgStructureNode.reportsToId`) — selalu role string hardcode. Field data org chart
   sudah ada dan terisi, tapi tidak dibaca sama sekali oleh engine approval.
-- [ ] **(Critical)** Antrian approval **tidak di-scope ke approver**. `ApprovalCenter.tsx:120-123`
+- [x] **(Critical)** Antrian approval **tidak di-scope ke approver**. `ApprovalCenter.tsx:120-123`
   dan `MssPortal.tsx:113` menampilkan SEMUA item pending se-tenant ke siapa saja yang
   membuka layar — tidak ada filter berdasarkan role/tim/atasan-langsung. `MssPortal.tsx:112`
   bahkan hardcode `employees.slice(0, 8) // Demo team members` sebagai "tim saya".
   Dampak: approver bisa approve request orang yang bukan bawahannya; dua approver bisa
   berebut menyetujui tiket yang sama.
-- [ ] **(Critical — bypass kontrol)** Untuk kategori ber-`totalLevels: 2` (Pinjaman, SPPD,
+- [x] **(Critical — bypass kontrol)** Untuk kategori ber-`totalLevels: 2` (Pinjaman, SPPD,
   Reimbursement), tombol approve lokal di modulnya masing-masing memanggil fungsi status
   final secara langsung, **melompati level-2 sepenuhnya**:
   - `LoanManagement.tsx:580` → `updateLoanStatus(..., 'Aktif')` langsung final, padahal
@@ -55,21 +55,21 @@ state hidup di React context + simulasi `localStorage` per-browser.
   (`updateProcurementStatus`, `HrmsContext.tsx:2366-2385` tidak pernah update tiket
   terkait) — tiket "hantu" tertahan selamanya di status `'Menunggu'` di Approval Center
   meski PR-nya sudah selesai diproses di modul Procurement.
-- [ ] **(High)** "Pengganti Approver" (delegasi saat approver tidak hadir) hanya
+- [x] **(High)** "Pengganti Approver" (delegasi saat approver tidak hadir) hanya
   kosmetik: `ApprovalDelegation` dibuat & ditampilkan (`ApprovalCenter.tsx` tab
   "Pengganti Approver" L648-745, `MssPortal.tsx` tab "Delegasi" L620-701) tapi **tidak
   pernah dibaca** oleh `reviewApprovalItem` atau logika routing manapun. Tombol
   "Hentikan Delegasi" hanya menampilkan toast, tidak benar-benar menghapus/menonaktifkan
   apa pun (tidak ada fungsi `deleteDelegation` di context). `ApprovalDelegation` juga
   nol data seed.
-- [ ] **(High)** SLA tidak fungsional. `deadlineAt` dihitung saat tiket dibuat tapi
+- [x] **(High)** SLA tidak fungsional. `deadlineAt` dihitung saat tiket dibuat tapi
   **tidak pernah dibandingkan** dengan waktu sekarang di mana pun — tidak ada reminder,
   auto-eskalasi, atau auto-approve/reject timeout. Tab "SLA & Pengaturan" di
   ApprovalCenter hanya `useState` lokal komponen, hilang saat reload, tombol "Simpan
   Konfigurasi SLA" hanya toast — tidak memanggil context sama sekali. Metric card
   "Mendekati Batas SLA (24 Jam)" juga palsu — hanya menghitung jumlah semua item
   pending, tidak benar-benar membandingkan ke jam.
-- [ ] **(High)** Tidak ada konsep approver **"mengetahui"** (CC/acknowledge-only) yang
+- [x] **(High)** Tidak ada konsep approver **"mengetahui"** (CC/acknowledge-only) yang
   berbeda dari approver pemutus keputusan — nol hit untuk konsep ini di seluruh model
   data/UI approval.
 - [ ] **(High)** RBAC matrix (`RbacManagement.tsx`, `TenantRbacManagement.tsx`) sama
@@ -78,12 +78,12 @@ state hidup di React context + simulasi `localStorage` per-browser.
   file itu). Konfirmasi lebih luas: tidak ada satu pun modul operasional lain yang
   memanggil `getRolePermission` untuk men-gate aksi — RBAC matrix murni dekoratif di
   seluruh aplikasi.
-- [ ] **(Medium)** `ApprovalWorkflowItem` tidak punya `rejectionReason` dan tidak punya
+- [x] **(Medium)** `ApprovalWorkflowItem` tidak punya `rejectionReason` dan tidak punya
   riwayat per-level (begitu naik ke level 2, keputusan level 1 "hilang" dari record).
 
 ## 2. Dokumen Resmi, Tanda Tangan (TTD) & QR Verifikasi
 
-- [ ] **(Critical)** QR code dan status `'Resmi Diterbitkan'` muncul **otomatis &
+- [x] **(Critical)** QR code dan status `'Resmi Diterbitkan'` muncul **otomatis &
   sinkron saat dokumen dibuat**, tanpa gerbang konfirmasi apa pun dari pembuat,
   approver, atau pihak "mengetahui" (`DocumentManagement.tsx:930-983` dan
   `createOfficialDocument`, `HrmsContext.tsx:2388-2424`). Status `'Draft'` memang ada di
@@ -100,7 +100,7 @@ state hidup di React context + simulasi `localStorage` per-browser.
 - [ ] **(Critical)** Alur TTD/QR **sepenuhnya terputus dari Approval Center**. Tidak
   ada kategori "penerbitan dokumen" di `ApprovalWorkflowItem`, dan tidak ada field yang
   menghubungkan `OfficialDocument.id` ke tiket approval manapun.
-- [ ] **(High)** Tidak ada entri audit trail saat dokumen (dan QR-nya) diterbitkan —
+- [x] **(High)** Tidak ada entri audit trail saat dokumen (dan QR-nya) diterbitkan —
   `createOfficialDocument` tidak pernah memanggil `logAuditAction`. Klaim UI "SHA-256 +
   UU ITE compliance" tidak didukung implementasi nyata — hash QR dibuat dengan
   `Math.random().toString(36)` (`HrmsContext.tsx:2409`), bukan hash kriptografis isi
@@ -116,31 +116,31 @@ state hidup di React context + simulasi `localStorage` per-browser.
 
 ## 3. GA Asset & Procurement (Contoh Asli dari Pemilik Produk — Terkonfirmasi)
 
-- [ ] **(Critical)** Procurement → Asset **100% terputus**. "Barang Diterima"
+- [x] **(Critical)** Procurement → Asset **100% terputus**. "Barang Diterima"
   (`updateProcurementStatus`) tidak pernah memanggil `addAsset` — GA harus mengetik
   ulang aset yang sama secara manual tanpa vendor/PO/garansi yang terbawa.
-- [ ] **(Critical)** **Tidak ada field garansi** di mana pun pada model data (`GAAsset`,
+- [x] **(Critical)** **Tidak ada field garansi** di mana pun pada model data (`GAAsset`,
   `ProcurementOrder`) — hanya muncul sebagai teks bebas di klausa kontrak/placeholder
   textarea, bukan field terstruktur.
 - [ ] **(High)** Form registrasi aset **hardcode** `purchaseDate` ke hari ini dan
   `condition` ke `'Baik'` — tidak ada input tanggal pembelian/kondisi sama sekali di
   modal registrasi (`GaAssetManagement.tsx:804-826, 2886-2972`).
-- [ ] **(Critical)** `usageStatus` (status Tersedia/Digunakan/Dalam Perbaikan) ada di
+- [x] **(Critical)** `usageStatus` (status Tersedia/Digunakan/Dalam Perbaikan) ada di
   tipe data dan di seed data, tapi **mati total** — nol pembacaan/penulisan di
   `GaAssetManagement.tsx`. Status open/closed yang terlihat di UI hanyalah ekspresi ad
   hoc `!asset.assignedToEmployeeId` dihitung ulang di JSX, bukan satu sumber kebenaran.
-- [ ] **(High)** **Tidak ada aksi "kembalikan ke GA / jadikan tersedia"** — sekali
+- [x] **(High)** **Tidak ada aksi "kembalikan ke GA / jadikan tersedia"** — sekali
   ditugaskan, aset hanya bisa berpindah ke karyawan lain lewat swap, tidak pernah bisa
   kembali jadi `'Tersedia'`. Status `'Dikembalikan ke GA'` dideklarasikan tapi tidak
   pernah di-set oleh kode apa pun.
-- [ ] **(High)** Tidak ada link balik Employee → "aset yang sedang saya pegang" —
+- [x] **(High)** Tidak ada link balik Employee → "aset yang sedang saya pegang" —
   hanya ada `allocatedAssets`/`returnedAssets: string[]` bertipe teks bebas di log
   mutasi Personalia, tidak terhubung ke `GAAsset.id` dan tidak pernah tampil di profil
   karyawan.
 - [ ] **(Medium)** Flow swap 2 pihak tidak atomik dan tidak divalidasi simetris —
   guard hanya menolak bila **kedua** pihak kosong, memungkinkan transfer sepihak yang
   timpang (`GaAssetManagement.tsx:925-1009`).
-- [ ] **(Medium)** `OffboardingRecord.assetReturned` hanya boolean tunggal, tidak
+- [x] **(Medium)** `OffboardingRecord.assetReturned` hanya boolean tunggal, tidak
   mereferensikan aset spesifik — tidak bisa melacak pengembalian sebagian untuk
   karyawan dengan banyak aset, dan tidak pernah benar-benar query balik ke
   `GAAsset.assignedToEmployeeId` untuk verifikasi.
