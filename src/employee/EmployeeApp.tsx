@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Lock, Mail, Eye, EyeOff, AlertCircle, ArrowRight, LogOut, User, Clock, CalendarDays, CheckSquare, ArrowLeft } from 'lucide-react';
+import { Lock, Mail, Eye, EyeOff, AlertCircle, ArrowRight, LogOut, User, Clock, CalendarDays, CheckSquare, ArrowLeft, KeyRound } from 'lucide-react';
 import { employeeApi, EmployeeApiError, type EmployeeProfile, type AttendanceRecord, type LeaveRequest } from './api';
 import { ValidatedInput } from '../components/common/ValidatedInput';
 import { ValidatedDateInput } from '../components/common/ValidatedDateInput';
@@ -48,6 +48,10 @@ const EmployeeLoginScreen: React.FC<{ onLoginSuccess: (profile: EmployeeProfile)
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [submitAttempted, setSubmitAttempted] = useState(false);
+  // Set only after the password step comes back with { mfaRequired: true } — mirrors LoginScreen.tsx's admin-side MFA step.
+  const [awaitingMfaCode, setAwaitingMfaCode] = useState(false);
+  const [mfaCode, setMfaCode] = useState('');
+  const [mfaSubmitAttempted, setMfaSubmitAttempted] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -56,11 +60,32 @@ const EmployeeLoginScreen: React.FC<{ onLoginSuccess: (profile: EmployeeProfile)
     setErrorMessage(null);
     setIsLoading(true);
     try {
-      await employeeApi.login(email, password);
+      const result = await employeeApi.login(email, password);
+      if ('mfaRequired' in result) {
+        setAwaitingMfaCode(true);
+        return;
+      }
       const profile = await employeeApi.me();
       onLoginSuccess(profile);
     } catch (err) {
       setErrorMessage(err instanceof EmployeeApiError ? err.message : 'Gagal masuk, coba lagi.');
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function handleVerifyMfa(e: React.FormEvent) {
+    e.preventDefault();
+    setMfaSubmitAttempted(true);
+    if (!mfaCode.trim()) return;
+    setErrorMessage(null);
+    setIsLoading(true);
+    try {
+      await employeeApi.verifyMfaLogin(mfaCode);
+      const profile = await employeeApi.me();
+      onLoginSuccess(profile);
+    } catch (err) {
+      setErrorMessage(err instanceof EmployeeApiError ? err.message : 'Gagal memverifikasi kode.');
     } finally {
       setIsLoading(false);
     }
@@ -88,42 +113,78 @@ const EmployeeLoginScreen: React.FC<{ onLoginSuccess: (profile: EmployeeProfile)
             </div>
           )}
 
-          <form onSubmit={handleSubmit} noValidate className="space-y-3.5">
-            <ValidatedInput
-              label="Email"
-              type="email"
-              required
-              requiredLabel="Email wajib diisi"
-              validate={(v) => (v.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) ? 'Format email tidak valid' : null)}
-              value={email}
-              onChange={setEmail}
-              showError={submitAttempted}
-              icon={<Mail className="w-4 h-4" />}
-            />
-            <ValidatedInput
-              label="Kata Sandi"
-              type={showPassword ? 'text' : 'password'}
-              required
-              requiredLabel="Kata sandi wajib diisi"
-              value={password}
-              onChange={setPassword}
-              showError={submitAttempted}
-              icon={<Lock className="w-4 h-4" />}
-              className="font-mono"
-              rightElement={
-                <button type="button" onClick={() => setShowPassword((p) => !p)} className="text-slate-400 hover:text-slate-600" tabIndex={-1}>
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+          {awaitingMfaCode ? (
+            <form onSubmit={handleVerifyMfa} noValidate className="space-y-3.5">
+              <p className="text-xs text-slate-600 leading-snug">
+                Masukkan kode 6 digit dari aplikasi autentikator Anda, atau salah satu kode cadangan Anda.
+              </p>
+              <ValidatedInput
+                label="Kode Verifikasi"
+                required
+                requiredLabel="Kode verifikasi wajib diisi"
+                autoFocus
+                value={mfaCode}
+                onChange={setMfaCode}
+                showError={mfaSubmitAttempted}
+                icon={<KeyRound className="w-4 h-4" />}
+                placeholder="123456"
+                className="font-mono tracking-widest"
+              />
+              <button type="submit" disabled={isLoading} className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md text-xs font-bold shadow-xs hover:shadow transition-all flex items-center justify-center gap-2 disabled:opacity-70 mt-2">
+                {isLoading ? <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <><span>Verifikasi</span><ArrowRight className="w-4 h-4" /></>}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAwaitingMfaCode(false);
+                  setMfaCode('');
+                  setErrorMessage(null);
+                }}
+                className="w-full flex items-center justify-center gap-1.5 text-center text-[11px] text-slate-500 hover:text-slate-700 pt-1"
+              >
+                <ArrowLeft className="w-3 h-3" /> Kembali ke Login
+              </button>
+            </form>
+          ) : (
+            <>
+              <form onSubmit={handleSubmit} noValidate className="space-y-3.5">
+                <ValidatedInput
+                  label="Email"
+                  type="email"
+                  required
+                  requiredLabel="Email wajib diisi"
+                  validate={(v) => (v.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) ? 'Format email tidak valid' : null)}
+                  value={email}
+                  onChange={setEmail}
+                  showError={submitAttempted}
+                  icon={<Mail className="w-4 h-4" />}
+                />
+                <ValidatedInput
+                  label="Kata Sandi"
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  requiredLabel="Kata sandi wajib diisi"
+                  value={password}
+                  onChange={setPassword}
+                  showError={submitAttempted}
+                  icon={<Lock className="w-4 h-4" />}
+                  className="font-mono"
+                  rightElement={
+                    <button type="button" onClick={() => setShowPassword((p) => !p)} className="text-slate-400 hover:text-slate-600" tabIndex={-1}>
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  }
+                />
+                <button type="submit" disabled={isLoading} className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md text-xs font-bold shadow-xs hover:shadow transition-all flex items-center justify-center gap-2 disabled:opacity-70 mt-2">
+                  {isLoading ? <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <><span>Masuk</span><ArrowRight className="w-4 h-4" /></>}
                 </button>
-              }
-            />
-            <button type="submit" disabled={isLoading} className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md text-xs font-bold shadow-xs hover:shadow transition-all flex items-center justify-center gap-2 disabled:opacity-70 mt-2">
-              {isLoading ? <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <><span>Masuk</span><ArrowRight className="w-4 h-4" /></>}
-            </button>
-          </form>
+              </form>
 
-          <button type="button" onClick={onSwitchToAdminLogin} className="w-full flex items-center justify-center gap-1.5 text-center text-[11px] text-slate-500 hover:text-slate-700 pt-1">
-            <ArrowLeft className="w-3 h-3" /> Masuk sebagai Admin Tenant
-          </button>
+              <button type="button" onClick={onSwitchToAdminLogin} className="w-full flex items-center justify-center gap-1.5 text-center text-[11px] text-slate-500 hover:text-slate-700 pt-1">
+                <ArrowLeft className="w-3 h-3" /> Masuk sebagai Admin Tenant
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -183,18 +244,177 @@ const EmployeeDashboard: React.FC<{ profile: EmployeeProfile; onLogout: () => vo
 };
 
 const ProfilTab: React.FC<{ profile: EmployeeProfile }> = ({ profile }) => (
-  <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-3">
-    <h2 className="font-bold text-sm text-slate-800">Data Diri</h2>
-    <div className="grid grid-cols-2 gap-3 text-xs">
-      <div><span className="text-slate-400 block">Nama Lengkap</span><span className="font-semibold">{profile.employee.fullName}</span></div>
-      <div><span className="text-slate-400 block">NIK</span><span className="font-semibold font-mono">{profile.employee.nik}</span></div>
-      <div><span className="text-slate-400 block">Email</span><span className="font-semibold">{profile.employee.email || '-'}</span></div>
-      <div><span className="text-slate-400 block">Telepon</span><span className="font-semibold">{profile.employee.phone || '-'}</span></div>
-      <div><span className="text-slate-400 block">Status Kepegawaian</span><span className="font-semibold">{profile.employee.employmentType}</span></div>
-      <div><span className="text-slate-400 block">Status</span><span className="font-semibold">{profile.employee.status}</span></div>
+  <div className="space-y-4">
+    <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-3">
+      <h2 className="font-bold text-sm text-slate-800">Data Diri</h2>
+      <div className="grid grid-cols-2 gap-3 text-xs">
+        <div><span className="text-slate-400 block">Nama Lengkap</span><span className="font-semibold">{profile.employee.fullName}</span></div>
+        <div><span className="text-slate-400 block">NIK</span><span className="font-semibold font-mono">{profile.employee.nik}</span></div>
+        <div><span className="text-slate-400 block">Email</span><span className="font-semibold">{profile.employee.email || '-'}</span></div>
+        <div><span className="text-slate-400 block">Telepon</span><span className="font-semibold">{profile.employee.phone || '-'}</span></div>
+        <div><span className="text-slate-400 block">Status Kepegawaian</span><span className="font-semibold">{profile.employee.employmentType}</span></div>
+        <div><span className="text-slate-400 block">Status</span><span className="font-semibold">{profile.employee.status}</span></div>
+      </div>
     </div>
+    <EmployeeMfaCard />
   </div>
 );
+
+/**
+ * Self-service MFA enrollment for employee accounts — same real
+ * server/routes/employee.ts's /mfa/* endpoints and UI contract as
+ * Header.tsx's admin-side MFA card (security review, user 2026-11-10:
+ * "MFA untuk karyawan").
+ */
+const EmployeeMfaCard: React.FC = () => {
+  const [mfaEnabled, setMfaEnabled] = useState<boolean | null>(null);
+  const [mfaLoading, setMfaLoading] = useState(false);
+  const [mfaError, setMfaError] = useState<string | null>(null);
+  const [mfaSetupData, setMfaSetupData] = useState<{ secret: string; otpauthUrl: string; qrCodeDataUrl: string } | null>(null);
+  const [mfaConfirmCode, setMfaConfirmCode] = useState('');
+  const [mfaBackupCodes, setMfaBackupCodes] = useState<string[] | null>(null);
+  const [mfaDisablePassword, setMfaDisablePassword] = useState('');
+  const [showMfaDisableForm, setShowMfaDisableForm] = useState(false);
+
+  useEffect(() => {
+    employeeApi.mfaStatus().then((s) => setMfaEnabled(s.enabled)).catch(() => setMfaEnabled(null));
+  }, []);
+
+  const handleStartMfaSetup = async () => {
+    setMfaError(null);
+    setMfaLoading(true);
+    try {
+      setMfaSetupData(await employeeApi.mfaSetup());
+    } catch (err) {
+      setMfaError(err instanceof EmployeeApiError ? err.message : 'Gagal memulai pengaturan MFA.');
+    } finally {
+      setMfaLoading(false);
+    }
+  };
+
+  const handleConfirmMfaSetup = async () => {
+    setMfaError(null);
+    setMfaLoading(true);
+    try {
+      const result = await employeeApi.mfaConfirm(mfaConfirmCode);
+      setMfaBackupCodes(result.backupCodes);
+      setMfaEnabled(true);
+      setMfaSetupData(null);
+      setMfaConfirmCode('');
+    } catch (err) {
+      setMfaError(err instanceof EmployeeApiError ? err.message : 'Kode verifikasi salah.');
+    } finally {
+      setMfaLoading(false);
+    }
+  };
+
+  const handleDisableMfa = async () => {
+    setMfaError(null);
+    setMfaLoading(true);
+    try {
+      await employeeApi.mfaDisable(mfaDisablePassword);
+      setMfaEnabled(false);
+      setShowMfaDisableForm(false);
+      setMfaDisablePassword('');
+      setMfaBackupCodes(null);
+    } catch (err) {
+      setMfaError(err instanceof EmployeeApiError ? err.message : 'Password salah.');
+    } finally {
+      setMfaLoading(false);
+    }
+  };
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="font-bold text-sm text-slate-800">Verifikasi Dua Langkah (2FA)</h2>
+          <div className="text-xs font-semibold mt-0.5">
+            {mfaEnabled === null ? (
+              <span className="text-slate-400">Memuat...</span>
+            ) : mfaEnabled ? (
+              <span className="text-emerald-700">Aktif</span>
+            ) : (
+              <span className="text-slate-500">Tidak Aktif</span>
+            )}
+          </div>
+          <div className="text-[11px] text-slate-500 mt-0.5">
+            Gunakan aplikasi autentikator (Google Authenticator, Authy, dll) untuk lapisan keamanan tambahan saat login.
+          </div>
+        </div>
+      </div>
+
+      {mfaError && <div className="text-[11px] text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-2 py-1.5">{mfaError}</div>}
+
+      {mfaBackupCodes && (
+        <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-[11px] text-amber-900 space-y-1.5">
+          <div className="font-semibold">Simpan kode cadangan ini — hanya ditampilkan sekali:</div>
+          <div className="grid grid-cols-2 gap-1 font-mono">
+            {mfaBackupCodes.map((c) => <span key={c}>{c}</span>)}
+          </div>
+        </div>
+      )}
+
+      {mfaEnabled === false && !mfaSetupData && (
+        <button type="button" onClick={handleStartMfaSetup} disabled={mfaLoading} className="text-xs font-semibold text-indigo-600 hover:underline disabled:opacity-50">
+          Aktifkan 2FA
+        </button>
+      )}
+
+      {mfaSetupData && (
+        <div className="space-y-2 border-t border-slate-200 pt-2.5">
+          <img src={mfaSetupData.qrCodeDataUrl} alt="QR kode 2FA" className="w-32 h-32 border border-slate-200 rounded-lg" />
+          <div className="text-[11px] text-slate-500">
+            Pindai dengan aplikasi autentikator, atau masukkan manual: <span className="font-mono">{mfaSetupData.secret}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={mfaConfirmCode}
+              onChange={(e) => setMfaConfirmCode(e.target.value)}
+              placeholder="Kode 6 digit"
+              className="flex-1 px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-mono"
+            />
+            <button
+              type="button"
+              onClick={handleConfirmMfaSetup}
+              disabled={mfaLoading || mfaConfirmCode.length < 6}
+              className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-semibold disabled:opacity-50"
+            >
+              Konfirmasi
+            </button>
+          </div>
+        </div>
+      )}
+
+      {mfaEnabled === true && !showMfaDisableForm && (
+        <button type="button" onClick={() => setShowMfaDisableForm(true)} className="text-xs font-semibold text-rose-600 hover:underline">
+          Matikan 2FA
+        </button>
+      )}
+
+      {showMfaDisableForm && (
+        <div className="flex items-center gap-2 border-t border-slate-200 pt-2.5">
+          <input
+            type="password"
+            value={mfaDisablePassword}
+            onChange={(e) => setMfaDisablePassword(e.target.value)}
+            placeholder="Konfirmasi dengan kata sandi"
+            className="flex-1 px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs"
+          />
+          <button
+            type="button"
+            onClick={handleDisableMfa}
+            disabled={mfaLoading || !mfaDisablePassword}
+            className="px-3 py-1.5 bg-rose-600 text-white rounded-lg text-xs font-semibold disabled:opacity-50"
+          >
+            Matikan
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
 
 const PresensiTab: React.FC<{ canCreate: boolean }> = ({ canCreate }) => {
   const [records, setRecords] = useState<AttendanceRecord[]>([]);

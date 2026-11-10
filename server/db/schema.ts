@@ -1534,6 +1534,14 @@ export const employeeAccounts = pgTable(
     passwordHash: text("password_hash").notNull(),
     roleKey: text("role_key").notNull().default("employee"),
     isActive: boolean("is_active").notNull().default(true),
+    // TOTP 2FA (RFC 6238) for employee (ESS/MSS) logins — same mechanism and
+    // storage pattern as users.totpSecretEncrypted/totpEnabled/
+    // totpBackupCodesHash (security review, user 2026-11-10: "MFA untuk
+    // karyawan"); previously MFA only existed for app_owner/tenant_admin
+    // accounts, never for employee_accounts at all.
+    totpSecretEncrypted: text("totp_secret_encrypted"),
+    totpEnabled: boolean("totp_enabled").notNull().default(false),
+    totpBackupCodesHash: jsonb("totp_backup_codes_hash").$type<string[]>(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [uniqueIndex("employee_accounts_tenant_email_idx").on(table.tenantId, table.email)]

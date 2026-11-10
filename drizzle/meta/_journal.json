@@ -309,6 +309,13 @@
       "when": 1794320079073,
       "tag": "0043_clean_lilandra",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1794320865747,
+      "tag": "0044_cold_silhouette",
+      "breakpoints": true
     }
   ]
 }

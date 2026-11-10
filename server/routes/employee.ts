@@ -2,15 +2,19 @@ import { Router } from "express";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { and, eq } from "drizzle-orm";
+import QRCode from "qrcode";
 import { db } from "../db/client.ts";
 import { employeeAccounts, employees, attendanceRecords, leaveRequests } from "../db/schema.ts";
-import { issueSession, requireEmployeeSession, requirePermission } from "../middleware/auth.ts";
+import { issueSession, requireEmployeeSession, requirePermission, issueMfaTicket, readMfaTicket, clearMfaTicket } from "../middleware/auth.ts";
 import { validateBody, validateParams, uuidParam } from "../lib/validate.ts";
 import { authLimiter } from "../lib/rateLimit.ts";
 import { logAudit } from "../lib/audit.ts";
 import { logLoginAttempt, isAccountLockedOut, LOCKOUT_WINDOW_MINUTES, alertIfAccountJustLockedOut } from "./auth.ts";
 import { getPermission } from "../lib/permissions.ts";
 import { checkClockIn, checkClockOut, performClockIn, performClockOut, ClockError } from "../lib/attendanceClock.ts";
+import { encryptSecret, decryptSecret } from "../lib/crypto.ts";
+import { generateTotpSecret, totpOtpauthUrl, verifyTotpCode, generateBackupCodes, hashBackupCode, consumeBackupCode } from "../lib/totp.ts";
+import { sendSecurityAlert } from "../lib/alerts.ts";
 
 /**
  * Real employee (ESS) / manager (MSS) login and the first real,
@@ -59,6 +63,17 @@ employeeRouter.post("/login", authLimiter, validateBody(employeeLoginSchema), as
     return res.status(403).json({ error: "Akun perusahaan Anda tidak aktif." });
   }
 
+  // A correct password isn't the whole login when MFA is enabled — same
+  // pending-ticket pattern as the admin/App-Owner login in auth.ts
+  // (security review, user 2026-11-10: "MFA untuk karyawan" — this branch
+  // didn't exist at all before, so an employee account could never have a
+  // working second factor no matter how it was configured).
+  if (account.totpEnabled) {
+    await logLoginAttempt({ tenantId, actorUserId: null, email, outcome: "success", reason: "password_ok_awaiting_mfa", ip });
+    issueMfaTicket(res, { userId: account.id, role: "employee", tenantId });
+    return res.json({ mfaRequired: true });
+  }
+
   await logLoginAttempt({ tenantId, actorUserId: null, email, outcome: "success", ip });
   await issueSession(req, res, { userId: account.id, role: "employee", tenantId, employeeId: account.employeeId, roleKey: account.roleKey });
 
@@ -66,7 +81,120 @@ employeeRouter.post("/login", authLimiter, validateBody(employeeLoginSchema), as
   res.json({ id: account.id, email: account.email, roleKey: account.roleKey, name: employee?.fullName ?? account.email });
 });
 
+const employeeMfaVerifyLoginSchema = z.object({
+  code: z.string().trim().min(6).max(12),
+});
+
+/** Second step of employee login when the account has MFA enabled — mirrors authRouter's /mfa/verify-login but reads/writes employee_accounts instead of users. */
+employeeRouter.post("/mfa/verify-login", authLimiter, validateBody(employeeMfaVerifyLoginSchema), async (req, res) => {
+  const { code } = req.body;
+  const ticket = readMfaTicket(req);
+  if (!ticket || ticket.role !== "employee") return res.status(401).json({ error: "Sesi verifikasi kedaluwarsa, silakan login ulang" });
+
+  const [account] = await db.select().from(employeeAccounts).where(eq(employeeAccounts.id, ticket.userId)).limit(1);
+  if (!account || !account.totpEnabled || !account.totpSecretEncrypted) {
+    clearMfaTicket(res);
+    return res.status(401).json({ error: "Sesi verifikasi tidak valid, silakan login ulang" });
+  }
+
+  const ip = req.ip ?? "unknown";
+  const secret = decryptSecret(account.totpSecretEncrypted);
+  let valid = verifyTotpCode(secret, code);
+
+  if (!valid && account.totpBackupCodesHash?.length) {
+    const remaining = consumeBackupCode(account.totpBackupCodesHash, code);
+    if (remaining) {
+      valid = true;
+      await db.update(employeeAccounts).set({ totpBackupCodesHash: remaining }).where(eq(employeeAccounts.id, account.id));
+    }
+  }
+
+  if (!valid) {
+    await logLoginAttempt({ tenantId: account.tenantId, actorUserId: null, email: account.email, outcome: "failure", reason: "invalid_mfa_code", ip });
+    return res.status(401).json({ error: "Kode verifikasi salah" });
+  }
+
+  clearMfaTicket(res);
+  await issueSession(req, res, { userId: account.id, role: "employee", tenantId: account.tenantId, employeeId: account.employeeId, roleKey: account.roleKey });
+  const [employee] = await db.select().from(employees).where(eq(employees.id, account.employeeId)).limit(1);
+  res.json({ id: account.id, email: account.email, roleKey: account.roleKey, name: employee?.fullName ?? account.email });
+});
+
 employeeRouter.use(requireEmployeeSession);
+
+/** Current MFA status for the logged-in employee — drives the ESS profile/security tab's "aktif/tidak aktif" state. */
+employeeRouter.get("/mfa/status", async (req, res) => {
+  const [account] = await db.select().from(employeeAccounts).where(eq(employeeAccounts.id, req.session!.userId)).limit(1);
+  if (!account) return res.status(401).json({ error: "Belum login" });
+  res.json({ enabled: account.totpEnabled });
+});
+
+/** Starts (or restarts) enrollment — same half-finished-enrollment-can't-lock-anyone-out contract as authRouter's /mfa/setup. */
+employeeRouter.post("/mfa/setup", async (req, res) => {
+  const [account] = await db.select().from(employeeAccounts).where(eq(employeeAccounts.id, req.session!.userId)).limit(1);
+  if (!account) return res.status(401).json({ error: "Belum login" });
+  if (account.totpEnabled) return res.status(400).json({ error: "MFA sudah aktif untuk akun ini. Matikan dulu sebelum mengatur ulang." });
+
+  const secret = generateTotpSecret();
+  await db.update(employeeAccounts).set({ totpSecretEncrypted: encryptSecret(secret) }).where(eq(employeeAccounts.id, account.id));
+
+  const otpauthUrl = totpOtpauthUrl(secret, account.email, "NusaHR");
+  const qrCodeDataUrl = await QRCode.toDataURL(otpauthUrl);
+  res.json({ secret, otpauthUrl, qrCodeDataUrl });
+});
+
+const employeeMfaConfirmSchema = z.object({
+  code: z.string().trim().min(6).max(12),
+});
+
+/** Completes enrollment: the code must match the secret /mfa/setup just stored before MFA turns on. Returns one-time backup codes — only their hashes are ever stored. */
+employeeRouter.post("/mfa/confirm", validateBody(employeeMfaConfirmSchema), async (req, res) => {
+  const { code } = req.body;
+  const [account] = await db.select().from(employeeAccounts).where(eq(employeeAccounts.id, req.session!.userId)).limit(1);
+  if (!account) return res.status(401).json({ error: "Belum login" });
+  if (account.totpEnabled) return res.status(400).json({ error: "MFA sudah aktif untuk akun ini." });
+  if (!account.totpSecretEncrypted) return res.status(400).json({ error: "Belum ada proses pengaturan MFA yang berjalan. Mulai dari /mfa/setup." });
+
+  const secret = decryptSecret(account.totpSecretEncrypted);
+  if (!verifyTotpCode(secret, code)) {
+    return res.status(400).json({ error: "Kode verifikasi salah" });
+  }
+
+  const backupCodes = generateBackupCodes();
+  await db
+    .update(employeeAccounts)
+    .set({ totpEnabled: true, totpBackupCodesHash: backupCodes.map(hashBackupCode) })
+    .where(eq(employeeAccounts.id, account.id));
+  await logAudit({ actorUserId: null, tenantId: account.tenantId, action: "auth.employee_mfa_enabled", details: { employeeAccountId: account.id } });
+
+  res.json({ backupCodes });
+});
+
+const employeeMfaDisableSchema = z.object({
+  password: z.string().min(1).max(200),
+});
+
+/** Turning MFA off requires the current password again — same unattended-unlocked-session defense as authRouter's /mfa/disable. */
+employeeRouter.post("/mfa/disable", validateBody(employeeMfaDisableSchema), async (req, res) => {
+  const { password } = req.body;
+  const [account] = await db.select().from(employeeAccounts).where(eq(employeeAccounts.id, req.session!.userId)).limit(1);
+  if (!account || !(await bcrypt.compare(password, account.passwordHash))) {
+    return res.status(401).json({ error: "Password salah" });
+  }
+
+  await db
+    .update(employeeAccounts)
+    .set({ totpEnabled: false, totpSecretEncrypted: null, totpBackupCodesHash: null })
+    .where(eq(employeeAccounts.id, account.id));
+  await logAudit({ actorUserId: null, tenantId: account.tenantId, action: "auth.employee_mfa_disabled", details: { employeeAccountId: account.id } });
+  await sendSecurityAlert({
+    tenantId: account.tenantId,
+    subject: "MFA dinonaktifkan pada akun karyawan",
+    message: `Verifikasi dua langkah (MFA) baru saja dinonaktifkan untuk akun karyawan ${account.email}. Jika ini bukan Anda, segera hubungi HR/Admin dan ganti password.`,
+  });
+
+  res.json({ ok: true });
+});
 
 employeeRouter.get("/me", async (req, res) => {
   const session = req.session!;

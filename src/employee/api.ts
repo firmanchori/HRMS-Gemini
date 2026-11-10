@@ -32,6 +32,9 @@ export interface EmployeeSessionUser {
   name: string;
 }
 
+/** Either a completed login, or a signal that a second (TOTP/backup code) step is still needed before a real session exists — mirrors shared/authApi.ts's LoginResult for the employee_accounts session type. */
+export type EmployeeLoginResult = EmployeeSessionUser | { mfaRequired: true };
+
 export interface EmployeeProfile {
   employee: {
     id: string;
@@ -94,7 +97,13 @@ export interface LeaveRequest {
 }
 
 export const employeeApi = {
-  login: (email: string, password: string) => request<EmployeeSessionUser>('/api/employee/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
+  login: (email: string, password: string) => request<EmployeeLoginResult>('/api/employee/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
+  /** Second step of login when login() returned { mfaRequired: true }. */
+  verifyMfaLogin: (code: string) => request<EmployeeSessionUser>('/api/employee/mfa/verify-login', { method: 'POST', body: JSON.stringify({ code }) }),
+  mfaStatus: () => request<{ enabled: boolean }>('/api/employee/mfa/status'),
+  mfaSetup: () => request<{ secret: string; otpauthUrl: string; qrCodeDataUrl: string }>('/api/employee/mfa/setup', { method: 'POST' }),
+  mfaConfirm: (code: string) => request<{ backupCodes: string[] }>('/api/employee/mfa/confirm', { method: 'POST', body: JSON.stringify({ code }) }),
+  mfaDisable: (password: string) => request<{ ok: true }>('/api/employee/mfa/disable', { method: 'POST', body: JSON.stringify({ password }) }),
   logout: () => request<{ ok: true }>('/api/auth/logout', { method: 'POST' }),
   me: () => request<EmployeeProfile>('/api/employee/me'),
   getAttendance: () => request<AttendanceRecord[]>('/api/employee/attendance'),

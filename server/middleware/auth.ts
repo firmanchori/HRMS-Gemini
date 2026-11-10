@@ -146,7 +146,7 @@ const MFA_TICKET_COOKIE = "nusahr_mfa_ticket";
 
 interface MfaTicketPayload {
   userId: string;
-  role: "app_owner" | "tenant_admin";
+  role: "app_owner" | "tenant_admin" | "employee";
   tenantId: string | null;
   purpose: "mfa_pending";
 }
