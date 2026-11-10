@@ -53,6 +53,7 @@ import {
   Archive,
 } from 'lucide-react';
 import { ValidatedDateInput } from '../common/ValidatedDateInput';
+import { ValidatedInput, ValidatedTextarea, ValidatedSelect } from '../common/ValidatedInput';
 import {
   CompanyDivision,
   CompanyDepartment,
@@ -389,11 +390,17 @@ export const OrganizationManagement: React.FC = () => {
   // Restructuring vs Administrative Typo Correction Modal
   const [isRestructureModalOpen, setIsRestructureModalOpen] = useState(false);
   const [isCorrectionModalOpen, setIsCorrectionModalOpen] = useState(false);
+  const [correctionSubmitAttempted, setCorrectionSubmitAttempted] = useState(false);
   const [proposalCategory, setProposalCategory] = useState<'organisasi' | 'perusahaan'>('organisasi');
 
   // Mode Draft Restrukturisasi: 'full' (Rancang Draft Lengkap: Divisi, Dept & Jabatan) vs 'single' (Perubahan Parsial Tunggal)
   const [restructureDraftMode, setRestructureDraftMode] = useState<'full' | 'single'>('full');
   const [draftActiveTab, setDraftActiveTab] = useState<'info' | 'grades' | 'divisions' | 'departments' | 'positions'>('info');
+  const [restructureStep1SubmitAttempted, setRestructureStep1SubmitAttempted] = useState(false);
+  const [draftStep2SubmitAttempted, setDraftStep2SubmitAttempted] = useState(false);
+  const [draftStep3SubmitAttempted, setDraftStep3SubmitAttempted] = useState(false);
+  const [draftStep4SubmitAttempted, setDraftStep4SubmitAttempted] = useState(false);
+  const [draftStep5SubmitAttempted, setDraftStep5SubmitAttempted] = useState(false);
   const [draftGradingScheme, setDraftGradingScheme] = useState<'single' | 'broadbanding'>('single');
   const [draftGradeSalaryRanges, setDraftGradeSalaryRanges] = useState<GradeSalaryRange[]>([]);
   const [draftDivisions, setDraftDivisions] = useState<CompanyDivision[]>([]);
@@ -460,6 +467,7 @@ export const OrganizationManagement: React.FC = () => {
     if (!newEntityParentId) errors.parentEntityId = 'Entitas induk wajib dipilih';
     if (!newEntityName.trim()) errors.name = 'Nama legal perusahaan wajib diisi';
     if (!newEntityCode.trim()) errors.code = 'Kode singkat wajib diisi';
+    if (!newEntityCity.trim()) errors.city = 'Domisili kota wajib diisi';
     if (!newAdminName.trim()) errors.adminName = 'Nama admin entitas ini wajib diisi';
     if (!newAdminEmail.trim()) errors.adminEmail = 'Email admin wajib diisi';
     if (newAdminPassword.length < 8) errors.adminPassword = 'Password admin minimal 8 karakter';
@@ -509,6 +517,7 @@ export const OrganizationManagement: React.FC = () => {
     headTitle: 'Head of Division',
     description: '',
   });
+  const [divisionSubmitAttempted, setDivisionSubmitAttempted] = useState(false);
 
   const [isDepartmentModalOpen, setIsDepartmentModalOpen] = useState(false);
   const [departmentFormData, setDepartmentFormData] = useState({
@@ -519,8 +528,10 @@ export const OrganizationManagement: React.FC = () => {
     headTitle: 'Department Head',
     description: '',
   });
+  const [departmentSubmitAttempted, setDepartmentSubmitAttempted] = useState(false);
 
   const [isPositionModalOpen, setIsPositionModalOpen] = useState(false);
+  const [positionSubmitAttempted, setPositionSubmitAttempted] = useState(false);
   const [positionFormData, setPositionFormData] = useState({
     id: '',
     title: '',
@@ -542,6 +553,7 @@ export const OrganizationManagement: React.FC = () => {
 
   // Modal Master Jabatan (Kamus Jabatan)
   const [isMasterPositionModalOpen, setIsMasterPositionModalOpen] = useState(false);
+  const [masterPositionSubmitAttempted, setMasterPositionSubmitAttempted] = useState(false);
   const [masterPositionFormData, setMasterPositionFormData] = useState({
     id: '',
     code: '',
@@ -560,6 +572,7 @@ export const OrganizationManagement: React.FC = () => {
 
   // State untuk Pengaturan Master Grade & Skema Jenjang
   const [isGradeModalOpen, setIsGradeModalOpen] = useState(false);
+  const [gradeSubmitAttempted, setGradeSubmitAttempted] = useState(false);
   const [previewGrade, setPreviewGrade] = useState<GradeSalaryRange | null>(null);
   const [gradeSearch, setGradeSearch] = useState('');
   const [gradeFormData, setGradeFormData] = useState({
@@ -812,7 +825,10 @@ export const OrganizationManagement: React.FC = () => {
     restructureForm.skDocFileName.trim()
   );
 
-  const isDraftStep2Valid = isDraftStep1Valid && draftGradeSalaryRanges.length > 0;
+  const isDraftStep2Valid =
+    isDraftStep1Valid &&
+    draftGradeSalaryRanges.length > 0 &&
+    draftGradeSalaryRanges.every((g) => g.gradeCode.trim() && g.gradeName.trim());
 
   const isDraftStep3Valid =
     isDraftStep2Valid &&
@@ -854,13 +870,19 @@ export const OrganizationManagement: React.FC = () => {
       setDraftActiveTab(targetTab);
     } else {
       if (!isDraftStep1Valid) {
+        setRestructureStep1SubmitAttempted(true);
         showToast('Selesaikan Judul Usulan, Nomor SK, dan Tanggal Efektif pada Tahap 1 terlebih dahulu.');
       } else if (!isDraftStep2Valid) {
-        showToast('Tentukan minimal 1 Grade Remunerasi pada Tahap 2 sebelum melanjutkan.');
+        setDraftStep2SubmitAttempted(true);
+        showToast('Tentukan minimal 1 Grade Remunerasi (dengan Kode & Nama terisi) pada Tahap 2 sebelum melanjutkan.');
       } else if (!isDraftStep3Valid) {
+        setDraftStep3SubmitAttempted(true);
         showToast('Lengkapi minimal 1 Divisi (Kode & Nama) pada Tahap 3 terlebih dahulu.');
       } else if (!isDraftStep4Valid) {
+        setDraftStep4SubmitAttempted(true);
         showToast('Lengkapi data Departemen/Unit pada Tahap 4 (atau pilih opsi Langsung ke Jabatan/Bypass).');
+      } else if (!isDraftStep5Valid) {
+        setDraftStep5SubmitAttempted(true);
       }
     }
   };
@@ -1259,7 +1281,9 @@ export const OrganizationManagement: React.FC = () => {
   // Direct CRUD Handlers (Only active when !currentEntityLocked)
   const handleSubmitDivision = (e: React.FormEvent) => {
     e.preventDefault();
+    setDivisionSubmitAttempted(true);
     if (!divisionFormData.name.trim() || !divisionFormData.code.trim()) return;
+    setDivisionSubmitAttempted(false);
     if (divisionFormData.id) {
       updateDivision(divisionFormData.id, {
         name: divisionFormData.name.trim(),
@@ -1284,7 +1308,9 @@ export const OrganizationManagement: React.FC = () => {
 
   const handleSubmitDepartment = (e: React.FormEvent) => {
     e.preventDefault();
+    setDepartmentSubmitAttempted(true);
     if (!departmentFormData.name.trim() || !departmentFormData.code.trim()) return;
+    setDepartmentSubmitAttempted(false);
     if (departmentFormData.id) {
       updateDepartment(departmentFormData.id, {
         name: departmentFormData.name.trim(),
@@ -1311,7 +1337,9 @@ export const OrganizationManagement: React.FC = () => {
 
   const handleSubmitPosition = (e: React.FormEvent) => {
     e.preventDefault();
+    setPositionSubmitAttempted(true);
     if (!positionFormData.title.trim()) return;
+    setPositionSubmitAttempted(false);
     if (positionFormData.id) {
       updateOrgNode(positionFormData.id, {
         title: positionFormData.title.trim(),
@@ -1346,7 +1374,10 @@ export const OrganizationManagement: React.FC = () => {
   // Handlers untuk Master Jabatan (Kamus Jabatan)
   const handleSubmitMasterPosition = (e: React.FormEvent) => {
     e.preventDefault();
+    setMasterPositionSubmitAttempted(true);
     if (!masterPositionFormData.title.trim()) return;
+    if (jobGradingScheme === 'single' && !masterPositionFormData.jobGrade.trim()) return;
+    setMasterPositionSubmitAttempted(false);
 
     let computedJobGrade = masterPositionFormData.jobGrade;
     if (jobGradingScheme === 'broadbanding') {
@@ -1478,6 +1509,7 @@ export const OrganizationManagement: React.FC = () => {
 
   const handleSubmitGrade = (e: React.FormEvent) => {
     e.preventDefault();
+    setGradeSubmitAttempted(true);
     if (!gradeFormData.gradeCode.trim() || !gradeFormData.gradeName.trim()) {
       showToast('Kode Grade dan Nama Level wajib diisi.');
       return;
@@ -1492,6 +1524,7 @@ export const OrganizationManagement: React.FC = () => {
         showToast('Gaji minimum tidak boleh lebih besar dari gaji maksimum.');
         return;
       }
+      setGradeSubmitAttempted(false);
 
       const calculatedMid = Number(gradeFormData.midSalary) || Math.round((Number(gradeFormData.minSalary) + Number(gradeFormData.maxSalary)) / 2);
 
@@ -1528,6 +1561,7 @@ export const OrganizationManagement: React.FC = () => {
         showToast('Nilai Remunerasi Baku Tunggal harus lebih dari 0.');
         return;
       }
+      setGradeSubmitAttempted(false);
 
       if (gradeFormData.id) {
         updateGradeSalaryRange(gradeFormData.id, {
@@ -1605,7 +1639,17 @@ export const OrganizationManagement: React.FC = () => {
   // Submit Restructuring Proposal
   const handleSubmitRestructuring = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!restructureForm.title.trim() || !restructureForm.skDocNumber.trim()) return;
+    setRestructureStep1SubmitAttempted(true);
+    if (
+      !restructureForm.title.trim() ||
+      !restructureForm.skDocNumber.trim() ||
+      !restructureForm.effectiveDate.trim() ||
+      !restructureForm.skDocFileName.trim() ||
+      !restructureForm.description.trim()
+    ) {
+      return;
+    }
+    setRestructureStep1SubmitAttempted(false);
 
     let payload: any = null;
 
@@ -1690,7 +1734,9 @@ export const OrganizationManagement: React.FC = () => {
   // Submit Typo / Administrative Correction
   const handleSubmitCorrection = (e: React.FormEvent) => {
     e.preventDefault();
+    setCorrectionSubmitAttempted(true);
     if (!correctionForm.correctedValue.trim()) return;
+    setCorrectionSubmitAttempted(false);
 
     let payload: any = null;
     if (correctionForm.targetType === 'position' && previewPosition) {
@@ -5340,13 +5386,12 @@ export const OrganizationManagement: React.FC = () => {
                   <label className="font-bold text-rose-950 block text-xs">
                     Masukkan Catatan / Alasan Penolakan SK:
                   </label>
-                  <textarea
+                  <ValidatedTextarea
                     rows={2}
-                    required
-                    placeholder="Contoh: Belum memenuhi rasio beban kerja anggaran kuartal ini..."
+                    placeholder="Contoh: Belum memenuhi rasio beban kerja anggaran kuartal ini... (opsional — jika kosong, sistem akan mengisi alasan standar otomatis)"
                     value={rejectionReasonInput}
-                    onChange={(e) => setRejectionReasonInput(e.target.value)}
-                    className="w-full px-3 py-2 border border-rose-300 rounded-lg text-xs bg-white"
+                    onChange={setRejectionReasonInput}
+                    className="bg-white"
                   />
                   <div className="flex justify-end gap-2 pt-1">
                     <button
@@ -5602,7 +5647,7 @@ export const OrganizationManagement: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleCreateEntity} className="flex flex-col flex-1 overflow-hidden text-xs">
+            <form onSubmit={handleCreateEntity} className="flex flex-col flex-1 overflow-hidden text-xs" noValidate>
             <div className="p-5 space-y-4 overflow-y-auto flex-1">
               {entityFormErrors.submit && (
                 <div className="px-3 py-2 bg-red-50 border border-red-200 rounded text-red-700 font-medium">
@@ -5611,39 +5656,33 @@ export const OrganizationManagement: React.FC = () => {
               )}
 
               {/* Parent Selector */}
-              <div>
-                <label className="font-medium text-slate-700 block mb-1">
-                  Entitas Induk (Parent Entity) *
-                </label>
-                <select
-                  value={newEntityParentId}
-                  onChange={(e) => {
-                    const selId = e.target.value;
-                    setNewEntityParentId(selId);
-                    const selEnt = entities.find((ent) => ent.id === selId);
-                    if (selEnt && selEnt.level === 'holding') {
-                      setNewEntityLevel('anak');
-                    } else {
-                      setNewEntityLevel('cucu');
-                    }
-                  }}
-                  className="w-full px-3 py-2 border border-slate-300 rounded font-medium bg-white"
-                  required
-                >
-                  <option value="">Pilih Entitas Induk...</option>
-                  {entities
-                    .filter((e) => e.level !== 'cucu')
-                    .map((ent) => (
-                      <option key={ent.id} value={ent.id}>
-                        {ent.level === 'holding' ? '🏢 [Holding]' : '🏭 [Anak]'} {ent.name} (
-                        {ent.code})
-                      </option>
-                    ))}
-                </select>
-                {entityFormErrors.parentEntityId && (
-                  <p className="mt-1 text-red-600">{entityFormErrors.parentEntityId}</p>
-                )}
-              </div>
+              <ValidatedSelect
+                label="Entitas Induk (Parent Entity)"
+                required
+                requiredLabel="Entitas induk wajib dipilih"
+                customError={entityFormErrors.parentEntityId || null}
+                value={newEntityParentId}
+                onChange={(selId) => {
+                  setNewEntityParentId(selId);
+                  const selEnt = entities.find((ent) => ent.id === selId);
+                  if (selEnt && selEnt.level === 'holding') {
+                    setNewEntityLevel('anak');
+                  } else {
+                    setNewEntityLevel('cucu');
+                  }
+                }}
+                className="font-medium bg-white"
+              >
+                <option value="">Pilih Entitas Induk...</option>
+                {entities
+                  .filter((e) => e.level !== 'cucu')
+                  .map((ent) => (
+                    <option key={ent.id} value={ent.id}>
+                      {ent.level === 'holding' ? '🏢 [Holding]' : '🏭 [Anak]'} {ent.name} (
+                      {ent.code})
+                    </option>
+                  ))}
+              </ValidatedSelect>
 
               {/* Tingkat & Hubungan Saham */}
               <div className="grid grid-cols-2 gap-3">
@@ -5677,50 +5716,44 @@ export const OrganizationManagement: React.FC = () => {
               {/* Nama & Kode */}
               <div className="grid grid-cols-3 gap-3">
                 <div className="col-span-2">
-                  <label className="font-medium text-slate-700 block mb-1">
-                    Nama Legal Perusahaan *
-                  </label>
-                  <input
-                    type="text"
+                  <ValidatedInput
+                    label="Nama Legal Perusahaan"
                     required
+                    requiredLabel="Nama legal perusahaan wajib diisi"
+                    customError={entityFormErrors.name || null}
                     placeholder="PT Nusantara Finansial Global"
                     value={newEntityName}
-                    onChange={(e) => setNewEntityName(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded font-medium"
+                    onChange={setNewEntityName}
+                    className="font-medium"
                   />
-                  {entityFormErrors.name && <p className="mt-1 text-red-600">{entityFormErrors.name}</p>}
                 </div>
-                <div>
-                  <label className="font-medium text-slate-700 block mb-1">Kode Singkat *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="NFG"
-                    value={newEntityCode}
-                    onChange={(e) => {
-                      const val = e.target.value.toUpperCase();
-                      setNewEntityCode(val);
-                      setNewEntityNikPattern(`${val}-{YYYY}-{SEQ:3}`);
-                      setNewEntityDocPrefix(`HRD-${val}`);
-                    }}
-                    className="w-full px-3 py-2 border border-slate-300 rounded font-mono font-bold"
-                  />
-                  {entityFormErrors.code && <p className="mt-1 text-red-600">{entityFormErrors.code}</p>}
-                </div>
+                <ValidatedInput
+                  label="Kode Singkat"
+                  required
+                  requiredLabel="Kode singkat wajib diisi"
+                  customError={entityFormErrors.code || null}
+                  placeholder="NFG"
+                  value={newEntityCode}
+                  onChange={(val) => {
+                    const upper = val.toUpperCase();
+                    setNewEntityCode(upper);
+                    setNewEntityNikPattern(`${upper}-{YYYY}-{SEQ:3}`);
+                    setNewEntityDocPrefix(`HRD-${upper}`);
+                  }}
+                  className="font-mono font-bold"
+                />
               </div>
 
               {/* Kota & NPWP */}
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="font-medium text-slate-700 block mb-1">Domisili Kota *</label>
-                  <input
-                    type="text"
-                    required
-                    value={newEntityCity}
-                    onChange={(e) => setNewEntityCity(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded"
-                  />
-                </div>
+                <ValidatedInput
+                  label="Domisili Kota"
+                  required
+                  requiredLabel="Domisili kota wajib diisi"
+                  customError={entityFormErrors.city || null}
+                  value={newEntityCity}
+                  onChange={setNewEntityCity}
+                />
                 <div>
                   <label className="font-medium text-slate-700 block mb-1">NPWP Badan</label>
                   <input
@@ -5862,37 +5895,39 @@ export const OrganizationManagement: React.FC = () => {
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="col-span-2">
-                    <label className="font-medium text-slate-700 block mb-1">Nama Admin *</label>
-                    <input
-                      type="text"
+                    <ValidatedInput
+                      label="Nama Admin"
+                      required
+                      requiredLabel="Nama admin entitas ini wajib diisi"
+                      customError={entityFormErrors.adminName || null}
                       placeholder="Nama lengkap admin entitas"
                       value={newAdminName}
-                      onChange={(e) => setNewAdminName(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-300 rounded"
+                      onChange={setNewAdminName}
                     />
-                    {entityFormErrors.adminName && <p className="mt-1 text-red-600">{entityFormErrors.adminName}</p>}
                   </div>
                   <div className="col-span-2">
-                    <label className="font-medium text-slate-700 block mb-1">Email Admin *</label>
-                    <input
+                    <ValidatedInput
+                      label="Email Admin"
                       type="email"
+                      required
+                      requiredLabel="Email admin wajib diisi"
+                      customError={entityFormErrors.adminEmail || null}
                       placeholder="admin@entitas.com"
                       value={newAdminEmail}
-                      onChange={(e) => setNewAdminEmail(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-300 rounded"
+                      onChange={setNewAdminEmail}
                     />
-                    {entityFormErrors.adminEmail && <p className="mt-1 text-red-600">{entityFormErrors.adminEmail}</p>}
                   </div>
                   <div className="col-span-2">
-                    <label className="font-medium text-slate-700 block mb-1">Password Awal Admin *</label>
-                    <input
+                    <ValidatedInput
+                      label="Password Awal Admin"
                       type="password"
+                      required
+                      requiredLabel="Password admin minimal 8 karakter"
+                      customError={entityFormErrors.adminPassword || null}
                       placeholder="Minimal 8 karakter"
                       value={newAdminPassword}
-                      onChange={(e) => setNewAdminPassword(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-300 rounded"
+                      onChange={setNewAdminPassword}
                     />
-                    {entityFormErrors.adminPassword && <p className="mt-1 text-red-600">{entityFormErrors.adminPassword}</p>}
                   </div>
                 </div>
               </div>
@@ -6286,23 +6321,23 @@ export const OrganizationManagement: React.FC = () => {
                 </p>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="font-semibold text-slate-700 block mb-1">Nomor SK *</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="Contoh: SK-DIR/RESTRUCT/2026/045"
-                      value={startRestructureForm.skDocNumber}
-                      onChange={(e) => setStartRestructureForm({ ...startRestructureForm, skDocNumber: e.target.value })}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold text-slate-900 text-xs focus:outline-indigo-600 bg-white"
-                    />
-                  </div>
+                  <ValidatedInput
+                    label="Nomor SK"
+                    required
+                    requiredLabel="Nomor SK wajib diisi"
+                    showError={!!startRestructureError}
+                    placeholder="Contoh: SK-DIR/RESTRUCT/2026/045"
+                    value={startRestructureForm.skDocNumber}
+                    onChange={(val) => setStartRestructureForm({ ...startRestructureForm, skDocNumber: val })}
+                    className="font-mono font-bold text-slate-900 bg-white"
+                  />
                   <ValidatedDateInput
                     id="startRestructureEffectiveDate"
                     label="Tanggal Efektif Berlaku *"
                     value={startRestructureForm.effectiveDate}
                     onChange={(val) => setStartRestructureForm({ ...startRestructureForm, effectiveDate: val })}
                     required
+                    showError={!!startRestructureError}
                     helperText="Format YYYY-MM-DD"
                   />
                 </div>
@@ -6390,17 +6425,17 @@ export const OrganizationManagement: React.FC = () => {
                   </div>
                 </div>
 
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Kajian Rasionalisasi Bisnis & Dasar Pertimbangan *</label>
-                  <textarea
-                    required
-                    rows={3}
-                    placeholder="Jelaskan dasar pertimbangan restrukturisasi/modifikasi..."
-                    value={startRestructureForm.reason}
-                    onChange={(e) => setStartRestructureForm({ ...startRestructureForm, reason: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:outline-indigo-600 bg-white"
-                  />
-                </div>
+                <ValidatedTextarea
+                  label="Kajian Rasionalisasi Bisnis & Dasar Pertimbangan"
+                  required
+                  requiredLabel="Kajian rasionalisasi bisnis & dasar pertimbangan wajib diisi"
+                  showError={!!startRestructureError}
+                  rows={3}
+                  placeholder="Jelaskan dasar pertimbangan restrukturisasi/modifikasi..."
+                  value={startRestructureForm.reason}
+                  onChange={(val) => setStartRestructureForm({ ...startRestructureForm, reason: val })}
+                  className="bg-white"
+                />
               </div>
 
               <div className="p-4 border-t border-slate-100 shrink-0 flex gap-2">
@@ -6447,31 +6482,29 @@ export const OrganizationManagement: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleSubmitDivision} className="flex flex-col flex-1 overflow-hidden min-h-0">
+            <form onSubmit={handleSubmitDivision} className="flex flex-col flex-1 overflow-hidden min-h-0" noValidate>
               <div className="p-4 sm:p-5 space-y-3.5 text-xs overflow-y-auto flex-1">
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Nama Divisi *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Contoh: Operation & Supply Chain"
-                    value={divisionFormData.name}
-                    onChange={(e) => setDivisionFormData({ ...divisionFormData, name: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-medium"
-                  />
-                </div>
+                <ValidatedInput
+                  label="Nama Divisi"
+                  required
+                  requiredLabel="Nama divisi wajib diisi"
+                  showError={divisionSubmitAttempted}
+                  placeholder="Contoh: Operation & Supply Chain"
+                  value={divisionFormData.name}
+                  onChange={(val) => setDivisionFormData({ ...divisionFormData, name: val })}
+                  className="font-medium"
+                />
 
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Kode Divisi *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Contoh: DIV-OPS"
-                    value={divisionFormData.code}
-                    onChange={(e) => setDivisionFormData({ ...divisionFormData, code: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold"
-                  />
-                </div>
+                <ValidatedInput
+                  label="Kode Divisi"
+                  required
+                  requiredLabel="Kode divisi wajib diisi"
+                  showError={divisionSubmitAttempted}
+                  placeholder="Contoh: DIV-OPS"
+                  value={divisionFormData.code}
+                  onChange={(val) => setDivisionFormData({ ...divisionFormData, code: val })}
+                  className="font-mono font-bold"
+                />
 
                 <div>
                   <label className="font-semibold text-slate-700 block mb-1">Deskripsi Ruang Lingkup Divisi</label>
@@ -6528,32 +6561,30 @@ export const OrganizationManagement: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleSubmitDepartment} className="flex flex-col flex-1 overflow-hidden min-h-0">
+            <form onSubmit={handleSubmitDepartment} className="flex flex-col flex-1 overflow-hidden min-h-0" noValidate>
               <div className="p-4 sm:p-5 space-y-3.5 text-xs overflow-y-auto flex-1">
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Nama Departemen/Unit *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Contoh: Warehouse & Logistics"
-                    value={departmentFormData.name}
-                    onChange={(e) => setDepartmentFormData({ ...departmentFormData, name: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-medium"
-                  />
-                </div>
+                <ValidatedInput
+                  label="Nama Departemen/Unit"
+                  required
+                  requiredLabel="Nama departemen/unit wajib diisi"
+                  showError={departmentSubmitAttempted}
+                  placeholder="Contoh: Warehouse & Logistics"
+                  value={departmentFormData.name}
+                  onChange={(val) => setDepartmentFormData({ ...departmentFormData, name: val })}
+                  className="font-medium"
+                />
 
                 <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="font-semibold text-slate-700 block mb-1">Kode Departemen/Unit *</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="DEPT-LOG"
-                      value={departmentFormData.code}
-                      onChange={(e) => setDepartmentFormData({ ...departmentFormData, code: e.target.value })}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold"
-                    />
-                  </div>
+                  <ValidatedInput
+                    label="Kode Departemen/Unit"
+                    required
+                    requiredLabel="Kode departemen/unit wajib diisi"
+                    showError={departmentSubmitAttempted}
+                    placeholder="DEPT-LOG"
+                    value={departmentFormData.code}
+                    onChange={(val) => setDepartmentFormData({ ...departmentFormData, code: val })}
+                    className="font-mono font-bold"
+                  />
                   <div>
                     <label className="font-semibold text-slate-700 block mb-1">Divisi Induk *</label>
                     <select
@@ -6623,7 +6654,7 @@ export const OrganizationManagement: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleSubmitPosition} className="flex flex-col flex-1 overflow-hidden min-h-0">
+            <form onSubmit={handleSubmitPosition} className="flex flex-col flex-1 overflow-hidden min-h-0" noValidate>
               <div className="p-4 sm:p-5 space-y-3.5 text-xs overflow-y-auto flex-1">
                 {/* Dropdown Utama: Nama Posisi / Formasi Jabatan dari Master Jabatan */}
                 <div className="space-y-2 p-3.5 bg-slate-50 rounded-xl border border-slate-300">
@@ -6637,19 +6668,21 @@ export const OrganizationManagement: React.FC = () => {
                   </span>
                 </div>
 
-                <select
+                <ValidatedSelect
                   required
+                  requiredLabel="Posisi / formasi jabatan wajib dipilih dari Master Jabatan"
+                  showError={positionSubmitAttempted}
                   value={
                     entityMasterPositions.find((m) => m.title.toLowerCase() === positionFormData.title.toLowerCase())?.id ||
                     (entityMasterPositions.length > 0 && !positionFormData.title ? '' : '')
                   }
-                  onChange={(e) => {
-                    const selected = entityMasterPositions.find((m) => m.id === e.target.value);
+                  onChange={(val) => {
+                    const selected = entityMasterPositions.find((m) => m.id === val);
                     if (selected) {
                       handleSelectMasterJobForPosition(selected);
                     }
                   }}
-                  className="w-full px-3 py-2 border-2 border-slate-300 rounded-lg bg-white text-xs font-bold text-slate-900 focus:outline-slate-800 shadow-2xs"
+                  className="border-2 border-slate-300 font-bold text-slate-900 shadow-2xs"
                 >
                   <option value="">-- Pilih Judul Jabatan dari Master Jabatan --</option>
                   {entityMasterPositions.map((m) => (
@@ -6657,7 +6690,7 @@ export const OrganizationManagement: React.FC = () => {
                       [{m.code}] {m.title} — Tier L{m.defaultLevel} ({m.jobFamily || 'General'})
                     </option>
                   ))}
-                </select>
+                </ValidatedSelect>
 
                 {positionFormData.title ? (
                   <div className="p-2.5 bg-white rounded-lg border border-slate-200 flex items-center justify-between gap-2 text-xs">
@@ -6904,19 +6937,18 @@ export const OrganizationManagement: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleSubmitMasterPosition} className="flex flex-col flex-1 overflow-hidden min-h-0">
+            <form onSubmit={handleSubmitMasterPosition} className="flex flex-col flex-1 overflow-hidden min-h-0" noValidate>
               <div className="p-4 sm:p-5 space-y-3.5 text-xs overflow-y-auto flex-1">
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Nama Jabatan *</label>
-                <input
-                  type="text"
+                <ValidatedInput
+                  label="Nama Jabatan"
                   required
+                  requiredLabel="Nama jabatan wajib diisi"
+                  showError={masterPositionSubmitAttempted}
                   placeholder="Contoh: Lead DevOps & Cloud Engineer"
                   value={masterPositionFormData.title}
-                  onChange={(e) => setMasterPositionFormData({ ...masterPositionFormData, title: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg font-medium text-xs focus:outline-slate-800"
+                  onChange={(val) => setMasterPositionFormData({ ...masterPositionFormData, title: val })}
+                  className="font-medium"
                 />
-              </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
@@ -6985,11 +7017,13 @@ export const OrganizationManagement: React.FC = () => {
                       Skema: Single Grade
                     </span>
                   </div>
-                  <select
-                    value={masterPositionFormData.jobGrade}
-                    onChange={(e) => setMasterPositionFormData({ ...masterPositionFormData, jobGrade: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white font-mono text-xs font-semibold focus:outline-slate-800"
+                  <ValidatedSelect
                     required
+                    requiredLabel="Grade jabatan wajib dipilih"
+                    showError={masterPositionSubmitAttempted}
+                    value={masterPositionFormData.jobGrade}
+                    onChange={(val) => setMasterPositionFormData({ ...masterPositionFormData, jobGrade: val })}
+                    className="bg-white font-mono font-semibold"
                   >
                     <option value="">Pilih Grade Jabatan...</option>
                     {gradeSalaryRanges.map((g) => (
@@ -6997,7 +7031,7 @@ export const OrganizationManagement: React.FC = () => {
                         {g.gradeCode} — {g.gradeName} (Rp {(g.minSalary / 1000000).toFixed(1)}M - {(g.maxSalary / 1000000).toFixed(1)}M)
                       </option>
                     ))}
-                  </select>
+                  </ValidatedSelect>
                   <p className="text-[10px] text-slate-500 mt-1">
                     Setiap jabatan terikat pada satu grade peringkat definitif sesuai skema Single Grade yang aktif.
                   </p>
@@ -7020,7 +7054,7 @@ export const OrganizationManagement: React.FC = () => {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                     <div>
                       <label className="text-[11px] font-semibold text-slate-700 block mb-1">
-                        Grade Minimum (Batas Bawah) *
+                        Grade Minimum (Batas Bawah) (Opsional)
                       </label>
                       <select
                         value={masterPositionFormData.minGrade}
@@ -7033,9 +7067,8 @@ export const OrganizationManagement: React.FC = () => {
                           });
                         }}
                         className="w-full px-3 py-2 border border-amber-300 rounded-lg bg-white font-mono text-xs font-semibold focus:outline-amber-600"
-                        required
                       >
-                        <option value="">Pilih Grade Min...</option>
+                        <option value="">Pilih Grade Min... (default Grade 07 jika kosong)</option>
                         {gradeSalaryRanges.map((g) => (
                           <option key={g.id} value={g.gradeCode}>
                             {g.gradeCode} — {g.gradeName}
@@ -7046,7 +7079,7 @@ export const OrganizationManagement: React.FC = () => {
 
                     <div>
                       <label className="text-[11px] font-semibold text-slate-700 block mb-1">
-                        Grade Maksimum (Batas Atas) *
+                        Grade Maksimum (Batas Atas) (Opsional)
                       </label>
                       <select
                         value={masterPositionFormData.maxGrade}
@@ -7059,9 +7092,8 @@ export const OrganizationManagement: React.FC = () => {
                           });
                         }}
                         className="w-full px-3 py-2 border border-amber-300 rounded-lg bg-white font-mono text-xs font-semibold focus:outline-amber-600"
-                        required
                       >
-                        <option value="">Pilih Grade Max...</option>
+                        <option value="">Pilih Grade Max... (default Grade 09 jika kosong)</option>
                         {gradeSalaryRanges.map((g) => (
                           <option key={g.id} value={g.gradeCode}>
                             {g.gradeCode} — {g.gradeName}
@@ -7498,7 +7530,7 @@ export const OrganizationManagement: React.FC = () => {
             </ScrollableTabNav>
 
             {/* Form with Horizontal Swipe Tab Navigation on Modal Body */}
-            <form onSubmit={handleSubmitRestructuring} className="flex flex-col flex-1 overflow-hidden min-h-0">
+            <form onSubmit={handleSubmitRestructuring} className="flex flex-col flex-1 overflow-hidden min-h-0" noValidate>
               <div {...draftSwipe} className="p-4 sm:p-5 space-y-4 text-xs overflow-y-auto flex-1">
                 {/* TAB 1: DATA SK & INFO */}
                 {draftActiveTab === 'info' && (
@@ -7544,30 +7576,28 @@ export const OrganizationManagement: React.FC = () => {
                       </span>
                     </div>
 
-                    <div>
-                      <label className="font-semibold text-slate-700 block mb-1">Judul Perubahan Restrukturisasi *</label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="Contoh: Restrukturisasi Organisasi Semester I 2026"
-                        value={restructureForm.title}
-                        onChange={(e) => setRestructureForm({ ...restructureForm, title: e.target.value })}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg font-medium text-xs focus:outline-indigo-600 bg-white"
-                      />
-                    </div>
+                    <ValidatedInput
+                      label="Judul Perubahan Restrukturisasi"
+                      required
+                      requiredLabel="Judul perubahan restrukturisasi wajib diisi"
+                      showError={restructureStep1SubmitAttempted}
+                      placeholder="Contoh: Restrukturisasi Organisasi Semester I 2026"
+                      value={restructureForm.title}
+                      onChange={(val) => setRestructureForm({ ...restructureForm, title: val })}
+                      className="font-medium bg-white"
+                    />
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div>
-                        <label className="font-semibold text-slate-700 block mb-1">Nomor Surat Keputusan (SK) *</label>
-                        <input
-                          type="text"
-                          required
-                          placeholder="Contoh: SK-DIR/RESTRUCT/2026/045"
-                          value={restructureForm.skDocNumber}
-                          onChange={(e) => setRestructureForm({ ...restructureForm, skDocNumber: e.target.value })}
-                          className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold text-slate-900 text-xs focus:outline-indigo-600 bg-white"
-                        />
-                      </div>
+                      <ValidatedInput
+                        label="Nomor Surat Keputusan (SK)"
+                        required
+                        requiredLabel="Nomor surat keputusan (SK) wajib diisi"
+                        showError={restructureStep1SubmitAttempted}
+                        placeholder="Contoh: SK-DIR/RESTRUCT/2026/045"
+                        value={restructureForm.skDocNumber}
+                        onChange={(val) => setRestructureForm({ ...restructureForm, skDocNumber: val })}
+                        className="font-mono font-bold text-slate-900 bg-white"
+                      />
 
                       <ValidatedDateInput
                         id="restructureEffectiveDate"
@@ -7575,12 +7605,13 @@ export const OrganizationManagement: React.FC = () => {
                         value={restructureForm.effectiveDate}
                         onChange={(val) => setRestructureForm({ ...restructureForm, effectiveDate: val })}
                         required
+                        showError={restructureStep1SubmitAttempted}
                         helperText="Format YYYY-MM-DD"
                       />
                     </div>
 
                     {/* Upload Dokumen Bukti Restrukturisasi */}
-                    <div className="p-3 bg-slate-50 border border-slate-300 rounded-xl space-y-2">
+                    <div className={`p-3 border rounded-xl space-y-2 ${restructureStep1SubmitAttempted && !restructureForm.skDocFileName.trim() ? 'bg-rose-50/20 border-rose-500' : 'bg-slate-50 border-slate-300'}`}>
                       <label className="font-semibold text-slate-800 block text-xs flex items-center justify-between">
                         <span>Upload Dokumen / Surat Bukti Restrukturisasi *</span>
                         <span className="text-[10px] text-slate-400 font-normal">Format PDF saja, maks. 10MB</span>
@@ -7622,19 +7653,25 @@ export const OrganizationManagement: React.FC = () => {
                           />
                         </label>
                       </div>
+                      {restructureStep1SubmitAttempted && !restructureForm.skDocFileName.trim() && (
+                        <p className="text-[11px] font-medium text-rose-600 flex items-center gap-1 mt-0.5">
+                          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                          <span>Dokumen / surat bukti restrukturisasi wajib diunggah</span>
+                        </p>
+                      )}
                     </div>
 
-                    <div>
-                      <label className="font-semibold text-slate-700 block mb-1">Kajian Rasionalisasi Bisnis & Dasar Pertimbangan *</label>
-                      <textarea
-                        required
-                        rows={3}
-                        placeholder="Jelaskan dasar pertimbangan restrukturisasi, efisiensi operasional, dan beban kerja..."
-                        value={restructureForm.description}
-                        onChange={(e) => setRestructureForm({ ...restructureForm, description: e.target.value })}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:outline-indigo-600 bg-white"
-                      />
-                    </div>
+                    <ValidatedTextarea
+                      label="Kajian Rasionalisasi Bisnis & Dasar Pertimbangan"
+                      required
+                      requiredLabel="Kajian rasionalisasi bisnis & dasar pertimbangan wajib diisi"
+                      showError={restructureStep1SubmitAttempted}
+                      rows={3}
+                      placeholder="Jelaskan dasar pertimbangan restrukturisasi, efisiensi operasional, dan beban kerja..."
+                      value={restructureForm.description}
+                      onChange={(val) => setRestructureForm({ ...restructureForm, description: val })}
+                      className="bg-white"
+                    />
 
                     {/* Next step button */}
                     <div className="pt-3 border-t border-slate-200 flex justify-end">
@@ -7786,34 +7823,36 @@ export const OrganizationManagement: React.FC = () => {
 
                           <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
                             <div className="sm:col-span-1">
-                              <label className="font-semibold text-slate-700 block mb-1">Kode Grade *</label>
-                              <input
-                                type="text"
+                              <ValidatedInput
+                                label="Kode Grade"
                                 required
+                                requiredLabel="Kode grade wajib diisi"
+                                showError={draftStep2SubmitAttempted}
                                 placeholder="Contoh: GR-08"
                                 value={grade.gradeCode}
-                                onChange={(e) => {
+                                onChange={(val) => {
                                   const next = [...draftGradeSalaryRanges];
-                                  next[idx].gradeCode = e.target.value.toUpperCase();
+                                  next[idx].gradeCode = val.toUpperCase();
                                   setDraftGradeSalaryRanges(next);
                                 }}
-                                className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold text-xs focus:outline-amber-600 uppercase bg-white"
+                                className="font-mono font-bold uppercase bg-white"
                               />
                             </div>
 
                             <div className="sm:col-span-2">
-                              <label className="font-semibold text-slate-700 block mb-1">Nama / Golongan Grade *</label>
-                              <input
-                                type="text"
+                              <ValidatedInput
+                                label="Nama / Golongan Grade"
                                 required
+                                requiredLabel="Nama / golongan grade wajib diisi"
+                                showError={draftStep2SubmitAttempted}
                                 placeholder="Contoh: Manager Senior Specialist"
                                 value={grade.gradeName}
-                                onChange={(e) => {
+                                onChange={(val) => {
                                   const next = [...draftGradeSalaryRanges];
-                                  next[idx].gradeName = e.target.value;
+                                  next[idx].gradeName = val;
                                   setDraftGradeSalaryRanges(next);
                                 }}
-                                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-semibold focus:outline-amber-600 bg-white"
+                                className="font-semibold bg-white"
                               />
                             </div>
 
@@ -7992,35 +8031,35 @@ export const OrganizationManagement: React.FC = () => {
                           </div>
 
                           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                            <div>
-                              <label className="font-semibold text-slate-700 block mb-1">Kode Divisi *</label>
-                              <input
-                                type="text"
-                                required
-                                placeholder="Contoh: DIV-OPS"
-                                value={div.code}
-                                onChange={(e) => {
-                                  const next = [...draftDivisions];
-                                  next[idx].code = e.target.value.toUpperCase();
-                                  setDraftDivisions(next);
-                                }}
-                                className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold text-xs focus:outline-indigo-600 uppercase bg-white"
-                              />
-                            </div>
+                            <ValidatedInput
+                              label="Kode Divisi"
+                              required
+                              requiredLabel="Kode divisi wajib diisi"
+                              showError={draftStep3SubmitAttempted}
+                              placeholder="Contoh: DIV-OPS"
+                              value={div.code}
+                              onChange={(val) => {
+                                const next = [...draftDivisions];
+                                next[idx].code = val.toUpperCase();
+                                setDraftDivisions(next);
+                              }}
+                              className="font-mono font-bold uppercase bg-white"
+                            />
 
                             <div className="sm:col-span-2">
-                              <label className="font-semibold text-slate-700 block mb-1">Nama Divisi *</label>
-                              <input
-                                type="text"
+                              <ValidatedInput
+                                label="Nama Divisi"
                                 required
+                                requiredLabel="Nama divisi wajib diisi"
+                                showError={draftStep3SubmitAttempted}
                                 placeholder="Contoh: Operation & Supply Chain"
                                 value={div.name}
-                                onChange={(e) => {
+                                onChange={(val) => {
                                   const next = [...draftDivisions];
-                                  next[idx].name = e.target.value;
+                                  next[idx].name = val;
                                   setDraftDivisions(next);
                                 }}
-                                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-semibold focus:outline-indigo-600 bg-white"
+                                className="font-semibold bg-white"
                               />
                             </div>
                           </div>
@@ -8248,37 +8287,35 @@ export const OrganizationManagement: React.FC = () => {
                               </div>
 
                               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                                <div>
-                                  <label className="font-semibold text-slate-700 block mb-1">Kode Departemen/Unit *</label>
-                                  <input
-                                    type="text"
-                                    required
-                                    placeholder="Contoh: DEPT-LOG"
-                                    value={dept.code}
-                                    onChange={(e) => {
-                                      const next = [...draftDepartments];
-                                      next[idx].code = e.target.value.toUpperCase();
-                                      setDraftDepartments(next);
-                                    }}
-                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold text-xs focus:outline-emerald-600 uppercase bg-white"
-                                  />
-                                </div>
+                                <ValidatedInput
+                                  label="Kode Departemen/Unit"
+                                  required
+                                  requiredLabel="Kode departemen/unit wajib diisi"
+                                  showError={draftStep4SubmitAttempted}
+                                  placeholder="Contoh: DEPT-LOG"
+                                  value={dept.code}
+                                  onChange={(val) => {
+                                    const next = [...draftDepartments];
+                                    next[idx].code = val.toUpperCase();
+                                    setDraftDepartments(next);
+                                  }}
+                                  className="font-mono font-bold uppercase bg-white"
+                                />
 
-                                <div>
-                                  <label className="font-semibold text-slate-700 block mb-1">Nama Departemen/Unit *</label>
-                                  <input
-                                    type="text"
-                                    required
-                                    placeholder="Contoh: Warehouse & Logistics"
-                                    value={dept.name}
-                                    onChange={(e) => {
-                                      const next = [...draftDepartments];
-                                      next[idx].name = e.target.value;
-                                      setDraftDepartments(next);
-                                    }}
-                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-semibold focus:outline-emerald-600 bg-white"
-                                  />
-                                </div>
+                                <ValidatedInput
+                                  label="Nama Departemen/Unit"
+                                  required
+                                  requiredLabel="Nama departemen/unit wajib diisi"
+                                  showError={draftStep4SubmitAttempted}
+                                  placeholder="Contoh: Warehouse & Logistics"
+                                  value={dept.name}
+                                  onChange={(val) => {
+                                    const next = [...draftDepartments];
+                                    next[idx].name = val;
+                                    setDraftDepartments(next);
+                                  }}
+                                  className="font-semibold bg-white"
+                                />
 
                                 <div>
                                   <label className="font-semibold text-slate-700 block mb-1">Divisi Induk *</label>
@@ -8464,18 +8501,19 @@ export const OrganizationManagement: React.FC = () => {
 
                           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                             <div className="sm:col-span-2">
-                              <label className="font-semibold text-slate-700 block mb-1">Nama Jabatan *</label>
-                              <input
-                                type="text"
+                              <ValidatedInput
+                                label="Nama Jabatan"
                                 required
+                                requiredLabel="Nama jabatan wajib diisi"
+                                showError={draftStep5SubmitAttempted}
                                 placeholder="Contoh: Lead DevOps & Cloud Engineer"
                                 value={node.title}
-                                onChange={(e) => {
+                                onChange={(val) => {
                                   const next = [...draftNodes];
-                                  next[idx].title = e.target.value;
+                                  next[idx].title = val;
                                   setDraftNodes(next);
                                 }}
-                                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-semibold focus:outline-violet-600 bg-white"
+                                className="font-semibold bg-white"
                               />
                             </div>
 
@@ -8750,32 +8788,28 @@ export const OrganizationManagement: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleSubmitCorrection} className="flex flex-col flex-1 overflow-hidden min-h-0">
+            <form onSubmit={handleSubmitCorrection} className="flex flex-col flex-1 overflow-hidden min-h-0" noValidate>
               <div className="p-4 sm:p-5 space-y-3.5 text-xs overflow-y-auto flex-1">
                 <p className="text-slate-600 leading-relaxed text-[11px]">
                   Fitur ini digunakan hanya untuk memperbaiki kesalahan ketik (typo) ejaan nama jabatan tanpa mengubah garis hierarki atau restrukturisasi organisasi.
                 </p>
 
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Ejaan Nama Jabatan Baru *</label>
-                  <input
-                    type="text"
-                    required
-                    value={correctionForm.correctedValue}
-                    onChange={(e) => setCorrectionForm({ ...correctionForm, correctedValue: e.target.value })}
-                    className="w-full px-3 py-2 border-2 border-indigo-300 rounded-lg font-bold"
-                  />
-                </div>
+                <ValidatedInput
+                  label="Ejaan Nama Jabatan Baru"
+                  required
+                  requiredLabel="Ejaan nama jabatan baru wajib diisi"
+                  showError={correctionSubmitAttempted}
+                  value={correctionForm.correctedValue}
+                  onChange={(val) => setCorrectionForm({ ...correctionForm, correctedValue: val })}
+                  className="border-2 border-indigo-300 font-bold"
+                />
 
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Catatan Koreksi Administratif</label>
-                  <textarea
-                    rows={2}
-                    value={correctionForm.notes}
-                    onChange={(e) => setCorrectionForm({ ...correctionForm, notes: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                  />
-                </div>
+                <ValidatedTextarea
+                  label="Catatan Koreksi Administratif (Opsional)"
+                  rows={2}
+                  value={correctionForm.notes}
+                  onChange={(val) => setCorrectionForm({ ...correctionForm, notes: val })}
+                />
               </div>
 
               {/* Pinned Bottom Footer Actions */}
@@ -8830,20 +8864,19 @@ export const OrganizationManagement: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleSubmitGrade} className="flex flex-col flex-1 overflow-hidden min-h-0">
+            <form onSubmit={handleSubmitGrade} className="flex flex-col flex-1 overflow-hidden min-h-0" noValidate>
               <div className="p-5 space-y-4 text-xs overflow-y-auto flex-1">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="font-semibold text-slate-700 block mb-1">Kode Grade *</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="Contoh: Grade 08, L3, M1"
-                      value={gradeFormData.gradeCode}
-                      onChange={(e) => setGradeFormData({ ...gradeFormData, gradeCode: e.target.value })}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold text-xs focus:outline-amber-600 uppercase"
-                    />
-                  </div>
+                  <ValidatedInput
+                    label="Kode Grade"
+                    required
+                    requiredLabel="Kode Grade wajib diisi"
+                    showError={gradeSubmitAttempted}
+                    placeholder="Contoh: Grade 08, L3, M1"
+                    value={gradeFormData.gradeCode}
+                    onChange={(val) => setGradeFormData({ ...gradeFormData, gradeCode: val })}
+                    className="font-mono font-bold uppercase"
+                  />
                   <div>
                     <label className="font-semibold text-slate-700 block mb-1">SK Efektif Mulai</label>
                     <input
@@ -8855,17 +8888,16 @@ export const OrganizationManagement: React.FC = () => {
                   </div>
                 </div>
 
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Nama Level / Posisi Acuan *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Contoh: Senior Specialist / Expert Officer"
-                    value={gradeFormData.gradeName}
-                    onChange={(e) => setGradeFormData({ ...gradeFormData, gradeName: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-semibold focus:outline-amber-600"
-                  />
-                </div>
+                <ValidatedInput
+                  label="Nama Level / Posisi Acuan"
+                  required
+                  requiredLabel="Nama level / posisi acuan wajib diisi"
+                  showError={gradeSubmitAttempted}
+                  placeholder="Contoh: Senior Specialist / Expert Officer"
+                  value={gradeFormData.gradeName}
+                  onChange={(val) => setGradeFormData({ ...gradeFormData, gradeName: val })}
+                  className="font-semibold"
+                />
 
                 {/* Gaji Acuan Remunerasi: Single Grade vs Broadbanding */}
                 {jobGradingScheme === 'single' ? (
@@ -8885,26 +8917,26 @@ export const OrganizationManagement: React.FC = () => {
                     </p>
 
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                      <div>
-                        <label className="text-[11px] font-semibold text-slate-700 block mb-1">Minimum (Rp) *</label>
-                        <input
-                          type="number"
-                          required
-                          min={0}
-                          step={500000}
-                          value={gradeFormData.minSalary}
-                          onChange={(e) => {
-                            const min = Number(e.target.value);
-                            const max = Number(gradeFormData.maxSalary) || min;
-                            setGradeFormData({
-                              ...gradeFormData,
-                              minSalary: min,
-                              midSalary: Math.round((min + max) / 2),
-                            });
-                          }}
-                          className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg font-mono text-xs focus:outline-indigo-600"
-                        />
-                      </div>
+                      <ValidatedInput
+                        label="Minimum (Rp)"
+                        type="number"
+                        required
+                        requiredLabel="Gaji minimum wajib diisi (lebih dari 0)"
+                        showError={gradeSubmitAttempted}
+                        min={0}
+                        step={500000}
+                        value={String(gradeFormData.minSalary)}
+                        onChange={(val) => {
+                          const min = Number(val);
+                          const max = Number(gradeFormData.maxSalary) || min;
+                          setGradeFormData({
+                            ...gradeFormData,
+                            minSalary: min,
+                            midSalary: Math.round((min + max) / 2),
+                          });
+                        }}
+                        className="font-mono"
+                      />
 
                       <div>
                         <label className="text-[11px] font-semibold text-slate-700 block mb-1">Midpoint (Rp)</label>
@@ -8918,26 +8950,26 @@ export const OrganizationManagement: React.FC = () => {
                         />
                       </div>
 
-                      <div>
-                        <label className="text-[11px] font-semibold text-slate-700 block mb-1">Maksimum (Rp) *</label>
-                        <input
-                          type="number"
-                          required
-                          min={0}
-                          step={500000}
-                          value={gradeFormData.maxSalary}
-                          onChange={(e) => {
-                            const max = Number(e.target.value);
-                            const min = Number(gradeFormData.minSalary) || 0;
-                            setGradeFormData({
-                              ...gradeFormData,
-                              maxSalary: max,
-                              midSalary: Math.round((min + max) / 2),
-                            });
-                          }}
-                          className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg font-mono text-xs focus:outline-indigo-600"
-                        />
-                      </div>
+                      <ValidatedInput
+                        label="Maksimum (Rp)"
+                        type="number"
+                        required
+                        requiredLabel="Gaji maksimum wajib diisi (lebih dari 0)"
+                        showError={gradeSubmitAttempted}
+                        min={0}
+                        step={500000}
+                        value={String(gradeFormData.maxSalary)}
+                        onChange={(val) => {
+                          const max = Number(val);
+                          const min = Number(gradeFormData.minSalary) || 0;
+                          setGradeFormData({
+                            ...gradeFormData,
+                            maxSalary: max,
+                            midSalary: Math.round((min + max) / 2),
+                          });
+                        }}
+                        className="font-mono"
+                      />
                     </div>
 
                     <div className="text-[11px] text-indigo-900 bg-white/80 p-2 rounded-lg border border-indigo-200/80 flex items-center justify-between">
@@ -8963,29 +8995,27 @@ export const OrganizationManagement: React.FC = () => {
                       Sesuai prinsip Broadbanding: di dalam grade <b>tidak ada rentang baku remunerasi (tanpa min/mid/max)</b>, melainkan hanya ada <b>1 nilai pasti tunggal</b>. Rentang grade nantinya ditentukan pada master jabatan.
                     </p>
 
-                    <div>
-                      <label className="text-[11px] font-semibold text-slate-700 block mb-1">
-                        Nominal Remunerasi Baku Tunggal (Rp) *
-                      </label>
-                      <input
-                        type="number"
-                        required
-                        min={0}
-                        step={500000}
-                        value={gradeFormData.singleValueSalary}
-                        onChange={(e) => {
-                          const val = Number(e.target.value);
-                          setGradeFormData({
-                            ...gradeFormData,
-                            singleValueSalary: val,
-                            minSalary: val,
-                            midSalary: val,
-                            maxSalary: val,
-                          });
-                        }}
-                        className="w-full px-3 py-2 border border-amber-300 rounded-lg font-mono text-xs font-bold focus:outline-amber-600"
-                      />
-                    </div>
+                    <ValidatedInput
+                      label="Nominal Remunerasi Baku Tunggal (Rp)"
+                      type="number"
+                      required
+                      requiredLabel="Nominal remunerasi baku tunggal wajib diisi (lebih dari 0)"
+                      showError={gradeSubmitAttempted}
+                      min={0}
+                      step={500000}
+                      value={String(gradeFormData.singleValueSalary)}
+                      onChange={(val) => {
+                        const num = Number(val);
+                        setGradeFormData({
+                          ...gradeFormData,
+                          singleValueSalary: num,
+                          minSalary: num,
+                          midSalary: num,
+                          maxSalary: num,
+                        });
+                      }}
+                      className="font-mono font-bold"
+                    />
 
                     <div className="text-[11px] text-amber-900 bg-white p-2.5 rounded-lg border border-amber-200 flex items-center justify-between">
                       <span className="font-medium">Remunerasi Pasti Grade Ini:</span>

@@ -55,6 +55,7 @@ import { QRCodeView } from '../common/QRCodeView';
 import { printPagesDirectly, exportPagesToPdf } from '../../utils/documentPdfExporter';
 import { EmployeeSelect } from '../common/EmployeeSelect';
 import { ValidatedDateInput } from '../common/ValidatedDateInput';
+import { ValidatedInput, ValidatedTextarea, ValidatedSelect } from '../common/ValidatedInput';
 import { ScrollableTabNav } from '../common/ScrollableTabNav';
 import { ModuleDocumentModal } from '../common/ModuleDocumentModal';
 
@@ -206,8 +207,20 @@ export const GaAssetManagement: React.FC = () => {
   });
 
   const [editingSlaCat, setEditingSlaCat] = useState<GAAssetCategorySla | null>(null);
+  const [slaSubmitAttempted, setSlaSubmitAttempted] = useState(false);
 
   const handleSaveCategorySla = (slaToSave: GAAssetCategorySla) => {
+    setSlaSubmitAttempted(true);
+    if (
+      !slaToSave.responseSlaHours || slaToSave.responseSlaHours < 1 ||
+      !slaToSave.resolutionSlaHours || slaToSave.resolutionSlaHours < 1 ||
+      !slaToSave.replacementSlaHours || slaToSave.replacementSlaHours < 1 ||
+      !slaToSave.procurementSlaDays || slaToSave.procurementSlaDays < 1 ||
+      !slaToSave.picName.trim() ||
+      !slaToSave.picRole.trim()
+    ) {
+      return;
+    }
     const updated = assetCategorySlas.map((s) =>
       s.id === slaToSave.id ? { ...slaToSave, updatedAt: new Date().toISOString().split('T')[0] } : s
     );
@@ -216,6 +229,7 @@ export const GaAssetManagement: React.FC = () => {
       localStorage.setItem('hrms_ga_asset_sla_settings', JSON.stringify(updated));
     }
     setEditingSlaCat(null);
+    setSlaSubmitAttempted(false);
     setSlaToastMessage(`SLA Kategori '${slaToSave.category}' berhasil diperbarui!`);
     setTimeout(() => setSlaToastMessage(null), 4000);
   };
@@ -260,8 +274,11 @@ export const GaAssetManagement: React.FC = () => {
 
   // Modals
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
+  const [registerSubmitAttempted, setRegisterSubmitAttempted] = useState(false);
   const [isMutasiModalOpen, setIsMutasiModalOpen] = useState(false);
+  const [mutasiSubmitAttempted, setMutasiSubmitAttempted] = useState(false);
   const [isMaintenanceModalOpen, setIsMaintenanceModalOpen] = useState(false);
+  const [maintSubmitAttempted, setMaintSubmitAttempted] = useState(false);
   const [isScannerModalOpen, setIsScannerModalOpen] = useState(false);
 
   // Register Form State
@@ -540,12 +557,15 @@ export const GaAssetManagement: React.FC = () => {
 
   // Scanner state
   const [scannedCode, setScannedCode] = useState('');
+  const [scanSubmitAttempted, setScanSubmitAttempted] = useState(false);
   const [scanCondition, setScanCondition] = useState<AssetCondition>('Baik');
   const [scanFeedback, setScanFeedback] = useState<{ success: boolean; msg: string } | null>(null);
 
   // Room Booking State
   const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
+  const [roomSubmitAttempted, setRoomSubmitAttempted] = useState(false);
   const [selectedBookingForMinutes, setSelectedBookingForMinutes] = useState<GARoomBooking | null>(null);
+  const [minutesSubmitAttempted, setMinutesSubmitAttempted] = useState(false);
   const [roomForm, setRoomForm] = useState({
     roomName: 'Ruang Meeting VIP - Lantai 18',
     meetingDate: new Date().toISOString().split('T')[0],
@@ -558,6 +578,7 @@ export const GaAssetManagement: React.FC = () => {
 
   // Vehicle Booking State (Penggunaan Kendaraan Operasional Sewaktu-waktu — konsep sama seperti Penggunaan Ruangan Sewaktu-waktu)
   const [isVehicleModalOpen, setIsVehicleModalOpen] = useState(false);
+  const [vehicleSubmitAttempted, setVehicleSubmitAttempted] = useState(false);
   const [vehicleForm, setVehicleForm] = useState({
     vehicleName: 'Toyota Avanza Veloz (B 5678 NTM) — Armada Pool Operasional',
     borrowerId: employees[0]?.id || '',
@@ -572,6 +593,7 @@ export const GaAssetManagement: React.FC = () => {
     startMileageKm: 12450,
   });
   const [selectedVehicleForReturn, setSelectedVehicleForReturn] = useState<GAVehicleBooking | null>(null);
+  const [returnSubmitAttempted, setReturnSubmitAttempted] = useState(false);
   const [returnForm, setReturnForm] = useState({
     returnDate: new Date().toISOString().split('T')[0],
     endOdometer: 0,
@@ -581,7 +603,9 @@ export const GaAssetManagement: React.FC = () => {
 
   // Supply Request & Master State
   const [isSupplyModalOpen, setIsSupplyModalOpen] = useState(false);
+  const [supplySubmitAttempted, setSupplySubmitAttempted] = useState(false);
   const [isAddSupplyModalOpen, setIsAddSupplyModalOpen] = useState(false);
+  const [addSupplySubmitAttempted, setAddSupplySubmitAttempted] = useState(false);
   const [newSupplyForm, setNewSupplyForm] = useState<{
     itemCode: string;
     itemName: string;
@@ -609,6 +633,7 @@ export const GaAssetManagement: React.FC = () => {
 
   // GA Ticket State
   const [isTicketModalOpen, setIsTicketModalOpen] = useState(false);
+  const [ticketSubmitAttempted, setTicketSubmitAttempted] = useState(false);
   const [selectedTicketForResolve, setSelectedTicketForResolve] = useState<GATicket | null>(null);
   const [ticketForm, setTicketForm] = useState({
     title: '',
@@ -669,7 +694,8 @@ export const GaAssetManagement: React.FC = () => {
 
   const handleCreateRoomBooking = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!roomForm.topic) return;
+    setRoomSubmitAttempted(true);
+    if (!roomForm.topic.trim() || !roomForm.meetingDate || !roomForm.startTime || !roomForm.endTime) return;
     addRoomBooking({
       roomName: roomForm.roomName,
       floorLocation: 'Lantai 18',
@@ -683,20 +709,32 @@ export const GaAssetManagement: React.FC = () => {
       attendeesExternal: [],
     });
     setIsRoomModalOpen(false);
+    setRoomSubmitAttempted(false);
     setRoomForm({ ...roomForm, topic: '' });
   };
 
   const handleSaveMinutes = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedBookingForMinutes || !meetingMinutesText) return;
+    setMinutesSubmitAttempted(true);
+    if (!selectedBookingForMinutes || !meetingMinutesText.trim()) return;
     saveMeetingMinutes(selectedBookingForMinutes.id, meetingMinutesText);
     setSelectedBookingForMinutes(null);
+    setMinutesSubmitAttempted(false);
     setMeetingMinutesText('');
   };
 
   const handleCreateVehicleBooking = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!vehicleForm.purpose) return;
+    setVehicleSubmitAttempted(true);
+    if (
+      !vehicleForm.purpose.trim() ||
+      !vehicleForm.startDate ||
+      !vehicleForm.endDate ||
+      !vehicleForm.startTime ||
+      !vehicleForm.endTime
+    ) {
+      return;
+    }
     const purposeWithTime = `[${vehicleForm.startTime} - ${vehicleForm.endTime} WIB] ${vehicleForm.purpose}${
       vehicleForm.destination ? ` (Tujuan: ${vehicleForm.destination})` : ''
     }`;
@@ -718,6 +756,7 @@ export const GaAssetManagement: React.FC = () => {
       taxExpiryDate: '2027-06-30',
     });
     setIsVehicleModalOpen(false);
+    setVehicleSubmitAttempted(false);
     setVehicleForm({ ...vehicleForm, purpose: '' });
     setSlaToastMessage(
       `Reservasi penggunaan kendaraan operasional sewaktu-waktu (${vehicleForm.vehicleName} · ${vehicleForm.startTime}-${vehicleForm.endTime} WIB) berhasil dicatat!`
@@ -727,8 +766,9 @@ export const GaAssetManagement: React.FC = () => {
 
   const handleCreateSupplyRequest = (e: React.FormEvent) => {
     e.preventDefault();
+    setSupplySubmitAttempted(true);
     const item = officeSupplies.find((s) => s.id === supplyForm.supplyId);
-    if (!item) return;
+    if (!item || !supplyForm.quantity || supplyForm.quantity < 1) return;
     addOfficeSupplyRequest({
       requesterId: employees[0]?.id || 'emp-001',
       department: 'General Affairs',
@@ -737,12 +777,23 @@ export const GaAssetManagement: React.FC = () => {
       reason: supplyForm.purpose || 'Kebutuhan operasional kantor harian',
     });
     setIsSupplyModalOpen(false);
+    setSupplySubmitAttempted(false);
     setSupplyForm({ ...supplyForm, purpose: '' });
   };
 
   const handleReturnVehicle = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedVehicleForReturn) return;
+    setReturnSubmitAttempted(true);
+    if (
+      !selectedVehicleForReturn ||
+      !returnForm.returnDate ||
+      !returnForm.endOdometer ||
+      returnForm.endOdometer < (selectedVehicleForReturn.startOdometer || 0) ||
+      returnForm.tollFuelCost == null ||
+      returnForm.tollFuelCost < 0
+    ) {
+      return;
+    }
     updateVehicleBookingStatus(
       selectedVehicleForReturn.id,
       'Dikembalikan',
@@ -750,11 +801,21 @@ export const GaAssetManagement: React.FC = () => {
       Number(returnForm.tollFuelCost)
     );
     setSelectedVehicleForReturn(null);
+    setReturnSubmitAttempted(false);
   };
 
   const handleAddSupplyItem = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newSupplyForm.itemName) return;
+    setAddSupplySubmitAttempted(true);
+    if (
+      !newSupplyForm.itemName.trim() ||
+      !newSupplyForm.currentStock ||
+      newSupplyForm.currentStock < 1 ||
+      !newSupplyForm.reorderPoint ||
+      newSupplyForm.reorderPoint < 1
+    ) {
+      return;
+    }
     addOfficeSupply({
       itemCode: newSupplyForm.itemCode || `ATK-${Date.now().toString().slice(-4)}`,
       itemName: newSupplyForm.itemName,
@@ -776,11 +837,13 @@ export const GaAssetManagement: React.FC = () => {
       estimatedUnitPrice: 45000,
       unit: 'Rim',
     });
+    setAddSupplySubmitAttempted(false);
   };
 
   const handleCreateTicket = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!ticketForm.title) return;
+    setTicketSubmitAttempted(true);
+    if (!ticketForm.title.trim()) return;
     addGaTicket({
       category: ticketForm.category,
       title: ticketForm.title,
@@ -790,6 +853,7 @@ export const GaAssetManagement: React.FC = () => {
       slaHours: ticketForm.urgency === 'Darurat' ? 2 : ticketForm.urgency === 'Tinggi' ? 8 : 24,
     });
     setIsTicketModalOpen(false);
+    setTicketSubmitAttempted(false);
     setTicketForm({ ...ticketForm, title: '', description: '' });
   };
 
@@ -803,7 +867,8 @@ export const GaAssetManagement: React.FC = () => {
 
   const handleRegisterAsset = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name) return;
+    setRegisterSubmitAttempted(true);
+    if (!name.trim() || !purchasePrice || purchasePrice <= 0) return;
 
     const generatedCode =
       assetCode || `${assetPrefix}-${category.substring(0, 3).toUpperCase()}-${String(assets.length + 1).padStart(3, '0')}`;
@@ -821,6 +886,7 @@ export const GaAssetManagement: React.FC = () => {
     });
 
     setIsRegisterModalOpen(false);
+    setRegisterSubmitAttempted(false);
     setName('');
     setAssetCode('');
   };
@@ -924,6 +990,16 @@ export const GaAssetManagement: React.FC = () => {
 
   const handleExecuteMutasi = (e: React.FormEvent) => {
     e.preventDefault();
+    setMutasiSubmitAttempted(true);
+
+    if (!newTargetBuilding.trim() || !newTargetRoom.trim()) return;
+
+    if (
+      mutasiCategory === 'Fasilitas Kendaraan Karyawan (Melekat ke 1 Karyawan)' &&
+      (!vehiclePlateInput.trim() || !vehicleOdometerInput || !facilitySkInput.trim())
+    ) {
+      return;
+    }
 
     // Cabang Khusus: Penukaran Aset Antar Karyawan (Melalui GA)
     if (mutasiCategory === 'Penukaran Aset Antar Karyawan (Melalui GA)') {
@@ -1002,6 +1078,7 @@ export const GaAssetManagement: React.FC = () => {
       );
       setTimeout(() => setSlaToastMessage(null), 4000);
       setIsMutasiModalOpen(false);
+      setMutasiSubmitAttempted(false);
       setSelectedSwapAssetAIds([]);
       setSelectedSwapAssetBIds([]);
       setMutasiNotes('');
@@ -1095,13 +1172,15 @@ export const GaAssetManagement: React.FC = () => {
     );
     setTimeout(() => setSlaToastMessage(null), 4000);
     setIsMutasiModalOpen(false);
+    setMutasiSubmitAttempted(false);
     setMutasiNotes('');
   };
 
   const handleCreateMaintenance = (e: React.FormEvent) => {
     e.preventDefault();
+    setMaintSubmitAttempted(true);
     const reporterEmployeeId = currentUser?.employeeId || employees.find((emp) => emp.email === currentUser?.email)?.id;
-    if (!maintAssetId || !maintIssue || !reporterEmployeeId) return;
+    if (!maintAssetId || !maintIssue.trim() || !reporterEmployeeId || !maintCost || maintCost <= 0) return;
 
     const ast = assets.find((a) => a.id === maintAssetId);
     addMaintenanceTicket({
@@ -1116,12 +1195,14 @@ export const GaAssetManagement: React.FC = () => {
 
     alert('Tiket perbaikan aset berhasil dibuat dan diteruskan ke General Affairs & Teknisi!');
     setIsMaintenanceModalOpen(false);
+    setMaintSubmitAttempted(false);
     setMaintIssue('');
   };
 
   const handleExecuteScan = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!scannedCode) return;
+    setScanSubmitAttempted(true);
+    if (!scannedCode.trim()) return;
 
     const success = performStockOpname(scannedCode.trim(), scanCondition);
     if (success) {
@@ -2158,18 +2239,17 @@ export const GaAssetManagement: React.FC = () => {
               Pindai stiker QR pada fisik aset secara langsung menggunakan kamera scanner atau input kode secara manual untuk validasi fisik aset.
             </p>
 
-            <form onSubmit={handleExecuteScan} className="space-y-4 text-xs">
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">Kode Aset QR</label>
-                <input
-                  type="text"
-                  placeholder="Contoh: AST-LTP-001"
-                  value={scannedCode}
-                  onChange={(e) => setScannedCode(e.target.value)}
-                  className="w-full p-2 border border-slate-300 rounded font-mono uppercase font-bold text-slate-900"
-                  required
-                />
-              </div>
+            <form onSubmit={handleExecuteScan} className="space-y-4 text-xs" noValidate>
+              <ValidatedInput
+                label="Kode Aset QR"
+                required
+                requiredLabel="Kode aset QR wajib diisi"
+                showError={scanSubmitAttempted}
+                placeholder="Contoh: AST-LTP-001"
+                value={scannedCode}
+                onChange={setScannedCode}
+                className="font-mono uppercase font-bold text-slate-900"
+              />
 
               <div>
                 <label className="font-semibold text-slate-700 block mb-1">Kondisi Hasil Pemeriksaan Fisik</label>
@@ -2884,18 +2964,16 @@ export const GaAssetManagement: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleRegisterAsset} className="p-5 space-y-3.5 text-xs">
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">Nama Perangkat / Aset</label>
-                <input
-                  type="text"
-                  placeholder="Contoh: MacBook Pro 16 M3 Max"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full p-2 border border-slate-300 rounded"
-                  required
-                />
-              </div>
+            <form onSubmit={handleRegisterAsset} className="p-5 space-y-3.5 text-xs" noValidate>
+              <ValidatedInput
+                label="Nama Perangkat / Aset"
+                required
+                requiredLabel="Nama perangkat / aset wajib diisi"
+                showError={registerSubmitAttempted}
+                placeholder="Contoh: MacBook Pro 16 M3 Max"
+                value={name}
+                onChange={setName}
+              />
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -2912,16 +2990,16 @@ export const GaAssetManagement: React.FC = () => {
                     <option value="Gedung & Ruangan">Gedung & Ruangan</option>
                   </select>
                 </div>
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Harga Pembelian (Rp)</label>
-                  <input
-                    type="number"
-                    value={purchasePrice}
-                    onChange={(e) => setPurchasePrice(Number(e.target.value))}
-                    className="w-full p-2 border border-slate-300 rounded font-mono"
-                    required
-                  />
-                </div>
+                <ValidatedInput
+                  label="Harga Pembelian (Rp)"
+                  type="number"
+                  required
+                  requiredLabel="Harga pembelian wajib diisi"
+                  showError={registerSubmitAttempted}
+                  value={String(purchasePrice)}
+                  onChange={(val) => setPurchasePrice(Number(val))}
+                  className="font-mono"
+                />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -2999,7 +3077,7 @@ export const GaAssetManagement: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleExecuteMutasi} className="p-5 space-y-4 text-xs max-h-[80vh] overflow-y-auto">
+            <form onSubmit={handleExecuteMutasi} className="p-5 space-y-4 text-xs max-h-[80vh] overflow-y-auto" noValidate>
               {/* Pilihan Kategori Serah Terima / Penukaran (BAST) */}
               <div>
                 <label className="font-bold text-slate-800 block mb-1.5">
@@ -3227,18 +3305,13 @@ export const GaAssetManagement: React.FC = () => {
 
                   {/* PETUGAS GA VERIFIKATOR & AKSESORIS PENDAMPING */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="font-semibold text-slate-700 block mb-1">
-                        Petugas General Affairs (GA) Verifikator &amp; Pengesah Penukaran *
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        value={gaHandoverOfficerName}
-                        onChange={(e) => setGaHandoverOfficerName(e.target.value)}
-                        className="w-full p-2 border border-slate-300 rounded-lg font-medium"
-                      />
-                    </div>
+                    <ValidatedInput
+                      label="Petugas General Affairs (GA) Verifikator & Pengesah Penukaran (Opsional)"
+                      value={gaHandoverOfficerName}
+                      onChange={setGaHandoverOfficerName}
+                      className="font-medium"
+                      helperText="Jika kosong, sistem akan mengisi petugas GA default"
+                    />
                     <div>
                       <label className="font-semibold text-slate-700 block mb-1">
                         Kelengkapan / Aksesoris yang Ikut Ditukar
@@ -3338,18 +3411,13 @@ export const GaAssetManagement: React.FC = () => {
 
                   {/* Pihak Serah Terima: Petugas GA & Penerima / Pimpinan Ruangan */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="font-semibold text-slate-700 block mb-1">
-                        Pihak Penyerah (Petugas General Affairs) *
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        value={gaHandoverOfficerName}
-                        onChange={(e) => setGaHandoverOfficerName(e.target.value)}
-                        className="w-full p-2 border border-slate-300 rounded-lg font-medium"
-                      />
-                    </div>
+                    <ValidatedInput
+                      label="Pihak Penyerah (Petugas General Affairs) (Opsional)"
+                      value={gaHandoverOfficerName}
+                      onChange={setGaHandoverOfficerName}
+                      className="font-medium"
+                      helperText="Jika kosong, sistem akan mengisi petugas GA default"
+                    />
 
                     <div>
                       <label className="font-semibold text-slate-700 block mb-1">
@@ -3379,36 +3447,34 @@ export const GaAssetManagement: React.FC = () => {
                         </span>
                       </div>
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                        <div>
-                          <label className="font-semibold text-slate-700 block mb-1">Nomor Polisi (Nopol) *</label>
-                          <input
-                            type="text"
-                            required
-                            value={vehiclePlateInput}
-                            onChange={(e) => setVehiclePlateInput(e.target.value.toUpperCase())}
-                            className="w-full p-2 bg-white border border-slate-300 rounded-lg font-mono font-bold"
-                          />
-                        </div>
-                        <div>
-                          <label className="font-semibold text-slate-700 block mb-1">Odometer Serah Terima (KM) *</label>
-                          <input
-                            type="number"
-                            required
-                            value={vehicleOdometerInput}
-                            onChange={(e) => setVehicleOdometerInput(Number(e.target.value))}
-                            className="w-full p-2 bg-white border border-slate-300 rounded-lg font-mono font-bold"
-                          />
-                        </div>
-                        <div>
-                          <label className="font-semibold text-slate-700 block mb-1">No. SK / Dasar Fasilitas *</label>
-                          <input
-                            type="text"
-                            required
-                            value={facilitySkInput}
-                            onChange={(e) => setFacilitySkInput(e.target.value)}
-                            className="w-full p-2 bg-white border border-slate-300 rounded-lg font-medium"
-                          />
-                        </div>
+                        <ValidatedInput
+                          label="Nomor Polisi (Nopol)"
+                          required
+                          requiredLabel="Nomor polisi (nopol) wajib diisi"
+                          showError={mutasiSubmitAttempted}
+                          value={vehiclePlateInput}
+                          onChange={(val) => setVehiclePlateInput(val.toUpperCase())}
+                          className="bg-white font-mono font-bold"
+                        />
+                        <ValidatedInput
+                          label="Odometer Serah Terima (KM)"
+                          type="number"
+                          required
+                          requiredLabel="Odometer serah terima wajib diisi"
+                          showError={mutasiSubmitAttempted}
+                          value={String(vehicleOdometerInput)}
+                          onChange={(val) => setVehicleOdometerInput(Number(val))}
+                          className="bg-white font-mono font-bold"
+                        />
+                        <ValidatedInput
+                          label="No. SK / Dasar Fasilitas"
+                          required
+                          requiredLabel="No. SK / dasar fasilitas wajib diisi"
+                          showError={mutasiSubmitAttempted}
+                          value={facilitySkInput}
+                          onChange={setFacilitySkInput}
+                          className="bg-white font-medium"
+                        />
                       </div>
                       <div>
                         <label className="font-semibold text-slate-700 block mb-1">
@@ -3427,32 +3493,28 @@ export const GaAssetManagement: React.FC = () => {
               )}
 
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Gedung Penempatan *</label>
-                  <input
-                    type="text"
-                    value={newTargetBuilding}
-                    onChange={(e) => setNewTargetBuilding(e.target.value)}
-                    className="w-full p-2 border border-slate-300 rounded-lg"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">
-                    {mutasiCategory === 'Aset Menetap di Ruangan'
-                      ? 'Nama Ruangan (Tempat Aset Menetap) *'
+                <ValidatedInput
+                  label="Gedung Penempatan"
+                  required
+                  requiredLabel="Gedung penempatan wajib diisi"
+                  showError={mutasiSubmitAttempted}
+                  value={newTargetBuilding}
+                  onChange={setNewTargetBuilding}
+                />
+                <ValidatedInput
+                  label={
+                    mutasiCategory === 'Aset Menetap di Ruangan'
+                      ? 'Nama Ruangan (Tempat Aset Menetap)'
                       : mutasiCategory === 'Fasilitas Kendaraan Karyawan (Melekat ke 1 Karyawan)'
-                      ? 'Alokasi Parkir / Homebase Fasilitas Kendaraan *'
-                      : 'Ruangan / Area Kerja Karyawan *'}
-                  </label>
-                  <input
-                    type="text"
-                    value={newTargetRoom}
-                    onChange={(e) => setNewTargetRoom(e.target.value)}
-                    className="w-full p-2 border border-slate-300 rounded-lg"
-                    required
-                  />
-                </div>
+                      ? 'Alokasi Parkir / Homebase Fasilitas Kendaraan'
+                      : 'Ruangan / Area Kerja Karyawan'
+                  }
+                  required
+                  requiredLabel="Ruangan / area penempatan wajib diisi"
+                  showError={mutasiSubmitAttempted}
+                  value={newTargetRoom}
+                  onChange={setNewTargetRoom}
+                />
               </div>
 
               <div>
@@ -3519,7 +3581,7 @@ export const GaAssetManagement: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleCreateMaintenance} className="p-5 space-y-3.5 text-xs">
+            <form onSubmit={handleCreateMaintenance} className="p-5 space-y-3.5 text-xs" noValidate>
               <div>
                 <label className="font-semibold text-slate-700 block mb-1">Aset Yang Bermasalah</label>
                 <select
@@ -3549,40 +3611,35 @@ export const GaAssetManagement: React.FC = () => {
                     <option value="Servis Rutin Berkala">Servis Rutin Berkala</option>
                   </select>
                 </div>
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Estimasi Biaya (Rp)</label>
-                  <input
-                    type="number"
-                    value={maintCost}
-                    onChange={(e) => setMaintCost(Number(e.target.value))}
-                    className="w-full p-2 border border-slate-300 rounded font-mono"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">Nama Vendor Teknisi</label>
-                <input
-                  type="text"
-                  value={maintVendor}
-                  onChange={(e) => setMaintVendor(e.target.value)}
-                  className="w-full p-2 border border-slate-300 rounded"
+                <ValidatedInput
+                  label="Estimasi Biaya (Rp)"
+                  type="number"
                   required
+                  requiredLabel="Estimasi biaya wajib diisi"
+                  showError={maintSubmitAttempted}
+                  value={String(maintCost)}
+                  onChange={(val) => setMaintCost(Number(val))}
+                  className="font-mono"
                 />
               </div>
 
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">Deskripsi Gejala Kerusakan</label>
-                <textarea
-                  rows={2}
-                  value={maintIssue}
-                  onChange={(e) => setMaintIssue(e.target.value)}
-                  placeholder="Misal: Layar flickering, baterai cepat panas..."
-                  className="w-full p-2 border border-slate-300 rounded"
-                  required
-                />
-              </div>
+              <ValidatedInput
+                label="Nama Vendor Teknisi (Opsional)"
+                value={maintVendor}
+                onChange={setMaintVendor}
+                helperText="Informasi referensi internal, tidak tercatat pada tiket perbaikan"
+              />
+
+              <ValidatedTextarea
+                label="Deskripsi Gejala Kerusakan"
+                required
+                requiredLabel="Deskripsi gejala kerusakan wajib diisi"
+                showError={maintSubmitAttempted}
+                rows={2}
+                value={maintIssue}
+                onChange={setMaintIssue}
+                placeholder="Misal: Layar flickering, baterai cepat panas..."
+              />
 
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-200">
                 <button
@@ -3620,7 +3677,7 @@ export const GaAssetManagement: React.FC = () => {
                 <X className="w-4 h-4 text-slate-400 hover:text-white" />
               </button>
             </div>
-            <form onSubmit={handleCreateRoomBooking} className="p-5 space-y-3.5 text-xs">
+            <form onSubmit={handleCreateRoomBooking} className="p-5 space-y-3.5 text-xs" noValidate>
               <div>
                 <label className="font-semibold text-slate-700 block mb-1">Pilihan Ruangan</label>
                 <select
@@ -3635,17 +3692,15 @@ export const GaAssetManagement: React.FC = () => {
                 </select>
               </div>
 
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">Topik / Agenda Rapat *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Contoh: Sprint Planning & Sync Target Q4"
-                  value={roomForm.topic}
-                  onChange={(e) => setRoomForm({ ...roomForm, topic: e.target.value })}
-                  className="w-full p-2 border border-slate-300 rounded"
-                />
-              </div>
+              <ValidatedInput
+                label="Topik / Agenda Rapat"
+                required
+                requiredLabel="Topik / agenda rapat wajib diisi"
+                showError={roomSubmitAttempted}
+                placeholder="Contoh: Sprint Planning & Sync Target Q4"
+                value={roomForm.topic}
+                onChange={(val) => setRoomForm({ ...roomForm, topic: val })}
+              />
 
               <div className="grid grid-cols-3 gap-2">
                 <ValidatedDateInput
@@ -3654,27 +3709,28 @@ export const GaAssetManagement: React.FC = () => {
                   value={roomForm.meetingDate}
                   onChange={(val) => setRoomForm({ ...roomForm, meetingDate: val })}
                   required
+                  showError={roomSubmitAttempted}
                 />
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Mulai</label>
-                  <input
-                    type="time"
-                    required
-                    value={roomForm.startTime}
-                    onChange={(e) => setRoomForm({ ...roomForm, startTime: e.target.value })}
-                    className="w-full p-2 border border-slate-300 rounded font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Selesai</label>
-                  <input
-                    type="time"
-                    required
-                    value={roomForm.endTime}
-                    onChange={(e) => setRoomForm({ ...roomForm, endTime: e.target.value })}
-                    className="w-full p-2 border border-slate-300 rounded font-mono"
-                  />
-                </div>
+                <ValidatedInput
+                  label="Mulai"
+                  type="time"
+                  required
+                  requiredLabel="Jam mulai wajib diisi"
+                  showError={roomSubmitAttempted}
+                  value={roomForm.startTime}
+                  onChange={(val) => setRoomForm({ ...roomForm, startTime: val })}
+                  className="font-mono"
+                />
+                <ValidatedInput
+                  label="Selesai"
+                  type="time"
+                  required
+                  requiredLabel="Jam selesai wajib diisi"
+                  showError={roomSubmitAttempted}
+                  value={roomForm.endTime}
+                  onChange={(val) => setRoomForm({ ...roomForm, endTime: val })}
+                  className="font-mono"
+                />
               </div>
 
               <div>
@@ -3724,7 +3780,7 @@ export const GaAssetManagement: React.FC = () => {
                 <X className="w-4 h-4 text-slate-400 hover:text-white" />
               </button>
             </div>
-            <form onSubmit={handleSaveMinutes} className="p-5 space-y-3.5 text-xs">
+            <form onSubmit={handleSaveMinutes} className="p-5 space-y-3.5 text-xs" noValidate>
               <div className="p-3 bg-slate-50 rounded border border-slate-200">
                 <div className="font-bold text-slate-900">{selectedBookingForMinutes.meetingTitle}</div>
                 <div className="text-[11px] text-slate-500 mt-0.5">
@@ -3732,17 +3788,16 @@ export const GaAssetManagement: React.FC = () => {
                 </div>
               </div>
 
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">Hasil Rapat & Action Items *</label>
-                <textarea
-                  rows={4}
-                  required
-                  placeholder="Ringkasan keputusan rapat, pembagian tugas PIC, dan target penyelesaian..."
-                  value={meetingMinutesText}
-                  onChange={(e) => setMeetingMinutesText(e.target.value)}
-                  className="w-full p-2.5 border border-slate-300 rounded"
-                />
-              </div>
+              <ValidatedTextarea
+                label="Hasil Rapat & Action Items"
+                required
+                requiredLabel="Hasil rapat & action items wajib diisi"
+                showError={minutesSubmitAttempted}
+                rows={4}
+                placeholder="Ringkasan keputusan rapat, pembagian tugas PIC, dan target penyelesaian..."
+                value={meetingMinutesText}
+                onChange={setMeetingMinutesText}
+              />
 
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-200">
                 <button
@@ -3787,7 +3842,7 @@ export const GaAssetManagement: React.FC = () => {
                 <X className="w-4 h-4 text-slate-400 hover:text-white" />
               </button>
             </div>
-            <form onSubmit={handleCreateVehicleBooking} className="p-5 space-y-3.5 text-xs">
+            <form onSubmit={handleCreateVehicleBooking} className="p-5 space-y-3.5 text-xs" noValidate>
               <div>
                 <label className="font-semibold text-slate-700 block mb-1">
                   Pilihan Armada Kendaraan Operasional (Pool Kantor) *
@@ -3824,28 +3879,22 @@ export const GaAssetManagement: React.FC = () => {
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Keperluan Dinas / Agenda *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Contoh: Kunjungan Audit Proyek Site"
-                    value={vehicleForm.purpose}
-                    onChange={(e) => setVehicleForm({ ...vehicleForm, purpose: e.target.value })}
-                    className="w-full p-2 border border-slate-300 rounded"
-                  />
-                </div>
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Rute / Lokasi Tujuan *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Contoh: Sudirman - Kawasan Industri Karawang"
-                    value={vehicleForm.destination}
-                    onChange={(e) => setVehicleForm({ ...vehicleForm, destination: e.target.value })}
-                    className="w-full p-2 border border-slate-300 rounded"
-                  />
-                </div>
+                <ValidatedInput
+                  label="Keperluan Dinas / Agenda"
+                  required
+                  requiredLabel="Keperluan dinas / agenda wajib diisi"
+                  showError={vehicleSubmitAttempted}
+                  placeholder="Contoh: Kunjungan Audit Proyek Site"
+                  value={vehicleForm.purpose}
+                  onChange={(val) => setVehicleForm({ ...vehicleForm, purpose: val })}
+                />
+                <ValidatedInput
+                  label="Rute / Lokasi Tujuan (Opsional)"
+                  placeholder="Contoh: Sudirman - Kawasan Industri Karawang"
+                  value={vehicleForm.destination}
+                  onChange={(val) => setVehicleForm({ ...vehicleForm, destination: val })}
+                  helperText="Jika kosong, sistem akan mengisi tujuan umum default"
+                />
               </div>
 
               {/* Jadwal Tanggal & Jam Pakai (Sama Konsepnya dengan Reservasi Penggunaan Ruangan Sewaktu-waktu) */}
@@ -3856,6 +3905,7 @@ export const GaAssetManagement: React.FC = () => {
                   value={vehicleForm.startDate}
                   onChange={(val) => setVehicleForm({ ...vehicleForm, startDate: val, endDate: val })}
                   required
+                  showError={vehicleSubmitAttempted}
                 />
                 <ValidatedDateInput
                   id="vehicleEndDate"
@@ -3864,27 +3914,28 @@ export const GaAssetManagement: React.FC = () => {
                   minDate={vehicleForm.startDate}
                   onChange={(val) => setVehicleForm({ ...vehicleForm, endDate: val })}
                   required
+                  showError={vehicleSubmitAttempted}
                 />
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Jam Mulai *</label>
-                  <input
-                    type="time"
-                    required
-                    value={vehicleForm.startTime}
-                    onChange={(e) => setVehicleForm({ ...vehicleForm, startTime: e.target.value })}
-                    className="w-full p-2 border border-slate-300 rounded font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Jam Selesai *</label>
-                  <input
-                    type="time"
-                    required
-                    value={vehicleForm.endTime}
-                    onChange={(e) => setVehicleForm({ ...vehicleForm, endTime: e.target.value })}
-                    className="w-full p-2 border border-slate-300 rounded font-mono"
-                  />
-                </div>
+                <ValidatedInput
+                  label="Jam Mulai"
+                  type="time"
+                  required
+                  requiredLabel="Jam mulai wajib diisi"
+                  showError={vehicleSubmitAttempted}
+                  value={vehicleForm.startTime}
+                  onChange={(val) => setVehicleForm({ ...vehicleForm, startTime: val })}
+                  className="font-mono"
+                />
+                <ValidatedInput
+                  label="Jam Selesai"
+                  type="time"
+                  required
+                  requiredLabel="Jam selesai wajib diisi"
+                  showError={vehicleSubmitAttempted}
+                  value={vehicleForm.endTime}
+                  onChange={(val) => setVehicleForm({ ...vehicleForm, endTime: val })}
+                  className="font-mono"
+                />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -3962,7 +4013,7 @@ export const GaAssetManagement: React.FC = () => {
                 <X className="w-4 h-4 text-slate-400 hover:text-white" />
               </button>
             </div>
-            <form onSubmit={handleCreateSupplyRequest} className="p-5 space-y-3.5 text-xs">
+            <form onSubmit={handleCreateSupplyRequest} className="p-5 space-y-3.5 text-xs" noValidate>
               <div>
                 <label className="font-semibold text-slate-700 block mb-1">Pilihan Barang ATK</label>
                 <select
@@ -3978,29 +4029,25 @@ export const GaAssetManagement: React.FC = () => {
                 </select>
               </div>
 
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">Jumlah Unit Diminta</label>
-                <input
-                  type="number"
-                  min={1}
-                  required
-                  value={supplyForm.quantity}
-                  onChange={(e) => setSupplyForm({ ...supplyForm, quantity: Number(e.target.value) })}
-                  className="w-full p-2 border border-slate-300 rounded font-mono"
-                />
-              </div>
+              <ValidatedInput
+                label="Jumlah Unit Diminta"
+                type="number"
+                min={1}
+                required
+                requiredLabel="Jumlah unit diminta wajib diisi (minimal 1)"
+                showError={supplySubmitAttempted}
+                value={String(supplyForm.quantity)}
+                onChange={(val) => setSupplyForm({ ...supplyForm, quantity: Number(val) })}
+                className="font-mono"
+              />
 
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">Alasan / Penggunaan *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Contoh: Pencetakan laporan audit tahunan & dossier legalitas"
-                  value={supplyForm.purpose}
-                  onChange={(e) => setSupplyForm({ ...supplyForm, purpose: e.target.value })}
-                  className="w-full p-2 border border-slate-300 rounded"
-                />
-              </div>
+              <ValidatedInput
+                label="Alasan / Penggunaan (Opsional)"
+                placeholder="Contoh: Pencetakan laporan audit tahunan & dossier legalitas"
+                value={supplyForm.purpose}
+                onChange={(val) => setSupplyForm({ ...supplyForm, purpose: val })}
+                helperText="Jika kosong, sistem akan mengisi alasan standar otomatis"
+              />
 
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-200">
                 <button
@@ -4038,7 +4085,7 @@ export const GaAssetManagement: React.FC = () => {
                 <X className="w-4 h-4 text-slate-400 hover:text-white" />
               </button>
             </div>
-            <form onSubmit={handleCreateTicket} className="p-5 space-y-3.5 text-xs">
+            <form onSubmit={handleCreateTicket} className="p-5 space-y-3.5 text-xs" noValidate>
               <div>
                 <label className="font-semibold text-slate-700 block mb-1">Kategori Masalah</label>
                 <select
@@ -4054,17 +4101,15 @@ export const GaAssetManagement: React.FC = () => {
                 </select>
               </div>
 
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">Judul Permasalahan *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Contoh: AC Ruang Meeting Lantai 18 Tidak Dingin"
-                  value={ticketForm.title}
-                  onChange={(e) => setTicketForm({ ...ticketForm, title: e.target.value })}
-                  className="w-full p-2 border border-slate-300 rounded"
-                />
-              </div>
+              <ValidatedInput
+                label="Judul Permasalahan"
+                required
+                requiredLabel="Judul permasalahan wajib diisi"
+                showError={ticketSubmitAttempted}
+                placeholder="Contoh: AC Ruang Meeting Lantai 18 Tidak Dingin"
+                value={ticketForm.title}
+                onChange={(val) => setTicketForm({ ...ticketForm, title: val })}
+              />
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -4138,23 +4183,19 @@ export const GaAssetManagement: React.FC = () => {
                 <X className="w-4 h-4 text-slate-400 hover:text-white" />
               </button>
             </div>
-            <form onSubmit={handleResolveTicket} className="p-5 space-y-3.5 text-xs">
+            <form onSubmit={handleResolveTicket} className="p-5 space-y-3.5 text-xs" noValidate>
               <div className="p-3 bg-slate-50 border border-slate-200 rounded">
                 <div className="font-bold text-slate-900">{selectedTicketForResolve.title}</div>
                 <div className="text-[11px] text-slate-500 mt-0.5">{selectedTicketForResolve.category} · Pelapor: {employees.find((e) => e.id === selectedTicketForResolve.requesterId)?.fullName || 'Aditya Pratama'}</div>
               </div>
 
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">Catatan Resolusi Teknisi *</label>
-                <textarea
-                  rows={3}
-                  required
-                  placeholder="Jelaskan tindakan yang telah dilakukan untuk mengatasi masalah ini..."
-                  value={ticketResolutionNotes}
-                  onChange={(e) => setTicketResolutionNotes(e.target.value)}
-                  className="w-full p-2 border border-slate-300 rounded"
-                />
-              </div>
+              <ValidatedTextarea
+                label="Catatan Resolusi Teknisi (Opsional)"
+                rows={3}
+                placeholder="Jelaskan tindakan yang telah dilakukan untuk mengatasi masalah ini... (jika kosong, sistem akan mengisi catatan standar otomatis)"
+                value={ticketResolutionNotes}
+                onChange={setTicketResolutionNotes}
+              />
 
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-200">
                 <button
@@ -4271,7 +4312,7 @@ export const GaAssetManagement: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleReturnVehicle} className="p-5 space-y-3.5 text-xs">
+            <form onSubmit={handleReturnVehicle} className="p-5 space-y-3.5 text-xs" noValidate>
               <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
                 <div className="font-bold text-slate-800 text-sm">{selectedVehicleForReturn.vehicleName}</div>
                 <div className="text-slate-500 text-[11px] mt-0.5">
@@ -4282,42 +4323,45 @@ export const GaAssetManagement: React.FC = () => {
                 </div>
               </div>
 
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">Tanggal Pengembalian Fisik</label>
-                <input
-                  type="date"
-                  required
-                  value={returnForm.returnDate}
-                  onChange={(e) => setReturnForm({ ...returnForm, returnDate: e.target.value })}
-                  className="w-full p-2 border border-slate-300 rounded"
-                />
-              </div>
+              <ValidatedInput
+                label="Tanggal Pengembalian Fisik"
+                type="date"
+                required
+                requiredLabel="Tanggal pengembalian fisik wajib diisi"
+                showError={returnSubmitAttempted}
+                value={returnForm.returnDate}
+                onChange={(val) => setReturnForm({ ...returnForm, returnDate: val })}
+              />
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Odometer Akhir (KM)</label>
-                  <input
+                  <ValidatedInput
+                    label="Odometer Akhir (KM)"
                     type="number"
                     min={selectedVehicleForReturn.startOdometer || 0}
                     required
-                    value={returnForm.endOdometer}
-                    onChange={(e) => setReturnForm({ ...returnForm, endOdometer: Number(e.target.value) })}
-                    className="w-full p-2 border border-slate-300 rounded font-mono"
+                    requiredLabel={`Odometer akhir wajib diisi (minimal ${selectedVehicleForReturn.startOdometer || 0} KM)`}
+                    showError={returnSubmitAttempted}
+                    value={String(returnForm.endOdometer)}
+                    onChange={(val) => setReturnForm({ ...returnForm, endOdometer: Number(val) })}
+                    className="font-mono"
                   />
                   <span className="text-[10px] text-slate-400 mt-0.5 block">
                     Jarak tempuh: {Math.max(0, returnForm.endOdometer - (selectedVehicleForReturn.startOdometer || 0))} KM
                   </span>
                 </div>
                 <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Total Biaya BBM & Tol (Rp)</label>
-                  <input
+                  <ValidatedInput
+                    label="Total Biaya BBM & Tol (Rp)"
                     type="number"
                     min="0"
                     step="5000"
                     required
-                    value={returnForm.tollFuelCost}
-                    onChange={(e) => setReturnForm({ ...returnForm, tollFuelCost: Number(e.target.value) })}
-                    className="w-full p-2 border border-slate-300 rounded font-mono"
+                    requiredLabel="Total biaya BBM & tol wajib diisi"
+                    showError={returnSubmitAttempted}
+                    value={String(returnForm.tollFuelCost)}
+                    onChange={(val) => setReturnForm({ ...returnForm, tollFuelCost: Number(val) })}
+                    className="font-mono"
                   />
                   <span className="text-[10px] text-emerald-600 font-semibold mt-0.5 block">
                     {formatRupiah(returnForm.tollFuelCost)}
@@ -4325,17 +4369,14 @@ export const GaAssetManagement: React.FC = () => {
                 </div>
               </div>
 
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">Catatan Kondisi Mobil & Keterangan</label>
-                <textarea
-                  rows={2}
-                  required
-                  value={returnForm.returnNotes}
-                  onChange={(e) => setReturnForm({ ...returnForm, returnNotes: e.target.value })}
-                  placeholder="Misal: Kondisi bersih, bensin terisi separuh, tidak ada baret..."
-                  className="w-full p-2 border border-slate-300 rounded"
-                />
-              </div>
+              <ValidatedTextarea
+                label="Catatan Kondisi Mobil & Keterangan (Opsional)"
+                rows={2}
+                value={returnForm.returnNotes}
+                onChange={(val) => setReturnForm({ ...returnForm, returnNotes: val })}
+                placeholder="Misal: Kondisi bersih, bensin terisi separuh, tidak ada baret..."
+                helperText="Catatan referensi internal, tidak tercatat pada riwayat pengembalian kendaraan"
+              />
 
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-200">
                 <button
@@ -4374,18 +4415,16 @@ export const GaAssetManagement: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleAddSupplyItem} className="p-5 space-y-3.5 text-xs">
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">Nama Barang / ATK</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Contoh: Kertas HVS A4 80gr PaperOne, Pulpen Joyko Gel 0.5..."
-                  value={newSupplyForm.itemName}
-                  onChange={(e) => setNewSupplyForm({ ...newSupplyForm, itemName: e.target.value })}
-                  className="w-full p-2 border border-slate-300 rounded"
-                />
-              </div>
+            <form onSubmit={handleAddSupplyItem} className="p-5 space-y-3.5 text-xs" noValidate>
+              <ValidatedInput
+                label="Nama Barang / ATK"
+                required
+                requiredLabel="Nama barang / ATK wajib diisi"
+                showError={addSupplySubmitAttempted}
+                placeholder="Contoh: Kertas HVS A4 80gr PaperOne, Pulpen Joyko Gel 0.5..."
+                value={newSupplyForm.itemName}
+                onChange={(val) => setNewSupplyForm({ ...newSupplyForm, itemName: val })}
+              />
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -4420,26 +4459,28 @@ export const GaAssetManagement: React.FC = () => {
               </div>
 
               <div className="grid grid-cols-2 gap-3">
+                <ValidatedInput
+                  label="Stok Awal Fisik"
+                  type="number"
+                  min="1"
+                  required
+                  requiredLabel="Stok awal fisik wajib diisi (minimal 1)"
+                  showError={addSupplySubmitAttempted}
+                  value={String(newSupplyForm.currentStock)}
+                  onChange={(val) => setNewSupplyForm({ ...newSupplyForm, currentStock: Number(val) })}
+                  className="font-mono"
+                />
                 <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Stok Awal Fisik</label>
-                  <input
+                  <ValidatedInput
+                    label="Batas Minimal Reorder"
                     type="number"
                     min="1"
                     required
-                    value={newSupplyForm.currentStock}
-                    onChange={(e) => setNewSupplyForm({ ...newSupplyForm, currentStock: Number(e.target.value) })}
-                    className="w-full p-2 border border-slate-300 rounded font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Batas Minimal Reorder</label>
-                  <input
-                    type="number"
-                    min="1"
-                    required
-                    value={newSupplyForm.reorderPoint}
-                    onChange={(e) => setNewSupplyForm({ ...newSupplyForm, reorderPoint: Number(e.target.value) })}
-                    className="w-full p-2 border border-slate-300 rounded font-mono"
+                    requiredLabel="Batas minimal reorder wajib diisi (minimal 1)"
+                    showError={addSupplySubmitAttempted}
+                    value={String(newSupplyForm.reorderPoint)}
+                    onChange={(val) => setNewSupplyForm({ ...newSupplyForm, reorderPoint: Number(val) })}
+                    className="font-mono"
                   />
                   <span className="text-[10px] text-slate-400 mt-0.5 block">Notifikasi restock jika dibawah angka ini</span>
                 </div>
@@ -4503,38 +4544,39 @@ export const GaAssetManagement: React.FC = () => {
                 handleSaveCategorySla(editingSlaCat);
               }}
               className="p-5 overflow-y-auto space-y-4 text-xs"
+              noValidate
             >
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="font-semibold text-slate-700 block mb-1">
-                    SLA Respon Awal (Jam) *
-                  </label>
-                  <input
+                  <ValidatedInput
+                    label="SLA Respon Awal (Jam)"
                     type="number"
                     min="1"
                     required
-                    value={editingSlaCat.responseSlaHours}
-                    onChange={(e) =>
-                      setEditingSlaCat({ ...editingSlaCat, responseSlaHours: Number(e.target.value) })
+                    requiredLabel="SLA respon awal wajib diisi (minimal 1 jam)"
+                    showError={slaSubmitAttempted}
+                    value={String(editingSlaCat.responseSlaHours)}
+                    onChange={(val) =>
+                      setEditingSlaCat({ ...editingSlaCat, responseSlaHours: Number(val) })
                     }
-                    className="w-full p-2 border border-slate-300 rounded-lg font-mono font-bold focus:outline-indigo-600"
+                    className="font-mono font-bold"
                   />
                   <span className="text-[10px] text-slate-400 mt-0.5 block">Target awal tanggapan tiket</span>
                 </div>
 
                 <div>
-                  <label className="font-semibold text-slate-700 block mb-1">
-                    SLA Resolusi / Servis (Jam) *
-                  </label>
-                  <input
+                  <ValidatedInput
+                    label="SLA Resolusi / Servis (Jam)"
                     type="number"
                     min="1"
                     required
-                    value={editingSlaCat.resolutionSlaHours}
-                    onChange={(e) =>
-                      setEditingSlaCat({ ...editingSlaCat, resolutionSlaHours: Number(e.target.value) })
+                    requiredLabel="SLA resolusi / servis wajib diisi (minimal 1 jam)"
+                    showError={slaSubmitAttempted}
+                    value={String(editingSlaCat.resolutionSlaHours)}
+                    onChange={(val) =>
+                      setEditingSlaCat({ ...editingSlaCat, resolutionSlaHours: Number(val) })
                     }
-                    className="w-full p-2 border border-slate-300 rounded-lg font-mono font-bold focus:outline-indigo-600"
+                    className="font-mono font-bold"
                   />
                   <span className="text-[10px] text-slate-400 mt-0.5 block">
                     Batas perbaikan ({Math.round(editingSlaCat.resolutionSlaHours / 24 * 10) / 10} Hari)
@@ -4544,35 +4586,35 @@ export const GaAssetManagement: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="font-semibold text-slate-700 block mb-1">
-                    SLA Unit Cadangan / Backup (Jam) *
-                  </label>
-                  <input
+                  <ValidatedInput
+                    label="SLA Unit Cadangan / Backup (Jam)"
                     type="number"
                     min="1"
                     required
-                    value={editingSlaCat.replacementSlaHours}
-                    onChange={(e) =>
-                      setEditingSlaCat({ ...editingSlaCat, replacementSlaHours: Number(e.target.value) })
+                    requiredLabel="SLA unit cadangan / backup wajib diisi (minimal 1 jam)"
+                    showError={slaSubmitAttempted}
+                    value={String(editingSlaCat.replacementSlaHours)}
+                    onChange={(val) =>
+                      setEditingSlaCat({ ...editingSlaCat, replacementSlaHours: Number(val) })
                     }
-                    className="w-full p-2 border border-slate-300 rounded-lg font-mono font-bold focus:outline-indigo-600"
+                    className="font-mono font-bold"
                   />
                   <span className="text-[10px] text-slate-400 mt-0.5 block">Batas penyediaan unit pinjaman</span>
                 </div>
 
                 <div>
-                  <label className="font-semibold text-slate-700 block mb-1">
-                    SLA Pengadaan Baru (Hari Kerja) *
-                  </label>
-                  <input
+                  <ValidatedInput
+                    label="SLA Pengadaan Baru (Hari Kerja)"
                     type="number"
                     min="1"
                     required
-                    value={editingSlaCat.procurementSlaDays}
-                    onChange={(e) =>
-                      setEditingSlaCat({ ...editingSlaCat, procurementSlaDays: Number(e.target.value) })
+                    requiredLabel="SLA pengadaan baru wajib diisi (minimal 1 hari kerja)"
+                    showError={slaSubmitAttempted}
+                    value={String(editingSlaCat.procurementSlaDays)}
+                    onChange={(val) =>
+                      setEditingSlaCat({ ...editingSlaCat, procurementSlaDays: Number(val) })
                     }
-                    className="w-full p-2 border border-slate-300 rounded-lg font-mono font-bold focus:outline-indigo-600"
+                    className="font-mono font-bold"
                   />
                   <span className="text-[10px] text-slate-400 mt-0.5 block">Lead time pembelian baru</span>
                 </div>
@@ -4615,31 +4657,29 @@ export const GaAssetManagement: React.FC = () => {
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Nama Lead PIC</label>
-                  <input
-                    type="text"
-                    required
-                    value={editingSlaCat.picName}
-                    onChange={(e) =>
-                      setEditingSlaCat({ ...editingSlaCat, picName: e.target.value })
-                    }
-                    className="w-full p-2 border border-slate-300 rounded-lg font-medium"
-                  />
-                </div>
+                <ValidatedInput
+                  label="Nama Lead PIC"
+                  required
+                  requiredLabel="Nama lead PIC wajib diisi"
+                  showError={slaSubmitAttempted}
+                  value={editingSlaCat.picName}
+                  onChange={(val) =>
+                    setEditingSlaCat({ ...editingSlaCat, picName: val })
+                  }
+                  className="font-medium"
+                />
 
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Peran / Jabatan Tim</label>
-                  <input
-                    type="text"
-                    required
-                    value={editingSlaCat.picRole}
-                    onChange={(e) =>
-                      setEditingSlaCat({ ...editingSlaCat, picRole: e.target.value })
-                    }
-                    className="w-full p-2 border border-slate-300 rounded-lg font-medium"
-                  />
-                </div>
+                <ValidatedInput
+                  label="Peran / Jabatan Tim"
+                  required
+                  requiredLabel="Peran / jabatan tim wajib diisi"
+                  showError={slaSubmitAttempted}
+                  value={editingSlaCat.picRole}
+                  onChange={(val) =>
+                    setEditingSlaCat({ ...editingSlaCat, picRole: val })
+                  }
+                  className="font-medium"
+                />
               </div>
 
               <div>
