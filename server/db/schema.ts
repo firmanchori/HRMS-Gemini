@@ -1467,6 +1467,17 @@ export const gaAssets = pgTable("ga_assets", {
   lastStockOpname: text("last_stock_opname").notNull(),
   qrPayload: text("qr_payload").notNull(),
   usageStatus: text("usage_status"),
+  // Structured warranty + provenance (audit findings §3: warranty only
+  // existed as free text, and Procurement -> Asset was fully disconnected,
+  // so GA retyped assets without vendor/PO/warranty carried over).
+  warrantyExpiryDate: text("warranty_expiry_date"),
+  warrantyProvider: text("warranty_provider"),
+  procurementOrderId: uuid("procurement_order_id"),
+  vendorId: uuid("vendor_id"),
+  poNumber: text("po_number"),
+  // Master location link — building/room stay as the human label.
+  officeLocationId: uuid("office_location_id"),
+  returnedToGaAt: timestamp("returned_to_ga_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
@@ -1522,6 +1533,10 @@ export const procurementOrders = pgTable("procurement_orders", {
   department: text("department").notNull(),
   status: text("status").notNull().default("Pengajuan PR"),
   requestedDate: text("requested_date").notNull(),
+  warrantyMonths: integer("warranty_months"),
+  receivedDate: text("received_date"),
+  /** Set once the received goods were turned into ga_assets rows — keeps "Barang Diterima" idempotent. */
+  assetsGeneratedAt: timestamp("assets_generated_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 

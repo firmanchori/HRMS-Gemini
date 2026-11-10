@@ -76,6 +76,7 @@ import {
   vendorInvoices,
 } from "../db/schema.ts";
 import { requireTenantAdmin } from "../middleware/auth.ts";
+import { generateAssetsFromReceivedOrder, isReceivedStatus, deriveUsageStatus } from "../lib/assetLifecycle.ts";
 import { buildApprovalSteps, currentBlockingStep, decideApproval, withDerivedStatus, ApprovalError } from "../lib/approvalEngine.ts";
 import { validateBody, validateParams, uuidParam } from "../lib/validate.ts";
 import { rejectBreachedPassword } from "../middleware/passwordCheck.ts";
@@ -2929,6 +2930,13 @@ tenantRouter.put("/offboarding-records/:id", validateParams(uuidParam("id")), va
   const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
   const [existing] = await db.select().from(offboardingRecords).where(and(eq(offboardingRecords.id, req.params.id), eq(offboardingRecords.tenantId, tenantId))).limit(1);
   if (!existing || !visibleEmployeeIds.includes(existing.employeeId)) return res.status(404).json({ error: "Data offboarding tidak ditemukan" });
+  // Clearance is verified against the real asset register, not a self-reported checkbox.
+  if (req.body.assetReturned === true) {
+    const held = await db.select({ code: gaAssets.assetCode, name: gaAssets.name }).from(gaAssets).where(and(eq(gaAssets.tenantId, tenantId), eq(gaAssets.assignedToEmployeeId, existing.employeeId)));
+    if (held.length > 0) {
+      return res.status(409).json({ error: `Karyawan masih memegang ${held.length} aset: ${held.map((a) => a.code).join(", ")}. Kembalikan ke GA terlebih dahulu.` });
+    }
+  }
   const [updated] = await db.update(offboardingRecords).set(req.body).where(eq(offboardingRecords.id, req.params.id)).returning();
   res.json(updated);
 });
@@ -3030,6 +3038,9 @@ const gaAssetSchema = z.object({
   lastStockOpname: z.string().trim().min(1).max(20),
   qrPayload: z.string().trim().min(1).max(2000),
   usageStatus: z.enum(["Tersedia", "Digunakan", "Dalam Perbaikan"]).optional().nullable(),
+  warrantyExpiryDate: z.string().trim().max(20).optional().nullable(),
+  warrantyProvider: z.string().trim().max(200).optional().nullable(),
+  officeLocationId: z.string().uuid().optional().nullable(),
 });
 
 tenantRouter.get("/ga-assets", async (req, res) => {
@@ -3039,7 +3050,10 @@ tenantRouter.get("/ga-assets", async (req, res) => {
 
 tenantRouter.post("/ga-assets", validateBody(gaAssetSchema), async (req, res) => {
   const tenantId = req.session!.tenantId!;
-  const [created] = await db.insert(gaAssets).values({ ...req.body, tenantId }).returning();
+  const [created] = await db
+    .insert(gaAssets)
+    .values({ ...req.body, tenantId, usageStatus: deriveUsageStatus({ assignedToEmployeeId: req.body.assignedToEmployeeId ?? null, condition: req.body.condition ?? "Baik" }) })
+    .returning();
   res.status(201).json(created);
 });
 
@@ -3047,8 +3061,36 @@ tenantRouter.put("/ga-assets/:id", validateParams(uuidParam("id")), validateBody
   const tenantId = req.session!.tenantId!;
   const [existing] = await db.select().from(gaAssets).where(and(eq(gaAssets.id, req.params.id), eq(gaAssets.tenantId, tenantId))).limit(1);
   if (!existing) return res.status(404).json({ error: "Aset tidak ditemukan" });
-  const [updated] = await db.update(gaAssets).set(req.body).where(eq(gaAssets.id, req.params.id)).returning();
+  // usageStatus is derived, never trusted from the client (single source of truth).
+  const { usageStatus: _u, ...patch } = req.body;
+  const next = { ...existing, ...patch };
+  const [updated] = await db
+    .update(gaAssets)
+    .set({ ...patch, usageStatus: deriveUsageStatus({ assignedToEmployeeId: next.assignedToEmployeeId, condition: next.condition }) })
+    .where(eq(gaAssets.id, req.params.id))
+    .returning();
   res.json(updated);
+});
+
+/** "Kembalikan ke GA" — releases the holder and makes the asset available again (was missing entirely: once assigned, an asset could only move to another employee). */
+tenantRouter.post("/ga-assets/:id/return", validateParams(uuidParam("id")), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [existing] = await db.select().from(gaAssets).where(and(eq(gaAssets.id, req.params.id), eq(gaAssets.tenantId, tenantId))).limit(1);
+  if (!existing) return res.status(404).json({ error: "Aset tidak ditemukan" });
+  if (!existing.assignedToEmployeeId) return res.status(400).json({ error: "Aset ini tidak sedang dipegang karyawan." });
+  const [updated] = await db
+    .update(gaAssets)
+    .set({ assignedToEmployeeId: null, returnedToGaAt: new Date(), usageStatus: deriveUsageStatus({ assignedToEmployeeId: null, condition: existing.condition }) })
+    .where(eq(gaAssets.id, existing.id))
+    .returning();
+  await logAudit({ actorUserId: req.session!.userId, tenantId, action: "ga_asset.returned_to_ga", details: { assetId: existing.id, fromEmployeeId: existing.assignedToEmployeeId } });
+  res.json(updated);
+});
+
+/** Back-link Employee -> assets currently held (used by profile and the offboarding clearance check). */
+tenantRouter.get("/employees/:id/assets", validateParams(uuidParam("id")), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  res.json(await db.select().from(gaAssets).where(and(eq(gaAssets.tenantId, tenantId), eq(gaAssets.assignedToEmployeeId, req.params.id))));
 });
 
 // ---------------------------------------------------------------------------
@@ -3137,6 +3179,12 @@ const procurementOrderSchema = z.object({
   department: z.string().trim().min(1).max(200),
   status: z.enum(["Pengajuan PR", "Quotation Diterima", "Disetujui HR/Finance", "PO Terbit", "Kontrak Berjalan", "Barang Diterima / Project Selesai", "Barang Diterima"]).optional(),
   requestedDate: z.string().trim().min(1).max(20),
+  warrantyMonths: z.number().int().min(0).max(240).optional().nullable(),
+  receivedDate: z.string().trim().max(20).optional().nullable(),
+  // Transient hints used only when status flips to received (not stored on the order).
+  receivingCategory: z.enum(["Laptop & Komputer", "Kendaraan Operasional", "Fasilitas Gedung", "Furniture", "Perangkat Jaringan"]).optional(),
+  receivingBuilding: z.string().trim().max(200).optional(),
+  receivingRoom: z.string().trim().max(200).optional(),
 });
 
 tenantRouter.get("/procurement-orders", async (req, res) => {
@@ -3154,8 +3202,15 @@ tenantRouter.put("/procurement-orders/:id", validateParams(uuidParam("id")), val
   const tenantId = req.session!.tenantId!;
   const [existing] = await db.select().from(procurementOrders).where(and(eq(procurementOrders.id, req.params.id), eq(procurementOrders.tenantId, tenantId))).limit(1);
   if (!existing) return res.status(404).json({ error: "Procurement order tidak ditemukan" });
-  const [updated] = await db.update(procurementOrders).set(req.body).where(eq(procurementOrders.id, req.params.id)).returning();
-  res.json(updated);
+  const { receivingCategory, receivingBuilding, receivingRoom, ...orderPatch } = req.body;
+  const [updated] = await db.update(procurementOrders).set(orderPatch).where(eq(procurementOrders.id, req.params.id)).returning();
+  // Marking goods received now creates the asset records (vendor/PO/warranty carried over) instead of leaving GA to retype them.
+  let generatedAssets: unknown[] = [];
+  if (isReceivedStatus(updated.status)) {
+    generatedAssets = await generateAssetsFromReceivedOrder({ tenantId, orderId: updated.id, category: receivingCategory, building: receivingBuilding, room: receivingRoom });
+    if (generatedAssets.length) await logAudit({ actorUserId: req.session!.userId, tenantId, action: "procurement.assets_generated", details: { orderId: updated.id, count: generatedAssets.length } });
+  }
+  res.json({ ...updated, generatedAssetCount: generatedAssets.length });
 });
 
 // ---------------------------------------------------------------------------

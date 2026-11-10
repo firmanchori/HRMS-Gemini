@@ -65,6 +65,7 @@ export const GaAssetManagement: React.FC = () => {
     employees,
     addAsset,
     updateAsset,
+    returnAssetToGa,
     performStockOpname,
     currentTenant,
     assetMaintenanceTickets,
@@ -4290,6 +4291,33 @@ export const GaAssetManagement: React.FC = () => {
                   {selectedAssetForQR.category} · {selectedAssetForQR.room}
                 </p>
               </div>
+            </div>
+
+            <div className="px-5 py-3 border-t border-slate-200 bg-slate-50 text-[11px] space-y-1 no-print">
+              <div className="flex justify-between"><span className="text-slate-500">Status</span><b className="text-slate-800">{selectedAssetForQR.usageStatus ?? '-'}</b></div>
+              {selectedAssetForQR.poNumber && (
+                <div className="flex justify-between"><span className="text-slate-500">Asal PO</span><b className="font-mono text-slate-800">{selectedAssetForQR.poNumber}</b></div>
+              )}
+              <div className="flex justify-between">
+                <span className="text-slate-500">Garansi</span>
+                <b className={selectedAssetForQR.warrantyExpiryDate && selectedAssetForQR.warrantyExpiryDate < new Date().toISOString().slice(0, 10) ? 'text-rose-700' : 'text-slate-800'}>
+                  {selectedAssetForQR.warrantyExpiryDate
+                    ? `s/d ${selectedAssetForQR.warrantyExpiryDate}${selectedAssetForQR.warrantyProvider ? ` (${selectedAssetForQR.warrantyProvider})` : ''}${selectedAssetForQR.warrantyExpiryDate < new Date().toISOString().slice(0, 10) ? ' — HABIS' : ''}`
+                    : 'Tidak tercatat'}
+                </b>
+              </div>
+              {selectedAssetForQR.assignedToEmployeeId && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await returnAssetToGa(selectedAssetForQR.id);
+                    setSelectedAssetForQR(null);
+                  }}
+                  className="w-full mt-2 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold"
+                >
+                  Kembalikan ke GA (jadikan Tersedia)
+                </button>
+              )}
             </div>
           </div>
         </div>

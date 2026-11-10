@@ -323,6 +323,8 @@ interface HrmsContextType {
   assets: GAAsset[];
   addAsset: (asset: Omit<GAAsset, 'id' | 'tenantId' | 'lastStockOpname' | 'qrPayload'>) => void;
   updateAsset: (id: string, updates: Partial<GAAsset>) => void;
+  /** Server-side "Kembalikan ke GA": releases the holder, status becomes Tersedia. */
+  returnAssetToGa: (id: string) => Promise<void>;
   performStockOpname: (assetCode: string, condition: GAAsset['condition'], notes?: string) => boolean;
 
   // 10. Procurement
@@ -2605,6 +2607,11 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     tenantApi.updateGAAsset(id, updates as Partial<ApiGAAsset>).then((updated) => {
       setApiAssets((prev) => prev.map((a) => (a.id === id ? updated : a)));
     });
+  };
+
+  const returnAssetToGa = async (id: string) => {
+    const updated = await tenantApi.returnGAAssetToGa(id);
+    setApiAssets((prev) => prev.map((a) => (a.id === id ? updated : a)));
   };
 
   const performStockOpname = (assetCode: string, condition: GAAsset['condition']): boolean => {
@@ -5130,6 +5137,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         assets, // real backend data, already tenant-scoped server-side
         addAsset,
         updateAsset,
+        returnAssetToGa,
         performStockOpname,
         procurementOrders, // real backend data, already tenant-scoped server-side
         addProcurementOrder,

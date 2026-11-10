@@ -1133,6 +1133,13 @@ export interface GAAsset {
   lastStockOpname: string;
   qrPayload: string;
   usageStatus?: 'Tersedia' | 'Digunakan' | 'Dalam Perbaikan';
+  warrantyExpiryDate?: string | null;
+  warrantyProvider?: string | null;
+  procurementOrderId?: string | null;
+  vendorId?: string | null;
+  poNumber?: string | null;
+  officeLocationId?: string | null;
+  returnedToGaAt?: string | null;
 }
 
 export interface AssetMaintenanceTicket {

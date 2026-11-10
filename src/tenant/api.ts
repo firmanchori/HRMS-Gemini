@@ -750,7 +750,15 @@ export interface GAAsset {
   assignedToEmployeeId: string | null;
   lastStockOpname: string;
   qrPayload: string;
+  /** Derived server-side from holder + condition — never client-set. */
   usageStatus: "Tersedia" | "Digunakan" | "Dalam Perbaikan" | null;
+  warrantyExpiryDate?: string | null;
+  warrantyProvider?: string | null;
+  procurementOrderId?: string | null;
+  vendorId?: string | null;
+  poNumber?: string | null;
+  officeLocationId?: string | null;
+  returnedToGaAt?: string | null;
 }
 
 export interface AssetMaintenanceTicket {
@@ -1288,6 +1296,7 @@ export const tenantApi = {
   listGAAssets: () => request<GAAsset[]>("/api/tenant/ga-assets"),
   createGAAsset: (data: Omit<GAAsset, "id" | "tenantId">) =>
     request<GAAsset>("/api/tenant/ga-assets", { method: "POST", body: JSON.stringify(data) }),
+  returnGAAssetToGa: (id: string) => request<GAAsset>(`/api/tenant/ga-assets/${id}/return`, { method: "POST", body: JSON.stringify({}) }),
   updateGAAsset: (id: string, data: Partial<GAAsset>) =>
     request<GAAsset>(`/api/tenant/ga-assets/${id}`, { method: "PUT", body: JSON.stringify(data) }),
 
