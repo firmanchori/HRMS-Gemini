@@ -355,6 +355,7 @@ export interface ProbationCategoryScore {
   categoryId: string;
   label: string;
   score: number;
+  questions?: { questionId: string; text: string; score: number }[];
 }
 
 export interface ProbationEvaluation {
@@ -381,6 +382,7 @@ export interface ProbationEvaluation {
 export interface ProbationEvaluationCategory {
   id: string;
   label: string;
+  questions?: { id: string; text: string }[];
 }
 
 export interface ProbationEvaluationTemplate {
@@ -388,6 +390,9 @@ export interface ProbationEvaluationTemplate {
   tenantId: string;
   name: string;
   categories: ProbationEvaluationCategory[];
+  divisionId?: string | null;
+  departmentId?: string | null;
+  positionId?: string | null;
   validFrom: string;
   validUntil: string | null;
   isActive: boolean;

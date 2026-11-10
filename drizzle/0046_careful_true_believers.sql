@@ -1,0 +1,6 @@
+ALTER TABLE "probation_evaluation_templates" ADD COLUMN "division_id" uuid;--> statement-breakpoint
+ALTER TABLE "probation_evaluation_templates" ADD COLUMN "department_id" uuid;--> statement-breakpoint
+ALTER TABLE "probation_evaluation_templates" ADD COLUMN "position_id" uuid;--> statement-breakpoint
+ALTER TABLE "probation_evaluation_templates" ADD CONSTRAINT "probation_evaluation_templates_division_id_company_divisions_id_fk" FOREIGN KEY ("division_id") REFERENCES "public"."company_divisions"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "probation_evaluation_templates" ADD CONSTRAINT "probation_evaluation_templates_department_id_company_departments_id_fk" FOREIGN KEY ("department_id") REFERENCES "public"."company_departments"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "probation_evaluation_templates" ADD CONSTRAINT "probation_evaluation_templates_position_id_master_job_positions_id_fk" FOREIGN KEY ("position_id") REFERENCES "public"."master_job_positions"("id") ON DELETE no action ON UPDATE no action;

@@ -1729,6 +1729,8 @@ export interface OrgStructureSnapshot {
 export interface ProbationEvaluationCategory {
   id: string;
   label: string;
+  /** Each category's own distinct question list; absent only on legacy label-only templates. */
+  questions?: { id: string; text: string }[];
 }
 
 /** Custom probation evaluation form (user, 2026-11-09) — append-only: a tenant keeps creating new versions instead of editing one in place, so past evaluations stay tied to the exact template they were filled out against. */
@@ -1737,6 +1739,10 @@ export interface ProbationEvaluationTemplate {
   tenantId: string;
   name: string;
   categories: ProbationEvaluationCategory[];
+  /** Scope — all unset = applies to everyone; most specific match wins (jabatan > departemen > divisi > umum). */
+  divisionId?: string | null;
+  departmentId?: string | null;
+  positionId?: string | null;
   validFrom: string;
   validUntil?: string;
   isActive: boolean;
@@ -1746,7 +1752,9 @@ export interface ProbationEvaluationTemplate {
 export interface ProbationCategoryScore {
   categoryId: string;
   label: string;
+  /** Average of this category's question scores (or the single direct score for legacy label-only categories). */
   score: number;
+  questions?: { questionId: string; text: string; score: number }[];
 }
 
 export interface ProbationEvaluation {

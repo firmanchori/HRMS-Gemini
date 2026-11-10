@@ -959,7 +959,18 @@ export const probationEvaluationTemplates = pgTable("probation_evaluation_templa
   id: uuid("id").defaultRandom().primaryKey(),
   tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
   name: text("name").notNull(),
-  categories: jsonb("categories").notNull().$type<{ id: string; label: string }[]>(),
+  // Each category owns its OWN distinct question list (user, 2026-11-10:
+  // "kategori 1 10 pertanyaan, kategori 2 20 pertanyaan, jadi pertanyaan
+  // dengan kategori itu beda bukan sama") — previously a category was just
+  // a label scored once. `questions` is optional only so pre-existing
+  // label-only templates still load (they render as one score per category).
+  categories: jsonb("categories").notNull().$type<{ id: string; label: string; questions?: { id: string; text: string }[] }[]>(),
+  // Scope: which Divisi / Departemen / Jabatan this template is for. All
+  // null = applies to everyone; the most specific match wins when picking
+  // a template for an employee (position > department > division > global).
+  divisionId: uuid("division_id").references(() => companyDivisions.id),
+  departmentId: uuid("department_id").references(() => companyDepartments.id),
+  positionId: uuid("position_id").references(() => masterJobPositions.id),
   validFrom: text("valid_from").notNull(),
   validUntil: text("valid_until"),
   isActive: boolean("is_active").notNull().default(true),
@@ -984,7 +995,9 @@ export const probationEvaluations = pgTable("probation_evaluations", {
   // its per-category scores ({categoryId, label, score}[]) — the custom
   // replacement for the 4 fixed columns above.
   templateId: uuid("template_id").references(() => probationEvaluationTemplates.id),
-  categoryScores: jsonb("category_scores").$type<{ categoryId: string; label: string; score: number }[]>(),
+  categoryScores: jsonb("category_scores").$type<
+    { categoryId: string; label: string; score: number; questions?: { questionId: string; text: string; score: number }[] }[]
+  >(),
   overallScore: integer("overall_score").notNull(),
   recommendation: probationRecommendationEnum("recommendation").notNull(),
   extensionDurationMonths: integer("extension_duration_months"),

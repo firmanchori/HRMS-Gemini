@@ -1960,7 +1960,19 @@ tenantRouter.get("/probation-evaluation-templates", async (req, res) => {
 
 const probationEvaluationTemplateSchema = z.object({
   name: z.string().trim().min(2).max(200),
-  categories: z.array(z.object({ id: z.string().trim().min(1).max(100), label: z.string().trim().min(1).max(300) })).min(1).max(30),
+  categories: z
+    .array(
+      z.object({
+        id: z.string().trim().min(1).max(100),
+        label: z.string().trim().min(1).max(300),
+        questions: z.array(z.object({ id: z.string().trim().min(1).max(100), text: z.string().trim().min(1).max(1000) })).min(1).max(100).optional(),
+      })
+    )
+    .min(1)
+    .max(30),
+  divisionId: z.string().uuid().optional().nullable(),
+  departmentId: z.string().uuid().optional().nullable(),
+  positionId: z.string().uuid().optional().nullable(),
   validFrom: z.string().trim().min(1).max(20),
   validUntil: z.string().trim().max(20).optional(),
   isActive: z.boolean().optional(),
@@ -1991,7 +2003,16 @@ const probationEvaluationSchema = z.object({
   teamworkScore: z.number().int().min(0).max(100).optional(),
   initiativeScore: z.number().int().min(0).max(100).optional(),
   templateId: z.string().uuid().optional(),
-  categoryScores: z.array(z.object({ categoryId: z.string(), label: z.string(), score: z.number().int().min(0).max(100) })).optional(),
+  categoryScores: z
+    .array(
+      z.object({
+        categoryId: z.string(),
+        label: z.string(),
+        score: z.number().int().min(0).max(100),
+        questions: z.array(z.object({ questionId: z.string(), text: z.string(), score: z.number().int().min(0).max(100) })).optional(),
+      })
+    )
+    .optional(),
   overallScore: z.number().int().min(0).max(100),
   recommendation: z.enum(["Lulus", "Perpanjang Probation", "Tidak Lulus"]),
   extensionDurationMonths: z.number().int().min(0).optional(),
