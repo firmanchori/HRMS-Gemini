@@ -47,11 +47,11 @@ function AffiliateForm({ plans, onCreated, onClose }: { plans: Plan[]; onCreated
   }
 
   return (
-    <form onSubmit={handleSubmit} className="bg-white border border-slate-200 rounded-xl p-5 mb-4 space-y-3">
+    <form onSubmit={handleSubmit} className="bg-white border border-slate-200 rounded-xl p-5 mb-4 space-y-3" noValidate>
       {error && <div className="text-xs text-rose-800 bg-rose-50 border border-rose-200 rounded-lg p-2">{error}</div>}
       <div>
         <label className={labelClass}>Berlaku untuk Paket</label>
-        <select required value={form.planId} onChange={(e) => setForm((f) => ({ ...f, planId: e.target.value }))} className={`${inputClass} bg-white`}>
+        <select value={form.planId} onChange={(e) => setForm((f) => ({ ...f, planId: e.target.value }))} className={`${inputClass} bg-white`}>
           {plans.map((p) => (
             <option key={p.id} value={p.id}>
               {p.name} — Rp {p.priceIdr.toLocaleString("id-ID")}/bulan

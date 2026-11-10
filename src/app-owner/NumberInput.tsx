@@ -27,6 +27,9 @@ export function NumberInput({
   placeholder,
   disabled,
   required,
+  showError,
+  requiredLabel = "Wajib diisi",
+  customError,
 }: {
   value: number;
   onChange: (value: number) => void;
@@ -36,23 +39,33 @@ export function NumberInput({
   placeholder?: string;
   disabled?: boolean;
   required?: boolean;
+  /** Force the "required but empty" error to show (e.g. on a submit attempt). */
+  showError?: boolean;
+  requiredLabel?: string;
+  /** Externally computed error (e.g. a max-exceeded check) — always wins over the built-in required check. */
+  customError?: string | null;
 }) {
+  const effectiveError = customError || (required && showError && (!value || value <= 0) ? requiredLabel : null);
   return (
-    <input
-      type="number"
-      required={required}
-      disabled={disabled}
-      min={min}
-      max={max}
-      placeholder={placeholder}
-      value={value}
-      onFocus={(e) => e.target.select()}
-      onChange={(e) => {
-        const cleaned = maskLeadingZero(e.target.value);
-        if (cleaned !== e.target.value) e.target.value = cleaned;
-        onChange(cleaned === "" || cleaned === "-" ? 0 : Number(cleaned));
-      }}
-      className={className}
-    />
+    <div className="w-full space-y-1">
+      <input
+        type="number"
+        disabled={disabled}
+        min={min}
+        max={max}
+        placeholder={placeholder}
+        value={value}
+        onFocus={(e) => e.target.select()}
+        onChange={(e) => {
+          const cleaned = maskLeadingZero(e.target.value);
+          if (cleaned !== e.target.value) e.target.value = cleaned;
+          onChange(cleaned === "" || cleaned === "-" ? 0 : Number(cleaned));
+        }}
+        className={`${className ?? ""} ${effectiveError ? "border-rose-500 bg-rose-50/20" : ""}`}
+      />
+      {effectiveError && (
+        <p className="text-[11px] font-medium text-rose-600">{effectiveError}</p>
+      )}
+    </div>
   );
 }

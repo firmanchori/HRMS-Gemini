@@ -1,12 +1,14 @@
 import React, { useState } from "react";
 import { CheckCircle2, AlertCircle, Send } from "lucide-react";
 import { api, ApiError } from "./api";
+import { ValidatedInput, ValidatedTextarea } from "../components/common/ValidatedInput";
 
 export function ContactPage() {
   const [form, setForm] = useState({ name: "", email: "", subject: "", message: "" });
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
+  const [submitAttempted, setSubmitAttempted] = useState(false);
 
   function update<K extends keyof typeof form>(key: K, value: string) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -14,6 +16,8 @@ export function ContactPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setSubmitAttempted(true);
+    if (!form.name.trim() || !form.email.trim() || !form.subject.trim() || !form.message.trim()) return;
     setError(null);
     setLoading(true);
     try {
@@ -43,7 +47,7 @@ export function ContactPage() {
     <div className="min-h-screen w-screen flex items-center justify-center bg-slate-950 p-4">
       <div className="w-full max-w-md">
       <a href="/" className="block text-center text-xs text-slate-400 hover:text-slate-200 mb-3">&larr; Kembali ke Beranda</a>
-      <form onSubmit={handleSubmit} className="w-full bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
+      <form onSubmit={handleSubmit} className="w-full bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden" noValidate>
         <div className="px-6 py-5 bg-slate-900 text-white border-b border-slate-800">
           <h1 className="font-extrabold text-base">Hubungi Kami</h1>
           <p className="text-xs text-slate-400 mt-1">Pertanyaan tentang paket, demo, atau dukungan teknis.</p>
@@ -55,44 +59,40 @@ export function ContactPage() {
               <span>{error}</span>
             </div>
           )}
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Nama</label>
-            <input
-              required
-              value={form.name}
-              onChange={(e) => update("name", e.target.value)}
-              className="w-full rounded-md border border-slate-300 py-2 px-3 text-sm focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600 focus:outline-none"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Email</label>
-            <input
-              required
-              type="email"
-              value={form.email}
-              onChange={(e) => update("email", e.target.value)}
-              className="w-full rounded-md border border-slate-300 py-2 px-3 text-sm focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600 focus:outline-none"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Subjek</label>
-            <input
-              required
-              value={form.subject}
-              onChange={(e) => update("subject", e.target.value)}
-              className="w-full rounded-md border border-slate-300 py-2 px-3 text-sm focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600 focus:outline-none"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Pesan</label>
-            <textarea
-              required
-              rows={4}
-              value={form.message}
-              onChange={(e) => update("message", e.target.value)}
-              className="w-full rounded-md border border-slate-300 py-2 px-3 text-sm focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600 focus:outline-none"
-            />
-          </div>
+          <ValidatedInput
+            label="Nama"
+            required
+            requiredLabel="Nama wajib diisi"
+            showError={submitAttempted}
+            value={form.name}
+            onChange={(val) => update("name", val)}
+          />
+          <ValidatedInput
+            label="Email"
+            type="email"
+            required
+            requiredLabel="Email wajib diisi"
+            showError={submitAttempted}
+            value={form.email}
+            onChange={(val) => update("email", val)}
+          />
+          <ValidatedInput
+            label="Subjek"
+            required
+            requiredLabel="Subjek wajib diisi"
+            showError={submitAttempted}
+            value={form.subject}
+            onChange={(val) => update("subject", val)}
+          />
+          <ValidatedTextarea
+            label="Pesan"
+            required
+            requiredLabel="Pesan wajib diisi"
+            showError={submitAttempted}
+            rows={4}
+            value={form.message}
+            onChange={(val) => update("message", val)}
+          />
           <button
             type="submit"
             disabled={loading}

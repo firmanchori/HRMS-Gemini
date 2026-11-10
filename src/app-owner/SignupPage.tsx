@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { CheckCircle2, AlertCircle, ArrowRight, ArrowLeft, Copy } from "lucide-react";
 import { api, ApiError, type Plan, type SubscriptionTotal, type BankAccount } from "./api";
 import { NumberInput } from "./NumberInput";
+import { ValidatedInput } from "../components/common/ValidatedInput";
 
 const APP_BASE_DOMAIN = import.meta.env.VITE_APP_BASE_DOMAIN || "localhost:3000";
 const STEPS = ["Data Perusahaan", "Paket & Kebutuhan", "Pembayaran"];
@@ -90,8 +91,11 @@ export function SignupPage() {
     }
     if (s === 1) {
       if (!form.planId) errs.planId = "Pilih paket terlebih dahulu.";
-      if (selectedPlan && form.actualUsers > selectedPlan.maxEmployees) errs.actualUsers = `Maksimal ${selectedPlan.maxEmployees} karyawan untuk paket ini.`;
-      if (selectedPlan && form.actualEntities > selectedPlan.maxEntities) errs.actualEntities = `Maksimal ${selectedPlan.maxEntities} entitas untuk paket ini.`;
+      if (!form.totalMonths || form.totalMonths < 1) errs.totalMonths = "Total bulan berlangganan wajib diisi.";
+      if (!form.actualUsers || form.actualUsers < 1) errs.actualUsers = "Jumlah karyawan wajib diisi.";
+      else if (selectedPlan && form.actualUsers > selectedPlan.maxEmployees) errs.actualUsers = `Maksimal ${selectedPlan.maxEmployees} karyawan untuk paket ini.`;
+      if (!form.actualEntities || form.actualEntities < 1) errs.actualEntities = "Jumlah entitas/cabang wajib diisi.";
+      else if (selectedPlan && form.actualEntities > selectedPlan.maxEntities) errs.actualEntities = `Maksimal ${selectedPlan.maxEntities} entitas untuk paket ini.`;
     }
     if (s === 2) {
       if (!form.bankAccountId) errs.bankAccountId = "Pilih rekening tujuan transfer.";
@@ -178,7 +182,7 @@ export function SignupPage() {
 
   return (
     <div className="min-h-screen w-screen flex items-center justify-center bg-slate-950 p-4 py-10">
-      <form onSubmit={handleSubmit} className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
+      <form onSubmit={handleSubmit} className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden" noValidate>
         <div className="px-6 py-5 bg-slate-900 text-white border-b border-slate-800">
           <h1 className="font-extrabold text-base">Daftarkan Perusahaan Anda</h1>
           <div className="flex items-center gap-2 mt-3">
@@ -208,19 +212,26 @@ export function SignupPage() {
 
           {step === 0 && (
             <>
-              <div>
-                <label className={labelClass}>Nama Perusahaan</label>
-                <input required value={form.tenantName} onChange={(e) => update("tenantName", e.target.value)} className={inputClass} placeholder="PT Contoh Sejahtera" />
-                <FieldError field="tenantName" />
-              </div>
+              <ValidatedInput
+                label="Nama Perusahaan"
+                required
+                requiredLabel="Nama perusahaan wajib diisi."
+                customError={fieldErrors.tenantName}
+                value={form.tenantName}
+                onChange={(val) => update("tenantName", val)}
+                placeholder="PT Contoh Sejahtera"
+              />
               <div>
                 <label className={labelClass}>Subdomain</label>
-                <div className="flex items-center rounded-md border border-slate-300 focus-within:border-indigo-600 focus-within:ring-1 focus-within:ring-indigo-600">
+                <div
+                  className={`flex items-center rounded-md border focus-within:border-indigo-600 focus-within:ring-1 focus-within:ring-indigo-600 ${
+                    fieldErrors.subdomain ? "border-rose-500 bg-rose-50/20" : "border-slate-300"
+                  }`}
+                >
                   <input
-                    required
                     value={form.subdomain}
                     onChange={(e) => update("subdomain", e.target.value.toLowerCase())}
-                    className="flex-1 py-2 px-3 text-sm outline-none rounded-l-md"
+                    className="flex-1 py-2 px-3 text-sm outline-none rounded-l-md bg-transparent"
                     placeholder="namaperusahaan"
                   />
                   <span className="px-3 text-xs text-slate-400 font-mono">.{APP_BASE_DOMAIN}</span>
@@ -228,22 +239,35 @@ export function SignupPage() {
                 <FieldError field="subdomain" />
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={labelClass}>Nama Admin</label>
-                  <input required value={form.adminName} onChange={(e) => update("adminName", e.target.value)} className={inputClass} />
-                  <FieldError field="adminName" />
-                </div>
-                <div>
-                  <label className={labelClass}>Email Admin</label>
-                  <input required type="email" value={form.adminEmail} onChange={(e) => update("adminEmail", e.target.value)} className={inputClass} />
-                  <FieldError field="adminEmail" />
-                </div>
+                <ValidatedInput
+                  label="Nama Admin"
+                  required
+                  requiredLabel="Nama admin wajib diisi."
+                  customError={fieldErrors.adminName}
+                  value={form.adminName}
+                  onChange={(val) => update("adminName", val)}
+                />
+                <ValidatedInput
+                  label="Email Admin"
+                  type="email"
+                  required
+                  requiredLabel="Email admin wajib diisi."
+                  customError={fieldErrors.adminEmail}
+                  value={form.adminEmail}
+                  onChange={(val) => update("adminEmail", val)}
+                />
               </div>
-              <div>
-                <label className={labelClass}>Password Admin (min. 8 karakter)</label>
-                <input required type="password" minLength={8} value={form.adminPassword} onChange={(e) => update("adminPassword", e.target.value)} className={inputClass} />
-                <FieldError field="adminPassword" />
-              </div>
+              <ValidatedInput
+                label="Password Admin (min. 8 karakter)"
+                type="password"
+                required
+                requiredLabel="Password minimal 8 karakter."
+                validate={(val) => (val.length > 0 && val.length < 8 ? "Password minimal 8 karakter." : null)}
+                customError={fieldErrors.adminPassword}
+                minLength={8}
+                value={form.adminPassword}
+                onChange={(val) => update("adminPassword", val)}
+              />
             </>
           )}
 
@@ -262,7 +286,7 @@ export function SignupPage() {
                 </div>
                 <div>
                   <label className={labelClass}>Total Bulan Berlangganan</label>
-                  <NumberInput required min={1} max={120} value={form.totalMonths} onChange={(v) => update("totalMonths", v)} className={inputClass} />
+                  <NumberInput required min={1} max={120} value={form.totalMonths} onChange={(v) => update("totalMonths", v)} className={inputClass} showError={!!fieldErrors.totalMonths} customError={fieldErrors.totalMonths} />
                 </div>
               </div>
 
@@ -282,15 +306,13 @@ export function SignupPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className={labelClass}>Jumlah Karyawan Saat Ini</label>
-                  <NumberInput required min={1} max={selectedPlan?.maxEmployees} value={form.actualUsers} onChange={(v) => update("actualUsers", v)} className={inputClass} />
+                  <NumberInput required min={1} max={selectedPlan?.maxEmployees} value={form.actualUsers} onChange={(v) => update("actualUsers", v)} className={inputClass} showError={!!fieldErrors.actualUsers} customError={fieldErrors.actualUsers} />
                   {selectedPlan && <p className="text-[10px] text-slate-400 mt-1">Maks. {selectedPlan.maxEmployees} karyawan untuk paket ini.</p>}
-                  <FieldError field="actualUsers" />
                 </div>
                 <div>
                   <label className={labelClass}>Jumlah Entitas/Cabang</label>
-                  <NumberInput required min={1} max={selectedPlan?.maxEntities} value={form.actualEntities} onChange={(v) => update("actualEntities", v)} className={inputClass} />
+                  <NumberInput required min={1} max={selectedPlan?.maxEntities} value={form.actualEntities} onChange={(v) => update("actualEntities", v)} className={inputClass} showError={!!fieldErrors.actualEntities} customError={fieldErrors.actualEntities} />
                   {selectedPlan && <p className="text-[10px] text-slate-400 mt-1">Maks. {selectedPlan.maxEntities} entitas untuk paket ini.</p>}
-                  <FieldError field="actualEntities" />
                 </div>
               </div>
               <p className="text-[10px] text-slate-400 -mt-1">Harga final Anda mengikuti jumlah karyawan &amp; entitas di atas.</p>
@@ -376,9 +398,15 @@ export function SignupPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className={labelClass}>No. Referensi Transfer Anda</label>
-                  <input required value={form.referenceNumber} onChange={(e) => update("referenceNumber", e.target.value)} className={inputClass} placeholder="Nomor transaksi dari bukti transfer Anda" />
-                  <FieldError field="referenceNumber" />
+                  <ValidatedInput
+                    label="No. Referensi Transfer Anda"
+                    required
+                    requiredLabel="Isi nomor referensi transfer."
+                    customError={fieldErrors.referenceNumber}
+                    value={form.referenceNumber}
+                    onChange={(val) => update("referenceNumber", val)}
+                    placeholder="Nomor transaksi dari bukti transfer Anda"
+                  />
                 </div>
                 <div>
                   <label className={labelClass}>Catatan (opsional)</label>

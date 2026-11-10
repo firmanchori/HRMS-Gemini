@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Eye, EyeOff, CheckCircle2, AlertCircle, Mail, Server } from "lucide-react";
 import { api, ApiError, type EmailConfig, type EmailConfigInput } from "./api";
 import { NumberInput } from "./NumberInput";
+import { ValidatedInput } from "../components/common/ValidatedInput";
 
 type FormState = EmailConfigInput;
 
@@ -46,6 +47,7 @@ export function SettingsTab() {
       if (!current!.hasResendKey && !form!.resendApiKey) errs.resendApiKey = "API Key Resend wajib diisi.";
     } else {
       if (!form!.smtpHost) errs.smtpHost = "SMTP host wajib diisi.";
+      if (!form!.smtpPort || form!.smtpPort < 1) errs.smtpPort = "Port SMTP wajib diisi.";
       if (!form!.smtpUsername) errs.smtpUsername = "Username SMTP wajib diisi.";
       if (!current!.hasSmtpPassword && !form!.smtpPassword) errs.smtpPassword = "Password SMTP wajib diisi.";
     }
@@ -113,7 +115,7 @@ export function SettingsTab() {
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
+      <form onSubmit={handleSubmit} className="bg-white border border-slate-200 rounded-xl p-5 space-y-4" noValidate>
         <div>
           <label className={labelClass}>Mailer Service</label>
           <div className="flex gap-2">
@@ -139,29 +141,25 @@ export function SettingsTab() {
         </div>
 
         <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className={labelClass}>Nama Pengirim</label>
-            <input
-              required
-              value={form.fromName}
-              onChange={(e) => update("fromName", e.target.value)}
-              placeholder="NusaHR"
-              className={inputClass}
-            />
-            <FieldError field="fromName" />
-          </div>
-          <div>
-            <label className={labelClass}>Alamat Email Pengirim</label>
-            <input
-              required
-              type="email"
-              value={form.fromEmail}
-              onChange={(e) => update("fromEmail", e.target.value)}
-              placeholder="noreply@perusahaan.com"
-              className={inputClass}
-            />
-            <FieldError field="fromEmail" />
-          </div>
+          <ValidatedInput
+            label="Nama Pengirim"
+            required
+            requiredLabel="Nama pengirim wajib diisi."
+            customError={fieldErrors.fromName}
+            value={form.fromName}
+            onChange={(val) => update("fromName", val)}
+            placeholder="NusaHR"
+          />
+          <ValidatedInput
+            label="Alamat Email Pengirim"
+            type="email"
+            required
+            requiredLabel="Alamat email pengirim wajib diisi."
+            customError={fieldErrors.fromEmail}
+            value={form.fromEmail}
+            onChange={(val) => update("fromEmail", val)}
+            placeholder="noreply@perusahaan.com"
+          />
         </div>
 
         {form.provider === "resend" ? (
@@ -187,32 +185,30 @@ export function SettingsTab() {
           <div className="space-y-3 border-t border-slate-100 pt-3">
             <div className="grid grid-cols-3 gap-3">
               <div className="col-span-2">
-                <label className={labelClass}>SMTP Host</label>
-                <input
+                <ValidatedInput
+                  label="SMTP Host"
                   required
+                  requiredLabel="SMTP host wajib diisi."
+                  customError={fieldErrors.smtpHost}
                   value={form.smtpHost ?? ""}
-                  onChange={(e) => update("smtpHost", e.target.value)}
+                  onChange={(val) => update("smtpHost", val)}
                   placeholder="smtp.gmail.com"
-                  className={inputClass}
                 />
-                <FieldError field="smtpHost" />
               </div>
               <div>
                 <label className={labelClass}>Port</label>
-                <NumberInput required value={form.smtpPort ?? 587} onChange={(v) => update("smtpPort", v)} className={inputClass} />
+                <NumberInput required value={form.smtpPort ?? 587} onChange={(v) => update("smtpPort", v)} className={inputClass} showError={!!fieldErrors.smtpPort} customError={fieldErrors.smtpPort} />
               </div>
             </div>
-            <div>
-              <label className={labelClass}>Username (Alamat Email)</label>
-              <input
-                required
-                value={form.smtpUsername ?? ""}
-                onChange={(e) => update("smtpUsername", e.target.value)}
-                placeholder="hr@perusahaan.com"
-                className={inputClass}
-              />
-              <FieldError field="smtpUsername" />
-            </div>
+            <ValidatedInput
+              label="Username (Alamat Email)"
+              required
+              requiredLabel="Username SMTP wajib diisi."
+              customError={fieldErrors.smtpUsername}
+              value={form.smtpUsername ?? ""}
+              onChange={(val) => update("smtpUsername", val)}
+              placeholder="hr@perusahaan.com"
+            />
             <div>
               <label className={labelClass}>
                 Password / App Password{" "}

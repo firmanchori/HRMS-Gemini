@@ -3,6 +3,7 @@ import { Plus, X, Eye, Pencil, Trash2 } from "lucide-react";
 import { api, ApiError, type Plan, type ModuleCatalogEntry, type PlanDetail, type DiscountScheme, type DiscountTier } from "./api";
 import { ConfirmButton } from "./ConfirmButton";
 import { NumberInput } from "./NumberInput";
+import { ValidatedInput } from "../components/common/ValidatedInput";
 
 const EMPTY_FORM = {
   name: "",
@@ -86,6 +87,9 @@ function PlanForm({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const errs: Record<string, string> = {};
+    if (!form.name.trim()) errs.name = "Nama paket wajib diisi.";
+    if (!form.maxEmployees || form.maxEmployees < 1) errs.maxEmployees = "Maksimal karyawan wajib diisi (minimal 1).";
+    if (!form.maxEntities || form.maxEntities < 1) errs.maxEntities = "Maksimal entitas wajib diisi (minimal 1).";
     if (form.enabledModules.length === 0) errs.enabledModules = "Pilih minimal satu modul.";
     if (form.permanentDiscountPercent > 0 && !form.permanentDiscountReason.trim()) {
       errs.permanentDiscountReason = "Alasan wajib diisi jika diskon > 0.";
@@ -117,20 +121,25 @@ function PlanForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="bg-white border border-slate-200 rounded-xl p-5 mb-4 space-y-3">
+    <form onSubmit={handleSubmit} className="bg-white border border-slate-200 rounded-xl p-5 mb-4 space-y-3" noValidate>
       {error && <div className="text-xs text-rose-800 bg-rose-50 border border-rose-200 rounded-lg p-2">{error}</div>}
-      <div>
-        <label className={labelClass}>Nama Paket</label>
-        <input required value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="Starter / Professional / Enterprise" className={inputClass} />
-      </div>
+      <ValidatedInput
+        label="Nama Paket"
+        required
+        requiredLabel="Nama paket wajib diisi."
+        customError={fieldErrors.name}
+        value={form.name}
+        onChange={(val) => setForm((f) => ({ ...f, name: val }))}
+        placeholder="Starter / Professional / Enterprise"
+      />
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className={labelClass}>Maks. Karyawan</label>
-          <NumberInput required min={1} value={form.maxEmployees} onChange={(v) => setForm((f) => ({ ...f, maxEmployees: v }))} className={inputClass} />
+          <NumberInput required min={1} value={form.maxEmployees} onChange={(v) => setForm((f) => ({ ...f, maxEmployees: v }))} className={inputClass} showError={!!fieldErrors.maxEmployees} customError={fieldErrors.maxEmployees} />
         </div>
         <div>
           <label className={labelClass}>Maks. Entitas</label>
-          <NumberInput required min={1} value={form.maxEntities} onChange={(v) => setForm((f) => ({ ...f, maxEntities: v }))} className={inputClass} />
+          <NumberInput required min={1} value={form.maxEntities} onChange={(v) => setForm((f) => ({ ...f, maxEntities: v }))} className={inputClass} showError={!!fieldErrors.maxEntities} customError={fieldErrors.maxEntities} />
         </div>
       </div>
       <div>

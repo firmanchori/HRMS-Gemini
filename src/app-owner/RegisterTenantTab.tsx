@@ -3,6 +3,7 @@ import { CheckCircle2 } from "lucide-react";
 import { api, ApiError, type ModuleRow, type Plan, type PricingBreakdown, type SubscriptionTotal } from "./api";
 import { PlanDetailModal } from "./PlanDetailModal";
 import { NumberInput } from "./NumberInput";
+import { ValidatedInput } from "../components/common/ValidatedInput";
 
 const APP_BASE_DOMAIN = import.meta.env.VITE_APP_BASE_DOMAIN || "localhost:3000";
 
@@ -144,44 +145,63 @@ export function RegisterTenantTab({ onCreated }: { onCreated?: () => void } = {}
         </button>
       </div>
 
-      <form onSubmit={handleSubmit} className="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
+      <form onSubmit={handleSubmit} className="bg-white border border-slate-200 rounded-xl p-5 space-y-4" noValidate>
         {error && <div className="text-xs text-rose-800 bg-rose-50 border border-rose-200 rounded-lg p-2.5">{error}</div>}
 
         <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className={labelClass}>Nama Perusahaan</label>
-            <input required value={common.tenantName} onChange={(e) => setCommon((c) => ({ ...c, tenantName: e.target.value }))} className={inputClass} />
-            <FieldError field="tenantName" />
-          </div>
+          <ValidatedInput
+            label="Nama Perusahaan"
+            required
+            requiredLabel="Nama perusahaan wajib diisi."
+            customError={fieldErrors.tenantName}
+            value={common.tenantName}
+            onChange={(val) => setCommon((c) => ({ ...c, tenantName: val }))}
+          />
           <div>
             <label className={labelClass}>Subdomain</label>
-            <div className="flex items-center rounded-lg border border-slate-300 focus-within:outline focus-within:outline-indigo-600">
+            <div
+              className={`flex items-center rounded-lg border focus-within:outline focus-within:outline-indigo-600 ${
+                fieldErrors.subdomain ? "border-rose-500 bg-rose-50/20" : "border-slate-300"
+              }`}
+            >
               <input
-                required
                 value={common.subdomain}
                 onChange={(e) => setCommon((c) => ({ ...c, subdomain: e.target.value.toLowerCase() }))}
-                className="flex-1 py-2 px-3 text-xs font-medium outline-none rounded-l-lg"
+                className="flex-1 py-2 px-3 text-xs font-medium outline-none rounded-l-lg bg-transparent"
                 placeholder="namaperusahaan"
               />
               <span className="px-3 text-xs text-slate-400 font-mono">.{APP_BASE_DOMAIN}</span>
             </div>
             <FieldError field="subdomain" />
           </div>
-          <div>
-            <label className={labelClass}>Nama Admin</label>
-            <input required value={common.adminName} onChange={(e) => setCommon((c) => ({ ...c, adminName: e.target.value }))} className={inputClass} />
-            <FieldError field="adminName" />
-          </div>
-          <div>
-            <label className={labelClass}>Email Admin</label>
-            <input required type="email" value={common.adminEmail} onChange={(e) => setCommon((c) => ({ ...c, adminEmail: e.target.value }))} className={inputClass} />
-            <FieldError field="adminEmail" />
-          </div>
-          <div>
-            <label className={labelClass}>Password Admin</label>
-            <input required type="password" minLength={8} value={common.adminPassword} onChange={(e) => setCommon((c) => ({ ...c, adminPassword: e.target.value }))} className={inputClass} />
-            <FieldError field="adminPassword" />
-          </div>
+          <ValidatedInput
+            label="Nama Admin"
+            required
+            requiredLabel="Nama admin wajib diisi."
+            customError={fieldErrors.adminName}
+            value={common.adminName}
+            onChange={(val) => setCommon((c) => ({ ...c, adminName: val }))}
+          />
+          <ValidatedInput
+            label="Email Admin"
+            type="email"
+            required
+            requiredLabel="Email admin wajib diisi."
+            customError={fieldErrors.adminEmail}
+            value={common.adminEmail}
+            onChange={(val) => setCommon((c) => ({ ...c, adminEmail: val }))}
+          />
+          <ValidatedInput
+            label="Password Admin"
+            type="password"
+            required
+            requiredLabel="Password minimal 8 karakter."
+            validate={(val) => (val.length > 0 && val.length < 8 ? "Password minimal 8 karakter." : null)}
+            customError={fieldErrors.adminPassword}
+            minLength={8}
+            value={common.adminPassword}
+            onChange={(val) => setCommon((c) => ({ ...c, adminPassword: val }))}
+          />
         </div>
 
         {mode === "preset" ? (

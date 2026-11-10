@@ -18,6 +18,7 @@ function PromoForm({ plans, onCreated, onClose }: { plans: Plan[]; onCreated: ()
   });
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [submitAttempted, setSubmitAttempted] = useState(false);
   const [saving, setSaving] = useState(false);
 
   function validate(): Record<string, string> {
@@ -25,12 +26,15 @@ function PromoForm({ plans, onCreated, onClose }: { plans: Plan[]; onCreated: ()
     if (!form.code.trim()) errs.code = "Kode promo wajib diisi.";
     if (!form.name.trim()) errs.name = "Nama promo wajib diisi.";
     if (form.discountPercent < 1 || form.discountPercent > 100) errs.discountPercent = "Diskon harus antara 1-100%.";
-    if (form.validUntil < form.validFrom) errs.validUntil = "Tanggal berakhir tidak boleh sebelum tanggal mulai.";
+    if (!form.validFrom) errs.validFrom = "Tanggal mulai wajib diisi.";
+    if (!form.validUntil) errs.validUntil = "Tanggal berakhir wajib diisi.";
+    else if (form.validUntil < form.validFrom) errs.validUntil = "Tanggal berakhir tidak boleh sebelum tanggal mulai.";
     return errs;
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setSubmitAttempted(true);
     const errs = validate();
     if (Object.keys(errs).length > 0) {
       setFieldErrors(errs);
@@ -65,11 +69,11 @@ function PromoForm({ plans, onCreated, onClose }: { plans: Plan[]; onCreated: ()
   }
 
   return (
-    <form onSubmit={handleSubmit} className="bg-white border border-slate-200 rounded-xl p-5 mb-4 space-y-3">
+    <form onSubmit={handleSubmit} className="bg-white border border-slate-200 rounded-xl p-5 mb-4 space-y-3" noValidate>
       {error && <div className="text-xs text-rose-800 bg-rose-50 border border-rose-200 rounded-lg p-2">{error}</div>}
       <div>
         <label className={labelClass}>Berlaku untuk Paket</label>
-        <select required value={form.planId} onChange={(e) => setForm((f) => ({ ...f, planId: e.target.value }))} className={`${inputClass} bg-white`}>
+        <select value={form.planId} onChange={(e) => setForm((f) => ({ ...f, planId: e.target.value }))} className={`${inputClass} bg-white`}>
           {plans.map((p) => (
             <option key={p.id} value={p.id}>
               {p.name} — Rp {p.priceIdr.toLocaleString("id-ID")}/bulan
@@ -119,11 +123,8 @@ function PromoForm({ plans, onCreated, onClose }: { plans: Plan[]; onCreated: ()
         </div>
       </div>
       <div className="grid grid-cols-2 gap-3">
-        <ValidatedDateInput label="Berlaku Dari" value={form.validFrom} onChange={(v) => setForm((f) => ({ ...f, validFrom: v }))} required />
-        <div>
-          <ValidatedDateInput label="Berlaku Sampai" value={form.validUntil} onChange={(v) => setForm((f) => ({ ...f, validUntil: v }))} required minDate={form.validFrom} />
-          <FieldError field="validUntil" />
-        </div>
+        <ValidatedDateInput label="Berlaku Dari" value={form.validFrom} onChange={(v) => setForm((f) => ({ ...f, validFrom: v }))} required showError={submitAttempted} customError={fieldErrors.validFrom} />
+        <ValidatedDateInput label="Berlaku Sampai" value={form.validUntil} onChange={(v) => setForm((f) => ({ ...f, validUntil: v }))} required showError={submitAttempted} customError={fieldErrors.validUntil} minDate={form.validFrom} />
       </div>
       <div className="flex gap-2 pt-1">
         <button type="submit" disabled={saving} className="text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-white rounded-lg px-3.5 py-2 disabled:opacity-60">
