@@ -8,7 +8,7 @@ import { issueSession, requireEmployeeSession, requirePermission } from "../midd
 import { validateBody, validateParams, uuidParam } from "../lib/validate.ts";
 import { authLimiter } from "../lib/rateLimit.ts";
 import { logAudit } from "../lib/audit.ts";
-import { logLoginAttempt, isAccountLockedOut, LOCKOUT_WINDOW_MINUTES } from "./auth.ts";
+import { logLoginAttempt, isAccountLockedOut, LOCKOUT_WINDOW_MINUTES, alertIfAccountJustLockedOut } from "./auth.ts";
 import { getPermission } from "../lib/permissions.ts";
 import { checkClockIn, checkClockOut, performClockIn, performClockOut, ClockError } from "../lib/attendanceClock.ts";
 
@@ -47,6 +47,7 @@ employeeRouter.post("/login", authLimiter, validateBody(employeeLoginSchema), as
 
   if (!account || !(await bcrypt.compare(password, account.passwordHash))) {
     await logLoginAttempt({ tenantId, actorUserId: null, email, outcome: "failure", reason: "invalid_credentials", ip });
+    await alertIfAccountJustLockedOut(tenantId, email);
     return res.status(401).json({ error: "Email atau password salah" });
   }
   if (!account.isActive) {
@@ -59,7 +60,7 @@ employeeRouter.post("/login", authLimiter, validateBody(employeeLoginSchema), as
   }
 
   await logLoginAttempt({ tenantId, actorUserId: null, email, outcome: "success", ip });
-  issueSession(res, { userId: account.id, role: "employee", tenantId, employeeId: account.employeeId, roleKey: account.roleKey });
+  await issueSession(req, res, { userId: account.id, role: "employee", tenantId, employeeId: account.employeeId, roleKey: account.roleKey });
 
   const [employee] = await db.select().from(employees).where(eq(employees.id, account.employeeId)).limit(1);
   res.json({ id: account.id, email: account.email, roleKey: account.roleKey, name: employee?.fullName ?? account.email });

@@ -23,6 +23,7 @@ import {
   payrollRecords,
   leaveRequests,
   auditTrailEntries,
+  sessions,
 } from "../schema.ts";
 
 const SUBDOMAIN = "loadtest";
@@ -42,6 +43,7 @@ async function teardown() {
   await db.delete(leaveRequests).where(eq(leaveRequests.tenantId, existing.id));
   await db.delete(payrollRecords).where(eq(payrollRecords.tenantId, existing.id));
   await db.delete(employees).where(eq(employees.tenantId, existing.id));
+  await db.delete(sessions).where(eq(sessions.tenantId, existing.id));
   await db.delete(users).where(eq(users.tenantId, existing.id));
   const entityRows = await db.select().from(companyEntities).where(eq(companyEntities.tenantId, existing.id));
   for (const e of entityRows) {

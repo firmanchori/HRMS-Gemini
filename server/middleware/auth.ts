@@ -2,6 +2,8 @@ import type { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import crypto from "node:crypto";
 import { getPermission, type PermissionAction } from "../lib/permissions.ts";
+import { createSessionRow, getActiveSessionRow, touchSessionRow, revokeSessionRow } from "../lib/sessionStore.ts";
+import { checkSessionAnomaly } from "../lib/sessionSecurity.ts";
 
 const COOKIE_NAME = "nusahr_session";
 const CSRF_COOKIE_NAME = "nusahr_csrf";
@@ -15,6 +17,14 @@ interface SessionPayload {
   tenantId: string | null;
   employeeId?: string;
   roleKey?: string;
+  // References a row in the `sessions` table (security review, user
+  // 2026-11-10: "Session Hijacking") — the JWT alone used to be the whole
+  // session, so a stolen cookie stayed valid for its full 8h lifetime no
+  // matter what the real user did. Every request now re-checks this row
+  // hasn't been revoked, so logout/"logout other devices"/an admin
+  // disabling an account takes effect immediately instead of waiting out
+  // the token's own expiry.
+  sid: string;
 }
 
 declare global {
@@ -31,8 +41,15 @@ function secret(): string {
   return process.env.JWT_SECRET;
 }
 
-export function issueSession(res: Response, payload: SessionPayload) {
-  const token = jwt.sign(payload, secret(), { expiresIn: "8h" });
+export async function issueSession(req: Request, res: Response, payload: Omit<SessionPayload, "sid">) {
+  const sid = await createSessionRow({
+    userId: payload.userId,
+    role: payload.role,
+    tenantId: payload.tenantId,
+    userAgent: req.get("user-agent") ?? null,
+    ipAddress: req.ip ?? null,
+  });
+  const token = jwt.sign({ ...payload, sid }, secret(), { expiresIn: "8h" });
   res.cookie(COOKIE_NAME, token, {
     httpOnly: true,
     // The dev frontend proxies /api/* through its own origin (see
@@ -63,7 +80,17 @@ export function issueSession(res: Response, payload: SessionPayload) {
   });
 }
 
-export function clearSession(res: Response) {
+/** Revokes the session row server-side (so a copied cookie dies immediately, not just this browser's copy of it) before clearing the cookies. */
+export async function clearSession(req: Request, res: Response) {
+  const token = req.cookies?.[COOKIE_NAME];
+  if (token) {
+    try {
+      const payload = jwt.verify(token, secret()) as SessionPayload;
+      if (payload.sid) await revokeSessionRow(payload.sid);
+    } catch {
+      // Expired/invalid token — nothing valid to revoke, just clear cookies below.
+    }
+  }
   res.clearCookie(COOKIE_NAME);
   res.clearCookie(CSRF_COOKIE_NAME);
 }
@@ -157,26 +184,63 @@ export function clearMfaTicket(res: Response) {
 }
 
 /** Any logged-in account, App Owner or tenant admin — for self-service actions like managing one's own MFA that don't need the tenant/App-Owner boundary checks. */
-export function requireAnySession(req: Request, res: Response, next: NextFunction) {
-  const session = readSession(req);
+export async function requireAnySession(req: Request, res: Response, next: NextFunction) {
+  const session = await readSession(req);
   if (!session) return res.status(401).json({ error: "Harus login" });
   req.session = session;
   next();
 }
 
-export function readSession(req: Request): SessionPayload | null {
+/**
+ * Verifies the JWT, then checks the `sessions` row it points at is still
+ * live (not revoked) — the row-check is what makes logout/"logout other
+ * devices"/an admin disabling an account take effect immediately instead
+ * of waiting out the JWT's own 8h expiry (security review, user
+ * 2026-11-10: "Session Hijacking"). Also refreshes the row's
+ * last-seen-at/device fingerprint and runs the soft hijacking-anomaly
+ * check on every call — this runs on every authenticated request, so both
+ * are cheap, single-row operations by design.
+ */
+export async function readSession(req: Request): Promise<SessionPayload | null> {
   const token = req.cookies?.[COOKIE_NAME];
   if (!token) return null;
+  let payload: SessionPayload;
   try {
-    return jwt.verify(token, secret()) as SessionPayload;
+    payload = jwt.verify(token, secret()) as SessionPayload;
   } catch {
     return null;
   }
+  // A token minted before this field existed has no session row to check
+  // against — treat it as invalid rather than trusting the bare JWT, so
+  // every pre-existing session is forced through a fresh login once
+  // (deliberate: the alternative is silently granting unrevocable trust to
+  // tokens this exact code is meant to stop trusting blindly).
+  if (!payload.sid) return null;
+
+  const row = await getActiveSessionRow(payload.sid);
+  if (!row) return null;
+
+  const currentUserAgent = req.get("user-agent") ?? null;
+  const currentIp = req.ip ?? null;
+  // Anomaly check and the lastSeenAt/fingerprint touch are both
+  // non-blocking: neither should add latency to every single
+  // authenticated request's response, and neither can change whether this
+  // request is authorized (that was already decided above by the
+  // still-live row check). Errors are logged, never thrown — a failed
+  // bookkeeping update must never fail the request it's piggybacking on.
+  checkSessionAnomaly({ session: row, currentUserAgent, currentIp }).catch((err) =>
+    console.error("[auth] non-fatal: session anomaly check failed", err)
+  );
+  touchSessionRow(payload.sid, currentUserAgent, currentIp).catch((err) =>
+    console.error("[auth] non-fatal: failed to update session last-seen", err)
+  );
+
+  return payload;
 }
 
 /** Only a logged-in App Owner, on the bare base domain (req.tenant === null). */
-export function requireAppOwner(req: Request, res: Response, next: NextFunction) {
-  const session = readSession(req);
+export async function requireAppOwner(req: Request, res: Response, next: NextFunction) {
+  const session = await readSession(req);
   if (!session || session.role !== "app_owner") {
     return res.status(401).json({ error: "Harus login sebagai App Owner" });
   }
@@ -196,8 +260,8 @@ export function requireAppOwner(req: Request, res: Response, next: NextFunction)
  * cosmetic until that admin's existing session naturally expires (up to
  * 8h later) instead of taking effect immediately.
  */
-export function requireTenantAdmin(req: Request, res: Response, next: NextFunction) {
-  const session = readSession(req);
+export async function requireTenantAdmin(req: Request, res: Response, next: NextFunction) {
+  const session = await readSession(req);
   if (!session || session.role !== "tenant_admin") {
     return res.status(401).json({ error: "Harus login sebagai admin tenant" });
   }
@@ -217,8 +281,8 @@ export function requireTenantAdmin(req: Request, res: Response, next: NextFuncti
  * since an employee session is just as capable of outliving a suspension
  * if nothing re-checks it on every request.
  */
-export function requireEmployeeSession(req: Request, res: Response, next: NextFunction) {
-  const session = readSession(req);
+export async function requireEmployeeSession(req: Request, res: Response, next: NextFunction) {
+  const session = await readSession(req);
   if (!session || session.role !== "employee") {
     return res.status(401).json({ error: "Harus login sebagai karyawan" });
   }

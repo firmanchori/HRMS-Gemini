@@ -242,7 +242,7 @@ export const AuditTrailManagement: React.FC = () => {
               <span>Kepatuhan Regulasi & Keamanan</span>
             </span>
             <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 text-xs font-semibold rounded-md border border-emerald-200">
-              ISO 27001 Ready
+              WORM Append-Only
             </span>
           </div>
           <h2 className="text-base font-bold text-slate-900 mt-1 flex items-center gap-2">
@@ -250,7 +250,7 @@ export const AuditTrailManagement: React.FC = () => {
             <span>Audit Trail & Log Aktivitas Seluruh Modul</span>
           </h2>
           <p className="text-xs text-slate-500">
-            Rekam jejak transaksi historis (Who, What, When, Where, Action), bukti integritas data per modul, dan audit kepatuhan ISO 27001 / regulasi ketenagakerjaan.
+            Rekam jejak transaksi historis (Who, What, When, Where, Action), bukti integritas data per modul, dan dukungan audit kepatuhan regulasi ketenagakerjaan.
           </p>
         </div>
 
@@ -592,7 +592,7 @@ export const AuditTrailManagement: React.FC = () => {
                 <span>Kebijakan Retensi & Integritas Arsip Audit</span>
               </h3>
               <p className="text-xs text-slate-500 mt-1">
-                Sesuai dengan standar ISO 27001 dan UU PDP (Pelindungan Data Pribadi), data riwayat audit sistem disimpan secara permanen dengan prinsip <em>Write Once, Read Many (WORM)</em>.
+                Mengacu pada praktik keamanan informasi umum dan UU PDP (Pelindungan Data Pribadi), data riwayat audit sistem disimpan secara permanen dengan prinsip <em>Write Once, Read Many (WORM)</em>.
               </p>
             </div>
 
@@ -634,10 +634,10 @@ export const AuditTrailManagement: React.FC = () => {
             <div className="p-4 bg-indigo-50 border border-indigo-200 rounded-xl text-xs space-y-2">
               <div className="font-bold text-indigo-950 flex items-center gap-2">
                 <ShieldCheck className="w-4 h-4 text-indigo-700" />
-                <span>Pernyataan Kepatuhan Auditor Eksternal</span>
+                <span>Cakupan Log Audit</span>
               </div>
               <p className="text-indigo-900/90 leading-relaxed">
-                Log audit pada modul ini telah memenuhi kualifikasi audit internal perusahaan, pelaporan SPT PPh 21 DJP, audit kepatuhan BPJS Ketenagakerjaan/Kesehatan, serta audit sertifikasi ISO 27001 Sistem Manajemen Keamanan Informasi.
+                Log audit pada modul ini mencatat jejak perubahan yang relevan untuk kebutuhan audit internal perusahaan, pelaporan SPT PPh 21 DJP, dan audit kepatuhan BPJS Ketenagakerjaan/Kesehatan. Perusahaan tetap bertanggung jawab untuk memperoleh sertifikasi resmi (mis. ISO 27001) secara independen jika diperlukan — platform ini tidak mengklaim sertifikasi tersebut atas nama perusahaan.
               </p>
             </div>
           </div>

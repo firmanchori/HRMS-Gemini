@@ -1661,6 +1661,33 @@ export const enpsSurveys = pgTable("enps_surveys", {
 // Vendor Invoices (AP) — real backend (user, 2026-11-08: "lanjut 8").
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Sessions — server-side revocable session store (security review, user
+// 2026-11-10: "Session Hijacking"). The JWT in the nusahr_session cookie is
+// still what the browser carries, but it is now just a bearer reference to
+// this row (its `jti` claim = this row's id) — readSession() checks the row
+// hasn't been revoked on every request, so a stolen/copied cookie can be
+// killed immediately (logout, "logout other devices", an admin revoking a
+// compromised account) instead of staying valid for the rest of its 8h
+// lifetime regardless of what the legitimate user does. userAgent/ipAddress
+// are captured at mint time and refreshed on each use so a session that
+// suddenly starts being used from a very different device/network can be
+// flagged (see server/lib/sessionSecurity.ts) without hard-blocking
+// legitimate roaming (new wifi, mobile data, VPN toggle).
+// ---------------------------------------------------------------------------
+
+export const sessions = pgTable("sessions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id").notNull(),
+  role: text("role").notNull(),
+  tenantId: uuid("tenant_id").references(() => tenants.id),
+  userAgent: text("user_agent"),
+  ipAddress: text("ip_address"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).defaultNow().notNull(),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+});
+
 export const vendorInvoices = pgTable("vendor_invoices", {
   id: uuid("id").defaultRandom().primaryKey(),
   tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),

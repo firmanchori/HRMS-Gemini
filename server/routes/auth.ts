@@ -14,6 +14,8 @@ import { logAudit } from "../lib/audit.ts";
 import { encryptSecret, decryptSecret } from "../lib/crypto.ts";
 import { generateTotpSecret, totpOtpauthUrl, verifyTotpCode, generateBackupCodes, hashBackupCode, consumeBackupCode } from "../lib/totp.ts";
 import { rejectBreachedPassword } from "../middleware/passwordCheck.ts";
+import { sendSecurityAlert } from "../lib/alerts.ts";
+import { revokeAllSessionsForUser, revokeOtherSessionsForUser, listActiveSessionsForUser } from "../lib/sessionStore.ts";
 
 export const authRouter = Router();
 
@@ -81,6 +83,25 @@ export async function isAccountLockedOut(tenantId: string | null, email: string)
   return Number(recentFailures) >= LOCKOUT_THRESHOLD;
 }
 
+/**
+ * Fires a security alert exactly once per lockout window, right when the
+ * threshold is first crossed (security review, user 2026-11-10:
+ * "Logging/Alerting") — call this immediately after logging the failure
+ * that might have been the one to cross it. Safe to call unconditionally:
+ * attempts 1..(threshold-1) still return false from isAccountLockedOut
+ * here, and attempts after the threshold never reach this call at all
+ * (the route returns 429 before logging anything further), so this can
+ * only ever observe the transition from false to true once per window.
+ */
+export async function alertIfAccountJustLockedOut(tenantId: string | null, email: string) {
+  if (!(await isAccountLockedOut(tenantId, email))) return;
+  await sendSecurityAlert({
+    tenantId,
+    subject: "Percobaan login gagal berulang terdeteksi",
+    message: `Terdeteksi ${LOCKOUT_THRESHOLD}+ percobaan login gagal berturut-turut untuk akun ${email} dalam ${LOCKOUT_WINDOW_MINUTES} menit terakhir — akun ini sudah dikunci sementara. Ini bisa menandakan percobaan brute-force atau credential stuffing.`,
+  });
+}
+
 export { LOCKOUT_WINDOW_MINUTES };
 
 /** Single login endpoint: context (App Owner vs tenant admin) comes from the resolved subdomain. */
@@ -107,6 +128,7 @@ authRouter.post("/login", authLimiter, validateBody(loginSchema), async (req, re
   const [user] = await db.select().from(users).where(whereClause).limit(1);
   if (!user || !user.passwordHash || !(await bcrypt.compare(password, user.passwordHash))) {
     await logLoginAttempt({ tenantId, actorUserId: user?.id ?? null, email, outcome: "failure", reason: "invalid_credentials", ip });
+    await alertIfAccountJustLockedOut(tenantId, email);
     return res.status(401).json({ error: "Email atau password salah" });
   }
 
@@ -137,7 +159,7 @@ authRouter.post("/login", authLimiter, validateBody(loginSchema), async (req, re
   }
 
   await logLoginAttempt({ tenantId, actorUserId: user.id, email, outcome: "success", ip });
-  issueSession(res, { userId: user.id, role: user.role, tenantId: user.tenantId });
+  await issueSession(req, res, { userId: user.id, role: user.role, tenantId: user.tenantId });
   res.json({ id: user.id, name: user.name, email: user.email, role: user.role });
 });
 
@@ -175,7 +197,7 @@ authRouter.post("/mfa/verify-login", authLimiter, validateBody(mfaVerifyLoginSch
   }
 
   clearMfaTicket(res);
-  issueSession(res, { userId: user.id, role: user.role, tenantId: user.tenantId });
+  await issueSession(req, res, { userId: user.id, role: user.role, tenantId: user.tenantId });
   res.json({ id: user.id, name: user.name, email: user.email, role: user.role });
 });
 
@@ -250,6 +272,15 @@ authRouter.post("/mfa/disable", requireAnySession, validateBody(mfaDisableSchema
     .set({ totpEnabled: false, totpSecretEncrypted: null, totpBackupCodesHash: null })
     .where(eq(users.id, user.id));
   await logAudit({ actorUserId: user.id, tenantId: user.tenantId, action: "auth.mfa_disabled", details: {} });
+  // Turning off a second factor is a security downgrade worth a human
+  // noticing even when done legitimately (security review, user
+  // 2026-11-10: "Logging/Alerting") — a plain audit-log row nobody is
+  // watching isn't a real alert.
+  await sendSecurityAlert({
+    tenantId: user.tenantId,
+    subject: "MFA dinonaktifkan pada akun",
+    message: `Verifikasi dua langkah (MFA) baru saja dinonaktifkan untuk akun ${user.email}. Jika ini bukan Anda, segera hubungi admin dan ganti password.`,
+  });
 
   res.json({ ok: true });
 });
@@ -292,7 +323,7 @@ authRouter.get("/dev-accounts", async (req, res) => {
  * even right after a successful login.
  */
 authRouter.get("/me", async (req, res) => {
-  const session = readSession(req);
+  const session = await readSession(req);
   if (!session) return res.status(401).json({ error: "Belum login" });
 
   if (session.role === "app_owner") {
@@ -307,8 +338,35 @@ authRouter.get("/me", async (req, res) => {
   res.json({ id: user.id, name: user.name, email: user.email, role: user.role });
 });
 
-authRouter.post("/logout", (_req, res) => {
-  clearSession(res);
+authRouter.post("/logout", async (req, res) => {
+  await clearSession(req, res);
+  res.json({ ok: true });
+});
+
+/**
+ * Self-service device/session list (security review, user 2026-11-10:
+ * "Session Hijacking") — lets a user see every device currently logged
+ * into their account and notice one they don't recognize, which is the
+ * whole point of a revocable session store existing in the first place.
+ */
+authRouter.get("/sessions", requireAnySession, async (req, res) => {
+  const rows = await listActiveSessionsForUser(req.session!.userId);
+  res.json(
+    rows.map((r) => ({
+      id: r.id,
+      userAgent: r.userAgent,
+      ipAddress: r.ipAddress,
+      createdAt: r.createdAt,
+      lastSeenAt: r.lastSeenAt,
+      isCurrent: r.id === req.session!.sid,
+    }))
+  );
+});
+
+/** Revokes every other live session on this account in one action — the "someone might have my password/cookie, lock them out now" button. */
+authRouter.post("/sessions/logout-others", requireAnySession, async (req, res) => {
+  await revokeOtherSessionsForUser(req.session!.userId, req.session!.sid);
+  await logAudit({ actorUserId: req.session!.userId, tenantId: req.session!.tenantId, action: "auth.logout_other_sessions", details: {} });
   res.json({ ok: true });
 });
 
@@ -359,6 +417,12 @@ authRouter.post("/reset-password/:token", authLimiter, validateBody(resetPasswor
   const passwordHash = await bcrypt.hash(newPassword, 10);
   await db.update(users).set({ passwordHash }).where(eq(users.id, resetRow.userId));
   await db.update(passwordResetTokens).set({ usedAt: new Date() }).where(eq(passwordResetTokens.id, resetRow.id));
+  // A password reset is as good a reason as a confirmed compromise to kill
+  // every existing session on the account (security review, user
+  // 2026-11-10: "Session Hijacking") — whoever is resetting it proved
+  // control of the email inbox, but that doesn't mean an attacker's
+  // already-stolen session cookie should keep working afterward.
+  await revokeAllSessionsForUser(resetRow.userId);
   res.json({ ok: true });
 });
 

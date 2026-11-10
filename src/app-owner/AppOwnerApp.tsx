@@ -286,9 +286,9 @@ function LoginView({ onLoggedIn }: { onLoggedIn: (me: Me) => void }) {
         <div className="px-6 py-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
           <div className="flex items-center gap-1.5">
             <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-            <span>ISO 27001 Certified Security</span>
+            <span>Data Terenkripsi & Sesi Aman</span>
           </div>
-          <span className="text-[10px] font-mono text-slate-400">256-Bit SSL/TLS</span>
+          <span className="text-[10px] font-mono text-slate-400">HTTPS/TLS</span>
         </div>
       </div>
     </div>
