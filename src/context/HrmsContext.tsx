@@ -36,6 +36,8 @@ import {
   type LeaveRequest as ApiLeaveRequest,
   type EmployeeKpi as ApiEmployeeKpi,
   type ComplianceRecord as ApiComplianceRecord,
+  type PersonaliaActionRow as ApiPersonaliaActionRow,
+  type PersonaliaActionInput as ApiPersonaliaActionInput,
   type OffboardingRecord as ApiOffboardingRecord,
   type BusinessTripRequest as ApiBusinessTripRequest,
   type Vendor as ApiVendor,
@@ -132,7 +134,6 @@ import {
   INITIAL_TENANTS,
   INITIAL_USERS,
   INITIAL_EMPLOYEES,
-  INITIAL_PERSONALIA_LOGS,
   INITIAL_ATTENDANCE,
   INITIAL_LEAVE_REQUESTS,
   INITIAL_LOANS,
@@ -154,7 +155,6 @@ import {
   INITIAL_EMPLOYEE_STAGING,
   INITIAL_OVERTIME_REQUESTS,
   INITIAL_REIMBURSEMENT_CLAIMS,
-  INITIAL_PERSONALIA_REQUESTS,
   INITIAL_ORG_NODES,
   INITIAL_ORG_PROPOSALS,
   INITIAL_PROBATION_EVALUATIONS,
@@ -217,6 +217,7 @@ interface HrmsContextType {
     type: PersonaliaActionType | string;
     newPosition?: string;
     newDepartment?: string;
+    newOrgNodeId?: string;
     newGrade?: string;
     newSalary?: number;
     newPositionAllowance?: number;
@@ -234,7 +235,9 @@ interface HrmsContextType {
     signatories?: PersonaliaSignatory[];
     status?: 'Disetujui' | 'Menunggu Approval' | 'Draf';
     systemicImpact?: SystemicImpactConfig;
-  }) => void;
+  }) => Promise<void>;
+  submitPersonaliaDraft: (id: string) => Promise<void>;
+  deletePersonaliaDraft: (id: string) => Promise<void>;
 
   // 2. Attendance & Leave
   attendance: AttendanceRecord[];
@@ -865,10 +868,8 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [apiEmployees, setApiEmployees] = useState<ApiEmployee[]>([]);
   const employees = useMemo(() => apiEmployees.map((r) => mergeRowIntoMock(r) as unknown as Employee), [apiEmployees]);
 
-  const [personaliaLogs, setPersonaliaLogs] = useState<PersonaliaLog[]>(() => {
-    const saved = localStorage.getItem('nusahr_personalia');
-    return saved ? JSON.parse(saved) : INITIAL_PERSONALIA_LOGS;
-  });
+  // Personalia is real backend data (personalia_actions); logs/requests below are derived views of the same rows.
+  const [apiPersonalia, setApiPersonalia] = useState<ApiPersonaliaActionRow[]>([]);
 
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
 
@@ -1128,11 +1129,6 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   });
 
-  // 26. Personalia Requests
-  const [personaliaRequests, setPersonaliaRequests] = useState<PersonaliaRequest[]>(() => {
-    const saved = localStorage.getItem('nusahr_personalia_reqs');
-    return saved ? JSON.parse(saved) : INITIAL_PERSONALIA_REQUESTS;
-  });
 
   // 27. Org Nodes & Proposals — real backend data for the nodes themselves.
   const [apiOrgNodes, setApiOrgNodes] = useState<ApiOrgStructureNode[]>([]);
@@ -1148,6 +1144,69 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { ...mapped, currentEmployeeId: override ?? undefined, isVacant: !override };
     });
   }, [apiOrgNodes, divisionNameById, departmentNameById, employeeAssignmentOverrides]);
+  const personaliaLogs = useMemo<PersonaliaLog[]>(
+    () =>
+      apiPersonalia.map((r) => {
+        const node = r.newOrgNodeId ? orgNodes.find((n) => n.id === r.newOrgNodeId) : undefined;
+        return {
+          id: r.id,
+          tenantId: r.tenantId,
+          employeeId: r.employeeId,
+          type: r.type,
+          previousPosition: r.previousPosition ?? '-',
+          newPosition: node?.title ?? r.previousPosition ?? '-',
+          previousDepartment: r.previousDepartment ?? undefined,
+          newDepartment: node?.department ?? r.previousDepartment ?? undefined,
+          previousGrade: r.previousGrade ?? undefined,
+          newGrade: r.newGrade ?? r.previousGrade ?? undefined,
+          previousSalary: r.previousSalary,
+          newSalary: r.newSalary ?? r.previousSalary,
+          previousAllowance: r.previousAllowance ?? undefined,
+          newAllowance: r.newPositionAllowance ?? r.previousAllowance ?? undefined,
+          effectiveDate: r.effectiveDate,
+          letterNumber: r.letterNumber,
+          reason: r.reason,
+          approvedBy: r.approvedBy ?? '-',
+          status: r.status,
+          notes: r.notes ?? undefined,
+          newBranchLocation: r.newBranchLocation ?? undefined,
+          contractDurationMonths: r.contractDurationMonths ?? undefined,
+          contractEndDate: r.contractEndDate ?? undefined,
+          actingRoleExpiryDate: r.actingRoleExpiryDate ?? undefined,
+          permanentAppointmentDate: r.permanentAppointmentDate ?? undefined,
+          disciplinaryLevel: (r.disciplinaryLevel as PersonaliaLog['disciplinaryLevel']) ?? undefined,
+          skDocNumber: r.letterNumber,
+          signatories: r.signatories ?? undefined,
+          systemicImpact: (r.systemicImpact as unknown as PersonaliaLog['systemicImpact']) ?? undefined,
+        };
+      }),
+    [apiPersonalia, orgNodes]
+  );
+  const personaliaRequests = useMemo<PersonaliaRequest[]>(
+    () =>
+      apiPersonalia
+        .filter((r) => r.status !== 'Draf' && ['Promosi', 'Demosi', 'Mutasi', 'Penyesuaian Gaji', 'Koreksi & Update Data Pribadi', 'Tambah Data Baru'].includes(r.type))
+        .map((r) => ({
+          id: r.id,
+          tenantId: r.tenantId,
+          employeeId: r.employeeId,
+          type: r.type as PersonaliaRequest['type'],
+          previousPosition: r.previousPosition ?? undefined,
+          newPosition: (r.newOrgNodeId ? orgNodes.find((n) => n.id === r.newOrgNodeId)?.title : undefined) ?? undefined,
+          previousSalary: r.previousSalary,
+          newSalary: r.newSalary ?? undefined,
+          previousEntityId: r.previousEntityId ?? undefined,
+          newEntityId: r.newEntityId ?? undefined,
+          mutationType: (r.mutationType as PersonaliaRequest['mutationType']) ?? undefined,
+          personalDataUpdates: (r.personalDataUpdates as PersonaliaRequest['personalDataUpdates']) ?? undefined,
+          reason: r.reason,
+          effectiveDate: r.effectiveDate,
+          status: r.status as PersonaliaRequest['status'],
+          approvedBy: r.approvedBy ?? undefined,
+          skDocumentNumber: r.letterNumber,
+        })),
+    [apiPersonalia, orgNodes]
+  );
   const [orgProposals, setOrgProposals] = useState<OrgChangeProposal[]>(() => {
     const saved = localStorage.getItem('nusahr_org_proposals');
     return saved ? JSON.parse(saved) : INITIAL_ORG_PROPOSALS;
@@ -1417,6 +1476,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setInterviewTypeSettings(realInterviewTypes.map(toMockInterviewType));
     setOnboardingChecklistTemplates(realOnboardingChecklistTemplates.map(toMockChecklistTemplate));
     setApiEmployees(realEmployees);
+    tenantApi.listPersonaliaActions().then(setApiPersonalia).catch(() => setApiPersonalia([]));
     setProbationEvaluations(realProbationEvaluations.map(toMockProbationEvaluation));
     setProbationEvaluationTemplates(realProbationEvaluationTemplates as unknown as ProbationEvaluationTemplate[]);
     setContractReviews(realContractReviews.map(toMockContractReview));
@@ -1577,11 +1637,42 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     tenantApi.deleteEmployee(id).then(() => setApiEmployees((prev) => prev.filter((e) => e.id !== id)));
   };
 
-  const processPersonaliaAction = (action: {
+  /** Re-read everything an approved Personalia SK can change on the server (employee, org seat, SK document, SP record) plus the queue itself. */
+  const refreshAfterPersonaliaChange = async () => {
+    const [emps, nodes, docs, comp, pers, items] = await Promise.all([
+      tenantApi.listEmployees(),
+      tenantApi.listOrgNodes(),
+      tenantApi.listDocuments(),
+      tenantApi.listComplianceRecords(),
+      tenantApi.listPersonaliaActions(),
+      tenantApi.listApprovalItems(),
+    ]);
+    setApiEmployees(emps);
+    setApiOrgNodes(nodes);
+    setApiDocuments(docs);
+    setApiComplianceRecords(comp);
+    setApiPersonalia(pers);
+    setApprovalItems(items as unknown as ApprovalWorkflowItem[]);
+  };
+  const refreshPersonaliaQueue = async () => {
+    const [pers, items] = await Promise.all([tenantApi.listPersonaliaActions(), tenantApi.listApprovalItems()]);
+    setApiPersonalia(pers);
+    setApprovalItems(items as unknown as ApprovalWorkflowItem[]);
+  };
+
+  /**
+   * Sends the action to the server, which captures the "previous" snapshot,
+   * validates the target seat/salary band, and (unless Draf) routes it
+   * through the Approval Engine. Nothing changes on the employee until the
+   * final approval — and then the server applies it. Throws with the
+   * server's message so the form can show it inline.
+   */
+  const processPersonaliaAction = async (action: {
     employeeId: string;
     type: PersonaliaActionType | string;
     newPosition?: string;
     newDepartment?: string;
+    newOrgNodeId?: string;
     newGrade?: string;
     newSalary?: number;
     newPositionAllowance?: number;
@@ -1599,118 +1690,61 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     signatories?: PersonaliaSignatory[];
     status?: 'Disetujui' | 'Menunggu Approval' | 'Draf';
     systemicImpact?: SystemicImpactConfig;
-  }) => {
+  }): Promise<void> => {
     const emp = employees.find((e) => e.id === action.employeeId);
-    if (!emp) return;
+    if (!emp) throw new Error('Karyawan tidak ditemukan.');
+    const currentNodeId = (emp as unknown as { orgNodeId?: string | null }).orgNodeId ?? null;
 
-    const letterNumber =
-      action.skDocNumber ||
-      generateDocumentNumber(
-        'Surat Promosi',
-        personaliaLogs.length + 1,
-        currentTenant.code
-      );
+    // A new position is a REFERENCE to a seat in the org chart, never free text.
+    let newOrgNodeId = action.newOrgNodeId ?? null;
+    if (!newOrgNodeId && action.newPosition) {
+      const candidates = orgNodes.filter((n) => n.title === action.newPosition && (!action.newDepartment || n.department === action.newDepartment));
+      newOrgNodeId = (candidates.find((n) => n.isVacant) ?? candidates[0])?.id ?? null;
+    }
+    if (newOrgNodeId && newOrgNodeId === currentNodeId) newOrgNodeId = null;
+    const isMove = ['Promosi', 'Demosi', 'Mutasi', 'Mutasi Departemen'].includes(action.type);
+    if (!isMove) {
+      // Plt/Pjs keeps the person in their own seat; only moves relocate.
+      if (action.type !== 'Penetapan Plt' && action.type !== 'Penetapan Plt/Pjs') newOrgNodeId = null;
+    }
+    if (isMove && !newOrgNodeId && action.status !== 'Draf') {
+      throw new Error('Pilih posisi tujuan yang ada di Struktur Organisasi (bukan teks bebas).');
+    }
+    const date = (v?: string) => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null);
+    const num = (v?: number) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 
-    const finalStatus = action.status || 'Menunggu Approval';
-
-    const log: PersonaliaLog = {
-      id: `pers-${Date.now()}`,
-      tenantId: currentTenant.id,
+    await tenantApi.createPersonaliaAction({
       employeeId: action.employeeId,
       type: action.type,
-      previousPosition: emp.position,
-      newPosition: action.newPosition || emp.position,
-      previousDepartment: emp.department,
-      newDepartment: action.newDepartment || emp.department,
-      previousGrade: emp.grade,
-      newGrade: action.newGrade || emp.grade,
-      previousSalary: emp.basicSalary,
-      newSalary: action.newSalary !== undefined ? action.newSalary : emp.basicSalary,
-      previousAllowance: emp.positionAllowance,
-      newAllowance: action.newPositionAllowance !== undefined ? action.newPositionAllowance : emp.positionAllowance,
+      status: action.status === 'Draf' ? 'Draf' : 'Menunggu Approval',
+      newOrgNodeId,
+      newGrade: action.newGrade && action.newGrade !== emp.grade ? action.newGrade : null,
+      newSalary: num(action.newSalary) !== null && action.newSalary !== emp.basicSalary ? num(action.newSalary) : null,
+      newPositionAllowance: num(action.newPositionAllowance) !== null && action.newPositionAllowance !== emp.positionAllowance ? num(action.newPositionAllowance) : null,
+      newFixedAllowance: num(action.newFixedAllowance) !== null && action.newFixedAllowance !== emp.fixedAllowance ? num(action.newFixedAllowance) : null,
+      newBranchLocation: action.newBranchLocation && action.newBranchLocation !== emp.branchLocation ? action.newBranchLocation : null,
+      contractDurationMonths: action.type === 'Perpanjangan Kontrak' ? num(action.contractDurationMonths) : null,
+      contractEndDate: action.type === 'Perpanjangan Kontrak' ? date(action.contractEndDate) : null,
+      actingRoleExpiryDate: action.type.startsWith('Penetapan Plt') ? date(action.actingRoleExpiryDate) : null,
+      permanentAppointmentDate: action.type === 'Pengangkatan Tetap' ? date(action.permanentAppointmentDate) : null,
+      disciplinaryLevel: action.type === 'Sanksi Disiplin SP' ? action.disciplinaryLevel ?? null : null,
       effectiveDate: action.effectiveDate,
-      letterNumber,
+      letterNumber: action.skDocNumber?.trim() || null,
       reason: action.reason,
-      approvedBy: action.signatories?.find((s) => s.label.toLowerCase().includes('menyetujui') || s.label.toLowerCase().includes('disetujui'))?.name || currentUser.name,
-      status: finalStatus,
-      notes: action.notes,
-      newBranchLocation: action.newBranchLocation,
-      contractDurationMonths: action.contractDurationMonths,
-      contractEndDate: action.contractEndDate,
-      actingRoleExpiryDate: action.actingRoleExpiryDate,
-      permanentAppointmentDate: action.permanentAppointmentDate,
-      disciplinaryLevel: action.disciplinaryLevel,
-      skDocNumber: letterNumber,
-      signatories: action.signatories,
-      systemicImpact: action.systemicImpact,
-    };
+      notes: action.notes || null,
+      signatories: action.signatories ?? null,
+      systemicImpact: (action.systemicImpact as unknown as Record<string, unknown>) ?? null,
+    } as ApiPersonaliaActionInput);
+    await refreshPersonaliaQueue();
+  };
 
-    setPersonaliaLogs((prev) => [log, ...prev]);
-
-    // If it's a draft, do NOT update employee master record yet
-    if (finalStatus === 'Draf') {
-      logAuditAction('Personalia', 'SAVE_DRAFT', log.id, `Simpan draf tindakan personalia ${action.type} untuk ${emp.fullName}`);
-      return;
-    }
-
-    if (finalStatus === 'Menunggu Approval') {
-      // Add to Approval Center queue
-      createApprovalItem({
-        category: 'Promosi/Personalia',
-        referenceId: log.id,
-        title: `Personalia: ${action.type} - ${emp.fullName}`,
-        requesterId: action.employeeId,
-        department: emp.department || 'Operasional',
-        submittedAt: new Date().toISOString(),
-        deadlineAt: new Date(Date.now() + 72 * 3600 * 1000).toISOString(),
-        level: 1,
-        totalLevels: action.signatories?.length || 2,
-        assignedApproverRole: 'manager',
-        status: 'Menunggu',
-        notes: action.reason,
-      });
-      logAuditAction('Personalia', 'SUBMIT_FOR_APPROVAL', log.id, `Pengajuan persetujuan SK ${action.type} untuk ${emp.fullName}`);
-      return;
-    }
-
-    // Update employee master record with specific field updates based on action type
-    const updates: Partial<Employee> = {};
-    if (action.newPosition) updates.position = action.newPosition;
-    if (action.newDepartment) updates.department = action.newDepartment;
-    if (action.newGrade) updates.grade = action.newGrade;
-    if (action.newSalary !== undefined) updates.basicSalary = action.newSalary;
-    if (action.newPositionAllowance !== undefined) updates.positionAllowance = action.newPositionAllowance;
-    if (action.newFixedAllowance !== undefined) updates.fixedAllowance = action.newFixedAllowance;
-    if (action.newBranchLocation) updates.branchLocation = action.newBranchLocation;
-
-    if (action.type === 'Pengangkatan Tetap') {
-      updates.employmentType = 'Tetap';
-      updates.probationStatus = 'Lolos';
-      updates.permanentAppointmentDate = action.permanentAppointmentDate || action.effectiveDate;
-      if (action.skDocNumber) updates.contractDocNumber = action.skDocNumber;
-    } else if (action.type === 'Perpanjangan Kontrak') {
-      if (action.contractEndDate) updates.contractEndDate = action.contractEndDate;
-      if (action.skDocNumber) updates.contractDocNumber = action.skDocNumber;
-    } else if (action.type === 'Sanksi Disiplin SP' && action.disciplinaryLevel) {
-      issueComplianceAction({
-        employeeId: emp.id,
-        level: action.disciplinaryLevel,
-        violationReason: action.reason,
-        validMonths: 6,
-      });
-    }
-
-    updateEmployee(emp.id, updates);
-
-    // Create official document
-    createOfficialDocument({
-      type: 'Surat Promosi',
-      title: `Surat Keputusan (${action.type}): ${emp.fullName}`,
-      targetEmployeeId: emp.id,
-      signeeName: currentUser.name,
-      signeeRole: 'VP Human Resources & Direksi',
-      contentPreview: `Menetapkan keputusan personalia (${action.type}) atas nama ${emp.fullName} (NIK: ${emp.nik}). Perubahan mencakup jabatan: ${updates.position || emp.position}, unit: ${updates.department || emp.department}, remunerasi disesuaikan menjadi Rp ${(updates.basicSalary || emp.basicSalary).toLocaleString('id-ID')}. Berlaku efektif terhitung tanggal ${action.effectiveDate}.`,
-    });
+  const submitPersonaliaDraft = async (id: string) => {
+    await tenantApi.submitPersonaliaAction(id);
+    await refreshPersonaliaQueue();
+  };
+  const deletePersonaliaDraft = async (id: string) => {
+    await tenantApi.deletePersonaliaAction(id);
+    setApiPersonalia((prev) => prev.filter((r) => r.id !== id));
   };
 
   // 2. Attendance & Leave — real backend. persistAttendanceUpsert mirrors
@@ -3360,7 +3394,8 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } else if (item.category === 'Procurement PR') {
         updateProcurementStatus(item.referenceId, 'PO Terbit');
       } else if (item.category === 'Promosi/Personalia') {
-        approvePersonaliaRequest(item.referenceId);
+        // The server already applied the SK on final approval; just re-read what it changed.
+        refreshAfterPersonaliaChange().catch(() => undefined);
       } else if (item.category === 'Lembur') {
         reviewOvertimeRequest(item.referenceId, true);
       } else if (item.category === 'Reimbursement') {
@@ -3381,7 +3416,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } else if (item.category === 'Procurement PR') {
         updateProcurementStatus(item.referenceId, 'Pengajuan PR');
       } else if (item.category === 'Promosi/Personalia') {
-        rejectPersonaliaRequest(item.referenceId);
+        refreshPersonaliaQueue().catch(() => undefined);
       } else if (item.category === 'Lembur') {
         reviewOvertimeRequest(item.referenceId, false);
       } else if (item.category === 'Reimbursement') {
@@ -4286,132 +4321,31 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
   };
 
-  // 26. Personalia Handlers
+  // 26. Personalia request handlers — thin wrappers over the same server flow.
   const submitPersonaliaRequest = (req: Omit<PersonaliaRequest, 'id' | 'tenantId' | 'status'>) => {
-    const newReq: PersonaliaRequest = {
-      ...req,
-      id: `pers-req-${Date.now()}`,
-      tenantId: currentTenant.id,
-      status: 'Menunggu Approval',
-    };
-    setPersonaliaRequests((prev) => [newReq, ...prev]);
-
-    const emp = employees.find((e) => e.id === req.employeeId);
-    createApprovalItem({
-      category: 'Promosi/Personalia',
-      referenceId: newReq.id,
-      title: `Personalia: ${req.type} - ${emp?.fullName || 'Karyawan'}`,
-      requesterId: req.employeeId,
-      department: emp?.department || 'Operasional',
-      submittedAt: new Date().toISOString(),
-      deadlineAt: new Date(Date.now() + 72 * 3600 * 1000).toISOString(),
-      level: 1,
-      totalLevels: 2,
-      assignedApproverRole: 'manager',
-      status: 'Menunggu',
-      notes: req.reason,
-    });
-
-    logAuditAction('Personalia', 'SUBMIT_REQUEST', newReq.id, `Pengajuan perubahan status ${req.type} untuk ${emp?.fullName}`);
-  };
-
-  const approvePersonaliaRequest = (id: string) => {
-    const existingLog = personaliaLogs.find((l) => l.id === id);
-    if (existingLog) {
-      const emp = employees.find((e) => e.id === existingLog.employeeId);
-      if (emp) {
-        updateEmployee(emp.id, {
-          position: existingLog.newPosition || emp.position,
-          department: existingLog.newDepartment || emp.department,
-          grade: existingLog.newGrade || emp.grade,
-          basicSalary: existingLog.newSalary || emp.basicSalary,
-        });
-        createOfficialDocument({
-          type: existingLog.type === 'Promosi' ? 'Surat Promosi' : existingLog.type === 'Mutasi' ? 'Surat Mutasi' : 'SK Pengangkatan',
-          title: `Surat Keputusan ${existingLog.type}: ${emp.fullName}`,
-          targetEmployeeId: emp.id,
-          signeeName: currentUser.name,
-          signeeRole: 'VP Human Resources',
-          contentPreview: `Menetapkan perubahan status kepegawaian (${existingLog.type}) atas nama ${emp.fullName} dari jabatan ${existingLog.previousPosition} menjadi ${existingLog.newPosition}. Berlaku efektif ${existingLog.effectiveDate}.`,
-        });
-      }
-      setPersonaliaLogs((prev) =>
-        prev.map((l) => (l.id === id ? { ...l, status: 'Disetujui', approvedBy: currentUser.name } : l))
-      );
-      persistApprovalItemByReference(id, 'Promosi/Personalia', { status: 'Disetujui' });
-      logAuditAction('Personalia', 'APPROVE_LOG', id, `Persetujuan ${existingLog.type} untuk ${emp?.fullName || existingLog.employeeId}`);
-      return;
-    }
-    const req = personaliaRequests.find((p) => p.id === id);
-    if (!req) return;
-
-    const emp = employees.find((e) => e.id === req.employeeId);
-    if (!emp) return;
-
-    const letterNumber = generateDocumentNumber(
-      'Surat Promosi',
-      personaliaLogs.length + 1,
-      currentTenant.code
-    );
-
-    const updates: Partial<Employee> = {};
-    if (req.newPosition) updates.position = req.newPosition;
-    if (req.newSalary) updates.basicSalary = req.newSalary;
-    if (req.newDepartment) updates.department = req.newDepartment;
-    if (req.newEntityId) updates.entityId = req.newEntityId;
-    if (req.personalDataUpdates) {
-      Object.assign(updates, req.personalDataUpdates);
-    }
-    updateEmployee(emp.id, updates);
-
-    const log: PersonaliaLog = {
-      id: `pers-${Date.now()}`,
-      tenantId: currentTenant.id,
-      employeeId: req.employeeId,
-      type: req.type as any,
-      previousPosition: req.previousPosition || emp.position,
-      newPosition: req.newPosition || emp.position,
-      previousSalary: req.previousSalary || emp.basicSalary,
-      newSalary: req.newSalary || emp.basicSalary,
-      effectiveDate: req.effectiveDate,
-      letterNumber,
-      reason: req.reason,
-      approvedBy: currentUser.name,
-    };
-    setPersonaliaLogs((prev) => [log, ...prev]);
-
-    createOfficialDocument({
-      type: 'Surat Promosi',
-      title: `Surat Keputusan ${req.type}: ${emp.fullName}`,
-      targetEmployeeId: emp.id,
-      signeeName: currentUser.name,
-      signeeRole: 'VP Human Resources',
-      contentPreview: `Menetapkan perubahan status kepegawaian (${req.type}) atas nama ${emp.fullName}. Berlaku efektif ${req.effectiveDate}.`,
-    });
-
-    setPersonaliaRequests((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, status: 'Disetujui', approvedBy: currentUser.name, skDocumentNumber: letterNumber } : p))
-    );
-
-    logAuditAction('Personalia', 'APPROVE_REQUEST', id, `Persetujuan ${req.type} untuk ${emp.fullName} efektif per ${req.effectiveDate}`);
-  };
-
-  const rejectPersonaliaRequest = (id: string) => {
-    setPersonaliaLogs((prev) =>
-      prev.map((l) => (l.id === id ? { ...l, status: 'Ditolak', approvedBy: currentUser.name } : l))
-    );
-    persistApprovalItemByReference(id, 'Promosi/Personalia', { status: 'Ditolak' });
-    setPersonaliaRequests((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, status: 'Ditolak', approvedBy: currentUser.name } : p))
-    );
+    tenantApi
+      .createPersonaliaAction({
+        employeeId: req.employeeId,
+        type: req.type,
+        status: 'Menunggu Approval',
+        newSalary: req.newSalary ?? null,
+        newEntityId: req.newEntityId ?? null,
+        mutationType: req.mutationType ?? null,
+        personalDataUpdates: (req.personalDataUpdates as Record<string, unknown>) ?? null,
+        effectiveDate: req.effectiveDate,
+        reason: req.reason,
+      } as ApiPersonaliaActionInput)
+      .then(() => refreshPersonaliaQueue())
+      .catch((err: unknown) => window.alert(err instanceof Error ? err.message : 'Gagal mengajukan perubahan personalia.'));
   };
 
   const reviewPersonaliaRequest = (id: string, approved: boolean) => {
-    if (approved) {
-      approvePersonaliaRequest(id);
-    } else {
-      rejectPersonaliaRequest(id);
-    }
+    const row = apiPersonalia.find((r) => r.id === id);
+    if (!row?.approvalItemId) return;
+    tenantApi
+      .decideApprovalItem(row.approvalItemId, approved ? 'Disetujui' : 'Ditolak', approved ? undefined : 'Ditolak oleh HR')
+      .then(() => refreshAfterPersonaliaChange())
+      .catch((err: unknown) => window.alert(err instanceof Error ? err.message : 'Gagal memproses keputusan.'));
   };
 
   // 27. Org Proposals
@@ -5056,7 +4990,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // payrollRecords/loans/leaveRequests/kpis/complianceRecords/offboardingRecords/
     // procurementOrders/assets/businessTrips/vendors/assetMaintenanceTickets/assetRelocations
     // are now real backend data — no local mock to reset.
-    setPersonaliaLogs(INITIAL_PERSONALIA_LOGS);
+    setApiPersonalia([]);
   };
 
   return (
@@ -5084,6 +5018,8 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setActiveModule,
         employees: tenantEmployees,
         personaliaLogs: personaliaLogs.filter((p) => p.tenantId === currentTenant.id),
+        submitPersonaliaDraft,
+        deletePersonaliaDraft,
         addEmployee,
         updateEmployee,
         deleteEmployee,

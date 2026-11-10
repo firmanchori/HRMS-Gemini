@@ -160,17 +160,19 @@ state hidup di React context + simulasi `localStorage` per-browser.
 - [ ] **(High)** Dua field paralel untuk garis pelaporan: `Employee.managerId` (ID) vs
   `Employee.directSupervisor` (teks bebas) — tidak ada aturan mana yang jadi sumber
   kebenaran.
-- [ ] **(Critical)** Promosi/demosi/mutasi lewat Personalia **tidak pernah
+- [x] **(Critical)** Promosi/demosi/mutasi lewat Personalia **tidak pernah
   menyinkronkan** `OrgStructureNode.currentEmployeeId`/`isVacant` — hanya mengubah
   `employee.position/department/grade` sebagai teks. Org chart (`OrgChartManagement`,
   yang render strict dari `node.currentEmployeeId`) jadi basi/salah dibanding data
   karyawan sesungguhnya setelah setiap aksi Personalia.
+  _Selesai: tabel `personalia_actions` + `server/lib/personalia.ts`; persetujuan final Approval Engine menerapkan perubahan di server (kursi org chart dikosongkan/diisi, `managerId` mengikuti bagan, SK terbit tanpa QR sampai ditandatangani)._
 - [ ] **(High)** Personalia menyimpan tabel grade-gaji **hardcode miliknya sendiri**
   (`PersonaliaManagement.tsx:63 GRADE_SALARY_SCALES`), independen dari
   `gradeSalaryRanges` yang dikonfigurasi admin di `GradeSalaryManagement` — modul
   Grade & Salary jadi dekoratif/tidak pernah benar-benar dipakai untuk validasi
   promosi/payroll.
-- [ ] **(Medium)** Personalia mengizinkan input posisi teks bebas (`__custom__`) yang
+  _Sebagian: server kini memvalidasi gaji baru terhadap `gradeSalaryRanges`; saran otomatis di form masih memakai konstanta hardcode (belum diganti)._
+- [x] **(Medium)** Personalia mengizinkan input posisi teks bebas (`__custom__`) yang
   melewati referensi org chart sama sekali, bertentangan dengan klaim PRD "wajib
   mengambil referensi langsung dari Org Structure Nodes".
 - [ ] **(Medium)** Field "Usulan Gaji Baru" di Contract Renewal ditangkap di form tapi

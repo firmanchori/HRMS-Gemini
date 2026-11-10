@@ -77,6 +77,8 @@ import {
 } from "../db/schema.ts";
 import { requireTenantAdmin } from "../middleware/auth.ts";
 import { generateAssetsFromReceivedOrder, isReceivedStatus, deriveUsageStatus } from "../lib/assetLifecycle.ts";
+import { createOfficialDocumentRecord, isFullySigned, buildVerificationUrl } from "../lib/documents.ts";
+import { personaliaActionSchema, createPersonaliaAction, submitPersonaliaAction, deletePersonaliaDraft, listPersonaliaActions, PersonaliaError } from "../lib/personalia.ts";
 import { buildApprovalSteps, currentBlockingStep, decideApproval, withDerivedStatus, ApprovalError } from "../lib/approvalEngine.ts";
 import { validateBody, validateParams, uuidParam } from "../lib/validate.ts";
 import { rejectBreachedPassword } from "../middleware/passwordCheck.ts";
@@ -2217,6 +2219,36 @@ tenantRouter.post("/approval-items/:id/decision", validateParams(uuidParam("id")
   }
 });
 
+// --- Personalia (SK Promosi/Mutasi/Gaji/Kontrak/SP/Data) — real backend. Applying happens only server-side when the Approval Engine item is fully approved (see lib/personalia.ts). ---
+tenantRouter.get("/personalia-actions", async (req, res) => {
+  res.json(await listPersonaliaActions(req.session!.tenantId!, typeof req.query.employeeId === "string" ? req.query.employeeId : undefined));
+});
+tenantRouter.post("/personalia-actions", validateBody(personaliaActionSchema), async (req, res) => {
+  try {
+    res.status(201).json(await createPersonaliaAction({ tenantId: req.session!.tenantId!, actorUserId: req.session!.userId, input: req.body }));
+  } catch (err) {
+    if (err instanceof PersonaliaError) return res.status(err.status).json({ error: err.message });
+    throw err;
+  }
+});
+tenantRouter.post("/personalia-actions/:id/submit", validateParams(uuidParam("id")), async (req, res) => {
+  try {
+    res.json(await submitPersonaliaAction({ tenantId: req.session!.tenantId!, actionId: req.params.id, actorUserId: req.session!.userId }));
+  } catch (err) {
+    if (err instanceof PersonaliaError) return res.status(err.status).json({ error: err.message });
+    throw err;
+  }
+});
+tenantRouter.delete("/personalia-actions/:id", validateParams(uuidParam("id")), async (req, res) => {
+  try {
+    await deletePersonaliaDraft(req.session!.tenantId!, req.params.id);
+    res.status(204).end();
+  } catch (err) {
+    if (err instanceof PersonaliaError) return res.status(err.status).json({ error: err.message });
+    throw err;
+  }
+});
+
 const approvalWorkflowConfigSchema = z.object({
   steps: z
     .array(
@@ -3506,19 +3538,6 @@ const officialDocumentSchema = z.object({
   isFromDocxTemplate: z.boolean().optional(),
 });
 
-type DocSignatory = typeof officialDocuments.$inferSelect["signatories"][number];
-
-/** Vacuously complete when there are no required entries at all — the fallback below always creates at least one, so this only ever matters for pre-existing rows migrated with an empty list. */
-function isFullySigned(signatories: DocSignatory[]): boolean {
-  return signatories.filter((s) => s.isRequired).every((s) => s.confirmedAt);
-}
-
-function buildVerificationUrl(documentNumber: string): string {
-  const cleanNumber = documentNumber.replace(/[\/\s]/g, "-");
-  const hash = crypto.randomUUID().replace(/-/g, "").slice(0, 16);
-  return `https://nusahr.enterprise/verify?doc=${cleanNumber}&h=${hash}`;
-}
-
 tenantRouter.get("/documents", async (req, res) => {
   const tenantId = req.session!.tenantId!;
   res.json(await db.select().from(officialDocuments).where(eq(officialDocuments.tenantId, tenantId)));
@@ -3531,36 +3550,8 @@ tenantRouter.post("/documents", validateBody(officialDocumentSchema), async (req
     if (!tmpl) return res.status(404).json({ error: "Template dokumen tidak ditemukan" });
   }
 
-  // Required signatories for this document TYPE, configured once in
-  // Document Management (documentSignatoryConfigs) — copied onto the
-  // document instance now so a later edit to the config never retroactively
-  // changes what an already-issued document required.
-  const configs = await db
-    .select()
-    .from(documentSignatoryConfigs)
-    .where(and(eq(documentSignatoryConfigs.tenantId, tenantId), eq(documentSignatoryConfigs.documentType, req.body.type)))
-    .orderBy(documentSignatoryConfigs.sortOrder);
-
-  const signatories: DocSignatory[] =
-    configs.length > 0
-      ? configs.map((c) => ({ roleLabel: c.roleLabel, isRequired: c.isRequired, sortOrder: c.sortOrder, confirmedByEmployeeId: null, confirmedByName: null, confirmedAt: null }))
-      : // No signatory config exists for this type — fall back to a single
-        // required confirmation by the document's own nominal signee, so a
-        // document can never silently skip confirmation entirely just
-        // because nobody configured a signatory list for its type yet.
-        [{ roleLabel: req.body.signeeRole, isRequired: true, sortOrder: 0, confirmedByEmployeeId: null, confirmedByName: null, confirmedAt: null }];
-
-  const alreadyComplete = isFullySigned(signatories);
-  const [created] = await db
-    .insert(officialDocuments)
-    .values({
-      ...req.body,
-      tenantId,
-      signatories,
-      status: alreadyComplete ? "Resmi Diterbitkan" : "Menunggu Tanda Tangan",
-      qrVerificationUrl: alreadyComplete ? buildVerificationUrl(req.body.documentNumber) : null,
-    })
-    .returning();
+  const created = await createOfficialDocumentRecord({ tenantId, data: req.body });
+  const signatories = created.signatories;
   await logAudit({ actorUserId: req.session!.userId, tenantId, action: "document.created", details: { documentId: created.id, type: created.type, signatoryCount: signatories.length } });
   res.status(201).json(created);
 });

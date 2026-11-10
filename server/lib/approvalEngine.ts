@@ -82,6 +82,9 @@ export type DecisionActor =
   | { kind: "admin"; userId: string; name: string }
   | { kind: "employee"; employeeId: string; name: string; hasRolePermission: (roleKey: string) => Promise<boolean> };
 
+/** category -> callback invoked once an item reaches a final status. Modules register themselves (avoids a circular import into this file). */
+export const finalizeHooks: Record<string, (item: typeof approvalItems.$inferSelect, decidedByName: string) => Promise<void>> = {};
+
 export class ApprovalError extends Error {
   constructor(message: string, public status: number) {
     super(message);
@@ -163,5 +166,10 @@ export async function decideApproval(params: { tenantId: string; itemId: string;
     .set({ steps, history, status, level, totalLevels: Math.max(item.totalLevels, steps.length), assignedApproverId, rejectionReason: decision === "Ditolak" ? reason : item.rejectionReason })
     .where(eq(approvalItems.id, item.id))
     .returning();
+  if (updated.status === "Disetujui" || updated.status === "Ditolak") {
+    // Server-side side effects of a finished approval (e.g. applying a Personalia SK) run here so every decision route — admin or employee — triggers them identically.
+    const hook = finalizeHooks[updated.category];
+    if (hook) await hook(updated, actor.name);
+  }
   return updated;
 }

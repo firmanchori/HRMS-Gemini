@@ -350,6 +350,8 @@ export const PersonaliaManagement: React.FC = () => {
     employees,
     personaliaLogs,
     processPersonaliaAction,
+    submitPersonaliaDraft,
+    deletePersonaliaDraft,
     currentTenant,
     currentUser,
     orgNodes,
@@ -363,20 +365,35 @@ export const PersonaliaManagement: React.FC = () => {
   const [filterType, setFilterType] = useState<string>('all');
   const [isCustomPos, setIsCustomPos] = useState(false);
 
-  // Master positions extracted directly from org chart structure nodes + existing employees
+  // A promotion/demotion/mutation target must be a VACANT seat in the org chart (the server validates this too).
   const availablePositions = React.useMemo(() => {
     const set = new Set<string>();
     orgNodes?.forEach((n) => {
-      if (n.title) set.add(n.title.trim());
-    });
-    employees?.forEach((e) => {
-      if (e.position) set.add(e.position.trim());
+      if (n.title && n.isVacant) set.add(n.title.trim());
     });
     return Array.from(set).sort();
-  }, [orgNodes, employees]);
+  }, [orgNodes]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDocModalOpen, setIsDocModalOpen] = useState(false);
+  const [draftAction, setDraftAction] = useState<{ id: string; mode: 'submit' | 'delete' } | null>(null);
+  const [draftActionError, setDraftActionError] = useState<string | null>(null);
+  const [draftActionBusy, setDraftActionBusy] = useState(false);
+  const draftLogs = personaliaLogs.filter((l) => l.status === 'Draf');
+  const confirmDraftAction = async () => {
+    if (!draftAction) return;
+    setDraftActionBusy(true);
+    setDraftActionError(null);
+    try {
+      if (draftAction.mode === 'submit') await submitPersonaliaDraft(draftAction.id);
+      else await deletePersonaliaDraft(draftAction.id);
+      setDraftAction(null);
+    } catch (err) {
+      setDraftActionError(err instanceof Error ? err.message : 'Gagal memproses draf.');
+    } finally {
+      setDraftActionBusy(false);
+    }
+  };
 
   // Form State
   const [targetEmpId, setTargetEmpId] = useState(employees[0]?.id || '');
@@ -674,7 +691,7 @@ export const PersonaliaManagement: React.FC = () => {
         const scale = GRADE_SALARY_SCALES[targetGrade] || GRADE_SALARY_SCALES['L4'];
         const calculatedSalary = Math.max(Math.round(emp.basicSalary * (1 + (policy.salaryPercentChange || 25) / 100)), scale.minSalary);
         
-        setNewPosition(emp.position.startsWith('Lead') ? `Head of ${emp.department}` : `Lead ${emp.position}`);
+        setNewPosition('');
         setNewSalary(calculatedSalary);
         setNewPositionAllowance(scale.defaultPositionAllowance || 1500000);
         setNewGrade(targetGrade);
@@ -689,7 +706,7 @@ export const PersonaliaManagement: React.FC = () => {
       } else if (type === 'Mutasi') {
         const otherDept = emp.department === 'Engineering' ? 'Product & Design' : emp.department === 'Finance' ? 'Operations' : 'Human Capital';
         setNewDepartment(otherDept);
-        setNewPosition(`Specialist ${otherDept}`);
+        setNewPosition('');
       } else if (type === 'Rotasi Cabang') {
         setNewBranchLocation('Cabang Surabaya - Tech Hub');
         setNewFixedAllowance((emp.fixedAllowance || 0) + 2500000);
@@ -733,7 +750,7 @@ export const PersonaliaManagement: React.FC = () => {
     return matchesSearch && matchesType;
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setShowValidationErrors(true);
     setFormError(null);
@@ -803,43 +820,47 @@ export const PersonaliaManagement: React.FC = () => {
       returnedAssets,
     };
 
-    processPersonaliaAction({
-      employeeId: targetEmpId,
-      type: actionType,
-      newPosition: newPosition.trim(),
-      newDepartment: newDepartment.trim(),
-      newGrade,
-      newSalary: Number(newSalary),
-      newPositionAllowance: Number(newPositionAllowance),
-      newFixedAllowance: Number(newFixedAllowance),
-      newBranchLocation,
-      contractDurationMonths: Number(contractDurationMonths),
-      contractEndDate,
-      actingRoleExpiryDate,
-      permanentAppointmentDate,
-      disciplinaryLevel,
-      reason: reason || `Penetapan tindakan personalia resmi: ${actionType}`,
-      effectiveDate,
-      skDocNumber: skDocNumber.trim(),
-      notes: reason,
-      signatories: signatories.map((s) => ({
-        id: s.id,
-        label: s.label.trim(),
-        employeeId: s.employeeId,
-        nik: s.nik,
-        name: s.name.trim(),
-        role: s.role?.trim() || '-',
-      })),
-      status: 'Menunggu Approval',
-      systemicImpact: systemicConfig,
-    });
+    try {
+      await processPersonaliaAction({
+        employeeId: targetEmpId,
+        type: actionType,
+        newPosition: newPosition.trim(),
+        newDepartment: newDepartment.trim(),
+        newGrade,
+        newSalary: Number(newSalary),
+        newPositionAllowance: Number(newPositionAllowance),
+        newFixedAllowance: Number(newFixedAllowance),
+        newBranchLocation,
+        contractDurationMonths: Number(contractDurationMonths),
+        contractEndDate,
+        actingRoleExpiryDate,
+        permanentAppointmentDate,
+        disciplinaryLevel,
+        reason: reason || `Penetapan tindakan personalia resmi: ${actionType}`,
+        effectiveDate,
+        skDocNumber: skDocNumber.trim(),
+        notes: reason,
+        signatories: signatories.map((s) => ({
+          id: s.id,
+          label: s.label.trim(),
+          employeeId: s.employeeId,
+          nik: s.nik,
+          name: s.name.trim(),
+          role: s.role?.trim() || '-',
+        })),
+        status: 'Menunggu Approval',
+        systemicImpact: systemicConfig,
+      });
 
-    setIsModalOpen(false);
-    setReason('');
-    setShowValidationErrors(false);
+      setIsModalOpen(false);
+      setReason('');
+      setShowValidationErrors(false);
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : 'Gagal menyimpan tindakan personalia.');
+    }
   };
 
-  const handleSaveDraft = (e: React.MouseEvent) => {
+  const handleSaveDraft = async (e: React.MouseEvent) => {
     e.preventDefault();
     setFormError(null);
 
@@ -861,40 +882,44 @@ export const PersonaliaManagement: React.FC = () => {
       returnedAssets,
     };
 
-    processPersonaliaAction({
-      employeeId: targetEmpId,
-      type: actionType,
-      newPosition: newPosition.trim(),
-      newDepartment: newDepartment.trim(),
-      newGrade,
-      newSalary: Number(newSalary) || 0,
-      newPositionAllowance: Number(newPositionAllowance) || 0,
-      newFixedAllowance: Number(newFixedAllowance) || 0,
-      newBranchLocation,
-      contractDurationMonths: Number(contractDurationMonths) || 12,
-      contractEndDate,
-      actingRoleExpiryDate,
-      permanentAppointmentDate,
-      disciplinaryLevel,
-      reason: reason || `(Draf) Pengajuan tindakan personalia: ${actionType}`,
-      effectiveDate,
-      skDocNumber: skDocNumber.trim(),
-      notes: reason,
-      signatories: signatories.map((s) => ({
-        id: s.id,
-        label: s.label.trim() || 'Approval',
-        employeeId: s.employeeId,
-        nik: s.nik,
-        name: s.name.trim() || '-',
-        role: s.role?.trim() || '-',
-      })),
-      status: 'Draf',
-      systemicImpact: systemicConfig,
-    });
+    try {
+      await processPersonaliaAction({
+        employeeId: targetEmpId,
+        type: actionType,
+        newPosition: newPosition.trim(),
+        newDepartment: newDepartment.trim(),
+        newGrade,
+        newSalary: Number(newSalary) || 0,
+        newPositionAllowance: Number(newPositionAllowance) || 0,
+        newFixedAllowance: Number(newFixedAllowance) || 0,
+        newBranchLocation,
+        contractDurationMonths: Number(contractDurationMonths) || 12,
+        contractEndDate,
+        actingRoleExpiryDate,
+        permanentAppointmentDate,
+        disciplinaryLevel,
+        reason: reason || `(Draf) Pengajuan tindakan personalia: ${actionType}`,
+        effectiveDate,
+        skDocNumber: skDocNumber.trim(),
+        notes: reason,
+        signatories: signatories.map((s) => ({
+          id: s.id,
+          label: s.label.trim() || 'Approval',
+          employeeId: s.employeeId,
+          nik: s.nik,
+          name: s.name.trim() || '-',
+          role: s.role?.trim() || '-',
+        })),
+        status: 'Draf',
+        systemicImpact: systemicConfig,
+      });
 
-    setIsModalOpen(false);
-    setReason('');
-    setShowValidationErrors(false);
+      setIsModalOpen(false);
+      setReason('');
+      setShowValidationErrors(false);
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : 'Gagal menyimpan tindakan personalia.');
+    }
   };
 
   // Helper to construct Systemic Impact Grid Matrix for Form & Document Preview
@@ -1438,6 +1463,26 @@ export const PersonaliaManagement: React.FC = () => {
               )}
             </div>
           </div>
+
+          {draftLogs.length > 0 && (
+            <div className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-2">
+              <div className="text-xs font-semibold text-amber-900">Draf SK yang belum diajukan ({draftLogs.length})</div>
+              {draftLogs.map((d) => {
+                const e = employees.find((x) => x.id === d.employeeId);
+                return (
+                  <div key={d.id} className="flex flex-wrap items-center justify-between gap-2 bg-white border border-amber-100 rounded-lg px-3 py-2">
+                    <div className="text-xs text-slate-700">
+                      <span className="font-semibold">{d.type}</span> · {e?.fullName || 'Karyawan'} · efektif {d.effectiveDate}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button type="button" onClick={() => { setDraftActionError(null); setDraftAction({ id: d.id, mode: 'submit' }); }} className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md text-[11px] font-semibold">Ajukan Persetujuan</button>
+                      <button type="button" onClick={() => { setDraftActionError(null); setDraftAction({ id: d.id, mode: 'delete' }); }} className="px-2.5 py-1 bg-white hover:bg-rose-50 text-rose-700 border border-rose-200 rounded-md text-[11px] font-semibold">Hapus Draf</button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
           {/* TAMPILAN MOBILE & TABLET: Adaptive Card View (< md) */}
           <div className="md:hidden space-y-3">
@@ -2610,7 +2655,6 @@ export const PersonaliaManagement: React.FC = () => {
                               {pos}
                             </option>
                           ))}
-                          <option value="__custom__">+ Input Posisi Kustom Baru</option>
                         </select>
                         {(isCustomPos || (newPosition && !availablePositions.includes(newPosition))) && (
                           <ValidatedInput
@@ -2697,7 +2741,6 @@ export const PersonaliaManagement: React.FC = () => {
                               {pos}
                             </option>
                           ))}
-                          <option value="__custom__">+ Input Posisi Kustom Baru</option>
                         </select>
                         {(isCustomPos || (newPosition && !availablePositions.includes(newPosition))) && (
                           <ValidatedInput
@@ -2785,7 +2828,6 @@ export const PersonaliaManagement: React.FC = () => {
                               {pos}
                             </option>
                           ))}
-                          <option value="__custom__">+ Input Posisi Kustom Baru</option>
                         </select>
                         {(isCustomPos || (newPosition && !availablePositions.includes(newPosition))) && (
                           <ValidatedInput
@@ -2984,7 +3026,6 @@ export const PersonaliaManagement: React.FC = () => {
                               {pos}
                             </option>
                           ))}
-                          <option value="__custom__">+ Input Posisi Kustom Baru</option>
                         </select>
                         {(isCustomPos || (newPosition && !availablePositions.includes(newPosition))) && (
                           <ValidatedInput
@@ -4046,6 +4087,26 @@ export const PersonaliaManagement: React.FC = () => {
                 className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold text-xs transition-colors shadow-2xs"
               >
                 Tutup & Lanjutkan Formulir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {draftAction && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" onClick={() => !draftActionBusy && setDraftAction(null)}>
+          <div className="w-full max-w-sm bg-white rounded-xl shadow-xl border border-slate-200 p-5 space-y-3" onClick={(ev) => ev.stopPropagation()}>
+            <h3 className="text-sm font-bold text-slate-900">{draftAction.mode === 'submit' ? 'Ajukan draf untuk persetujuan?' : 'Hapus draf ini?'}</h3>
+            <p className="text-xs text-slate-600">
+              {draftAction.mode === 'submit'
+                ? 'Draf akan masuk antrean persetujuan atasan. Perubahan pada data karyawan baru berlaku setelah seluruh tahap disetujui.'
+                : 'Draf akan dihapus permanen dan tidak dapat dikembalikan.'}
+            </p>
+            {draftActionError && <div className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-md px-3 py-2">{draftActionError}</div>}
+            <div className="flex justify-end gap-2 pt-1">
+              <button type="button" disabled={draftActionBusy} onClick={() => setDraftAction(null)} className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50">Batal</button>
+              <button type="button" disabled={draftActionBusy} onClick={confirmDraftAction} className={`px-3 py-1.5 text-xs font-semibold text-white rounded-lg ${draftAction.mode === 'submit' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-rose-600 hover:bg-rose-700'}`}>
+                {draftActionBusy ? 'Memproses...' : draftAction.mode === 'submit' ? 'Ya, Ajukan' : 'Ya, Hapus'}
               </button>
             </div>
           </div>

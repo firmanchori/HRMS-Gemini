@@ -412,6 +412,56 @@ export interface ContractRenewalReview {
   newContractDocNumber: string | null;
 }
 
+export interface PersonaliaActionRow {
+  id: string;
+  tenantId: string;
+  employeeId: string;
+  type: string;
+  status: "Draf" | "Menunggu Approval" | "Disetujui" | "Ditolak";
+  previousPosition: string | null;
+  previousDepartment: string | null;
+  previousGrade: string | null;
+  previousSalary: number;
+  previousAllowance: number | null;
+  previousOrgNodeId: string | null;
+  previousEntityId: string | null;
+  newOrgNodeId: string | null;
+  newGrade: string | null;
+  newSalary: number | null;
+  newPositionAllowance: number | null;
+  newFixedAllowance: number | null;
+  newBranchLocation: string | null;
+  newEntityId: string | null;
+  mutationType: string | null;
+  personalDataUpdates: Record<string, unknown> | null;
+  contractDurationMonths: number | null;
+  contractEndDate: string | null;
+  actingRoleExpiryDate: string | null;
+  permanentAppointmentDate: string | null;
+  disciplinaryLevel: string | null;
+  effectiveDate: string;
+  letterNumber: string;
+  reason: string;
+  notes: string | null;
+  signatories: { id?: string; label: string; employeeId?: string; nik?: string; name: string; role?: string; date?: string }[] | null;
+  systemicImpact: Record<string, unknown> | null;
+  approvalItemId: string | null;
+  documentId: string | null;
+  approvedBy: string | null;
+  appliedAt: string | null;
+  createdAt: string;
+}
+
+/** What the client may send — the server captures the "previous*" snapshot, status after submit, and applies the change only after the Approval Engine approves. */
+export type PersonaliaActionInput = Partial<Pick<PersonaliaActionRow, "newOrgNodeId" | "newGrade" | "newSalary" | "newPositionAllowance" | "newFixedAllowance" | "newBranchLocation" | "newEntityId" | "mutationType" | "personalDataUpdates" | "contractDurationMonths" | "contractEndDate" | "actingRoleExpiryDate" | "permanentAppointmentDate" | "disciplinaryLevel" | "notes" | "signatories" | "systemicImpact">> & {
+  employeeId: string;
+  type: string;
+  status: "Draf" | "Menunggu Approval";
+  effectiveDate: string;
+  reason: string;
+  letterNumber?: string | null;
+};
+
 export interface ApprovalWorkflowItem {
   id: string;
   tenantId: string;
@@ -1163,6 +1213,11 @@ export const tenantApi = {
   getModuleSettings: () => request<Record<string, Record<string, unknown>>>("/api/tenant/module-settings"),
   updateModuleSettings: (moduleKey: string, settings: Record<string, unknown>) =>
     request<{ moduleKey: string; settings: Record<string, unknown> }>(`/api/tenant/module-settings/${moduleKey}`, { method: "PUT", body: JSON.stringify({ settings }) }),
+
+  listPersonaliaActions: (employeeId?: string) => request<PersonaliaActionRow[]>(`/api/tenant/personalia-actions${employeeId ? `?employeeId=${employeeId}` : ""}`),
+  createPersonaliaAction: (data: PersonaliaActionInput) => request<PersonaliaActionRow>("/api/tenant/personalia-actions", { method: "POST", body: JSON.stringify(data) }),
+  submitPersonaliaAction: (id: string) => request<PersonaliaActionRow>(`/api/tenant/personalia-actions/${id}/submit`, { method: "POST" }),
+  deletePersonaliaAction: (id: string) => request<void>(`/api/tenant/personalia-actions/${id}`, { method: "DELETE" }),
 
   decideApprovalItem: (id: string, decision: "Disetujui" | "Ditolak" | "Diketahui", reason?: string) =>
     request<ApprovalWorkflowItem>(`/api/tenant/approval-items/${id}/decision`, { method: "POST", body: JSON.stringify({ decision, reason }) }),

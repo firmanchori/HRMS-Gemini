@@ -1804,3 +1804,59 @@ export const vendorInvoices = pgTable("vendor_invoices", {
   notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+// ---------------------------------------------------------------------------
+// Personalia — real backend (user, 2026-11-11: "modul Personalia belum punya
+// tabel backend ... integrasikan semuanya end to end"). One row per SK /
+// personnel action (promosi, demosi, mutasi, penyesuaian gaji, pengangkatan
+// tetap, perpanjangan kontrak, Plt, koreksi data pribadi, ...). Replaces
+// the two localStorage-only collections (personaliaLogs + personaliaRequests)
+// that never touched the database: previous-values are snapshotted by the
+// SERVER from the real employee row, the approval chain goes through the
+// Approval Engine, and the employee master / org node / reporting line /
+// official document are only changed by the server once the final approval
+// lands — never by the browser.
+// ---------------------------------------------------------------------------
+
+export const personaliaActions = pgTable("personalia_actions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  employeeId: uuid("employee_id").references(() => employees.id).notNull(),
+  type: text("type").notNull(),
+  status: text("status").notNull().default("Draf"), // Draf | Menunggu Approval | Disetujui | Ditolak
+  // Snapshot of the employee at creation time (server-captured).
+  previousPosition: text("previous_position"),
+  previousDepartment: text("previous_department"),
+  previousGrade: text("previous_grade"),
+  previousSalary: integer("previous_salary").notNull().default(0),
+  previousAllowance: integer("previous_allowance"),
+  previousOrgNodeId: uuid("previous_org_node_id"),
+  previousEntityId: uuid("previous_entity_id"),
+  // Target. A new position is a REFERENCE to the org chart (org node), never free text.
+  newOrgNodeId: uuid("new_org_node_id").references(() => orgStructureNodes.id),
+  newGrade: text("new_grade"),
+  newSalary: integer("new_salary"),
+  newPositionAllowance: integer("new_position_allowance"),
+  newFixedAllowance: integer("new_fixed_allowance"),
+  newBranchLocation: text("new_branch_location"),
+  newEntityId: uuid("new_entity_id").references(() => companyEntities.id),
+  mutationType: text("mutation_type"),
+  personalDataUpdates: jsonb("personal_data_updates").$type<Record<string, unknown>>(),
+  contractDurationMonths: integer("contract_duration_months"),
+  contractEndDate: text("contract_end_date"),
+  actingRoleExpiryDate: text("acting_role_expiry_date"),
+  permanentAppointmentDate: text("permanent_appointment_date"),
+  disciplinaryLevel: text("disciplinary_level"),
+  effectiveDate: text("effective_date").notNull(),
+  letterNumber: text("letter_number").notNull(),
+  reason: text("reason").notNull(),
+  notes: text("notes"),
+  signatories: jsonb("signatories").$type<{ id?: string; label: string; employeeId?: string; nik?: string; name: string; role?: string; date?: string }[]>(),
+  systemicImpact: jsonb("systemic_impact").$type<Record<string, unknown>>(),
+  approvalItemId: uuid("approval_item_id"),
+  documentId: uuid("document_id"),
+  approvedBy: text("approved_by"),
+  appliedAt: timestamp("applied_at", { withTimezone: true }),
+  createdByUserId: uuid("created_by_user_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [uniqueIndex("personalia_actions_tenant_letter_idx").on(table.tenantId, table.letterNumber)]);

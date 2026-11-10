@@ -15,6 +15,7 @@ import { checkClockIn, checkClockOut, performClockIn, performClockOut, ClockErro
 import { encryptSecret, decryptSecret } from "../lib/crypto.ts";
 import { generateTotpSecret, totpOtpauthUrl, verifyTotpCode, generateBackupCodes, hashBackupCode, consumeBackupCode } from "../lib/totp.ts";
 import { sendSecurityAlert } from "../lib/alerts.ts";
+import { personaliaActionSchema, createPersonaliaAction, submitPersonaliaAction, deletePersonaliaDraft, listPersonaliaActions, PersonaliaError } from "../lib/personalia.ts";
 import { decideApproval, withDerivedStatus, currentBlockingStep, activeDelegatorIds, ApprovalError } from "../lib/approvalEngine.ts";
 
 /**
@@ -598,8 +599,8 @@ employeeRouter.put("/loans/:id", requirePermission("loans", "edit"), validatePar
 // approvals, documents). Same contract as phase 1: schemas mirror tenant.ts,
 // every query is tenant-scoped by the session, no entity scoping (employee
 // accounts have no entity dimension — documented default), writes audited.
-// Deliberately skipped: "personalia" (no real backend table exists yet),
-// POST /job-requisitions (job_requisitions.requested_by_user_id is a NOT NULL
+// "personalia" is now served below (personalia_actions table).
+// Deliberately skipped: POST /job-requisitions (job_requisitions.requested_by_user_id is a NOT NULL
 // FK to users, which an employee account has no row in — needs a schema
 // decision, not a silent workaround).
 // ---------------------------------------------------------------------------
@@ -957,6 +958,36 @@ employeeRouter.post("/approval-items/:id/decision", validateParams(uuidParam("id
     res.json(withDerivedStatus(updated));
   } catch (err) {
     if (err instanceof ApprovalError) return res.status(err.status).json({ error: err.message });
+    throw err;
+  }
+});
+
+// --- Personalia (moduleKey "personalia") — same server logic as tenant.ts; the decision itself still goes through the approval engine. ---
+employeeRouter.get("/personalia-actions", requirePermission("personalia", "view"), async (req, res) => {
+  res.json(await listPersonaliaActions(req.session!.tenantId!, typeof req.query.employeeId === "string" ? req.query.employeeId : undefined));
+});
+employeeRouter.post("/personalia-actions", requirePermission("personalia", "create"), validateBody(personaliaActionSchema), async (req, res) => {
+  try {
+    res.status(201).json(await createPersonaliaAction({ tenantId: req.session!.tenantId!, actorUserId: null, input: req.body }));
+  } catch (err) {
+    if (err instanceof PersonaliaError) return res.status(err.status).json({ error: err.message });
+    throw err;
+  }
+});
+employeeRouter.post("/personalia-actions/:id/submit", requirePermission("personalia", "create"), validateParams(uuidParam("id")), async (req, res) => {
+  try {
+    res.json(await submitPersonaliaAction({ tenantId: req.session!.tenantId!, actionId: req.params.id, actorUserId: null }));
+  } catch (err) {
+    if (err instanceof PersonaliaError) return res.status(err.status).json({ error: err.message });
+    throw err;
+  }
+});
+employeeRouter.delete("/personalia-actions/:id", requirePermission("personalia", "delete"), validateParams(uuidParam("id")), async (req, res) => {
+  try {
+    await deletePersonaliaDraft(req.session!.tenantId!, req.params.id);
+    res.status(204).end();
+  } catch (err) {
+    if (err instanceof PersonaliaError) return res.status(err.status).json({ error: err.message });
     throw err;
   }
 });
