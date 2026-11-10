@@ -29,6 +29,116 @@ import { ValidatedTextarea } from '../common/ValidatedInput';
 import { formatRupiah } from '../../utils/taxCalculator';
 import { ApprovalWorkflowItem, ApprovalDelegation } from '../../types/hrms';
 import { ScrollableTabNav } from '../common/ScrollableTabNav';
+import { tenantApi, type ApprovalWorkflowStepConfig } from '../../tenant/api';
+
+const WORKFLOW_CATEGORIES = ['Cuti', 'Perbaikan Presensi', 'Tukar Shift', 'Lembur', 'Pinjaman', 'Reimbursement', 'Promosi/Personalia', 'Perjalanan Dinas', 'Procurement PR', 'Offboarding'];
+const DEFAULT_WORKFLOW_STEP: ApprovalWorkflowStepConfig = { mode: 'approve', label: 'Persetujuan Atasan Langsung', approverType: 'direct_manager', slaHours: 48 };
+
+/** Pengaturan alur approval per kategori: jumlah level, siapa approver tiap level (dari hierarki organisasi nyata), mode persetujuan vs "mengetahui", SLA per level. */
+const WorkflowSettingsPanel: React.FC<{ employees: { id: string; fullName: string }[] }> = ({ employees }) => {
+  const [category, setCategory] = useState(WORKFLOW_CATEGORIES[0]);
+  const [steps, setSteps] = useState<ApprovalWorkflowStepConfig[]>([DEFAULT_WORKFLOW_STEP]);
+  const [saving, setSaving] = useState(false);
+  const [notice, setNotice] = useState<{ type: 'ok' | 'error'; text: string } | null>(null);
+
+  useEffect(() => {
+    setNotice(null);
+    tenantApi
+      .listApprovalWorkflowConfigs()
+      .then((rows) => setSteps(rows.find((r) => r.category === category)?.steps ?? [DEFAULT_WORKFLOW_STEP]))
+      .catch(() => setSteps([DEFAULT_WORKFLOW_STEP]));
+  }, [category]);
+
+  const update = (i: number, patch: Partial<ApprovalWorkflowStepConfig>) => setSteps((prev) => prev.map((st, idx) => (idx === i ? { ...st, ...patch } : st)));
+  const hasApprove = steps.some((st) => st.mode === 'approve');
+  const invalid = !hasApprove || steps.some((st) => !st.label.trim() || (st.approverType === 'employee' && !st.approverEmployeeId) || (st.approverType === 'role' && !st.approverRoleKey?.trim()));
+
+  const save = async () => {
+    setSaving(true);
+    setNotice(null);
+    try {
+      await tenantApi.saveApprovalWorkflowConfig(category, steps);
+      setNotice({ type: 'ok', text: `Alur approval "${category}" disimpan — berlaku untuk pengajuan baru.` });
+    } catch (err) {
+      setNotice({ type: 'error', text: err instanceof Error ? err.message : 'Gagal menyimpan.' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-lg p-5 shadow-xs space-y-4 max-w-3xl">
+      <div>
+        <h3 className="text-sm font-bold text-slate-900 mb-1">Alur Approval per Kategori</h3>
+        <p className="text-xs text-slate-500">
+          Tentukan jumlah level dan siapa yang memutuskan di tiap level. Approver dihitung otomatis dari atasan langsung pemohon di struktur organisasi, bukan role tetap.
+        </p>
+      </div>
+      <div className="flex items-center gap-2 text-xs">
+        <label className="font-semibold text-slate-700">Kategori</label>
+        <select value={category} onChange={(e) => setCategory(e.target.value)} className="px-2.5 py-1.5 border border-slate-300 rounded bg-white">
+          {WORKFLOW_CATEGORIES.map((c) => (
+            <option key={c}>{c}</option>
+          ))}
+        </select>
+      </div>
+      <div className="space-y-2">
+        {steps.map((st, i) => (
+          <div key={i} className="grid grid-cols-12 gap-2 items-center p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs">
+            <span className="col-span-12 sm:col-span-1 font-bold text-indigo-700">L{i + 1}</span>
+            <input value={st.label} onChange={(e) => update(i, { label: e.target.value })} placeholder="Nama langkah" className="col-span-12 sm:col-span-3 px-2 py-1.5 border border-slate-300 rounded" />
+            <select value={st.mode} onChange={(e) => update(i, { mode: e.target.value as 'approve' | 'acknowledge' })} className="col-span-6 sm:col-span-2 px-2 py-1.5 border border-slate-300 rounded bg-white">
+              <option value="approve">Menyetujui</option>
+              <option value="acknowledge">Mengetahui</option>
+            </select>
+            <select
+              value={st.approverType}
+              onChange={(e) => update(i, { approverType: e.target.value as ApprovalWorkflowStepConfig['approverType'] })}
+              className="col-span-6 sm:col-span-3 px-2 py-1.5 border border-slate-300 rounded bg-white"
+            >
+              <option value="direct_manager">Atasan langsung</option>
+              <option value="manager_of_manager">Atasan dari atasan</option>
+              <option value="role">Pemegang role tertentu</option>
+              <option value="employee">Karyawan tertentu</option>
+            </select>
+            <input
+              type="number"
+              min={1}
+              value={st.slaHours}
+              onChange={(e) => update(i, { slaHours: Math.max(1, Number(e.target.value)) })}
+              title="SLA (jam)"
+              className="col-span-4 sm:col-span-1 px-2 py-1.5 border border-slate-300 rounded font-mono"
+            />
+            <button type="button" disabled={steps.length <= 1} onClick={() => setSteps((prev) => prev.filter((_, idx) => idx !== i))} className="col-span-2 sm:col-span-1 text-rose-500 disabled:opacity-30">
+              <X className="w-4 h-4" />
+            </button>
+            {st.approverType === 'role' && (
+              <input value={st.approverRoleKey ?? ''} onChange={(e) => update(i, { approverRoleKey: e.target.value })} placeholder="roleKey (mis. finance_supervisor)" className="col-span-12 sm:col-span-6 sm:col-start-2 px-2 py-1.5 border border-slate-300 rounded font-mono" />
+            )}
+            {st.approverType === 'employee' && (
+              <select value={st.approverEmployeeId ?? ''} onChange={(e) => update(i, { approverEmployeeId: e.target.value })} className="col-span-12 sm:col-span-6 sm:col-start-2 px-2 py-1.5 border border-slate-300 rounded bg-white">
+                <option value="">-- Pilih karyawan approver --</option>
+                {employees.map((emp) => (
+                  <option key={emp.id} value={emp.id}>{emp.fullName}</option>
+                ))}
+              </select>
+            )}
+          </div>
+        ))}
+        <button type="button" onClick={() => setSteps((prev) => [...prev, { ...DEFAULT_WORKFLOW_STEP, label: `Level ${prev.length + 1}`, approverType: 'manager_of_manager' }])} className="text-xs font-semibold text-indigo-600">
+          + Tambah Level
+        </button>
+      </div>
+      {!hasApprove && <p className="text-[11px] text-rose-600 font-medium">Minimal satu langkah harus bermode Menyetujui.</p>}
+      {notice && <p className={`text-xs font-medium ${notice.type === 'ok' ? 'text-emerald-700' : 'text-rose-600'}`}>{notice.text}</p>}
+      <div className="flex justify-end">
+        <button type="button" disabled={invalid || saving} onClick={save} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white rounded font-semibold text-xs">
+          {saving ? 'Menyimpan...' : 'Simpan Alur'}
+        </button>
+      </div>
+    </div>
+  );
+};
 
 export const ApprovalCenter: React.FC = () => {
   const {
@@ -758,6 +868,7 @@ export const ApprovalCenter: React.FC = () => {
       )}
 
       {/* Settings & SLA Tab */}
+      {activeTab === 'pengaturan' && <WorkflowSettingsPanel employees={employees} />}
       {activeTab === 'pengaturan' && (
         <div className="bg-white border border-slate-200 rounded-lg p-5 shadow-xs space-y-6 max-w-2xl">
           <div>
@@ -880,6 +991,33 @@ export const ApprovalCenter: React.FC = () => {
                   </div>
                 )}
               </div>
+
+              {(selectedItem.steps?.length ?? 0) > 0 && (
+                <div className="space-y-1.5">
+                  <div className="font-semibold text-slate-700">Alur Persetujuan</div>
+                  {selectedItem.steps!.map((st) => {
+                    const approverName = employees.find((e) => e.id === st.approverEmployeeId)?.fullName ?? (st.approverRoleKey ? `Role: ${st.approverRoleKey}` : '-');
+                    const isCurrent = !st.decision && st.level === selectedItem.level;
+                    return (
+                      <div key={st.level} className={`flex items-start justify-between gap-2 p-2 rounded border ${isCurrent ? 'border-indigo-300 bg-indigo-50/50' : 'border-slate-200 bg-slate-50'}`}>
+                        <div className="min-w-0">
+                          <div className="font-semibold text-slate-800">
+                            L{st.level} · {st.label} <span className="text-[10px] font-normal text-slate-500">({st.mode === 'acknowledge' ? 'mengetahui' : 'menyetujui'})</span>
+                          </div>
+                          <div className="text-[10px] text-slate-500">
+                            {approverName}
+                            {st.deadlineAt && !st.decision ? ` · batas ${new Date(st.deadlineAt).toLocaleString('id-ID')}` : ''}
+                          </div>
+                          {st.reason && <div className="text-[10px] text-slate-600 italic">"{st.reason}"</div>}
+                        </div>
+                        <span className={`shrink-0 text-[10px] font-bold ${st.decision === 'Disetujui' ? 'text-emerald-700' : st.decision === 'Ditolak' ? 'text-rose-700' : st.decision ? 'text-slate-600' : 'text-amber-700'}`}>
+                          {st.decision ?? (isCurrent ? 'Menunggu' : 'Belum giliran')}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
 
               <ValidatedTextarea
                 label="Catatan / Alasan Putusan"
