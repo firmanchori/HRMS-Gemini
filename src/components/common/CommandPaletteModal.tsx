@@ -589,7 +589,7 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
               partyRole: doc.signeeRole,
               contentParagraphs: [doc.contentPreview],
               rawHtmlOrBody: doc.renderedHtml,
-              qrPayload: doc.qrVerificationUrl,
+              qrPayload: doc.qrVerificationUrl ?? undefined,
             });
             onClose();
           },

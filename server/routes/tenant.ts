@@ -3320,6 +3320,16 @@ tenantRouter.delete("/document-templates/:id", validateParams(uuidParam("id")), 
 // Document Management — Official Documents
 // ---------------------------------------------------------------------------
 
+/**
+ * Business-process fix (user, 2026-11-10: "QR muncul saat sudah approve
+ * dan kosong jika belum approve sesuai dengan template dokumen") — a
+ * document used to be created already "Resmi Diterbitkan" with a QR the
+ * FRONTEND invented (`Math.random()`-based hash, no server involvement),
+ * because this schema let the client supply both `status` and
+ * `qrVerificationUrl` directly. Neither field is client-settable anymore;
+ * see POST /documents and /documents/:id/signatories/:index/confirm below,
+ * the only two places that ever write them.
+ */
 const officialDocumentSchema = z.object({
   documentNumber: z.string().trim().min(1).max(200),
   type: z.string().trim().min(1).max(200),
@@ -3329,12 +3339,23 @@ const officialDocumentSchema = z.object({
   issueDate: z.string().trim().min(1).max(20),
   signeeName: z.string().trim().min(1).max(200),
   signeeRole: z.string().trim().min(1).max(200),
-  qrVerificationUrl: z.string().trim().min(1).max(500),
-  status: z.enum(["Resmi Diterbitkan", "Draft"]).optional(),
   contentPreview: z.string().max(500000),
   renderedHtml: z.string().max(2000000).optional().nullable(),
   isFromDocxTemplate: z.boolean().optional(),
 });
+
+type DocSignatory = typeof officialDocuments.$inferSelect["signatories"][number];
+
+/** Vacuously complete when there are no required entries at all — the fallback below always creates at least one, so this only ever matters for pre-existing rows migrated with an empty list. */
+function isFullySigned(signatories: DocSignatory[]): boolean {
+  return signatories.filter((s) => s.isRequired).every((s) => s.confirmedAt);
+}
+
+function buildVerificationUrl(documentNumber: string): string {
+  const cleanNumber = documentNumber.replace(/[\/\s]/g, "-");
+  const hash = crypto.randomUUID().replace(/-/g, "").slice(0, 16);
+  return `https://nusahr.enterprise/verify?doc=${cleanNumber}&h=${hash}`;
+}
 
 tenantRouter.get("/documents", async (req, res) => {
   const tenantId = req.session!.tenantId!;
@@ -3347,9 +3368,95 @@ tenantRouter.post("/documents", validateBody(officialDocumentSchema), async (req
     const [tmpl] = await db.select().from(documentTemplates).where(and(eq(documentTemplates.id, req.body.templateId), eq(documentTemplates.tenantId, tenantId))).limit(1);
     if (!tmpl) return res.status(404).json({ error: "Template dokumen tidak ditemukan" });
   }
-  const [created] = await db.insert(officialDocuments).values({ ...req.body, tenantId }).returning();
+
+  // Required signatories for this document TYPE, configured once in
+  // Document Management (documentSignatoryConfigs) — copied onto the
+  // document instance now so a later edit to the config never retroactively
+  // changes what an already-issued document required.
+  const configs = await db
+    .select()
+    .from(documentSignatoryConfigs)
+    .where(and(eq(documentSignatoryConfigs.tenantId, tenantId), eq(documentSignatoryConfigs.documentType, req.body.type)))
+    .orderBy(documentSignatoryConfigs.sortOrder);
+
+  const signatories: DocSignatory[] =
+    configs.length > 0
+      ? configs.map((c) => ({ roleLabel: c.roleLabel, isRequired: c.isRequired, sortOrder: c.sortOrder, confirmedByEmployeeId: null, confirmedByName: null, confirmedAt: null }))
+      : // No signatory config exists for this type — fall back to a single
+        // required confirmation by the document's own nominal signee, so a
+        // document can never silently skip confirmation entirely just
+        // because nobody configured a signatory list for its type yet.
+        [{ roleLabel: req.body.signeeRole, isRequired: true, sortOrder: 0, confirmedByEmployeeId: null, confirmedByName: null, confirmedAt: null }];
+
+  const alreadyComplete = isFullySigned(signatories);
+  const [created] = await db
+    .insert(officialDocuments)
+    .values({
+      ...req.body,
+      tenantId,
+      signatories,
+      status: alreadyComplete ? "Resmi Diterbitkan" : "Menunggu Tanda Tangan",
+      qrVerificationUrl: alreadyComplete ? buildVerificationUrl(req.body.documentNumber) : null,
+    })
+    .returning();
+  await logAudit({ actorUserId: req.session!.userId, tenantId, action: "document.created", details: { documentId: created.id, type: created.type, signatoryCount: signatories.length } });
   res.status(201).json(created);
 });
+
+const confirmDocumentSignatorySchema = z.object({
+  confirmedByName: z.string().trim().min(1).max(200).optional(),
+});
+
+/**
+ * The actual "approve" action this whole redesign is for — confirms ONE
+ * signatory slot on ONE document. Only once every `isRequired` slot has a
+ * confirmedAt does the document flip to "Resmi Diterbitkan" and get a real,
+ * server-generated QR; every confirmation before that leaves it
+ * "Menunggu Tanda Tangan" with qrVerificationUrl staying null, which is
+ * exactly the empty-until-approved behavior that was missing.
+ */
+tenantRouter.post(
+  "/documents/:id/signatories/:index/confirm",
+  validateParams(z.object({ id: z.string().uuid(), index: z.coerce.number().int().min(0) })),
+  validateBody(confirmDocumentSignatorySchema),
+  async (req, res) => {
+    const tenantId = req.session!.tenantId!;
+    const index = Number(req.params.index);
+    const [doc] = await db.select().from(officialDocuments).where(and(eq(officialDocuments.id, req.params.id), eq(officialDocuments.tenantId, tenantId))).limit(1);
+    if (!doc) return res.status(404).json({ error: "Dokumen tidak ditemukan" });
+    if (doc.status === "Resmi Diterbitkan") return res.status(400).json({ error: "Dokumen ini sudah resmi diterbitkan, seluruh tanda tangan sudah lengkap." });
+
+    const signatories = [...doc.signatories];
+    if (!signatories[index]) return res.status(404).json({ error: "Slot penandatangan tidak ditemukan" });
+    if (signatories[index].confirmedAt) return res.status(400).json({ error: "Slot penandatangan ini sudah dikonfirmasi sebelumnya." });
+
+    signatories[index] = {
+      ...signatories[index],
+      confirmedByEmployeeId: req.session!.employeeId ?? null,
+      confirmedByName: req.body.confirmedByName?.trim() || doc.signeeName,
+      confirmedAt: new Date().toISOString(),
+    };
+
+    const nowComplete = isFullySigned(signatories);
+    const [updated] = await db
+      .update(officialDocuments)
+      .set({
+        signatories,
+        status: nowComplete ? "Resmi Diterbitkan" : doc.status,
+        qrVerificationUrl: nowComplete ? buildVerificationUrl(doc.documentNumber) : doc.qrVerificationUrl,
+      })
+      .where(eq(officialDocuments.id, doc.id))
+      .returning();
+
+    await logAudit({
+      actorUserId: req.session!.role === "tenant_admin" ? req.session!.userId : null,
+      tenantId,
+      action: nowComplete ? "document.fully_signed_issued" : "document.signatory_confirmed",
+      details: { documentId: doc.id, signatoryIndex: index, roleLabel: signatories[index].roleLabel },
+    });
+    res.json(updated);
+  }
+);
 
 // ---------------------------------------------------------------------------
 // eNPS Engagement Survey

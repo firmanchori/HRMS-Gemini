@@ -846,11 +846,22 @@ export interface OfficialDocument {
   issueDate: string;
   signeeName: string;
   signeeRole: string;
-  qrVerificationUrl: string;
-  status: "Resmi Diterbitkan" | "Draft";
+  /** null until every required signatory has confirmed — server-generated, never client-supplied. */
+  qrVerificationUrl: string | null;
+  status: "Resmi Diterbitkan" | "Menunggu Tanda Tangan" | "Draft";
+  signatories: OfficialDocumentSignatory[];
   contentPreview: string;
   renderedHtml: string | null;
   isFromDocxTemplate: boolean;
+}
+
+export interface OfficialDocumentSignatory {
+  roleLabel: string;
+  isRequired: boolean;
+  sortOrder: number;
+  confirmedByEmployeeId: string | null;
+  confirmedByName: string | null;
+  confirmedAt: string | null;
 }
 
 export interface EnpsSurveyResponse {
@@ -1280,8 +1291,10 @@ export const tenantApi = {
     request<{ ok: true }>(`/api/tenant/document-templates/${id}`, { method: "DELETE" }),
 
   listDocuments: () => request<OfficialDocument[]>("/api/tenant/documents"),
-  createDocument: (data: Omit<OfficialDocument, "id" | "tenantId">) =>
+  createDocument: (data: Omit<OfficialDocument, "id" | "tenantId" | "qrVerificationUrl" | "status" | "signatories">) =>
     request<OfficialDocument>("/api/tenant/documents", { method: "POST", body: JSON.stringify(data) }),
+  confirmDocumentSignatory: (documentId: string, index: number, confirmedByName?: string) =>
+    request<OfficialDocument>(`/api/tenant/documents/${documentId}/signatories/${index}/confirm`, { method: "POST", body: JSON.stringify({ confirmedByName }) }),
 
   getEnpsSurvey: () => request<EnpsSurvey | null>("/api/tenant/enps-survey"),
   submitEnpsResponse: (data: { score: number; department: string; feedback?: string | null }) =>

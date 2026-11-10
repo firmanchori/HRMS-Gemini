@@ -1289,8 +1289,9 @@ export interface OfficialDocument {
   issueDate: string;
   signeeName: string;
   signeeRole: string;
-  qrVerificationUrl: string;
-  status: 'Resmi Diterbitkan' | 'Draft';
+  qrVerificationUrl: string | null;
+  status: 'Resmi Diterbitkan' | 'Menunggu Tanda Tangan' | 'Draft';
+  signatories?: { roleLabel: string; isRequired: boolean; sortOrder: number; confirmedByEmployeeId: string | null; confirmedByName: string | null; confirmedAt: string | null }[];
   contentPreview: string;
   renderedHtml?: string;
   isFromDocxTemplate?: boolean;

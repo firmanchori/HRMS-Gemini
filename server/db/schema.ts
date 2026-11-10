@@ -1634,8 +1634,27 @@ export const officialDocuments = pgTable("official_documents", {
   issueDate: text("issue_date").notNull(),
   signeeName: text("signee_name").notNull(),
   signeeRole: text("signee_role").notNull(),
-  qrVerificationUrl: text("qr_verification_url").notNull(),
-  status: text("status").notNull().default("Resmi Diterbitkan"),
+  // Nullable now (business process review, user 2026-11-10: "QR muncul
+  // saat sudah approve dan kosong jika belum approve") — a document used
+  // to get a QR code and land on "Resmi Diterbitkan" (officially issued)
+  // the instant it was created, with the frontend inventing both the
+  // status AND the QR URL itself (`Math.random()`-based hash, no server
+  // involvement at all). Now stays null until every required signatory in
+  // `signatories` below has confirmed; POST /documents and the confirm
+  // route are the only two places that ever write this column, never the
+  // client-supplied value.
+  qrVerificationUrl: text("qr_verification_url"),
+  status: text("status").notNull().default("Menunggu Tanda Tangan"),
+  // Per-instance copy of documentSignatoryConfigs for this document's
+  // `type`, taken at creation time (so editing the config later doesn't
+  // retroactively change what an already-issued document required) — each
+  // entry tracks its own confirmation independently. Document only
+  // transitions to "Resmi Diterbitkan" (and only then gets a real
+  // qrVerificationUrl) once every entry with isRequired:true has
+  // confirmedAt set.
+  signatories: jsonb("signatories").notNull().default([]).$type<
+    { roleLabel: string; isRequired: boolean; sortOrder: number; confirmedByEmployeeId: string | null; confirmedByName: string | null; confirmedAt: string | null }[]
+  >(),
   contentPreview: text("content_preview").notNull(),
   renderedHtml: text("rendered_html"),
   isFromDocxTemplate: boolean("is_from_docx_template").notNull().default(false),

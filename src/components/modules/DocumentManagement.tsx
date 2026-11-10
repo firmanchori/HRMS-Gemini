@@ -139,6 +139,7 @@ export const DocumentManagement: React.FC = () => {
     documents,
     employees,
     createOfficialDocument,
+    confirmDocumentSignatory,
     currentTenant,
     currentEntity,
     currentUser,
@@ -1027,10 +1028,14 @@ export const DocumentManagement: React.FC = () => {
     setCustomDocTitle('');
     setCustomAdditionalNotes('');
 
+    const pendingCount = (newDoc.signatories || []).filter((sg) => sg.isRequired && !sg.confirmedAt).length;
     setFeedbackMessage({
       type: 'success',
-      title: 'Surat Keputusan Resmi Berhasil Diterbitkan',
-      description: `Dokumen "${title}" (${documentNumber}) ditandatangani oleh ${generateSigneeName} (${generateSigneeRole}).`,
+      title: pendingCount > 0 ? 'Dokumen Dibuat — Menunggu Tanda Tangan' : 'Surat Keputusan Resmi Berhasil Diterbitkan',
+      description:
+        pendingCount > 0
+          ? `Dokumen "${title}" (${documentNumber}) menunggu ${pendingCount} konfirmasi penandatangan. QR verifikasi baru terbit setelah seluruh pihak wajib menandatangani.`
+          : `Dokumen "${title}" (${documentNumber}) resmi diterbitkan.`,
     });
   };
 
@@ -5688,9 +5693,63 @@ PIHAK PERTAMA memberikan upah pokok sebesar {{gaji_pokok}} ({{gaji_terbilang}}) 
               </button>
             </div>
 
+            {(() => {
+              const liveDoc = documents.find((d) => d.id === selectedDoc.id) ?? selectedDoc;
+              const sigs = liveDoc.signatories || [];
+              if (liveDoc.status === 'Resmi Diterbitkan' && sigs.length === 0) return null;
+              return (
+                <div className="px-5 py-3 bg-white border-b border-slate-200 no-print shrink-0 space-y-2 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-800">Status Tanda Tangan</span>
+                    <span
+                      className={`px-2 py-0.5 rounded-full font-semibold border ${
+                        liveDoc.status === 'Resmi Diterbitkan'
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          : 'bg-amber-50 text-amber-700 border-amber-200'
+                      }`}
+                    >
+                      {liveDoc.status === 'Resmi Diterbitkan' ? 'Resmi Diterbitkan — QR Aktif' : 'Menunggu Tanda Tangan — QR Belum Terbit'}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {sigs.map((sg, idx) => (
+                      <div key={idx} className="flex items-center justify-between gap-2 p-2 border border-slate-200 rounded-lg bg-slate-50">
+                        <div className="min-w-0">
+                          <div className="font-semibold text-slate-800 truncate">
+                            {sg.roleLabel} {sg.isRequired && <span className="text-rose-500">*</span>}
+                          </div>
+                          <div className="text-[10px] text-slate-500 truncate">
+                            {sg.confirmedAt ? `Ditandatangani ${sg.confirmedByName} · ${new Date(sg.confirmedAt).toLocaleString('id-ID')}` : 'Belum ditandatangani'}
+                          </div>
+                        </div>
+                        {!sg.confirmedAt && (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              try {
+                                const updated = await confirmDocumentSignatory(liveDoc.id, idx);
+                                setSelectedDoc(updated);
+                              } catch (err) {
+                                setFeedbackMessage({ type: 'error', title: 'Gagal Mengonfirmasi', description: err instanceof Error ? err.message : 'Coba lagi.' } as any);
+                              }
+                            }}
+                            className="shrink-0 px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md font-semibold"
+                          >
+                            Konfirmasi TTD
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* Document Content Canvas Multi-Halaman Real A4 */}
             <div className="p-4 sm:p-6 bg-slate-200/90 overflow-y-auto flex justify-center">
               {(() => {
+                const liveDocForSheet = documents.find((d) => d.id === selectedDoc.id) ?? selectedDoc;
+                const qrActive = liveDocForSheet.status === 'Resmi Diterbitkan';
                 const targetEmp = employees.find((e) => e.id === selectedDoc.targetEmployeeId) || employees[0];
                 return (
                   <OfficialMultiPageDocumentSheet
@@ -5704,8 +5763,8 @@ PIHAK PERTAMA memberikan upah pokok sebesar {{gaji_pokok}} ({{gaji_terbilang}}) 
                     signeeRole={selectedDoc.signeeRole}
                     issueDate={selectedDoc.issueDate}
                     showLetterhead={true}
-                    showQrSignature={true}
-                    showQrValidation={true}
+                    showQrSignature={qrActive}
+                    showQrValidation={qrActive}
                     onSuccessNotice={(title, desc) => {
                       setFeedbackMessage({
                         title,

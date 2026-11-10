@@ -344,6 +344,8 @@ interface HrmsContextType {
     isFromDocxTemplate?: boolean;
     customDocumentNumber?: string;
   }) => Promise<OfficialDocument>;
+  /** Confirms one signatory slot; the server flips the document to "Resmi Diterbitkan" + issues the QR only once every required slot is confirmed. */
+  confirmDocumentSignatory: (documentId: string, index: number, confirmedByName?: string) => Promise<OfficialDocument>;
 
   // 12. Migration Wizard
   executeMigrationImport: (rows: MigrationRowPreview[]) => { successCount: number; errorCount: number };
@@ -2690,19 +2692,22 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         currentTenant.code
       );
 
-    const cleanNumber = documentNumber.replace(/[\/\s]/g, '-');
-    const hash = Math.random().toString(36).substring(2, 10);
-    const qrVerificationUrl = `https://nusahr.enterprise/verify?doc=${cleanNumber}&h=${hash}`;
-
+    // Status and QR are server-computed now (a new document starts
+    // "Menunggu Tanda Tangan" with no QR until every required signatory
+    // confirms) — never invented client-side.
     const created = await tenantApi.createDocument({
       ...docData,
       documentNumber,
       issueDate: new Date().toISOString().split('T')[0],
-      qrVerificationUrl,
-      status: 'Resmi Diterbitkan',
-    } as unknown as Omit<ApiOfficialDocument, 'id' | 'tenantId'>);
+    } as unknown as Parameters<typeof tenantApi.createDocument>[0]);
     setApiDocuments((prev) => [created, ...prev]);
     return created as unknown as OfficialDocument;
+  };
+
+  const confirmDocumentSignatory = async (documentId: string, index: number, confirmedByName?: string): Promise<OfficialDocument> => {
+    const updated = await tenantApi.confirmDocumentSignatory(documentId, index, confirmedByName);
+    setApiDocuments((prev) => prev.map((d) => (d.id === updated.id ? updated : d)));
+    return updated as unknown as OfficialDocument;
   };
 
   // 12. Migration Wizard Execution
@@ -5127,6 +5132,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updateProcurementStatus,
         documents, // real backend data, already tenant-scoped server-side
         createOfficialDocument,
+        confirmDocumentSignatory,
         executeMigrationImport,
         // Advanced Modules
         onboardingProcesses, // real backend data, already tenant-scoped server-side
