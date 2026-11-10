@@ -25,6 +25,7 @@ import {
 import { ScrollableTabNav } from '../common/ScrollableTabNav';
 import { formatRupiah } from '../../utils/taxCalculator';
 import { CurrencyInput } from '../common/CurrencyInput';
+import { ValidatedInput, ValidatedTextarea } from '../common/ValidatedInput';
 import { REIMBURSEMENT_CATEGORIES, ReimbursementCategory } from '../../types/hrms';
 import { tenantApi, ApiError, type EssClockInCheck, type EssClockOutCheck } from '../../tenant/api';
 
@@ -209,6 +210,19 @@ export const EssPortal: React.FC = () => {
     reason: 'Kebutuhan darurat renovasi atap rumah',
   });
 
+  const [leaveFormError, setLeaveFormError] = useState<string | null>(null);
+  const [leaveSubmitAttempted, setLeaveSubmitAttempted] = useState(false);
+  const [overtimeFormError, setOvertimeFormError] = useState<string | null>(null);
+  const [overtimeSubmitAttempted, setOvertimeSubmitAttempted] = useState(false);
+  const [correctionFormError, setCorrectionFormError] = useState<string | null>(null);
+  const [correctionSubmitAttempted, setCorrectionSubmitAttempted] = useState(false);
+  const [reimburseFormError, setReimburseFormError] = useState<string | null>(null);
+  const [reimburseSubmitAttempted, setReimburseSubmitAttempted] = useState(false);
+  const [sppdFormError, setSppdFormError] = useState<string | null>(null);
+  const [sppdSubmitAttempted, setSppdSubmitAttempted] = useState(false);
+  const [kasbonFormError, setKasbonFormError] = useState<string | null>(null);
+  const [kasbonSubmitAttempted, setKasbonSubmitAttempted] = useState(false);
+
   // Local state for submitted self-service items history
   const [myRequests, setMyRequests] = useState<Array<{
     id: string;
@@ -249,10 +263,20 @@ export const EssPortal: React.FC = () => {
   // Handle Leave Submission
   const handleSubmitLeave = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!leaveForm.reason.trim()) {
-      alert('Alasan cuti wajib diisi.');
+    setLeaveSubmitAttempted(true);
+    if (!leaveForm.startDate || !leaveForm.endDate) {
+      setLeaveFormError('Tanggal mulai dan selesai cuti wajib diisi.');
       return;
     }
+    if (leaveForm.endDate < leaveForm.startDate) {
+      setLeaveFormError('Tanggal selesai tidak boleh sebelum tanggal mulai.');
+      return;
+    }
+    if (!leaveForm.reason.trim()) {
+      setLeaveFormError('Alasan cuti wajib diisi.');
+      return;
+    }
+    setLeaveFormError(null);
 
     submitLeaveRequest({
       employeeId: currentEmp.id,
@@ -282,20 +306,27 @@ export const EssPortal: React.FC = () => {
       totalDays: 1,
       reason: '',
     });
+    setLeaveSubmitAttempted(false);
     setActiveTab('status');
   };
 
   // Handle Overtime Submission
   const handleSubmitOvertime = (e: React.FormEvent) => {
     e.preventDefault();
+    setOvertimeSubmitAttempted(true);
     if (currentEmp.canOvertime === false) {
-      alert('Anda tidak memiliki hak lembur — hubungi HR jika ini keliru.');
+      setOvertimeFormError('Anda tidak memiliki hak lembur — hubungi HR jika ini keliru.');
+      return;
+    }
+    if (!overtimeForm.date || !overtimeForm.startTime || !overtimeForm.endTime) {
+      setOvertimeFormError('Tanggal, jam mulai, dan jam selesai lembur wajib diisi.');
       return;
     }
     if (!overtimeForm.taskDescription.trim()) {
-      alert('Uraian tugas lembur wajib diisi.');
+      setOvertimeFormError('Uraian tugas lembur wajib diisi.');
       return;
     }
+    setOvertimeFormError(null);
 
 
     const newReq = {
@@ -332,16 +363,23 @@ export const EssPortal: React.FC = () => {
       totalHours: 3,
       taskDescription: '',
     });
+    setOvertimeSubmitAttempted(false);
     setActiveTab('status');
   };
 
   // Handle Attendance Correction Submission
   const handleSubmitAttendanceCorrection = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!attendanceCorrectionForm.reason.trim()) {
-      alert('Alasan koreksi presensi wajib diisi.');
+    setCorrectionSubmitAttempted(true);
+    if (!attendanceCorrectionForm.date || !attendanceCorrectionForm.actualTime) {
+      setCorrectionFormError('Tanggal dan jam kehadiran sebenarnya wajib diisi.');
       return;
     }
+    if (!attendanceCorrectionForm.reason.trim()) {
+      setCorrectionFormError('Alasan koreksi presensi wajib diisi.');
+      return;
+    }
+    setCorrectionFormError(null);
 
 
     const newReq = {
@@ -376,16 +414,23 @@ export const EssPortal: React.FC = () => {
       actualTime: '08:30',
       reason: '',
     });
+    setCorrectionSubmitAttempted(false);
     setActiveTab('status');
   };
 
   // Handle Reimbursement Submission
   const handleSubmitReimburse = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!reimburseForm.description.trim()) {
-      alert('Keterangan klaim wajib diisi.');
+    setReimburseSubmitAttempted(true);
+    if (!reimburseForm.amount || reimburseForm.amount <= 0) {
+      setReimburseFormError('Nominal klaim wajib diisi.');
       return;
     }
+    if (!reimburseForm.description.trim()) {
+      setReimburseFormError('Keterangan klaim wajib diisi.');
+      return;
+    }
+    setReimburseFormError(null);
 
 
     const newReq = {
@@ -417,12 +462,23 @@ export const EssPortal: React.FC = () => {
       receiptNo: '',
       description: '',
     });
+    setReimburseSubmitAttempted(false);
     setActiveTab('status');
   };
 
   // Handle Kasbon Submission
   const handleSubmitKasbon = (e: React.FormEvent) => {
     e.preventDefault();
+    setKasbonSubmitAttempted(true);
+    if (!kasbonForm.amount || kasbonForm.amount <= 0) {
+      setKasbonFormError('Nominal kasbon wajib diisi.');
+      return;
+    }
+    if (!kasbonForm.reason.trim()) {
+      setKasbonFormError('Alasan / kebutuhan mendesak wajib diisi.');
+      return;
+    }
+    setKasbonFormError(null);
     if (addLoan) {
       addLoan({
         employeeId: currentEmp.id,
@@ -448,6 +504,7 @@ export const EssPortal: React.FC = () => {
 
     setMyRequests([newReq, ...myRequests]);
     setNoticeMessage(`Pengajuan kasbon ${formatRupiah(kasbonForm.amount)} berhasil diajukan.`);
+    setKasbonSubmitAttempted(false);
     setActiveTab('status');
   };
 
@@ -763,40 +820,44 @@ export const EssPortal: React.FC = () => {
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="font-semibold text-slate-700 block mb-1">Tanggal Mulai Cuti *</label>
-                    <input
-                      type="date"
-                      required
-                      value={leaveForm.startDate}
-                      onChange={(e) => setLeaveForm({ ...leaveForm, startDate: e.target.value })}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="font-semibold text-slate-700 block mb-1">Tanggal Selesai Cuti *</label>
-                    <input
-                      type="date"
-                      required
-                      value={leaveForm.endDate}
-                      onChange={(e) => setLeaveForm({ ...leaveForm, endDate: e.target.value })}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Alasan Pengajuan Cuti *</label>
-                  <textarea
-                    rows={3}
+                  <ValidatedInput
+                    label="Tanggal Mulai Cuti"
+                    type="date"
                     required
-                    placeholder="Uraikan keperluan cuti Anda secara singkat dan jelas..."
-                    value={leaveForm.reason}
-                    onChange={(e) => setLeaveForm({ ...leaveForm, reason: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                    requiredLabel="Tanggal mulai cuti wajib diisi"
+                    showError={leaveSubmitAttempted}
+                    value={leaveForm.startDate}
+                    onChange={(val) => setLeaveForm({ ...leaveForm, startDate: val })}
+                  />
+
+                  <ValidatedInput
+                    label="Tanggal Selesai Cuti"
+                    type="date"
+                    required
+                    requiredLabel="Tanggal selesai cuti wajib diisi"
+                    showError={leaveSubmitAttempted}
+                    value={leaveForm.endDate}
+                    onChange={(val) => setLeaveForm({ ...leaveForm, endDate: val })}
                   />
                 </div>
+
+                {leaveFormError && (
+                  <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 font-semibold flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>{leaveFormError}</span>
+                  </div>
+                )}
+
+                <ValidatedTextarea
+                  label="Alasan Pengajuan Cuti"
+                  required
+                  requiredLabel="Alasan cuti wajib diisi"
+                  showError={leaveSubmitAttempted}
+                  rows={3}
+                  placeholder="Uraikan keperluan cuti Anda secara singkat dan jelas..."
+                  value={leaveForm.reason}
+                  onChange={(val) => setLeaveForm({ ...leaveForm, reason: val })}
+                />
 
                 <div className="pt-2 flex justify-end">
                   <button
@@ -819,53 +880,56 @@ export const EssPortal: React.FC = () => {
                 <h3 className="font-bold text-slate-900 text-sm">Formulir Pengajuan Lembur Mandiri</h3>
               </div>
 
-              <form onSubmit={handleSubmitOvertime} className="space-y-4 text-xs">
+              <form onSubmit={handleSubmitOvertime} className="space-y-4 text-xs" noValidate>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div>
-                    <label className="font-semibold text-slate-700 block mb-1">Tanggal Lembur *</label>
-                    <input
-                      type="date"
-                      required
-                      value={overtimeForm.date}
-                      onChange={(e) => setOvertimeForm({ ...overtimeForm, date: e.target.value })}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="font-semibold text-slate-700 block mb-1">Jam Mulai *</label>
-                    <input
-                      type="time"
-                      required
-                      value={overtimeForm.startTime}
-                      onChange={(e) => setOvertimeForm({ ...overtimeForm, startTime: e.target.value })}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="font-semibold text-slate-700 block mb-1">Jam Selesai *</label>
-                    <input
-                      type="time"
-                      required
-                      value={overtimeForm.endTime}
-                      onChange={(e) => setOvertimeForm({ ...overtimeForm, endTime: e.target.value })}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Uraian Tugas & Deliverable Output Lembur *</label>
-                  <textarea
-                    rows={3}
+                  <ValidatedInput
+                    label="Tanggal Lembur"
+                    type="date"
                     required
-                    placeholder="Jelaskan pekerjaan lembur yang diselesaikan..."
-                    value={overtimeForm.taskDescription}
-                    onChange={(e) => setOvertimeForm({ ...overtimeForm, taskDescription: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                    requiredLabel="Tanggal lembur wajib diisi"
+                    showError={overtimeSubmitAttempted}
+                    value={overtimeForm.date}
+                    onChange={(val) => setOvertimeForm({ ...overtimeForm, date: val })}
+                  />
+
+                  <ValidatedInput
+                    label="Jam Mulai"
+                    type="time"
+                    required
+                    requiredLabel="Jam mulai lembur wajib diisi"
+                    showError={overtimeSubmitAttempted}
+                    value={overtimeForm.startTime}
+                    onChange={(val) => setOvertimeForm({ ...overtimeForm, startTime: val })}
+                  />
+
+                  <ValidatedInput
+                    label="Jam Selesai"
+                    type="time"
+                    required
+                    requiredLabel="Jam selesai lembur wajib diisi"
+                    showError={overtimeSubmitAttempted}
+                    value={overtimeForm.endTime}
+                    onChange={(val) => setOvertimeForm({ ...overtimeForm, endTime: val })}
                   />
                 </div>
+
+                {overtimeFormError && (
+                  <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 font-semibold flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>{overtimeFormError}</span>
+                  </div>
+                )}
+
+                <ValidatedTextarea
+                  label="Uraian Tugas & Deliverable Output Lembur"
+                  required
+                  requiredLabel="Uraian tugas lembur wajib diisi"
+                  showError={overtimeSubmitAttempted}
+                  rows={3}
+                  placeholder="Jelaskan pekerjaan lembur yang diselesaikan..."
+                  value={overtimeForm.taskDescription}
+                  onChange={(val) => setOvertimeForm({ ...overtimeForm, taskDescription: val })}
+                />
 
                 <div className="pt-2 flex justify-end">
                   <button
@@ -888,18 +952,17 @@ export const EssPortal: React.FC = () => {
                 <h3 className="font-bold text-slate-900 text-sm">Formulir Koreksi Presensi (Lupa Clock-in / Out)</h3>
               </div>
 
-              <form onSubmit={handleSubmitAttendanceCorrection} className="space-y-4 text-xs">
+              <form onSubmit={handleSubmitAttendanceCorrection} className="space-y-4 text-xs" noValidate>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div>
-                    <label className="font-semibold text-slate-700 block mb-1">Tanggal Absensi *</label>
-                    <input
-                      type="date"
-                      required
-                      value={attendanceCorrectionForm.date}
-                      onChange={(e) => setAttendanceCorrectionForm({ ...attendanceCorrectionForm, date: e.target.value })}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                    />
-                  </div>
+                  <ValidatedInput
+                    label="Tanggal Absensi"
+                    type="date"
+                    required
+                    requiredLabel="Tanggal absensi wajib diisi"
+                    showError={correctionSubmitAttempted}
+                    value={attendanceCorrectionForm.date}
+                    onChange={(val) => setAttendanceCorrectionForm({ ...attendanceCorrectionForm, date: val })}
+                  />
 
                   <div>
                     <label className="font-semibold text-slate-700 block mb-1">Kategori Masalah *</label>
@@ -919,29 +982,34 @@ export const EssPortal: React.FC = () => {
                     </select>
                   </div>
 
-                  <div>
-                    <label className="font-semibold text-slate-700 block mb-1">Jam Kehadiran Sebenarnya *</label>
-                    <input
-                      type="time"
-                      required
-                      value={attendanceCorrectionForm.actualTime}
-                      onChange={(e) => setAttendanceCorrectionForm({ ...attendanceCorrectionForm, actualTime: e.target.value })}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Alasan / Bukti Pendukung *</label>
-                  <textarea
-                    rows={3}
+                  <ValidatedInput
+                    label="Jam Kehadiran Sebenarnya"
+                    type="time"
                     required
-                    placeholder="Contoh: Menghadiri meeting pagi dengan klien di luar kantor sebelum jam 09:00..."
-                    value={attendanceCorrectionForm.reason}
-                    onChange={(e) => setAttendanceCorrectionForm({ ...attendanceCorrectionForm, reason: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                    requiredLabel="Jam kehadiran sebenarnya wajib diisi"
+                    showError={correctionSubmitAttempted}
+                    value={attendanceCorrectionForm.actualTime}
+                    onChange={(val) => setAttendanceCorrectionForm({ ...attendanceCorrectionForm, actualTime: val })}
                   />
                 </div>
+
+                {correctionFormError && (
+                  <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 font-semibold flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>{correctionFormError}</span>
+                  </div>
+                )}
+
+                <ValidatedTextarea
+                  label="Alasan / Bukti Pendukung"
+                  required
+                  requiredLabel="Alasan koreksi presensi wajib diisi"
+                  showError={correctionSubmitAttempted}
+                  rows={3}
+                  placeholder="Contoh: Menghadiri meeting pagi dengan klien di luar kantor sebelum jam 09:00..."
+                  value={attendanceCorrectionForm.reason}
+                  onChange={(val) => setAttendanceCorrectionForm({ ...attendanceCorrectionForm, reason: val })}
+                />
 
                 <div className="pt-2 flex justify-end">
                   <button
@@ -964,7 +1032,7 @@ export const EssPortal: React.FC = () => {
                 <h3 className="font-bold text-slate-900 text-sm">Formulir Klaim Pengeluaran / Reimbursement</h3>
               </div>
 
-              <form onSubmit={handleSubmitReimburse} className="space-y-4 text-xs">
+              <form onSubmit={handleSubmitReimburse} className="space-y-4 text-xs" noValidate>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="font-semibold text-slate-700 block mb-1">Kategori Biaya *</label>
@@ -991,6 +1059,8 @@ export const EssPortal: React.FC = () => {
                       value={reimburseForm.amount}
                       onChange={(val) => setReimburseForm({ ...reimburseForm, amount: val })}
                       placeholder="0"
+                      required
+                      showError={reimburseSubmitAttempted}
                     />
                   </div>
                 </div>
@@ -1006,17 +1076,23 @@ export const EssPortal: React.FC = () => {
                   />
                 </div>
 
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Rincian Keperluan *</label>
-                  <textarea
-                    rows={3}
-                    required
-                    placeholder="Rincian agenda atau kegiatan yang memerlukan biaya ini..."
-                    value={reimburseForm.description}
-                    onChange={(e) => setReimburseForm({ ...reimburseForm, description: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                  />
-                </div>
+                {reimburseFormError && (
+                  <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 font-semibold flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>{reimburseFormError}</span>
+                  </div>
+                )}
+
+                <ValidatedTextarea
+                  label="Rincian Keperluan"
+                  required
+                  requiredLabel="Keterangan klaim wajib diisi"
+                  showError={reimburseSubmitAttempted}
+                  rows={3}
+                  placeholder="Rincian agenda atau kegiatan yang memerlukan biaya ini..."
+                  value={reimburseForm.description}
+                  onChange={(val) => setReimburseForm({ ...reimburseForm, description: val })}
+                />
 
                 <div className="pt-2 flex justify-end">
                   <button
@@ -1042,7 +1118,25 @@ export const EssPortal: React.FC = () => {
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
-              
+                  setSppdSubmitAttempted(true);
+                  if (!sppdForm.destination.trim()) {
+                    setSppdFormError('Kota / lokasi tujuan wajib diisi.');
+                    return;
+                  }
+                  if (!sppdForm.startDate || !sppdForm.endDate) {
+                    setSppdFormError('Tanggal berangkat dan kembali wajib diisi.');
+                    return;
+                  }
+                  if (sppdForm.endDate < sppdForm.startDate) {
+                    setSppdFormError('Tanggal kembali tidak boleh sebelum tanggal berangkat.');
+                    return;
+                  }
+                  if (!sppdForm.purpose.trim()) {
+                    setSppdFormError('Tujuan & agenda kedinasan wajib diisi.');
+                    return;
+                  }
+                  setSppdFormError(null);
+
     const newReq = {
                     id: `req-${Date.now().toString().slice(-4)}`,
                     category: 'Perjalanan Dinas',
@@ -1070,43 +1164,41 @@ export const EssPortal: React.FC = () => {
                     accommodationCost: Math.round((Number(sppdForm.estimatedBudget) || 0) * 0.4),
                   });
                   setNoticeMessage(`Pengajuan SPPD ke ${sppdForm.destination} berhasil diajukan.`);
+                  setSppdSubmitAttempted(false);
                   setActiveTab('status');
                 }}
                 className="space-y-4 text-xs"
+                noValidate
               >
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Kota / Lokasi Tujuan *</label>
-                  <input
-                    type="text"
-                    required
-                    value={sppdForm.destination}
-                    onChange={(e) => setSppdForm({ ...sppdForm, destination: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                  />
-                </div>
+                <ValidatedInput
+                  label="Kota / Lokasi Tujuan"
+                  required
+                  requiredLabel="Kota / lokasi tujuan wajib diisi"
+                  showError={sppdSubmitAttempted}
+                  value={sppdForm.destination}
+                  onChange={(val) => setSppdForm({ ...sppdForm, destination: val })}
+                />
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="font-semibold text-slate-700 block mb-1">Tanggal Berangkat *</label>
-                    <input
-                      type="date"
-                      required
-                      value={sppdForm.startDate}
-                      onChange={(e) => setSppdForm({ ...sppdForm, startDate: e.target.value })}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                    />
-                  </div>
+                  <ValidatedInput
+                    label="Tanggal Berangkat"
+                    type="date"
+                    required
+                    requiredLabel="Tanggal berangkat wajib diisi"
+                    showError={sppdSubmitAttempted}
+                    value={sppdForm.startDate}
+                    onChange={(val) => setSppdForm({ ...sppdForm, startDate: val })}
+                  />
 
-                  <div>
-                    <label className="font-semibold text-slate-700 block mb-1">Tanggal Kembali *</label>
-                    <input
-                      type="date"
-                      required
-                      value={sppdForm.endDate}
-                      onChange={(e) => setSppdForm({ ...sppdForm, endDate: e.target.value })}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                    />
-                  </div>
+                  <ValidatedInput
+                    label="Tanggal Kembali"
+                    type="date"
+                    required
+                    requiredLabel="Tanggal kembali wajib diisi"
+                    showError={sppdSubmitAttempted}
+                    value={sppdForm.endDate}
+                    onChange={(val) => setSppdForm({ ...sppdForm, endDate: val })}
+                  />
                 </div>
 
                 <div>
@@ -1119,16 +1211,22 @@ export const EssPortal: React.FC = () => {
                   />
                 </div>
 
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Tujuan & Agenda Kedinasan *</label>
-                  <textarea
-                    rows={3}
-                    required
-                    value={sppdForm.purpose}
-                    onChange={(e) => setSppdForm({ ...sppdForm, purpose: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                  />
-                </div>
+                {sppdFormError && (
+                  <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 font-semibold flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>{sppdFormError}</span>
+                  </div>
+                )}
+
+                <ValidatedTextarea
+                  label="Tujuan & Agenda Kedinasan"
+                  required
+                  requiredLabel="Tujuan & agenda kedinasan wajib diisi"
+                  showError={sppdSubmitAttempted}
+                  rows={3}
+                  value={sppdForm.purpose}
+                  onChange={(val) => setSppdForm({ ...sppdForm, purpose: val })}
+                />
 
                 <div className="pt-2 flex justify-end">
                   <button
@@ -1151,7 +1249,7 @@ export const EssPortal: React.FC = () => {
                 <h3 className="font-bold text-slate-900 text-sm">Formulir Pinjaman Cepat / Kasbon Karyawan</h3>
               </div>
 
-              <form onSubmit={handleSubmitKasbon} className="space-y-4 text-xs">
+              <form onSubmit={handleSubmitKasbon} className="space-y-4 text-xs" noValidate>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="font-semibold text-slate-700 block mb-1">Nominal Kasbon (Rp) *</label>
@@ -1160,6 +1258,8 @@ export const EssPortal: React.FC = () => {
                       value={kasbonForm.amount}
                       onChange={(val) => setKasbonForm({ ...kasbonForm, amount: val })}
                       placeholder="0"
+                      required
+                      showError={kasbonSubmitAttempted}
                     />
                     <span className="text-[10px] text-slate-400 mt-1 block">Maksimal 30% dari take home pay bulanan.</span>
                   </div>
@@ -1179,16 +1279,22 @@ export const EssPortal: React.FC = () => {
                   </div>
                 </div>
 
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Alasan / Kebutuhan Mendesak *</label>
-                  <textarea
-                    rows={3}
-                    required
-                    value={kasbonForm.reason}
-                    onChange={(e) => setKasbonForm({ ...kasbonForm, reason: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                  />
-                </div>
+                {kasbonFormError && (
+                  <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 font-semibold flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>{kasbonFormError}</span>
+                  </div>
+                )}
+
+                <ValidatedTextarea
+                  label="Alasan / Kebutuhan Mendesak"
+                  required
+                  requiredLabel="Alasan / kebutuhan mendesak wajib diisi"
+                  showError={kasbonSubmitAttempted}
+                  rows={3}
+                  value={kasbonForm.reason}
+                  onChange={(val) => setKasbonForm({ ...kasbonForm, reason: val })}
+                />
 
                 <div className="pt-2 flex justify-end">
                   <button

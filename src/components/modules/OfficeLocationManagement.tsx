@@ -22,6 +22,7 @@ import {
   ZoomOut,
 } from 'lucide-react';
 import { OfficeLocation, OfficeLocationType } from '../../types/hrms';
+import { ValidatedInput, ValidatedTextarea } from '../common/ValidatedInput';
 
 const TILE_SIZE = 256;
 
@@ -196,6 +197,7 @@ export const OfficeLocationManagement: React.FC = () => {
   const [formIsActive, setFormIsActive] = useState<boolean>(true);
   const [formNotes, setFormNotes] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
+  const [locationSubmitAttempted, setLocationSubmitAttempted] = useState(false);
 
   // Map Search & Interactive Draggable Map State inside Form Modal
   const [mapSearchInput, setMapSearchInput] = useState('');
@@ -488,6 +490,11 @@ export const OfficeLocationManagement: React.FC = () => {
 
   const handleSaveLocation = (e: React.FormEvent) => {
     e.preventDefault();
+    setLocationSubmitAttempted(true);
+    if (!formCompanyName.trim()) {
+      setFormError('Perusahaan / Entitas wajib diisi.');
+      return;
+    }
     if (!formName.trim() || !formCode.trim()) {
       setFormError('Kode dan Nama Lokasi Kantor wajib diisi.');
       return;
@@ -539,6 +546,7 @@ export const OfficeLocationManagement: React.FC = () => {
     }
 
     setIsModalOpen(false);
+    setLocationSubmitAttempted(false);
     setTimeout(() => setNotice(null), 4000);
   };
 
@@ -831,7 +839,7 @@ export const OfficeLocationManagement: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleSaveLocation} className="p-5 space-y-4 text-xs max-h-[82vh] overflow-y-auto">
+            <form onSubmit={handleSaveLocation} className="p-5 space-y-4 text-xs max-h-[82vh] overflow-y-auto" noValidate>
               {formError && (
                 <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 font-semibold flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 shrink-0" />
@@ -842,15 +850,15 @@ export const OfficeLocationManagement: React.FC = () => {
               {/* Row 1: Perusahaan & Kategori Lokasi */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Perusahaan / Entitas *</label>
-                  <input
-                    type="text"
-                    list="companyOptionsList"
+                  <ValidatedInput
+                    label="Perusahaan / Entitas"
                     required
+                    requiredLabel="Perusahaan / Entitas wajib diisi"
+                    showError={locationSubmitAttempted}
+                    list="companyOptionsList"
                     value={formCompanyName}
-                    onChange={(e) => setFormCompanyName(e.target.value)}
+                    onChange={setFormCompanyName}
                     placeholder="Contoh: PT Perusahaan A"
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg"
                   />
                   <datalist id="companyOptionsList">
                     {companiesList.map((c) => (
@@ -874,43 +882,38 @@ export const OfficeLocationManagement: React.FC = () => {
                   </select>
                 </div>
 
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Kode Lokasi *</label>
-                  <input
-                    type="text"
-                    required
-                    value={formCode}
-                    onChange={(e) => setFormCode(e.target.value.toUpperCase())}
-                    placeholder="LOC-HQ-01"
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold"
-                  />
-                </div>
+                <ValidatedInput
+                  label="Kode Lokasi"
+                  required
+                  requiredLabel="Kode Lokasi wajib diisi"
+                  showError={locationSubmitAttempted}
+                  value={formCode}
+                  onChange={(val) => setFormCode(val.toUpperCase())}
+                  placeholder="LOC-HQ-01"
+                  className="font-mono font-bold"
+                />
               </div>
 
               {/* Row 2: Nama Lokasi & Kota */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="sm:col-span-2">
-                  <label className="font-semibold text-slate-700 block mb-1">Nama Lokasi Kantor / Cabang / Gudang *</label>
-                  <input
-                    type="text"
+                  <ValidatedInput
+                    label="Nama Lokasi Kantor / Cabang / Gudang"
                     required
+                    requiredLabel="Nama Lokasi Kantor wajib diisi"
+                    showError={locationSubmitAttempted}
                     value={formName}
-                    onChange={(e) => setFormName(e.target.value)}
+                    onChange={setFormName}
                     placeholder="Contoh: Kantor Pusat Jakarta / Gudang Logistik Cikarang"
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg"
                   />
                 </div>
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Kota / Kabupaten *</label>
-                  <input
-                    type="text"
-                    required
-                    value={formCity}
-                    onChange={(e) => setFormCity(e.target.value)}
-                    placeholder="Jakarta Selatan"
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                  />
-                </div>
+                <ValidatedInput
+                  label="Kota / Kabupaten (Opsional)"
+                  value={formCity}
+                  onChange={setFormCity}
+                  placeholder="Jakarta Selatan"
+                  helperText="Default 'Jakarta' jika dikosongkan"
+                />
               </div>
 
               {/* Row 3: Pencarian Peta (Search by Address atau Search by Lat Long) */}
@@ -1285,51 +1288,40 @@ export const OfficeLocationManagement: React.FC = () => {
 
                 {/* Latitude, Longitude & Radius Inputs (Auto-filled when clicking map) */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
-                  <div>
-                    <label className="font-semibold text-slate-700 block mb-1">Latitude (Garis Lintang) *</label>
-                    <input
-                      type="number"
-                      step="any"
-                      required
-                      value={formLat}
-                      onChange={(e) => {
-                        const val = parseFloat(e.target.value) || 0;
-                        setFormLat(val);
-                        setMapViewLat(val);
-                      }}
-                      className="w-full px-3 py-2 bg-white border border-indigo-300 rounded-lg font-mono font-bold text-slate-900"
-                    />
-                  </div>
-                  <div>
-                    <label className="font-semibold text-slate-700 block mb-1">Longitude (Garis Bujur) *</label>
-                    <input
-                      type="number"
-                      step="any"
-                      required
-                      value={formLng}
-                      onChange={(e) => {
-                        const val = parseFloat(e.target.value) || 0;
-                        setFormLng(val);
-                        setMapViewLng(val);
-                      }}
-                      className="w-full px-3 py-2 bg-white border border-indigo-300 rounded-lg font-mono font-bold text-slate-900"
-                    />
-                  </div>
+                  <ValidatedInput
+                    label="Latitude (Garis Lintang)"
+                    type="number"
+                    step="any"
+                    value={String(formLat)}
+                    onChange={(val) => {
+                      const v = parseFloat(val) || 0;
+                      setFormLat(v);
+                      setMapViewLat(v);
+                    }}
+                    className="font-mono font-bold text-slate-900"
+                  />
+                  <ValidatedInput
+                    label="Longitude (Garis Bujur)"
+                    type="number"
+                    step="any"
+                    value={String(formLng)}
+                    onChange={(val) => {
+                      const v = parseFloat(val) || 0;
+                      setFormLng(v);
+                      setMapViewLng(v);
+                    }}
+                    className="font-mono font-bold text-slate-900"
+                  />
                   {formShapeType === 'circle' ? (
-                    <div>
-                      <label className="font-semibold text-slate-700 block mb-1">Radius Absensi GPS (Meter) *</label>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="number"
-                          min={10}
-                          max={5000}
-                          required
-                          value={formRadius}
-                          onChange={(e) => setFormRadius(Number(e.target.value))}
-                          className="w-full px-3 py-2 bg-white border border-indigo-300 rounded-lg font-mono font-bold text-indigo-700"
-                        />
-                      </div>
-                    </div>
+                    <ValidatedInput
+                      label="Radius Absensi GPS (Meter)"
+                      type="number"
+                      min={10}
+                      max={5000}
+                      value={String(formRadius)}
+                      onChange={(val) => setFormRadius(Number(val))}
+                      className="font-mono font-bold text-indigo-700"
+                    />
                   ) : (
                     <div>
                       <label className="font-semibold text-slate-700 block mb-1">Area Geofencing</label>
@@ -1342,17 +1334,16 @@ export const OfficeLocationManagement: React.FC = () => {
               </div>
 
               {/* Row 4: Alamat Lengkap & Catatan */}
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">Alamat Lengkap Lokasi Kantor *</label>
-                <textarea
-                  rows={2}
-                  required
-                  value={formAddress}
-                  onChange={(e) => setFormAddress(e.target.value)}
-                  placeholder="Jl. HR Rasuna Said Blok X2 Kav. 6, Kuningan, Jakarta Selatan..."
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                />
-              </div>
+              <ValidatedTextarea
+                label="Alamat Lengkap Lokasi Kantor"
+                required
+                requiredLabel="Alamat lengkap lokasi kantor wajib diisi"
+                showError={locationSubmitAttempted}
+                rows={2}
+                value={formAddress}
+                onChange={setFormAddress}
+                placeholder="Jl. HR Rasuna Said Blok X2 Kav. 6, Kuningan, Jakarta Selatan..."
+              />
 
               <div className="flex items-center justify-between pt-1">
                 <label className="flex items-center gap-2 cursor-pointer font-semibold text-slate-700">
