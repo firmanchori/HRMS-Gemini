@@ -296,18 +296,28 @@ export async function requireEmployeeSession(req: Request, res: Response, next: 
   next();
 }
 
+
 /**
- * Gates an employee route by the real role_permission_entries matrix
- * (RbacManagement.tsx's own matrix, now actually enforced server-side
- * instead of only hiding/showing UI) — this is the piece that was
- * missing entirely: hasPermission()/getRolePermission() used to only
- * ever be called from inside the RBAC settings screen itself, never from
- * any route that actually gates an action.
+ * Gates a route by the real role_permission_entries matrix (RbacManagement.tsx's
+ * own matrix, now actually enforced server-side instead of only hiding/showing
+ * UI) — this is the piece that was missing entirely: hasPermission()/
+ * getRolePermission() used to only ever be called from inside the RBAC
+ * settings screen itself, never from any route that actually gates an action.
+ *
+ * A tenant_admin session always passes — it's the one full-access owner
+ * account per entity by design (see `requireTenantStaff`'s doc comment),
+ * never itself permission-restricted; the matrix exists to restrict
+ * everyone else. Must run after `requireTenantStaff`/`requireEmployeeSession`
+ * (needs `req.session` already set).
  */
 export function requirePermission(moduleKey: string, action: PermissionAction) {
   return async (req: Request, res: Response, next: NextFunction) => {
     const session = req.session;
-    if (!session || session.role !== "employee" || !session.roleKey) {
+    if (!session) {
+      return res.status(403).json({ error: "Tidak memiliki izin untuk tindakan ini" });
+    }
+    if (session.role === "tenant_admin") return next();
+    if (session.role !== "employee" || !session.roleKey) {
       return res.status(403).json({ error: "Tidak memiliki izin untuk tindakan ini" });
     }
     const permission = await getPermission(session.tenantId!, moduleKey, session.roleKey);

@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs";
 import { and, eq } from "drizzle-orm";
 import QRCode from "qrcode";
 import { db } from "../db/client.ts";
-import { employeeAccounts, employees, attendanceRecords, leaveRequests } from "../db/schema.ts";
+import { employeeAccounts, employees, attendanceRecords, leaveRequests, payrollRecords, gaAssets, procurementOrders, complianceRecords, employeeLoans } from "../db/schema.ts";
 import { issueSession, requireEmployeeSession, requirePermission, issueMfaTicket, readMfaTicket, clearMfaTicket } from "../middleware/auth.ts";
 import { validateBody, validateParams, uuidParam } from "../lib/validate.ts";
 import { authLimiter } from "../lib/rateLimit.ts";
@@ -348,5 +348,244 @@ employeeRouter.post("/approvals/leave/:id/decision", requirePermission("attendan
     .returning();
 
   await logAudit({ actorUserId: null, tenantId: session.tenantId, action: "leave.decision", details: { leaveRequestId: target.id, decision: req.body.decision, managerEmployeeId: session.employeeId } });
+  res.json(updated);
+});
+
+// ---------------------------------------------------------------------------
+// Payroll — first module of the RBAC granular-enforcement rollout beyond
+// attendance (security review, user 2026-11-10: "RBAC granular Harus
+// diselesaikan"). Mirrors tenant.ts's /payroll-records routes exactly
+// (same table, same validation shape) but reachable by an employee-role
+// account whose roleKey has been granted the "payroll" module's
+// view/create/edit permission in the RBAC matrix — e.g. a "Finance
+// Supervisor" custom role who should be able to run payroll without
+// needing the single tenant_admin owner login.
+//
+// Visibility scope: employee_accounts has no entity-scoping dimension at
+// all today (unlike tenant_admin's `users.entityId` vertical scope), so a
+// granted "payroll" permission is tenant-wide, not limited to one entity —
+// this is a deliberate, documented default pending a real entity-scoping
+// concept for employee accounts, not an oversight.
+// ---------------------------------------------------------------------------
+
+const employeePayrollRecordSchema = z.object({
+  employeeId: z.string().uuid(),
+  period: z.string().trim().min(1).max(100),
+  basicSalary: z.number().int().min(0).optional(),
+  allowances: z.number().int().min(0).optional(),
+  overtimePay: z.number().int().min(0).optional(),
+  reimbursement: z.number().int().min(0).optional(),
+  thrBonus: z.number().int().min(0).optional(),
+  grossPay: z.number().int().min(0).optional(),
+  bpjsKesCompany: z.number().int().min(0).optional(),
+  bpjsKesEmployee: z.number().int().min(0).optional(),
+  bpjsTkCompany: z.number().int().min(0).optional(),
+  bpjsTkEmployee: z.number().int().min(0).optional(),
+  pph21TERCategory: z.enum(["TER A", "TER B", "TER C"]).optional(),
+  pph21RatePercent: z.number().min(0).optional(),
+  pph21Amount: z.number().int().min(0).optional(),
+  loanDeduction: z.number().int().min(0).optional(),
+  lateDeduction: z.number().int().min(0).optional(),
+  unpaidLeaveDeduction: z.number().int().min(0).optional().nullable(),
+  severancePay: z.number().int().min(0).optional().nullable(),
+  totalDeductions: z.number().int().min(0).optional(),
+  netPay: z.number().int().min(0).optional(),
+  status: z.enum(["Draft", "Approved", "Disbursed"]).optional(),
+  paidDate: z.string().trim().max(20).optional().nullable(),
+});
+
+employeeRouter.get("/payroll-records", requirePermission("payroll", "view"), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  res.json(await db.select().from(payrollRecords).where(eq(payrollRecords.tenantId, tenantId)));
+});
+
+/** Upsert by (employeeId, period) — same replace-not-duplicate contract as tenant.ts's admin route. */
+employeeRouter.post("/payroll-records/upsert", requirePermission("payroll", "create"), validateBody(employeePayrollRecordSchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [existing] = await db
+    .select()
+    .from(payrollRecords)
+    .where(and(eq(payrollRecords.tenantId, tenantId), eq(payrollRecords.employeeId, req.body.employeeId), eq(payrollRecords.period, req.body.period)))
+    .limit(1);
+  if (existing) {
+    const [updated] = await db.update(payrollRecords).set(req.body).where(eq(payrollRecords.id, existing.id)).returning();
+    await logAudit({ actorUserId: null, tenantId, action: "payroll.record_upserted", details: { payrollRecordId: updated.id, employeeAccountId: req.session!.userId } });
+    return res.json(updated);
+  }
+  const [created] = await db.insert(payrollRecords).values({ ...req.body, tenantId }).returning();
+  await logAudit({ actorUserId: null, tenantId, action: "payroll.record_upserted", details: { payrollRecordId: created.id, employeeAccountId: req.session!.userId } });
+  res.status(201).json(created);
+});
+
+employeeRouter.put("/payroll-records/:id", requirePermission("payroll", "edit"), validateParams(uuidParam("id")), validateBody(employeePayrollRecordSchema.partial()), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [existing] = await db.select().from(payrollRecords).where(and(eq(payrollRecords.id, req.params.id), eq(payrollRecords.tenantId, tenantId))).limit(1);
+  if (!existing) return res.status(404).json({ error: "Data payroll tidak ditemukan" });
+  const [updated] = await db.update(payrollRecords).set(req.body).where(eq(payrollRecords.id, req.params.id)).returning();
+  await logAudit({ actorUserId: null, tenantId, action: "payroll.record_updated", details: { payrollRecordId: updated.id, employeeAccountId: req.session!.userId } });
+  res.json(updated);
+});
+
+// ---------------------------------------------------------------------------
+// GA Assets — second module of the RBAC granular-enforcement rollout
+// (moduleKey "assets" in the RBAC matrix). Mirrors tenant.ts's /ga-assets
+// core CRUD; maintenance tickets and relocations stay admin-only for now
+// (tracked as a follow-up, not silently dropped).
+// ---------------------------------------------------------------------------
+
+const employeeGaAssetSchema = z.object({
+  assetCode: z.string().trim().min(1).max(100),
+  name: z.string().trim().min(1).max(200),
+  category: z.enum(["Laptop & Komputer", "Kendaraan Operasional", "Fasilitas Gedung", "Furniture", "Perangkat Jaringan"]),
+  building: z.string().trim().min(1).max(200),
+  room: z.string().trim().min(1).max(200),
+  purchaseDate: z.string().trim().min(1).max(20),
+  purchasePrice: z.number().int().min(0),
+  condition: z.enum(["Baik", "Perlu Perbaikan", "Rusak", "Dipinjam", "Hilang"]).optional(),
+  assignedToEmployeeId: z.string().uuid().optional().nullable(),
+  lastStockOpname: z.string().trim().min(1).max(20),
+  qrPayload: z.string().trim().min(1).max(2000),
+  usageStatus: z.enum(["Tersedia", "Digunakan", "Dalam Perbaikan"]).optional().nullable(),
+});
+
+employeeRouter.get("/ga-assets", requirePermission("assets", "view"), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  res.json(await db.select().from(gaAssets).where(eq(gaAssets.tenantId, tenantId)));
+});
+
+employeeRouter.post("/ga-assets", requirePermission("assets", "create"), validateBody(employeeGaAssetSchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [created] = await db.insert(gaAssets).values({ ...req.body, tenantId }).returning();
+  await logAudit({ actorUserId: null, tenantId, action: "ga_asset.created", details: { assetId: created.id, employeeAccountId: req.session!.userId } });
+  res.status(201).json(created);
+});
+
+employeeRouter.put("/ga-assets/:id", requirePermission("assets", "edit"), validateParams(uuidParam("id")), validateBody(employeeGaAssetSchema.partial()), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [existing] = await db.select().from(gaAssets).where(and(eq(gaAssets.id, req.params.id), eq(gaAssets.tenantId, tenantId))).limit(1);
+  if (!existing) return res.status(404).json({ error: "Aset tidak ditemukan" });
+  const [updated] = await db.update(gaAssets).set(req.body).where(eq(gaAssets.id, req.params.id)).returning();
+  await logAudit({ actorUserId: null, tenantId, action: "ga_asset.updated", details: { assetId: updated.id, employeeAccountId: req.session!.userId } });
+  res.json(updated);
+});
+
+// ---------------------------------------------------------------------------
+// Procurement — third module of the RBAC rollout (moduleKey "procurement").
+// ---------------------------------------------------------------------------
+
+const employeeProcurementOrderSchema = z.object({
+  type: z.enum(["Pengadaan Barang", "Project / Jasa", "Barang", "Proyek / Jasa Kontrak"]).optional().nullable(),
+  prNumber: z.string().trim().min(1).max(100),
+  poNumber: z.string().trim().max(100).optional(),
+  quotationNumber: z.string().trim().max(100).optional().nullable(),
+  contractNumber: z.string().trim().max(100).optional().nullable(),
+  vendorId: z.string().uuid().optional().nullable(),
+  vendorName: z.string().trim().min(1).max(200),
+  itemName: z.string().trim().min(1).max(500),
+  quantity: z.number().int().min(1),
+  estimatedCost: z.number().int().min(0),
+  requestor: z.string().trim().min(1).max(200),
+  department: z.string().trim().min(1).max(200),
+  status: z.enum(["Pengajuan PR", "Quotation Diterima", "Disetujui HR/Finance", "PO Terbit", "Kontrak Berjalan", "Barang Diterima / Project Selesai", "Barang Diterima"]).optional(),
+  requestedDate: z.string().trim().min(1).max(20),
+});
+
+employeeRouter.get("/procurement-orders", requirePermission("procurement", "view"), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  res.json(await db.select().from(procurementOrders).where(eq(procurementOrders.tenantId, tenantId)));
+});
+
+employeeRouter.post("/procurement-orders", requirePermission("procurement", "create"), validateBody(employeeProcurementOrderSchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [created] = await db.insert(procurementOrders).values({ ...req.body, tenantId }).returning();
+  await logAudit({ actorUserId: null, tenantId, action: "procurement_order.created", details: { orderId: created.id, employeeAccountId: req.session!.userId } });
+  res.status(201).json(created);
+});
+
+employeeRouter.put("/procurement-orders/:id", requirePermission("procurement", "edit"), validateParams(uuidParam("id")), validateBody(employeeProcurementOrderSchema.partial()), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [existing] = await db.select().from(procurementOrders).where(and(eq(procurementOrders.id, req.params.id), eq(procurementOrders.tenantId, tenantId))).limit(1);
+  if (!existing) return res.status(404).json({ error: "Procurement order tidak ditemukan" });
+  const [updated] = await db.update(procurementOrders).set(req.body).where(eq(procurementOrders.id, req.params.id)).returning();
+  await logAudit({ actorUserId: null, tenantId, action: "procurement_order.updated", details: { orderId: updated.id, employeeAccountId: req.session!.userId } });
+  res.json(updated);
+});
+
+// ---------------------------------------------------------------------------
+// Compliance — fourth module of the RBAC rollout (moduleKey "compliance").
+// ---------------------------------------------------------------------------
+
+const employeeComplianceRecordSchema = z.object({
+  employeeId: z.string().uuid(),
+  level: z.enum(["SP 1", "SP 2", "SP 3", "Skorsing", "PHK"]),
+  violationReason: z.string().trim().min(1).max(2000),
+  letterNumber: z.string().trim().min(1).max(200),
+  issueDate: z.string().trim().min(1).max(20),
+  validUntil: z.string().trim().min(1).max(20),
+  signedBy: z.string().trim().max(200).optional().nullable(),
+  status: z.enum(["Aktif", "Kedaluwarsa", "Dibatalkan"]).optional(),
+});
+
+employeeRouter.get("/compliance-records", requirePermission("compliance", "view"), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  res.json(await db.select().from(complianceRecords).where(eq(complianceRecords.tenantId, tenantId)));
+});
+
+employeeRouter.post("/compliance-records", requirePermission("compliance", "create"), validateBody(employeeComplianceRecordSchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [created] = await db.insert(complianceRecords).values({ ...req.body, tenantId }).returning();
+  await logAudit({ actorUserId: null, tenantId, action: "compliance_record.created", details: { recordId: created.id, employeeAccountId: req.session!.userId } });
+  res.status(201).json(created);
+});
+
+employeeRouter.put("/compliance-records/:id", requirePermission("compliance", "edit"), validateParams(uuidParam("id")), validateBody(employeeComplianceRecordSchema.partial()), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [existing] = await db.select().from(complianceRecords).where(and(eq(complianceRecords.id, req.params.id), eq(complianceRecords.tenantId, tenantId))).limit(1);
+  if (!existing) return res.status(404).json({ error: "Data kepatuhan tidak ditemukan" });
+  const [updated] = await db.update(complianceRecords).set(req.body).where(eq(complianceRecords.id, req.params.id)).returning();
+  await logAudit({ actorUserId: null, tenantId, action: "compliance_record.updated", details: { recordId: updated.id, employeeAccountId: req.session!.userId } });
+  res.json(updated);
+});
+
+// ---------------------------------------------------------------------------
+// Loans & Kasbon — fifth module of the RBAC rollout (moduleKey "loans").
+// ---------------------------------------------------------------------------
+
+const employeeLoanRecordSchema = z.object({
+  employeeId: z.string().uuid(),
+  loanType: z.string().trim().min(1).max(100),
+  totalAmount: z.number().int().min(0),
+  tenorMonths: z.number().int().min(1),
+  monthlyInstallment: z.number().int().min(0),
+  remainingAmount: z.number().int().min(0).optional(),
+  startDate: z.string().trim().min(1).max(20),
+  reason: z.string().trim().max(1000).optional().nullable(),
+  status: z.enum(["Aktif", "Lunas", "Menunggu Approval", "Ditolak"]).optional(),
+  adminFee: z.number().int().min(0).optional().nullable(),
+  interestMethod: z.string().trim().max(100).optional().nullable(),
+  interestRatePercent: z.number().min(0).optional().nullable(),
+});
+
+employeeRouter.get("/loans", requirePermission("loans", "view"), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  res.json(await db.select().from(employeeLoans).where(eq(employeeLoans.tenantId, tenantId)));
+});
+
+employeeRouter.post("/loans", requirePermission("loans", "create"), validateBody(employeeLoanRecordSchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [created] = await db
+    .insert(employeeLoans)
+    .values({ ...req.body, remainingAmount: req.body.remainingAmount ?? req.body.totalAmount, tenantId })
+    .returning();
+  await logAudit({ actorUserId: null, tenantId, action: "loan.created", details: { loanId: created.id, employeeAccountId: req.session!.userId } });
+  res.status(201).json(created);
+});
+
+employeeRouter.put("/loans/:id", requirePermission("loans", "edit"), validateParams(uuidParam("id")), validateBody(employeeLoanRecordSchema.partial()), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [existing] = await db.select().from(employeeLoans).where(and(eq(employeeLoans.id, req.params.id), eq(employeeLoans.tenantId, tenantId))).limit(1);
+  if (!existing) return res.status(404).json({ error: "Data pinjaman tidak ditemukan" });
+  const [updated] = await db.update(employeeLoans).set(req.body).where(eq(employeeLoans.id, req.params.id)).returning();
+  await logAudit({ actorUserId: null, tenantId, action: "loan.updated", details: { loanId: updated.id, employeeAccountId: req.session!.userId } });
   res.json(updated);
 });
