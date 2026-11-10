@@ -8,6 +8,7 @@ import bcrypt from "bcryptjs";
 import { createApp } from "../app.ts";
 import { withCsrf } from "../lib/testCsrf.ts";
 import { db, pool } from "../db/client.ts";
+import { applyDuePersonaliaActions } from "../lib/personalia.ts";
 import { tenants, tenantSubscriptions, users, subscriptionPlans, companyEntities, entityClosure, employees, sessions, auditLogEntries, officialDocuments, orgStructureNodes, personaliaActions, approvalItems, complianceRecords } from "../db/schema.ts";
 
 /**
@@ -86,7 +87,7 @@ describe("Personalia end-to-end", () => {
       newOrgNodeId: nodeNew,
       newGrade: "G4",
       newSalary: 7_000_000,
-      effectiveDate: "2026-12-01",
+      effectiveDate: "2026-11-01",
       reason: "Kinerja unggul",
       previousSalary: 999, // ignored: server snapshot wins
     });
@@ -105,11 +106,11 @@ describe("Personalia end-to-end", () => {
   });
 
   it("rejects a promotion to a missing seat, and a duplicate letter number", async () => {
-    const bad = await adminAgent.post("/api/tenant/personalia-actions").set("Origin", origin).send({ employeeId: staffId, type: "Promosi", effectiveDate: "2026-12-01", reason: "tanpa posisi" });
+    const bad = await adminAgent.post("/api/tenant/personalia-actions").set("Origin", origin).send({ employeeId: staffId, type: "Promosi", effectiveDate: "2026-11-01", reason: "tanpa posisi" });
     expect(bad.status).toBe(400);
-    const dup = await adminAgent.post("/api/tenant/personalia-actions").set("Origin", origin).send({ employeeId: staffId, type: "Penyesuaian Gaji", newSalary: 6_000_000, effectiveDate: "2026-12-01", reason: "gaji", letterNumber: "DUP-1", status: "Draf" });
+    const dup = await adminAgent.post("/api/tenant/personalia-actions").set("Origin", origin).send({ employeeId: staffId, type: "Penyesuaian Gaji", newSalary: 6_000_000, effectiveDate: "2026-11-01", reason: "gaji", letterNumber: "DUP-1", status: "Draf" });
     expect(dup.status).toBe(201);
-    const dup2 = await adminAgent.post("/api/tenant/personalia-actions").set("Origin", origin).send({ employeeId: staffId, type: "Penyesuaian Gaji", newSalary: 6_000_000, effectiveDate: "2026-12-01", reason: "gaji", letterNumber: "DUP-1", status: "Draf" });
+    const dup2 = await adminAgent.post("/api/tenant/personalia-actions").set("Origin", origin).send({ employeeId: staffId, type: "Penyesuaian Gaji", newSalary: 6_000_000, effectiveDate: "2026-11-01", reason: "gaji", letterNumber: "DUP-1", status: "Draf" });
     expect(dup2.status).toBe(400);
     await adminAgent.delete(`/api/tenant/personalia-actions/${dup.body.id}`).set("Origin", origin).expect(204);
   });
@@ -141,7 +142,7 @@ describe("Personalia end-to-end", () => {
   });
 
   it("a rejected action never changes the employee; SP approval creates a compliance record", async () => {
-    const rej = await adminAgent.post("/api/tenant/personalia-actions").set("Origin", origin).send({ employeeId: staffId, type: "Penyesuaian Gaji", newSalary: 9_000_000, effectiveDate: "2026-12-01", reason: "ditolak uji" });
+    const rej = await adminAgent.post("/api/tenant/personalia-actions").set("Origin", origin).send({ employeeId: staffId, type: "Penyesuaian Gaji", newSalary: 9_000_000, effectiveDate: "2026-11-01", reason: "ditolak uji" });
     expect(rej.status).toBe(201);
     const r = await adminAgent.post(`/api/tenant/approval-items/${rej.body.approvalItemId}/decision`).set("Origin", origin).send({ decision: "Ditolak", reason: "tidak sesuai anggaran" });
     expect(r.status).toBe(200);
@@ -150,11 +151,55 @@ describe("Personalia end-to-end", () => {
     const [row] = await db.select().from(personaliaActions).where(eq(personaliaActions.id, rej.body.id));
     expect(row.status).toBe("Ditolak");
 
-    const sp = await adminAgent.post("/api/tenant/personalia-actions").set("Origin", origin).send({ employeeId: staffId, type: "Sanksi Disiplin SP", disciplinaryLevel: "SP 1", effectiveDate: "2026-12-02", reason: "Pelanggaran jam kerja" });
+    const sp = await adminAgent.post("/api/tenant/personalia-actions").set("Origin", origin).send({ employeeId: staffId, type: "Sanksi Disiplin SP", disciplinaryLevel: "SP 1", effectiveDate: "2026-11-01", reason: "Pelanggaran jam kerja" });
     expect(sp.status).toBe(201);
     await adminAgent.post(`/api/tenant/approval-items/${sp.body.approvalItemId}/decision`).set("Origin", origin).send({ decision: "Disetujui" }).expect(200);
     const comp = await db.select().from(complianceRecords).where(eq(complianceRecords.employeeId, staffId));
     expect(comp.length).toBe(1);
     expect(comp[0].level).toBe("SP 1");
+  });
+
+  it("personal-data SK: every field is validated by its format, protected keys are rejected, valid data is applied on approval", async () => {
+    const post = (personalDataUpdates: Record<string, unknown>) =>
+      adminAgent.post("/api/tenant/personalia-actions").set("Origin", origin).send({ employeeId: staffId, type: "Koreksi & Update Data Pribadi", effectiveDate: "2026-11-01", reason: "Koreksi data", personalDataUpdates });
+    const badNik = await post({ nikKtp: "123" });
+    expect(badNik.status).toBe(400);
+    expect(badNik.body.error).toMatch(/NIK KTP/);
+    const protectedKey = await post({ basicSalary: 99_000_000 });
+    expect(protectedKey.status).toBe(400);
+    expect(protectedKey.body.error).toMatch(/basicSalary/);
+    const empty = await post({});
+    expect(empty.status).toBe(400);
+
+    const ok = await post({ nikKtp: "3201010101010001", bankAccount: "1234567890", phone: "+62 812-3456-7890", birthDate: "1995-05-20" });
+    expect(ok.status).toBe(201);
+    await adminAgent.post(`/api/tenant/approval-items/${ok.body.approvalItemId}/decision`).set("Origin", origin).send({ decision: "Disetujui" }).expect(200);
+    const [emp] = await db.select().from(employees).where(eq(employees.id, staffId));
+    expect((emp.details as Record<string, unknown>).nikKtp).toBe("3201010101010001");
+    expect(emp.phone).toBe("+62 812-3456-7890");
+    expect(emp.basicSalary).toBe(7_000_000);
+  });
+
+  it("a future effective date is approved now but only applied once that date arrives", async () => {
+    const created = await adminAgent.post("/api/tenant/personalia-actions").set("Origin", origin).send({ employeeId: staffId, type: "Penyesuaian Gaji", newSalary: 8_000_000, effectiveDate: "2099-01-01", reason: "Kenaikan terjadwal" });
+    expect(created.status).toBe(201);
+    await adminAgent.post(`/api/tenant/approval-items/${created.body.approvalItemId}/decision`).set("Origin", origin).send({ decision: "Disetujui" }).expect(200);
+
+    let [emp] = await db.select().from(employees).where(eq(employees.id, staffId));
+    expect(emp.basicSalary).toBe(7_000_000);
+    let [row] = await db.select().from(personaliaActions).where(eq(personaliaActions.id, created.body.id));
+    expect(row.status).toBe("Disetujui");
+    expect(row.appliedAt).toBeNull();
+
+    await applyDuePersonaliaActions();
+    [emp] = await db.select().from(employees).where(eq(employees.id, staffId));
+    expect(emp.basicSalary).toBe(7_000_000); // still not due
+
+    await db.update(personaliaActions).set({ effectiveDate: "2020-01-01" }).where(eq(personaliaActions.id, created.body.id));
+    await applyDuePersonaliaActions();
+    [emp] = await db.select().from(employees).where(eq(employees.id, staffId));
+    expect(emp.basicSalary).toBe(8_000_000);
+    [row] = await db.select().from(personaliaActions).where(eq(personaliaActions.id, created.body.id));
+    expect(row.appliedAt).not.toBeNull();
   });
 });

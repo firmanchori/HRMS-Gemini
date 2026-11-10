@@ -166,12 +166,12 @@ state hidup di React context + simulasi `localStorage` per-browser.
   yang render strict dari `node.currentEmployeeId`) jadi basi/salah dibanding data
   karyawan sesungguhnya setelah setiap aksi Personalia.
   _Selesai: tabel `personalia_actions` + `server/lib/personalia.ts`; persetujuan final Approval Engine menerapkan perubahan di server (kursi org chart dikosongkan/diisi, `managerId` mengikuti bagan, SK terbit tanpa QR sampai ditandatangani)._
-- [ ] **(High)** Personalia menyimpan tabel grade-gaji **hardcode miliknya sendiri**
+- [x] **(High)** Personalia menyimpan tabel grade-gaji **hardcode miliknya sendiri**
   (`PersonaliaManagement.tsx:63 GRADE_SALARY_SCALES`), independen dari
   `gradeSalaryRanges` yang dikonfigurasi admin di `GradeSalaryManagement` — modul
   Grade & Salary jadi dekoratif/tidak pernah benar-benar dipakai untuk validasi
   promosi/payroll.
-  _Sebagian: server kini memvalidasi gaji baru terhadap `gradeSalaryRanges`; saran otomatis di form masih memakai konstanta hardcode (belum diganti)._
+  _Selesai: server memvalidasi gaji terhadap `gradeSalaryRanges`; form Personalia memakai grade & rentang gaji yang dikonfigurasi admin (konstanta hanya fallback bila belum ada grade)._
 - [x] **(Medium)** Personalia mengizinkan input posisi teks bebas (`__custom__`) yang
   melewati referensi org chart sama sekali, bertentangan dengan klaim PRD "wajib
   mengambil referensi langsung dari Org Structure Nodes".

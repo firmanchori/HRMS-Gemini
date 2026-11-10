@@ -1,4 +1,4 @@
-import { and, eq, isNull, ne, sql, desc } from "drizzle-orm";
+import { and, eq, isNull, ne, sql, desc, lte } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db/client.ts";
 import {
@@ -14,6 +14,7 @@ import {
 import { buildApprovalSteps, currentBlockingStep, finalizeHooks, ApprovalError } from "./approvalEngine.ts";
 import { createOfficialDocumentRecord } from "./documents.ts";
 import { logAudit } from "./audit.ts";
+import { logError } from "./logger.ts";
 
 export const PERSONALIA_CATEGORY = "Promosi/Personalia";
 
@@ -37,7 +38,7 @@ export const PERSONALIA_TYPES = [
 const ORG_MOVE_TYPES = new Set<string>(["Promosi", "Demosi", "Mutasi", "Mutasi Departemen"]);
 /** Keys of personalDataUpdates that must never be changed through a data-correction SK (identity/ownership/money are changed by their own action types). */
 const PROTECTED_DATA_KEYS = new Set(["id", "tenantId", "entityId", "basicSalary", "orgNodeId", "managerId", "status", "details", "createdAt", "candidateId"]);
-const COLUMN_DATA_KEYS = new Set(["fullName", "email", "phone", "avatar", "nik"]);
+const COLUMN_DATA_KEYS = new Set(["fullName", "email", "phone", "avatar"]);
 
 const signatorySchema = z.object({
   id: z.string().optional(),
@@ -78,6 +79,59 @@ export const personaliaActionSchema = z.object({
   systemicImpact: z.record(z.string(), z.unknown()).optional().nullable(),
 });
 export type PersonaliaActionInput = z.infer<typeof personaliaActionSchema>;
+
+const digits = (n: number | number[], label: string) => {
+  const lens = Array.isArray(n) ? n : [n];
+  return z.string().trim().refine((v) => lens.includes(v.replace(/\D/g, "").length) && /^[\d.\-\s]+$/.test(v), `${label} harus berupa ${lens.join(" atau ")} digit angka`);
+};
+const text = (label: string, max = 200) => z.string().trim().min(1, `${label} tidak boleh kosong`).max(max, `${label} maksimal ${max} karakter`);
+const optionalList = z.array(z.record(z.string(), z.unknown())).max(50);
+
+/** Allow-list of the personal-data fields a "Koreksi"/"Tambah Data" SK may change, each validated by its real format. Anything else (identity keys, salary, org links) is rejected, not silently dropped. */
+export const personalDataUpdatesSchema = z
+  .object({
+    fullName: text("Nama lengkap"),
+    email: z.string().trim().email("Email tidak valid").max(200),
+    personalEmail: z.string().trim().email("Email pribadi tidak valid").max(200),
+    phone: z.string().trim().regex(/^\+?[\d\s\-]{8,20}$/, "Nomor telepon tidak valid"),
+    whatsApp: z.string().trim().regex(/^\+?[\d\s\-]{8,20}$/, "Nomor WhatsApp tidak valid"),
+    avatar: z.string().max(2000),
+    nikKtp: digits(16, "NIK KTP"),
+    noKk: digits(16, "No. KK"),
+    birthPlace: text("Tempat lahir", 100),
+    birthDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Tanggal lahir harus YYYY-MM-DD").refine((v) => v < new Date().toISOString().slice(0, 10), "Tanggal lahir tidak boleh di masa depan"),
+    gender: z.enum(["Laki-laki", "Perempuan"]),
+    religion: z.enum(["Islam", "Kristen", "Katolik", "Hindu", "Buddha", "Konghucu", "Lainnya"]),
+    maritalStatus: z.enum(["Lajang", "Menikah", "Cerai Hidup", "Cerai Mati"]),
+    bloodType: z.enum(["A", "B", "AB", "O"]),
+    ktpAddress: text("Alamat KTP", 500),
+    currentAddress: text("Alamat domisili", 500),
+    postalCode: z.string().trim().regex(/^\d{5}$/, "Kode pos harus 5 digit"),
+    npwp: digits([15, 16], "NPWP"),
+    npwp16: digits(16, "NPWP 16 digit"),
+    ptkp: text("Status PTKP", 10),
+    kppPratama: text("KPP Pratama", 200),
+    bpjsTkNo: text("No. BPJS Ketenagakerjaan", 30),
+    bpjsKesNo: text("No. BPJS Kesehatan", 30),
+    faskes1Bpjs: text("Faskes 1 BPJS", 200),
+    bankName: text("Nama bank", 100),
+    bankAccount: z.string().trim().regex(/^\d{5,30}$/, "Nomor rekening harus 5–30 digit angka"),
+    bankAccountHolder: text("Nama pemilik rekening", 200),
+    lastEducationDegree: z.enum(["SMA/SMK", "D3", "S1", "S2", "S3"]),
+    institution: text("Institusi"),
+    major: text("Jurusan"),
+    graduationYear: z.number().int().min(1950).max(new Date().getFullYear() + 1),
+    educationGpa: z.union([z.number().min(0).max(4.5), z.string().trim().max(10)]),
+    titlePrefix: z.string().trim().max(50),
+    titleSuffix: z.string().trim().max(50),
+    formalEducations: optionalList,
+    nonFormalEducations: optionalList,
+    familyMembers: optionalList,
+    emergencyContacts: optionalList,
+  })
+  .partial()
+  .strict()
+  .refine((o) => Object.keys(o).length > 0, "Tidak ada data yang diubah");
 
 export class PersonaliaError extends Error {
   constructor(message: string, public status = 400) {
@@ -148,6 +202,20 @@ export async function createPersonaliaAction(params: { tenantId: string; actorUs
   if (input.status === "Menunggu Approval") assertComplete(input);
   await assertSalaryWithinGrade(tenantId, input.newGrade ?? detailStr(emp, "grade"), input.newSalary);
 
+  let personalData: Record<string, unknown> | null = input.personalDataUpdates ?? null;
+  if (input.type === "Koreksi & Update Data Pribadi" || input.type === "Tambah Data Baru") {
+    const parsed = personalDataUpdatesSchema.safeParse(personalData ?? {});
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0];
+      if (issue.code === "unrecognized_keys") throw new PersonaliaError(`Kolom tidak boleh diubah lewat SK data pribadi: ${issue.keys.join(", ")}`);
+      const field = issue.path.length ? `${issue.path.join(".")}: ` : "";
+      throw new PersonaliaError(`Data pribadi tidak valid — ${field}${issue.message}`);
+    }
+    personalData = parsed.data;
+  } else {
+    personalData = null; // other action types never carry personal-data changes
+  }
+
   const letterNumber = input.letterNumber?.trim() || (await nextLetterNumber(tenantId, new Date().getFullYear()));
   const [dup] = await db.select({ id: personaliaActions.id }).from(personaliaActions).where(and(eq(personaliaActions.tenantId, tenantId), eq(personaliaActions.letterNumber, letterNumber))).limit(1);
   if (dup) throw new PersonaliaError(`Nomor surat ${letterNumber} sudah digunakan.`);
@@ -174,7 +242,7 @@ export async function createPersonaliaAction(params: { tenantId: string; actorUs
       newBranchLocation: input.newBranchLocation ?? null,
       newEntityId: input.newEntityId ?? null,
       mutationType: input.mutationType ?? null,
-      personalDataUpdates: input.personalDataUpdates ?? null,
+      personalDataUpdates: personalData,
       contractDurationMonths: input.contractDurationMonths ?? null,
       contractEndDate: input.contractEndDate ?? null,
       actingRoleExpiryDate: input.actingRoleExpiryDate ?? null,
@@ -250,6 +318,11 @@ function documentTypeFor(type: string): string {
   if (type === "Mutasi" || type === "Mutasi Departemen" || type === "Rotasi Cabang") return "Surat Mutasi";
   if (type === "Pengangkatan Tetap") return "SK Pengangkatan";
   return "Surat Promosi";
+}
+
+/** Today in Jakarta (the tenant's business timezone) as YYYY-MM-DD. */
+function todayWib(): string {
+  return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Jakarta" });
 }
 
 /**
@@ -385,7 +458,8 @@ export async function applyPersonaliaAction(actionId: string, approvedBy: string
     await logAudit({ actorUserId: null, tenantId, action: "personalia.applied", details: { personaliaActionId: a.id, type: a.type, employeeId: emp.id, documentId: doc.id } });
   } catch (err) {
     // Release the claim so a retry (or a corrected position) can apply it; the approval stays decided.
-    await db.update(personaliaActions).set({ status: "Menunggu Approval", appliedAt: null, approvedBy: null }).where(eq(personaliaActions.id, actionId));
+    // Stays "Disetujui" (the approval is final) but unapplied, so the scheduled sweep retries it.
+    await db.update(personaliaActions).set({ status: "Disetujui", appliedAt: null }).where(eq(personaliaActions.id, actionId));
     throw err;
   }
 }
@@ -393,6 +467,12 @@ export async function applyPersonaliaAction(actionId: string, approvedBy: string
 finalizeHooks[PERSONALIA_CATEGORY] = async (item, decidedByName) => {
   if (item.status === "Disetujui") {
     try {
+      const [action] = await db.select().from(personaliaActions).where(eq(personaliaActions.id, item.referenceId)).limit(1);
+      if (action && action.effectiveDate > todayWib()) {
+        // Approved ahead of its effective date: recorded now, applied by applyDuePersonaliaActions() on that date.
+        await db.update(personaliaActions).set({ status: "Disetujui", approvedBy: decidedByName }).where(eq(personaliaActions.id, action.id));
+        return;
+      }
       await applyPersonaliaAction(item.referenceId, decidedByName);
     } catch (err) {
       // Surface to the approver instead of silently leaving approved-but-unapplied.
@@ -402,3 +482,21 @@ finalizeHooks[PERSONALIA_CATEGORY] = async (item, decidedByName) => {
     await db.update(personaliaActions).set({ status: "Ditolak", approvedBy: decidedByName }).where(eq(personaliaActions.id, item.referenceId));
   }
 };
+
+/** Applies every approved action whose effective date has arrived. Safe to run repeatedly (apply is claimed atomically). Returns how many were applied. */
+export async function applyDuePersonaliaActions(): Promise<number> {
+  const due = await db
+    .select()
+    .from(personaliaActions)
+    .where(and(eq(personaliaActions.status, "Disetujui"), isNull(personaliaActions.appliedAt), lte(personaliaActions.effectiveDate, todayWib())));
+  let applied = 0;
+  for (const a of due) {
+    try {
+      await applyPersonaliaAction(a.id, a.approvedBy ?? "Sistem");
+      applied += 1;
+    } catch (err) {
+      logError(`Personalia: gagal menerapkan ${a.id} saat tanggal efektif`, err);
+    }
+  }
+  return applied;
+}

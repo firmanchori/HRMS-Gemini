@@ -3,6 +3,7 @@ config({ path: ".env.local" });
 
 import { createApp } from "./app.ts";
 import { initErrorTracking, log, logError } from "./lib/logger.ts";
+import { applyDuePersonaliaActions } from "./lib/personalia.ts";
 
 initErrorTracking();
 
@@ -26,3 +27,8 @@ const app = createApp();
 app.listen(PORT, () => {
   log("info", `NusaHR API listening on http://localhost:${PORT}`);
 });
+
+// Approved Personalia SKs whose effective date is in the future are applied here once it arrives (hourly + on boot).
+const sweepPersonalia = () => applyDuePersonaliaActions().then((n) => n > 0 && log("info", `Personalia: ${n} SK diterapkan pada tanggal efektif`)).catch((err) => logError("Personalia sweep failed", err));
+sweepPersonalia();
+setInterval(sweepPersonalia, 60 * 60 * 1000).unref();

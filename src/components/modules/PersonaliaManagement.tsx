@@ -355,6 +355,7 @@ export const PersonaliaManagement: React.FC = () => {
     currentTenant,
     currentUser,
     orgNodes,
+    gradeSalaryRanges,
     openFilePreview,
     complianceRecords,
     kpis,
@@ -373,6 +374,26 @@ export const PersonaliaManagement: React.FC = () => {
     });
     return Array.from(set).sort();
   }, [orgNodes]);
+  // Salary bands come from the grades the admin configured (Grade & Salary). The built-in table is only a fallback for tenants that haven't configured any.
+  const gradeScales = React.useMemo<Record<string, GradeSalaryScale>>(() => {
+    if (!gradeSalaryRanges || gradeSalaryRanges.length === 0) return GRADE_SALARY_SCALES;
+    const out: Record<string, GradeSalaryScale> = {};
+    for (const g of gradeSalaryRanges) {
+      const fallback = GRADE_SALARY_SCALES[g.gradeCode];
+      out[g.gradeCode] = {
+        grade: g.gradeCode,
+        label: g.gradeName ? `${g.gradeCode} - ${g.gradeName}` : g.gradeCode,
+        minSalary: g.minSalary ?? g.singleValueSalary ?? 0,
+        maxSalary: g.maxSalary ?? g.singleValueSalary ?? 0,
+        defaultPositionAllowance: fallback?.defaultPositionAllowance ?? 0,
+        recommendedRole: fallback?.recommendedRole ?? 'Regular Employee',
+        defaultApprovalAuthorities: fallback?.defaultApprovalAuthorities ?? [],
+        defaultAssets: fallback?.defaultAssets ?? [],
+      };
+    }
+    return out;
+  }, [gradeSalaryRanges]);
+  const gradeCodesAscending = React.useMemo(() => Object.values(gradeScales).sort((a, b) => a.minSalary - b.minSalary).map((g) => g.grade), [gradeScales]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDocModalOpen, setIsDocModalOpen] = useState(false);
@@ -402,7 +423,7 @@ export const PersonaliaManagement: React.FC = () => {
   // Dynamic fields
   const [newPosition, setNewPosition] = useState('');
   const [newDepartment, setNewDepartment] = useState('');
-  const [newGrade, setNewGrade] = useState('L3');
+  const [newGrade, setNewGrade] = useState('');
   const [newSalary, setNewSalary] = useState<number>(10000000);
   const [newPositionAllowance, setNewPositionAllowance] = useState<number>(0);
   const [newFixedAllowance, setNewFixedAllowance] = useState<number>(0);
@@ -666,7 +687,7 @@ export const PersonaliaManagement: React.FC = () => {
     if (!emp) return;
     setNewPosition(emp.position);
     setNewDepartment(emp.department);
-    setNewGrade(emp.grade || 'L3');
+    setNewGrade(emp.grade || '');
     setNewSalary(emp.basicSalary);
     setNewPositionAllowance(emp.positionAllowance || 0);
     setNewFixedAllowance(emp.fixedAllowance || 0);
@@ -687,8 +708,9 @@ export const PersonaliaManagement: React.FC = () => {
       setReturnedAssets([...policy.defaultReturnedAssets]);
 
       if (type === 'Promosi') {
-        const targetGrade = emp.grade === 'L3' ? 'L4' : emp.grade === 'L2' ? 'L3' : emp.grade === 'L4' ? 'M1' : 'M2';
-        const scale = GRADE_SALARY_SCALES[targetGrade] || GRADE_SALARY_SCALES['L4'];
+        const ci = gradeCodesAscending.indexOf(emp.grade || '');
+        const targetGrade = gradeCodesAscending[Math.min(ci + 1, gradeCodesAscending.length - 1)] ?? emp.grade ?? '';
+        const scale = gradeScales[targetGrade] || { minSalary: emp.basicSalary, defaultPositionAllowance: 0 };
         const calculatedSalary = Math.max(Math.round(emp.basicSalary * (1 + (policy.salaryPercentChange || 25) / 100)), scale.minSalary);
         
         setNewPosition('');
@@ -696,8 +718,9 @@ export const PersonaliaManagement: React.FC = () => {
         setNewPositionAllowance(scale.defaultPositionAllowance || 1500000);
         setNewGrade(targetGrade);
       } else if (type === 'Demosi') {
-        const targetGrade = emp.grade === 'M1' ? 'L4' : emp.grade === 'L4' ? 'L3' : 'L2';
-        const scale = GRADE_SALARY_SCALES[targetGrade] || GRADE_SALARY_SCALES['L2'];
+        const ci = gradeCodesAscending.indexOf(emp.grade || '');
+        const targetGrade = gradeCodesAscending[Math.max(ci - 1, 0)] ?? emp.grade ?? '';
+        const scale = gradeScales[targetGrade] || { minSalary: emp.basicSalary, defaultPositionAllowance: 0 };
         const calculatedSalary = Math.max(Math.round(emp.basicSalary * (1 + (policy.salaryPercentChange || -15) / 100)), scale.minSalary);
         
         setNewSalary(calculatedSalary);
@@ -711,7 +734,7 @@ export const PersonaliaManagement: React.FC = () => {
         setNewBranchLocation('Cabang Surabaya - Tech Hub');
         setNewFixedAllowance((emp.fixedAllowance || 0) + 2500000);
       } else if (type === 'Penyesuaian Gaji') {
-        const scale = GRADE_SALARY_SCALES[emp.grade || 'L3'];
+        const scale = gradeScales[emp.grade || '-'];
         const adjustedSalary = Math.max(Math.round(emp.basicSalary * 1.1), scale ? scale.minSalary : emp.basicSalary);
         setNewSalary(adjustedSalary);
       } else if (type === 'Pengangkatan Tetap') {
@@ -807,7 +830,7 @@ export const PersonaliaManagement: React.FC = () => {
       return;
     }
 
-    const currentScale = GRADE_SALARY_SCALES[newGrade];
+    const currentScale = gradeScales[newGrade];
     const systemicConfig: SystemicImpactConfig = {
       gradeScaleMin: currentScale?.minSalary,
       gradeScaleMax: currentScale?.maxSalary,
@@ -869,7 +892,7 @@ export const PersonaliaManagement: React.FC = () => {
       return;
     }
 
-    const currentScale = GRADE_SALARY_SCALES[newGrade];
+    const currentScale = gradeScales[newGrade];
     const systemicConfig: SystemicImpactConfig = {
       gradeScaleMin: currentScale?.minSalary,
       gradeScaleMax: currentScale?.maxSalary,
@@ -945,7 +968,7 @@ export const PersonaliaManagement: React.FC = () => {
       },
       {
         category: '2. Skala Gaji & Grade Upah',
-        before: `${emp?.grade || 'L3'} · ${formatRupiah(emp?.basicSalary || 0)}`,
+        before: `${emp?.grade || '-'} · ${formatRupiah(emp?.basicSalary || 0)}`,
         after: `${grd} · ${formatRupiah(sal)}`,
         impact:
           sal > (emp?.basicSalary || 0)
@@ -1067,7 +1090,7 @@ export const PersonaliaManagement: React.FC = () => {
         { label: 'Usulan Jabatan Baru', value: newPosition || emp?.position || '-' },
         { label: 'Divisi / Unit Kerja', value: empDept },
         { label: 'Lokasi Penempatan', value: newBranchLocation },
-        { label: 'Grade Golongan Baru', value: `${newGrade} (${GRADE_SALARY_SCALES[newGrade]?.label || newGrade})` },
+        { label: 'Grade Golongan Baru', value: `${newGrade} (${gradeScales[newGrade]?.label || newGrade})` },
         ...(newSalary ? [
           { label: 'Usulan Gaji Pokok Baru', value: formatRupiah(newSalary) },
           { label: 'Gaji Pokok Sebelumnya', value: formatRupiah(emp?.basicSalary || 0) },
@@ -1143,7 +1166,7 @@ export const PersonaliaManagement: React.FC = () => {
       emp,
       log.newPosition,
       empDept,
-      log.newGrade || 'L3',
+      log.newGrade || '-',
       log.newSalary,
       logNewAllowances,
       logRevokedAllowances,
@@ -1158,7 +1181,7 @@ export const PersonaliaManagement: React.FC = () => {
       emp,
       log.newPosition,
       empDept,
-      log.newGrade || 'L3',
+      log.newGrade || '-',
       log.newSalary,
       log.effectiveDate,
       log.reason,
@@ -2542,7 +2565,7 @@ export const PersonaliaManagement: React.FC = () => {
                       <div className="bg-white p-2.5 rounded-lg border border-slate-200/80 shadow-2xs">
                         <span className="text-[10px] text-slate-400 block font-medium">Status & Grade</span>
                         <div className="font-bold text-slate-900 text-xs mt-0.5">
-                          {selectedTargetEmp.employmentType || 'PKWTT'} · {selectedTargetEmp.grade || 'L3'}
+                          {selectedTargetEmp.employmentType || 'PKWTT'} · {selectedTargetEmp.grade || '-'}
                         </div>
                         <span className="text-[9px] text-slate-400 block truncate">
                           Gaji: {formatRupiah(selectedTargetEmp.basicSalary || 0)}
@@ -2676,13 +2699,9 @@ export const PersonaliaManagement: React.FC = () => {
                         onChange={(e) => setNewGrade(e.target.value)}
                         className="w-full px-3 py-1.5 border border-slate-300 rounded bg-white font-mono"
                       >
-                        <option value="L1">L1 - Entry Level / Junior</option>
-                        <option value="L2">L2 - Associate Specialist</option>
-                        <option value="L3">L3 - Senior Specialist</option>
-                        <option value="L4">L4 - Principal / Lead</option>
-                        <option value="M1">M1 - Assistant Manager</option>
-                        <option value="M2">M2 - Senior Manager</option>
-                        <option value="E1">E1 - Vice President</option>
+                        {gradeCodesAscending.map((g) => (
+                          <option key={g} value={g}>{gradeScales[g].label}</option>
+                        ))}
                       </select>
                     </div>
                   </div>
@@ -2762,9 +2781,9 @@ export const PersonaliaManagement: React.FC = () => {
                         onChange={(e) => setNewGrade(e.target.value)}
                         className="w-full px-3 py-1.5 border border-slate-300 rounded bg-white font-mono"
                       >
-                        <option value="L1">L1 - Entry Level</option>
-                        <option value="L2">L2 - Associate</option>
-                        <option value="L3">L3 - Senior</option>
+                        {gradeCodesAscending.map((g) => (
+                          <option key={g} value={g}>{gradeScales[g].label}</option>
+                        ))}
                       </select>
                     </div>
                   </div>
@@ -3082,11 +3101,11 @@ export const PersonaliaManagement: React.FC = () => {
                   </div>
 
                   {/* Indicator Grade Scale info */}
-                  {GRADE_SALARY_SCALES[newGrade] && (
+                  {gradeScales[newGrade] && (
                     <div className="px-2.5 py-1 bg-white border border-indigo-200 rounded-lg text-right shrink-0">
                       <span className="text-[10px] text-slate-400 block font-medium">Skala Upah Grade {newGrade}</span>
                       <span className="text-xs font-mono font-bold text-indigo-900">
-                        {formatRupiah(GRADE_SALARY_SCALES[newGrade].minSalary)} — {formatRupiah(GRADE_SALARY_SCALES[newGrade].maxSalary)}
+                        {formatRupiah(gradeScales[newGrade].minSalary)} — {formatRupiah(gradeScales[newGrade].maxSalary)}
                       </span>
                     </div>
                   )}
@@ -3117,7 +3136,7 @@ export const PersonaliaManagement: React.FC = () => {
                       <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
                         2. Skala Gaji & Grade
                       </span>
-                      {GRADE_SALARY_SCALES[newGrade] && newSalary < GRADE_SALARY_SCALES[newGrade].minSalary ? (
+                      {gradeScales[newGrade] && newSalary < gradeScales[newGrade].minSalary ? (
                         <span className="text-[9px] px-1 rounded bg-rose-100 text-rose-700 font-bold">
                           &lt; Min Grade
                         </span>
@@ -3128,20 +3147,20 @@ export const PersonaliaManagement: React.FC = () => {
                       )}
                     </div>
                     <div className="text-[11px] text-slate-500 line-through">
-                      Grade {selectedTargetEmp?.grade || 'L3'} · {formatRupiah(selectedTargetEmp?.basicSalary || 0)}
+                      Grade {selectedTargetEmp?.grade || '-'} · {formatRupiah(selectedTargetEmp?.basicSalary || 0)}
                     </div>
                     <div className="font-bold text-slate-900 text-xs flex items-center gap-1 font-mono">
                       <ArrowRight className="w-3 h-3 text-emerald-600 shrink-0" />
                       <span>Grade {newGrade} · {formatRupiah(newSalary)}</span>
                     </div>
-                    {GRADE_SALARY_SCALES[newGrade] && newSalary < GRADE_SALARY_SCALES[newGrade].minSalary && (
+                    {gradeScales[newGrade] && newSalary < gradeScales[newGrade].minSalary && (
                       <button
                         type="button"
-                        onClick={() => setNewSalary(GRADE_SALARY_SCALES[newGrade].minSalary)}
+                        onClick={() => setNewSalary(gradeScales[newGrade].minSalary)}
                         className="text-[9px] text-indigo-700 font-bold hover:underline block text-left"
                         title="Otomatis sesuaikan gaji ke batas minimum grade"
                       >
-                        ⚡ Samakan ke Min Grade ({formatRupiah(GRADE_SALARY_SCALES[newGrade].minSalary)})
+                        ⚡ Samakan ke Min Grade ({formatRupiah(gradeScales[newGrade].minSalary)})
                       </button>
                     )}
                   </div>
@@ -3232,20 +3251,20 @@ export const PersonaliaManagement: React.FC = () => {
                     <div className="p-2.5 bg-indigo-50/50 border border-indigo-200 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                       <div>
                         <span className="font-bold text-indigo-950 block text-xs">
-                          Struktur Skala Upah Otomatis: Grade {newGrade} ({GRADE_SALARY_SCALES[newGrade]?.label || newGrade})
+                          Struktur Skala Upah Otomatis: Grade {newGrade} ({gradeScales[newGrade]?.label || newGrade})
                         </span>
                         <span className="text-[11px] text-indigo-800">
-                          Batas Minimal Skala: <strong>{formatRupiah(GRADE_SALARY_SCALES[newGrade]?.minSalary || 4500000)}</strong> — Batas Maksimal: <strong>{formatRupiah(GRADE_SALARY_SCALES[newGrade]?.maxSalary || 9500000)}</strong>
+                          Batas Minimal Skala: <strong>{formatRupiah(gradeScales[newGrade]?.minSalary || 4500000)}</strong> — Batas Maksimal: <strong>{formatRupiah(gradeScales[newGrade]?.maxSalary || 9500000)}</strong>
                         </span>
                       </div>
 
-                      {GRADE_SALARY_SCALES[newGrade] && (
+                      {gradeScales[newGrade] && (
                         <button
                           type="button"
                           onClick={() => {
-                            setNewSalary(GRADE_SALARY_SCALES[newGrade].minSalary);
-                            if (GRADE_SALARY_SCALES[newGrade].defaultPositionAllowance) {
-                              setNewPositionAllowance(GRADE_SALARY_SCALES[newGrade].defaultPositionAllowance);
+                            setNewSalary(gradeScales[newGrade].minSalary);
+                            if (gradeScales[newGrade].defaultPositionAllowance) {
+                              setNewPositionAllowance(gradeScales[newGrade].defaultPositionAllowance);
                             }
                           }}
                           className="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-xs font-bold shadow-2xs shrink-0 transition-colors"
@@ -3819,7 +3838,7 @@ export const PersonaliaManagement: React.FC = () => {
                       </span>
                       <span>•</span>
                       <span className="inline-flex items-center gap-1 font-mono">
-                        <span>Grade: {selectedTargetEmp.grade || 'L3'}</span>
+                        <span>Grade: {selectedTargetEmp.grade || '-'}</span>
                       </span>
                     </div>
                   </div>
