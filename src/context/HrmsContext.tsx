@@ -3302,28 +3302,33 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // 17. Multi-tier Approval Center Actions
+  /**
+   * Decisions are made by the server's Approval Engine (who may approve,
+   * no skipped levels, reject needs a reason, step-by-step advance); this
+   * only relays the decision and, once the server reports the request
+   * fully approved/rejected, runs the source module's follow-up action.
+   */
   const reviewApprovalItem = (id: string, approved: boolean, notes?: string) => {
     const item = approvalItems.find((a) => a.id === id);
     if (!item) return;
+    tenantApi
+      .decideApprovalItem(id, approved ? 'Disetujui' : 'Ditolak', notes)
+      .then((updated) => {
+        setApprovalItems((prev) => prev.map((a) => (a.id === id ? (updated as unknown as ApprovalWorkflowItem) : a)));
+        if (updated.status === 'Menunggu' || updated.status === 'Eskalasi Terlambat') {
+          logAuditAction('Approval Center', 'LEVEL_UP', id, `Approval level ${item.level} disetujui, lanjut ke level ${updated.level}`);
+          return;
+        }
+        runApprovalSideEffects(item, updated.status === 'Disetujui', notes);
+      })
+      .catch((err: unknown) => {
+        window.alert(err instanceof Error ? err.message : 'Gagal memproses keputusan approval.');
+      });
+  };
 
+  const runApprovalSideEffects = (item: ApprovalWorkflowItem, approved: boolean, notes?: string) => {
+    const id = item.id;
     if (approved) {
-      if (item.level < item.totalLevels) {
-        // Advance to next level! (FR-2.4 & Catalog Bug #7)
-        const nextLevel = item.level + 1;
-        const nextRole = nextLevel === 2 ? 'director' : 'super_admin';
-        persistApprovalItemUpdate(id, {
-          level: nextLevel,
-          assignedApproverRole: nextRole,
-          notes: notes ? `${item.notes || ''} [L${item.level}: ${notes}]` : item.notes,
-        });
-        logAuditAction('Approval Center', 'LEVEL_UP', id, `Approval level ${item.level} disetujui, lanjut ke level ${nextLevel}`);
-        return;
-      }
-
-      // Final Level Approved!
-      persistApprovalItemUpdate(id, { status: 'Disetujui', notes: notes ? `${item.notes || ''} [Final: ${notes}]` : item.notes });
-
-      // Category Handler Registry
       if (item.category === 'Cuti') {
         reviewLeaveRequest(item.referenceId, true);
         const emp = employees.find((e) => e.id === item.requesterId);
@@ -3356,7 +3361,6 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       logAuditAction('Approval Center', 'APPROVE_FINAL', id, `Persetujuan final selesai untuk kategori ${item.category}`);
     } else {
-      persistApprovalItemUpdate(id, { status: 'Ditolak', notes: notes || item.notes });
       if (item.category === 'Cuti') {
         reviewLeaveRequest(item.referenceId, false);
       } else if (item.category === 'Pinjaman') {

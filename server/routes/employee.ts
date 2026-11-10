@@ -1,10 +1,10 @@
 import { Router } from "express";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import QRCode from "qrcode";
 import { db } from "../db/client.ts";
-import { employeeAccounts, employees, attendanceRecords, leaveRequests, payrollRecords, gaAssets, procurementOrders, complianceRecords, employeeLoans } from "../db/schema.ts";
+import { employeeAccounts, employees, attendanceRecords, leaveRequests, payrollRecords, gaAssets, procurementOrders, complianceRecords, employeeLoans, businessTrips, employeeKpis, jobRequisitions, jobVacancies, candidates, offboardingRecords, companyCalendarEvents, auditTrailEntries, approvalItems, officialDocuments, documentSignatoryConfigs, documentTemplates, companyEntities } from "../db/schema.ts";
 import { issueSession, requireEmployeeSession, requirePermission, issueMfaTicket, readMfaTicket, clearMfaTicket } from "../middleware/auth.ts";
 import { validateBody, validateParams, uuidParam } from "../lib/validate.ts";
 import { authLimiter } from "../lib/rateLimit.ts";
@@ -15,6 +15,7 @@ import { checkClockIn, checkClockOut, performClockIn, performClockOut, ClockErro
 import { encryptSecret, decryptSecret } from "../lib/crypto.ts";
 import { generateTotpSecret, totpOtpauthUrl, verifyTotpCode, generateBackupCodes, hashBackupCode, consumeBackupCode } from "../lib/totp.ts";
 import { sendSecurityAlert } from "../lib/alerts.ts";
+import { decideApproval, withDerivedStatus, currentBlockingStep, activeDelegatorIds, ApprovalError } from "../lib/approvalEngine.ts";
 
 /**
  * Real employee (ESS) / manager (MSS) login and the first real,
@@ -589,3 +590,486 @@ employeeRouter.put("/loans/:id", requirePermission("loans", "edit"), validatePar
   await logAudit({ actorUserId: null, tenantId, action: "loan.updated", details: { loanId: updated.id, employeeAccountId: req.session!.userId } });
   res.json(updated);
 });
+
+
+// ---------------------------------------------------------------------------
+// RBAC granular-enforcement rollout, phase 2 — remaining matrix modules
+// (employees, trips, kpi, recruitment, offboarding, calendar, audit_trail,
+// approvals, documents). Same contract as phase 1: schemas mirror tenant.ts,
+// every query is tenant-scoped by the session, no entity scoping (employee
+// accounts have no entity dimension — documented default), writes audited.
+// Deliberately skipped: "personalia" (no real backend table exists yet),
+// POST /job-requisitions (job_requisitions.requested_by_user_id is a NOT NULL
+// FK to users, which an employee account has no row in — needs a schema
+// decision, not a silent workaround).
+// ---------------------------------------------------------------------------
+
+const zDateTime = () => z.string().datetime().transform((v) => new Date(v));
+
+async function assertEntityInTenant(tenantId: string, entityId: string | null | undefined): Promise<boolean> {
+  if (!entityId) return true;
+  const [row] = await db.select({ id: companyEntities.id }).from(companyEntities).where(and(eq(companyEntities.id, entityId), eq(companyEntities.tenantId, tenantId))).limit(1);
+  return Boolean(row);
+}
+
+// --- Employees (moduleKey "employees") ---
+const employeeRecordSchema = z.object({
+  entityId: z.string().uuid(),
+  nik: z.string().trim().min(1).max(50),
+  fullName: z.string().trim().min(2).max(200),
+  email: z.string().trim().email().optional().nullable(),
+  phone: z.string().trim().max(50).optional().nullable(),
+  avatar: z.string().trim().max(2000).optional().nullable(),
+  employmentType: z.string().trim().max(50).optional().nullable(),
+  positionId: z.string().uuid().optional().nullable(),
+  divisionId: z.string().uuid().optional().nullable(),
+  departmentId: z.string().uuid().optional().nullable(),
+  orgNodeId: z.string().uuid().optional().nullable(),
+  managerId: z.string().uuid().optional().nullable(),
+  candidateId: z.string().uuid().optional().nullable(),
+  status: z.string().trim().max(50).optional().nullable(),
+  basicSalary: z.number().int().min(0).optional().nullable(),
+  joinDate: zDateTime().optional().nullable(),
+  resignDate: zDateTime().optional().nullable(),
+  resignReason: z.string().trim().max(500).optional().nullable(),
+  details: z.record(z.string(), z.unknown()).optional(),
+});
+
+employeeRouter.get("/employees", requirePermission("employees", "view"), async (req, res) => {
+  res.json(await db.select().from(employees).where(eq(employees.tenantId, req.session!.tenantId!)));
+});
+
+employeeRouter.post("/employees", requirePermission("employees", "create"), validateBody(employeeRecordSchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  if (!(await assertEntityInTenant(tenantId, req.body.entityId))) return res.status(404).json({ error: "Entitas tidak ditemukan" });
+  const [created] = await db.insert(employees).values({ ...req.body, tenantId }).returning();
+  await logAudit({ actorUserId: null, tenantId, action: "employee.create", details: { employeeId: created.id, employeeAccountId: req.session!.userId } });
+  res.status(201).json(created);
+});
+
+employeeRouter.put("/employees/:id", requirePermission("employees", "edit"), validateParams(uuidParam("id")), validateBody(employeeRecordSchema.partial()), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [existing] = await db.select().from(employees).where(and(eq(employees.id, req.params.id), eq(employees.tenantId, tenantId))).limit(1);
+  if (!existing) return res.status(404).json({ error: "Karyawan tidak ditemukan" });
+  if (!(await assertEntityInTenant(tenantId, req.body.entityId))) return res.status(404).json({ error: "Entitas tidak ditemukan" });
+  const [updated] = await db.update(employees).set(req.body).where(eq(employees.id, req.params.id)).returning();
+  await logAudit({ actorUserId: null, tenantId, action: "employee.update", details: { employeeId: updated.id, employeeAccountId: req.session!.userId } });
+  res.json(updated);
+});
+
+// --- Business Trips / SPPD (moduleKey "trips") ---
+const employeeBusinessTripSchema = z.object({
+  tripNumber: z.string().trim().min(1).max(100),
+  employeeId: z.string().uuid(),
+  destinationCity: z.string().trim().min(1).max(200),
+  startDate: z.string().trim().min(1).max(20),
+  endDate: z.string().trim().min(1).max(20),
+  totalDays: z.number().int().min(1),
+  purpose: z.string().trim().min(1).max(2000),
+  transportType: z.enum(["Pesawat", "Kereta Api", "Mobil Operasional", "Travel"]),
+  estimatedCost: z.number().int().min(0),
+  perDiemDaily: z.number().int().min(0),
+  accommodationCost: z.number().int().min(0),
+  status: z.enum(["Menunggu Approval", "Disetujui Atasan", "Disetujui Finance", "Selesai", "Ditolak"]).optional(),
+  approvedBy: z.string().trim().max(200).optional().nullable(),
+});
+
+employeeRouter.get("/business-trips", requirePermission("trips", "view"), async (req, res) => {
+  res.json(await db.select().from(businessTrips).where(eq(businessTrips.tenantId, req.session!.tenantId!)));
+});
+
+employeeRouter.post("/business-trips", requirePermission("trips", "create"), validateBody(employeeBusinessTripSchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [target] = await db.select({ id: employees.id }).from(employees).where(and(eq(employees.id, req.body.employeeId), eq(employees.tenantId, tenantId))).limit(1);
+  if (!target) return res.status(404).json({ error: "Karyawan tidak ditemukan" });
+  const [created] = await db.insert(businessTrips).values({ ...req.body, tenantId }).returning();
+  await logAudit({ actorUserId: null, tenantId, action: "business_trip.created", details: { tripId: created.id, employeeAccountId: req.session!.userId } });
+  res.status(201).json(created);
+});
+
+employeeRouter.put("/business-trips/:id", requirePermission("trips", "edit"), validateParams(uuidParam("id")), validateBody(employeeBusinessTripSchema.partial()), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [existing] = await db.select().from(businessTrips).where(and(eq(businessTrips.id, req.params.id), eq(businessTrips.tenantId, tenantId))).limit(1);
+  if (!existing) return res.status(404).json({ error: "Data perjalanan dinas tidak ditemukan" });
+  const [updated] = await db.update(businessTrips).set(req.body).where(eq(businessTrips.id, req.params.id)).returning();
+  await logAudit({ actorUserId: null, tenantId, action: "business_trip.updated", details: { tripId: updated.id, employeeAccountId: req.session!.userId } });
+  res.json(updated);
+});
+
+// --- KPI (moduleKey "kpi") ---
+const employeeKpiRecordSchema = z.object({
+  employeeId: z.string().uuid(),
+  period: z.string().trim().min(1).max(100),
+  quarter: z.enum(["Q1", "Q2", "Q3", "Q4"]),
+  metrics: z.array(z.unknown()).optional(),
+  finalScore: z.number().optional(),
+  feedback: z.string().trim().max(2000).optional().nullable(),
+  reviewer: z.string().trim().max(200).optional().nullable(),
+  evaluatedAt: z.string().trim().min(1).max(20),
+});
+
+employeeRouter.get("/employee-kpis", requirePermission("kpi", "view"), async (req, res) => {
+  res.json(await db.select().from(employeeKpis).where(eq(employeeKpis.tenantId, req.session!.tenantId!)));
+});
+
+/** Upsert by (employeeId, quarter, period) — same replace-not-duplicate contract as tenant.ts. A create/edit permission is required either way, checked per outcome below. */
+employeeRouter.post("/employee-kpis/upsert", requirePermission("kpi", "create"), validateBody(employeeKpiRecordSchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [target] = await db.select({ id: employees.id }).from(employees).where(and(eq(employees.id, req.body.employeeId), eq(employees.tenantId, tenantId))).limit(1);
+  if (!target) return res.status(404).json({ error: "Karyawan tidak ditemukan" });
+  const [existing] = await db
+    .select()
+    .from(employeeKpis)
+    .where(and(eq(employeeKpis.tenantId, tenantId), eq(employeeKpis.employeeId, req.body.employeeId), eq(employeeKpis.quarter, req.body.quarter), eq(employeeKpis.period, req.body.period)))
+    .limit(1);
+  if (existing) {
+    // Replacing an existing review is an edit, not a create.
+    const perm = await getPermission(tenantId, "kpi", req.session!.roleKey!);
+    if (!perm.edit) return res.status(403).json({ error: "Anda tidak memiliki izin untuk tindakan ini" });
+    const [updated] = await db.update(employeeKpis).set(req.body).where(eq(employeeKpis.id, existing.id)).returning();
+    await logAudit({ actorUserId: null, tenantId, action: "employee_kpi.updated", details: { kpiId: updated.id, employeeAccountId: req.session!.userId } });
+    return res.json(updated);
+  }
+  const [created] = await db.insert(employeeKpis).values({ ...req.body, tenantId }).returning();
+  await logAudit({ actorUserId: null, tenantId, action: "employee_kpi.created", details: { kpiId: created.id, employeeAccountId: req.session!.userId } });
+  res.status(201).json(created);
+});
+
+// --- Recruitment (moduleKey "recruitment"): requisitions (no POST, see header), vacancies, candidates ---
+const employeeJobRequisitionSchema = z.object({
+  entityId: z.string().uuid(),
+  officeLocationId: z.string().uuid().optional(),
+  divisionId: z.string().uuid().optional(),
+  departmentId: z.string().uuid().optional(),
+  positionId: z.string().uuid().optional(),
+  requisitionType: z.enum(["Baru", "Penggantian"]).optional(),
+  replacementEmployeeId: z.string().uuid().optional(),
+  headcount: z.number().int().min(1).optional(),
+  educationLevelId: z.string().uuid().optional(),
+  fieldsOfStudyIds: z.array(z.string().uuid()).optional(),
+  minExperienceYears: z.number().int().min(0).optional(),
+  knockoutCriteria: z.array(z.unknown()).optional(),
+  scoredCriteria: z.array(z.unknown()).optional(),
+  signatories: z.array(z.unknown()).optional(),
+  status: z.enum(["Draft", "Menunggu Approval", "Disetujui", "Ditolak", "Dibatalkan", "Dicabut (Retracted)"]).optional(),
+  details: z.record(z.string(), z.unknown()).optional(),
+});
+
+employeeRouter.get("/job-requisitions", requirePermission("recruitment", "view"), async (req, res) => {
+  res.json(await db.select().from(jobRequisitions).where(eq(jobRequisitions.tenantId, req.session!.tenantId!)));
+});
+
+employeeRouter.put("/job-requisitions/:id", requirePermission("recruitment", "edit"), validateParams(uuidParam("id")), validateBody(employeeJobRequisitionSchema.partial()), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [existing] = await db.select().from(jobRequisitions).where(and(eq(jobRequisitions.id, req.params.id), eq(jobRequisitions.tenantId, tenantId))).limit(1);
+  if (!existing) return res.status(404).json({ error: "FPTK tidak ditemukan" });
+  if (!(await assertEntityInTenant(tenantId, req.body.entityId))) return res.status(404).json({ error: "Entitas tidak ditemukan" });
+  const [updated] = await db.update(jobRequisitions).set(req.body).where(eq(jobRequisitions.id, req.params.id)).returning();
+  await logAudit({ actorUserId: null, tenantId, action: "job_requisition.update", details: { jobRequisitionId: updated.id, employeeAccountId: req.session!.userId } });
+  res.json(updated);
+});
+
+const employeeJobVacancySchema = z.object({
+  entityId: z.string().uuid(),
+  jobRequisitionId: z.string().uuid().optional(),
+  title: z.string().trim().min(1).max(200),
+  openings: z.number().int().min(1).optional(),
+  status: z.enum(["Buka", "Ditutup"]).optional(),
+  targetCloseDate: zDateTime().optional(),
+  details: z.record(z.string(), z.unknown()).optional(),
+});
+
+employeeRouter.get("/job-vacancies", requirePermission("recruitment", "view"), async (req, res) => {
+  res.json(await db.select().from(jobVacancies).where(eq(jobVacancies.tenantId, req.session!.tenantId!)));
+});
+
+employeeRouter.post("/job-vacancies", requirePermission("recruitment", "create"), validateBody(employeeJobVacancySchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  if (!(await assertEntityInTenant(tenantId, req.body.entityId))) return res.status(404).json({ error: "Entitas tidak ditemukan" });
+  const [created] = await db.insert(jobVacancies).values({ ...req.body, tenantId }).returning();
+  await logAudit({ actorUserId: null, tenantId, action: "job_vacancy.create", details: { jobVacancyId: created.id, employeeAccountId: req.session!.userId } });
+  res.status(201).json(created);
+});
+
+employeeRouter.put("/job-vacancies/:id", requirePermission("recruitment", "edit"), validateParams(uuidParam("id")), validateBody(employeeJobVacancySchema.partial()), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [existing] = await db.select().from(jobVacancies).where(and(eq(jobVacancies.id, req.params.id), eq(jobVacancies.tenantId, tenantId))).limit(1);
+  if (!existing) return res.status(404).json({ error: "Lowongan tidak ditemukan" });
+  if (!(await assertEntityInTenant(tenantId, req.body.entityId))) return res.status(404).json({ error: "Entitas tidak ditemukan" });
+  const [updated] = await db.update(jobVacancies).set(req.body).where(eq(jobVacancies.id, req.params.id)).returning();
+  await logAudit({ actorUserId: null, tenantId, action: "job_vacancy.update", details: { jobVacancyId: updated.id, employeeAccountId: req.session!.userId } });
+  res.json(updated);
+});
+
+const employeeCandidateSchema = z.object({
+  jobVacancyId: z.string().uuid(),
+  name: z.string().trim().min(1).max(200),
+  email: z.string().trim().email(),
+  phone: z.string().trim().max(50).optional(),
+  stage: z.string().trim().min(1).max(100).optional(),
+  aiMatchScore: z.number().int().min(0).max(100).optional(),
+  testScore: z.number().int().min(0).max(100).optional(),
+  interviewScore: z.number().int().min(0).max(100).optional(),
+  offeredSalary: z.number().int().min(0).optional(),
+  details: z.record(z.string(), z.unknown()).optional(),
+});
+
+employeeRouter.get("/candidates", requirePermission("recruitment", "view"), async (req, res) => {
+  res.json(await db.select().from(candidates).where(eq(candidates.tenantId, req.session!.tenantId!)));
+});
+
+employeeRouter.post("/candidates", requirePermission("recruitment", "create"), validateBody(employeeCandidateSchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [vacancy] = await db.select({ id: jobVacancies.id }).from(jobVacancies).where(and(eq(jobVacancies.id, req.body.jobVacancyId), eq(jobVacancies.tenantId, tenantId))).limit(1);
+  if (!vacancy) return res.status(404).json({ error: "Lowongan tidak ditemukan" });
+  const [created] = await db.insert(candidates).values({ ...req.body, tenantId }).returning();
+  await logAudit({ actorUserId: null, tenantId, action: "candidate.create", details: { candidateId: created.id, employeeAccountId: req.session!.userId } });
+  res.status(201).json(created);
+});
+
+employeeRouter.put("/candidates/:id", requirePermission("recruitment", "edit"), validateParams(uuidParam("id")), validateBody(employeeCandidateSchema.partial()), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [existing] = await db.select({ id: candidates.id }).from(candidates).where(and(eq(candidates.id, req.params.id), eq(candidates.tenantId, tenantId))).limit(1);
+  if (!existing) return res.status(404).json({ error: "Kandidat tidak ditemukan" });
+  if (req.body.jobVacancyId) {
+    const [vacancy] = await db.select({ id: jobVacancies.id }).from(jobVacancies).where(and(eq(jobVacancies.id, req.body.jobVacancyId), eq(jobVacancies.tenantId, tenantId))).limit(1);
+    if (!vacancy) return res.status(404).json({ error: "Lowongan tidak ditemukan" });
+  }
+  const [updated] = await db.update(candidates).set(req.body).where(eq(candidates.id, req.params.id)).returning();
+  await logAudit({ actorUserId: null, tenantId, action: "candidate.update", details: { candidateId: updated.id, employeeAccountId: req.session!.userId } });
+  res.json(updated);
+});
+
+// --- Offboarding (moduleKey "offboarding") ---
+const employeeOffboardingSchema = z.object({
+  employeeId: z.string().uuid(),
+  separationType: z.enum(["Resign Sukarela", "Habis Kontrak", "PHK Efisiensi", "PHK Indisipliner"]),
+  requestDate: z.string().trim().min(1).max(20),
+  effectiveDate: z.string().trim().min(1).max(20),
+  handoverCompleted: z.boolean().optional(),
+  assetReturned: z.boolean().optional(),
+  financeCleared: z.boolean().optional(),
+  severancePay: z.number().int().min(0).optional(),
+  parklaringIssued: z.boolean().optional(),
+  parklaringNumber: z.string().trim().max(200).optional().nullable(),
+  notes: z.string().trim().max(2000).optional().nullable(),
+});
+
+employeeRouter.get("/offboarding-records", requirePermission("offboarding", "view"), async (req, res) => {
+  res.json(await db.select().from(offboardingRecords).where(eq(offboardingRecords.tenantId, req.session!.tenantId!)));
+});
+
+employeeRouter.post("/offboarding-records", requirePermission("offboarding", "create"), validateBody(employeeOffboardingSchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [target] = await db.select({ id: employees.id }).from(employees).where(and(eq(employees.id, req.body.employeeId), eq(employees.tenantId, tenantId))).limit(1);
+  if (!target) return res.status(404).json({ error: "Karyawan tidak ditemukan" });
+  const [created] = await db.insert(offboardingRecords).values({ ...req.body, tenantId }).returning();
+  await logAudit({ actorUserId: null, tenantId, action: "offboarding.created", details: { recordId: created.id, employeeAccountId: req.session!.userId } });
+  res.status(201).json(created);
+});
+
+employeeRouter.put("/offboarding-records/:id", requirePermission("offboarding", "edit"), validateParams(uuidParam("id")), validateBody(employeeOffboardingSchema.partial()), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [existing] = await db.select().from(offboardingRecords).where(and(eq(offboardingRecords.id, req.params.id), eq(offboardingRecords.tenantId, tenantId))).limit(1);
+  if (!existing) return res.status(404).json({ error: "Data offboarding tidak ditemukan" });
+  const [updated] = await db.update(offboardingRecords).set(req.body).where(eq(offboardingRecords.id, req.params.id)).returning();
+  await logAudit({ actorUserId: null, tenantId, action: "offboarding.updated", details: { recordId: updated.id, employeeAccountId: req.session!.userId } });
+  res.json(updated);
+});
+
+// --- Calendar (moduleKey "calendar") ---
+const employeeCalendarEventSchema = z.object({
+  entityId: z.string().uuid().optional().nullable(),
+  title: z.string().trim().min(1).max(200),
+  date: z.string().trim().min(1).max(20),
+  type: z.enum(["Cuti Bersama", "Libur Nasional", "Event", "Libur Perusahaan", "Cuti Bersama Perusahaan"]),
+  deductsLeaveBucket: z.boolean().optional(),
+  description: z.string().trim().max(1000).optional().nullable(),
+});
+
+employeeRouter.get("/calendar-events", requirePermission("calendar", "view"), async (req, res) => {
+  res.json(await db.select().from(companyCalendarEvents).where(eq(companyCalendarEvents.tenantId, req.session!.tenantId!)));
+});
+
+employeeRouter.post("/calendar-events", requirePermission("calendar", "create"), validateBody(employeeCalendarEventSchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  if (!(await assertEntityInTenant(tenantId, req.body.entityId))) return res.status(404).json({ error: "Entitas tidak ditemukan" });
+  const [created] = await db.insert(companyCalendarEvents).values({ ...req.body, tenantId }).returning();
+  await logAudit({ actorUserId: null, tenantId, action: "calendar_event.created", details: { eventId: created.id, employeeAccountId: req.session!.userId } });
+  res.status(201).json(created);
+});
+
+// --- Audit trail (moduleKey "audit_trail") — read-only for this tier; entries are written by the system, never by staff accounts. ---
+employeeRouter.get("/audit-trail", requirePermission("audit_trail", "view"), async (req, res) => {
+  res.json(
+    await db.select().from(auditTrailEntries).where(eq(auditTrailEntries.tenantId, req.session!.tenantId!)).orderBy(desc(auditTrailEntries.timestamp)).limit(2000)
+  );
+});
+
+// --- Approvals (moduleKey "approvals") — tenant-wide queue, same as tenant.ts. Deciding/editing an item needs the 'approve' action. ---
+
+/**
+ * Approval queue for an employee approver: only items whose CURRENT step is
+ * theirs (or one they hold an active delegation for), never the whole
+ * tenant queue — plus the full queue for a role explicitly granted
+ * "approvals: view" in the matrix (e.g. an HR/Finance controller).
+ */
+employeeRouter.get("/approval-items", async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const me = req.session!.employeeId!;
+  const rows = await db.select().from(approvalItems).where(eq(approvalItems.tenantId, tenantId));
+  const permission = await getPermission(tenantId, "approvals", req.session!.roleKey ?? "");
+  if (permission.view) return res.json(rows.map((r) => withDerivedStatus(r)));
+  const delegators = await activeDelegatorIds(tenantId, me);
+  const mine = rows.filter((r) => {
+    const step = currentBlockingStep(r.steps);
+    const approver = step?.approverEmployeeId;
+    return approver === me || (approver ? delegators.includes(approver) : false) || r.requesterId === me;
+  });
+  res.json(mine.map((r) => withDerivedStatus(r)));
+});
+
+const employeeApprovalDecisionSchema = z.object({
+  decision: z.enum(["Disetujui", "Ditolak", "Diketahui"]),
+  reason: z.string().trim().max(2000).optional().nullable(),
+});
+
+/** The only way an employee moves an approval forward: the engine verifies they are the current step's approver (or an active delegate), forbids self-approval, and requires a reason to reject. The generic status-PUT that used to exist here is gone — it could force-approve anything. */
+employeeRouter.post("/approval-items/:id/decision", validateParams(uuidParam("id")), validateBody(employeeApprovalDecisionSchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const session = req.session!;
+  const [me] = await db.select({ fullName: employees.fullName }).from(employees).where(eq(employees.id, session.employeeId!)).limit(1);
+  try {
+    const updated = await decideApproval({
+      tenantId,
+      itemId: req.params.id,
+      actor: {
+        kind: "employee",
+        employeeId: session.employeeId!,
+        name: me?.fullName ?? "Karyawan",
+        // A role-based step (no named approver) is open to holders of that roleKey.
+        hasRolePermission: async (roleKey) => session.roleKey === roleKey,
+      },
+      decision: req.body.decision,
+      reason: req.body.reason,
+    });
+    await logAudit({ actorUserId: null, tenantId, action: "approval_item.decision", details: { approvalItemId: updated.id, decision: req.body.decision, status: updated.status, employeeAccountId: session.userId } });
+    res.json(withDerivedStatus(updated));
+  } catch (err) {
+    if (err instanceof ApprovalError) return res.status(err.status).json({ error: err.message });
+    throw err;
+  }
+});
+
+// --- Documents (moduleKey "documents") — same server-computed status/QR/signatory
+// logic as tenant.ts: the client can never assert status or qrVerificationUrl. ---
+type EmployeeDocSignatory = typeof officialDocuments.$inferSelect["signatories"][number];
+
+function docIsFullySigned(signatories: EmployeeDocSignatory[]): boolean {
+  return signatories.filter((s) => s.isRequired).every((s) => s.confirmedAt);
+}
+
+function docBuildVerificationUrl(documentNumber: string): string {
+  const cleanNumber = documentNumber.replace(/[\/\s]/g, "-");
+  const hash = crypto.randomUUID().replace(/-/g, "").slice(0, 16);
+  return `https://nusahr.enterprise/verify?doc=${cleanNumber}&h=${hash}`;
+}
+
+const employeeOfficialDocumentSchema = z.object({
+  documentNumber: z.string().trim().min(1).max(200),
+  type: z.string().trim().min(1).max(200),
+  templateId: z.string().uuid().optional().nullable(),
+  title: z.string().trim().min(1).max(400),
+  targetEmployeeId: z.string().uuid().optional().nullable(),
+  issueDate: z.string().trim().min(1).max(20),
+  signeeName: z.string().trim().min(1).max(200),
+  signeeRole: z.string().trim().min(1).max(200),
+  contentPreview: z.string().max(500000),
+  renderedHtml: z.string().max(2000000).optional().nullable(),
+  isFromDocxTemplate: z.boolean().optional(),
+});
+
+employeeRouter.get("/documents", requirePermission("documents", "view"), async (req, res) => {
+  res.json(await db.select().from(officialDocuments).where(eq(officialDocuments.tenantId, req.session!.tenantId!)));
+});
+
+employeeRouter.post("/documents", requirePermission("documents", "create"), validateBody(employeeOfficialDocumentSchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  if (req.body.templateId) {
+    const [tmpl] = await db.select({ id: documentTemplates.id }).from(documentTemplates).where(and(eq(documentTemplates.id, req.body.templateId), eq(documentTemplates.tenantId, tenantId))).limit(1);
+    if (!tmpl) return res.status(404).json({ error: "Template dokumen tidak ditemukan" });
+  }
+  if (req.body.targetEmployeeId) {
+    const [target] = await db.select({ id: employees.id }).from(employees).where(and(eq(employees.id, req.body.targetEmployeeId), eq(employees.tenantId, tenantId))).limit(1);
+    if (!target) return res.status(404).json({ error: "Karyawan tidak ditemukan" });
+  }
+
+  const configs = await db
+    .select()
+    .from(documentSignatoryConfigs)
+    .where(and(eq(documentSignatoryConfigs.tenantId, tenantId), eq(documentSignatoryConfigs.documentType, req.body.type)))
+    .orderBy(documentSignatoryConfigs.sortOrder);
+
+  const signatories: EmployeeDocSignatory[] =
+    configs.length > 0
+      ? configs.map((c) => ({ roleLabel: c.roleLabel, isRequired: c.isRequired, sortOrder: c.sortOrder, confirmedByEmployeeId: null, confirmedByName: null, confirmedAt: null }))
+      : [{ roleLabel: req.body.signeeRole, isRequired: true, sortOrder: 0, confirmedByEmployeeId: null, confirmedByName: null, confirmedAt: null }];
+
+  const alreadyComplete = docIsFullySigned(signatories);
+  const [created] = await db
+    .insert(officialDocuments)
+    .values({
+      ...req.body,
+      tenantId,
+      signatories,
+      status: alreadyComplete ? "Resmi Diterbitkan" : "Menunggu Tanda Tangan",
+      qrVerificationUrl: alreadyComplete ? docBuildVerificationUrl(req.body.documentNumber) : null,
+    })
+    .returning();
+  await logAudit({ actorUserId: null, tenantId, action: "document.created", details: { documentId: created.id, type: created.type, signatoryCount: signatories.length, employeeAccountId: req.session!.userId } });
+  res.status(201).json(created);
+});
+
+employeeRouter.post(
+  "/documents/:id/signatories/:index/confirm",
+  requirePermission("documents", "approve"),
+  validateParams(z.object({ id: z.string().uuid(), index: z.coerce.number().int().min(0) })),
+  validateBody(z.object({ confirmedByName: z.string().trim().min(1).max(200).optional() })),
+  async (req, res) => {
+    const tenantId = req.session!.tenantId!;
+    const index = Number(req.params.index);
+    const [doc] = await db.select().from(officialDocuments).where(and(eq(officialDocuments.id, req.params.id), eq(officialDocuments.tenantId, tenantId))).limit(1);
+    if (!doc) return res.status(404).json({ error: "Dokumen tidak ditemukan" });
+    if (doc.status === "Resmi Diterbitkan") return res.status(400).json({ error: "Dokumen ini sudah resmi diterbitkan, seluruh tanda tangan sudah lengkap." });
+
+    const signatories = [...doc.signatories];
+    if (!signatories[index]) return res.status(404).json({ error: "Slot penandatangan tidak ditemukan" });
+    if (signatories[index].confirmedAt) return res.status(400).json({ error: "Slot penandatangan ini sudah dikonfirmasi sebelumnya." });
+
+    signatories[index] = {
+      ...signatories[index],
+      confirmedByEmployeeId: req.session!.employeeId ?? null,
+      confirmedByName: req.body.confirmedByName?.trim() || doc.signeeName,
+      confirmedAt: new Date().toISOString(),
+    };
+
+    const nowComplete = docIsFullySigned(signatories);
+    const [updated] = await db
+      .update(officialDocuments)
+      .set({
+        signatories,
+        status: nowComplete ? "Resmi Diterbitkan" : doc.status,
+        qrVerificationUrl: nowComplete ? docBuildVerificationUrl(doc.documentNumber) : doc.qrVerificationUrl,
+      })
+      .where(eq(officialDocuments.id, doc.id))
+      .returning();
+
+    await logAudit({
+      actorUserId: null,
+      tenantId,
+      action: nowComplete ? "document.fully_signed_issued" : "document.signatory_confirmed",
+      details: { documentId: doc.id, signatoryIndex: index, roleLabel: signatories[index].roleLabel, employeeAccountId: req.session!.userId },
+    });
+    res.json(updated);
+  }
+);

@@ -1074,8 +1074,52 @@ export const approvalItems = pgTable("approval_items", {
   status: text("status").notNull().default("Menunggu"),
   amount: integer("amount"),
   notes: text("notes"),
+  // Per-instance snapshot of the category's workflow config at creation
+  // (approval engine redesign, user 2026-11-10) — each step carries its own
+  // resolved approver (from the REAL org hierarchy, not a hardcoded role),
+  // mode (approve = blocks the chain, acknowledge = "mengetahui", recorded
+  // but never blocks), SLA deadline and its own decision/reason, so a later
+  // edit to the config never changes an in-flight request.
+  steps: jsonb("steps").notNull().default([]).$type<ApprovalStepState[]>(),
+  /** Append-only audit of every decision (approve/reject/acknowledge) with actor + reason. */
+  history: jsonb("history").notNull().default([]).$type<{ at: string; level: number; action: string; byEmployeeId: string | null; byName: string; reason?: string | null; viaDelegation?: boolean }[]>(),
+  rejectionReason: text("rejection_reason"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+export type ApprovalStepState = {
+  level: number;
+  mode: "approve" | "acknowledge";
+  label: string;
+  approverType: "direct_manager" | "manager_of_manager" | "role" | "employee";
+  approverRoleKey?: string | null;
+  approverEmployeeId: string | null;
+  slaHours: number;
+  deadlineAt: string | null;
+  decision: "Disetujui" | "Ditolak" | "Diketahui" | null;
+  decidedByEmployeeId: string | null;
+  decidedByName: string | null;
+  decidedAt: string | null;
+  reason: string | null;
+};
+
+/**
+ * Settings screen backing store for the Approval Engine: how many levels a
+ * category needs and who approves each (direct manager / manager's manager
+ * / holder of a role / a named employee), approve vs acknowledge-only, and
+ * SLA hours per level. One row per (tenant, category).
+ */
+export const approvalWorkflowConfigs = pgTable(
+  "approval_workflow_configs",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+    category: text("category").notNull(),
+    steps: jsonb("steps").notNull().$type<{ mode: "approve" | "acknowledge"; label: string; approverType: "direct_manager" | "manager_of_manager" | "role" | "employee"; approverRoleKey?: string | null; approverEmployeeId?: string | null; slaHours: number }[]>(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [uniqueIndex("approval_workflow_configs_tenant_category_idx").on(table.tenantId, table.category)]
+);
 
 /** Who can approve on behalf of whom, for a date range — same plain-text-id rationale as approvalItems. */
 export const approvalDelegations = pgTable("approval_delegations", {

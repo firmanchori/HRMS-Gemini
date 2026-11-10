@@ -8,7 +8,7 @@ import bcrypt from "bcryptjs";
 import { createApp } from "../app.ts";
 import { withCsrf } from "../lib/testCsrf.ts";
 import { db, pool } from "../db/client.ts";
-import { tenants, tenantSubscriptions, users, subscriptionPlans, companyEntities, employees, employeeAccounts, sessions, rolePermissionEntries, roleDefinitions, payrollRecords, auditLogEntries } from "../db/schema.ts";
+import { tenants, tenantSubscriptions, users, subscriptionPlans, companyEntities, employees, employeeAccounts, sessions, rolePermissionEntries, roleDefinitions, payrollRecords, auditLogEntries, officialDocuments, businessTrips } from "../db/schema.ts";
 
 /**
  * Proves the RBAC-granular rollout (security review, user 2026-11-10:
@@ -72,6 +72,8 @@ afterAll(async () => {
   await db.delete(rolePermissionEntries).where(eq(rolePermissionEntries.tenantId, tenantId));
   await db.delete(roleDefinitions).where(eq(roleDefinitions.tenantId, tenantId));
   await db.delete(payrollRecords).where(eq(payrollRecords.tenantId, tenantId));
+  await db.delete(officialDocuments).where(eq(officialDocuments.tenantId, tenantId));
+  await db.delete(businessTrips).where(eq(businessTrips.tenantId, tenantId));
   await db.delete(employeeAccounts).where(eq(employeeAccounts.tenantId, tenantId));
   await db.delete(employees).where(eq(employees.tenantId, tenantId));
   await db.delete(companyEntities).where(eq(companyEntities.tenantId, tenantId));
@@ -112,5 +114,60 @@ describe("RBAC granular enforcement — employee module access is real, not deco
       .set("Origin", origin)
       .send({ employeeId, period: "2026-11" });
     expect(res.status).toBe(403);
+  });
+
+  const grant = (moduleKey: string, perms: Partial<Record<"view" | "create" | "edit" | "delete" | "approve" | "export", boolean>>) =>
+    adminAgent
+      .put(`/api/tenant/rbac-permissions/${moduleKey}/${STAFF_ROLE_KEY}`)
+      .set("Origin", origin)
+      .send({ view: false, create: false, edit: false, delete: false, approve: false, export: false, ...perms });
+
+  it("phase 2: employees module is rejected without a grant and unlocked by one", async () => {
+    const before = await staffAgent.get("/api/employee/employees").set("Origin", origin);
+    expect(before.status).toBe(403);
+    expect((await grant("employees", { view: true })).status).toBe(201);
+    const after = await staffAgent.get("/api/employee/employees").set("Origin", origin);
+    expect(after.status).toBe(200);
+    expect(after.body.some((e: { id: string }) => e.id === employeeId)).toBe(true);
+  });
+
+  it("phase 2: an unrelated module grant does not leak (trips still 403 with only employees view)", async () => {
+    const res = await staffAgent.get("/api/employee/business-trips").set("Origin", origin);
+    expect(res.status).toBe(403);
+  });
+
+  it("phase 2: documents create does not imply approve — confirming a signatory needs the 'approve' action", async () => {
+    expect((await grant("documents", { view: true, create: true })).status).toBe(201);
+    const created = await staffAgent.post("/api/employee/documents").set("Origin", origin).send({
+      documentNumber: "RBAC-001/SK",
+      type: "SK_RBAC_TEST",
+      title: "SK RBAC",
+      issueDate: "2026-11-10",
+      signeeName: "Direktur",
+      signeeRole: "Direktur",
+      contentPreview: "isi",
+      status: "Resmi Diterbitkan",
+      qrVerificationUrl: "https://evil.example/qr",
+    });
+    expect(created.status).toBe(201);
+    expect(created.body.status).toBe("Menunggu Tanda Tangan");
+    expect(created.body.qrVerificationUrl).toBeNull();
+
+    const denied = await staffAgent.post(`/api/employee/documents/${created.body.id}/signatories/0/confirm`).set("Origin", origin).send({});
+    expect(denied.status).toBe(403);
+
+    expect((await grant("documents", { view: true, create: true, approve: true })).status).toBe(200);
+    const ok = await staffAgent.post(`/api/employee/documents/${created.body.id}/signatories/0/confirm`).set("Origin", origin).send({});
+    expect(ok.status).toBe(200);
+    expect(ok.body.status).toBe("Resmi Diterbitkan");
+    expect(ok.body.qrVerificationUrl).toMatch(/^https:\/\/nusahr\.enterprise\/verify/);
+  });
+
+  it("phase 2: audit trail is view-only for this tier (no write route exists)", async () => {
+    expect((await grant("audit_trail", { view: true })).status).toBe(201);
+    const read = await staffAgent.get("/api/employee/audit-trail").set("Origin", origin);
+    expect(read.status).toBe(200);
+    const write = await staffAgent.post("/api/employee/audit-trail").set("Origin", origin).send({});
+    expect([404, 405]).toContain(write.status);
   });
 });

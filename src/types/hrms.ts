@@ -446,6 +446,10 @@ export interface ApprovalWorkflowItem {
   assignedApproverId?: string;
   substituteApproverId?: string;
   status: 'Menunggu' | 'Disetujui' | 'Ditolak' | 'Eskalasi Terlambat';
+  /** Server-resolved workflow steps (approver from the real reporting line, SLA per step, decision per step). */
+  steps?: import('../tenant/api').ApprovalStepState[];
+  history?: { at: string; level: number; action: string; byEmployeeId: string | null; byName: string; reason?: string | null; viaDelegation?: boolean }[];
+  rejectionReason?: string | null;
   amount?: number;
   notes?: string;
 }

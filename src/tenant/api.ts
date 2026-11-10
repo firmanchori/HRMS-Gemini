@@ -430,6 +430,42 @@ export interface ApprovalWorkflowItem {
   status: "Menunggu" | "Disetujui" | "Ditolak" | "Eskalasi Terlambat";
   amount: number | null;
   notes: string | null;
+  steps?: ApprovalStepState[];
+  history?: { at: string; level: number; action: string; byEmployeeId: string | null; byName: string; reason?: string | null; viaDelegation?: boolean }[];
+  rejectionReason?: string | null;
+}
+
+export interface ApprovalStepState {
+  level: number;
+  mode: "approve" | "acknowledge";
+  label: string;
+  approverType: "direct_manager" | "manager_of_manager" | "role" | "employee";
+  approverRoleKey?: string | null;
+  approverEmployeeId: string | null;
+  slaHours: number;
+  deadlineAt: string | null;
+  decision: "Disetujui" | "Ditolak" | "Diketahui" | null;
+  decidedByEmployeeId: string | null;
+  decidedByName: string | null;
+  decidedAt: string | null;
+  reason: string | null;
+}
+
+export interface ApprovalWorkflowStepConfig {
+  mode: "approve" | "acknowledge";
+  label: string;
+  approverType: "direct_manager" | "manager_of_manager" | "role" | "employee";
+  approverRoleKey?: string | null;
+  approverEmployeeId?: string | null;
+  slaHours: number;
+}
+
+export interface ApprovalWorkflowConfig {
+  id: string;
+  tenantId: string;
+  category: string;
+  steps: ApprovalWorkflowStepConfig[];
+  updatedAt: string;
 }
 
 export interface ApprovalDelegation {
@@ -1120,6 +1156,11 @@ export const tenantApi = {
   updateModuleSettings: (moduleKey: string, settings: Record<string, unknown>) =>
     request<{ moduleKey: string; settings: Record<string, unknown> }>(`/api/tenant/module-settings/${moduleKey}`, { method: "PUT", body: JSON.stringify({ settings }) }),
 
+  decideApprovalItem: (id: string, decision: "Disetujui" | "Ditolak" | "Diketahui", reason?: string) =>
+    request<ApprovalWorkflowItem>(`/api/tenant/approval-items/${id}/decision`, { method: "POST", body: JSON.stringify({ decision, reason }) }),
+  listApprovalWorkflowConfigs: () => request<ApprovalWorkflowConfig[]>("/api/tenant/approval-workflow-configs"),
+  saveApprovalWorkflowConfig: (category: string, steps: ApprovalWorkflowStepConfig[]) =>
+    request<ApprovalWorkflowConfig>(`/api/tenant/approval-workflow-configs/${encodeURIComponent(category)}`, { method: "PUT", body: JSON.stringify({ steps }) }),
   listApprovalItems: () => request<ApprovalWorkflowItem[]>("/api/tenant/approval-items"),
   createApprovalItem: (data: Omit<ApprovalWorkflowItem, "id" | "tenantId">) =>
     request<ApprovalWorkflowItem>("/api/tenant/approval-items", { method: "POST", body: JSON.stringify(data) }),

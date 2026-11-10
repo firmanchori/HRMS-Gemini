@@ -43,6 +43,7 @@ import {
   contractRenewalReviews,
   tenantModuleSettings,
   approvalItems,
+  approvalWorkflowConfigs,
   approvalDelegations,
   workShifts,
   employeeSchedules,
@@ -75,6 +76,7 @@ import {
   vendorInvoices,
 } from "../db/schema.ts";
 import { requireTenantAdmin } from "../middleware/auth.ts";
+import { buildApprovalSteps, currentBlockingStep, decideApproval, withDerivedStatus, ApprovalError } from "../lib/approvalEngine.ts";
 import { validateBody, validateParams, uuidParam } from "../lib/validate.ts";
 import { rejectBreachedPassword } from "../middleware/passwordCheck.ts";
 import { computeNewEntityClosureRows, buildEntityTree, applyChangeSet, resolveNikPattern } from "../lib/orgStructure.ts";
@@ -2138,7 +2140,8 @@ tenantRouter.put("/module-settings/:moduleKey", validateBody(moduleSettingsSchem
 // ---------------------------------------------------------------------------
 
 tenantRouter.get("/approval-items", async (req, res) => {
-  res.json(await db.select().from(approvalItems).where(eq(approvalItems.tenantId, req.session!.tenantId!)));
+  const rows = await db.select().from(approvalItems).where(eq(approvalItems.tenantId, req.session!.tenantId!));
+  res.json(rows.map((r) => withDerivedStatus(r)));
 });
 
 const approvalItemSchema = z.object({
@@ -2159,24 +2162,107 @@ const approvalItemSchema = z.object({
   notes: z.string().trim().max(2000).optional(),
 });
 
+/**
+ * Approval Engine (user, 2026-11-10: "Approval Engine ... harus benar benar
+ * di implementasikan"): steps/approver/SLA are resolved HERE from the
+ * category's configured workflow and the requester's real reporting line —
+ * the client no longer picks its own level, approver or status (those body
+ * fields are ignored), so a request can't be created pre-approved or routed
+ * to a convenient approver.
+ */
 tenantRouter.post("/approval-items", validateBody(approvalItemSchema), async (req, res) => {
   const tenantId = req.session!.tenantId!;
-  const [created] = await db.insert(approvalItems).values({ ...req.body, tenantId }).returning();
-  await logAudit({ actorUserId: req.session!.userId, tenantId, action: "approval_item.create", details: { approvalItemId: created.id, category: created.category } });
+  const { level: _l, totalLevels: _t, status: _s, assignedApproverId: _a, substituteApproverId: _sa, deadlineAt: _d, ...rest } = req.body;
+  const steps = await buildApprovalSteps(tenantId, rest.category, rest.requesterId);
+  const first = currentBlockingStep(steps);
+  const [created] = await db
+    .insert(approvalItems)
+    .values({
+      ...rest,
+      tenantId,
+      steps,
+      level: first?.level ?? 1,
+      totalLevels: steps.length,
+      assignedApproverId: first?.approverEmployeeId ?? null,
+      deadlineAt: first?.deadlineAt ? new Date(first.deadlineAt) : null,
+      status: "Menunggu",
+    })
+    .returning();
+  await logAudit({ actorUserId: req.session!.userId, tenantId, action: "approval_item.create", details: { approvalItemId: created.id, category: created.category, levels: steps.length } });
   res.status(201).json(created);
 });
 
-tenantRouter.put("/approval-items/:id", validateParams(uuidParam("id")), validateBody(approvalItemSchema.partial()), async (req, res) => {
-  const tenantId = req.session!.tenantId!;
-  const [updated] = await db
-    .update(approvalItems)
-    .set(req.body)
-    .where(and(eq(approvalItems.id, req.params.id), eq(approvalItems.tenantId, tenantId)))
-    .returning();
-  if (!updated) return res.status(404).json({ error: "Item approval tidak ditemukan" });
-  await logAudit({ actorUserId: req.session!.userId, tenantId, action: "approval_item.update", details: { approvalItemId: updated.id, status: updated.status } });
-  res.json(updated);
+/** Every decision goes through the engine: the current step's real approver (or active delegate) only, no skipping levels, reject needs a reason. A tenant_admin decides as the owner-level override (audited). */
+const approvalDecisionSchema = z.object({
+  decision: z.enum(["Disetujui", "Ditolak", "Diketahui"]),
+  reason: z.string().trim().max(2000).optional().nullable(),
 });
+tenantRouter.post("/approval-items/:id/decision", validateParams(uuidParam("id")), validateBody(approvalDecisionSchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [admin] = await db.select({ name: users.name }).from(users).where(eq(users.id, req.session!.userId)).limit(1);
+  try {
+    const updated = await decideApproval({
+      tenantId,
+      itemId: req.params.id,
+      actor: { kind: "admin", userId: req.session!.userId, name: admin?.name ?? "Admin Tenant" },
+      decision: req.body.decision,
+      reason: req.body.reason,
+    });
+    await logAudit({ actorUserId: req.session!.userId, tenantId, action: "approval_item.decision", details: { approvalItemId: updated.id, decision: req.body.decision, status: updated.status, level: updated.level } });
+    res.json(withDerivedStatus(updated));
+  } catch (err) {
+    if (err instanceof ApprovalError) return res.status(err.status).json({ error: err.message });
+    throw err;
+  }
+});
+
+const approvalWorkflowConfigSchema = z.object({
+  steps: z
+    .array(
+      z.object({
+        mode: z.enum(["approve", "acknowledge"]),
+        label: z.string().trim().min(1).max(200),
+        approverType: z.enum(["direct_manager", "manager_of_manager", "role", "employee"]),
+        approverRoleKey: z.string().trim().max(100).optional().nullable(),
+        approverEmployeeId: z.string().uuid().optional().nullable(),
+        slaHours: z.number().int().min(1).max(24 * 30),
+      })
+    )
+    .min(1)
+    .max(10)
+    .refine((steps) => steps.some((s) => s.mode === "approve"), { message: "Minimal satu langkah harus bermode persetujuan." }),
+});
+tenantRouter.get("/approval-workflow-configs", async (req, res) => {
+  res.json(await db.select().from(approvalWorkflowConfigs).where(eq(approvalWorkflowConfigs.tenantId, req.session!.tenantId!)));
+});
+tenantRouter.put("/approval-workflow-configs/:category", validateBody(approvalWorkflowConfigSchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const category = decodeURIComponent(req.params.category);
+  const [existing] = await db.select().from(approvalWorkflowConfigs).where(and(eq(approvalWorkflowConfigs.tenantId, tenantId), eq(approvalWorkflowConfigs.category, category))).limit(1);
+  const row = existing
+    ? (await db.update(approvalWorkflowConfigs).set({ steps: req.body.steps, updatedAt: new Date() }).where(eq(approvalWorkflowConfigs.id, existing.id)).returning())[0]
+    : (await db.insert(approvalWorkflowConfigs).values({ tenantId, category, steps: req.body.steps }).returning())[0];
+  await logAudit({ actorUserId: req.session!.userId, tenantId, action: "approval_workflow.config_saved", details: { category, levels: req.body.steps.length } });
+  res.json(row);
+});
+
+/** Generic update — can no longer touch level/approver (only the engine route above moves a request forward); a status sync from a source module is an audited admin override recorded in history. */
+tenantRouter.put(
+  "/approval-items/:id",
+  validateParams(uuidParam("id")),
+  validateBody(approvalItemSchema.partial().omit({ level: true, totalLevels: true, assignedApproverId: true, substituteApproverId: true, assignedApproverRole: true })),
+  async (req, res) => {
+    const tenantId = req.session!.tenantId!;
+    const [existing] = await db.select().from(approvalItems).where(and(eq(approvalItems.id, req.params.id), eq(approvalItems.tenantId, tenantId))).limit(1);
+    if (!existing) return res.status(404).json({ error: "Item approval tidak ditemukan" });
+    const history = req.body.status && req.body.status !== existing.status
+      ? [...existing.history, { at: new Date().toISOString(), level: existing.level, action: `Sinkron status → ${req.body.status} (override admin dari modul sumber)`, byEmployeeId: null, byName: "Admin Tenant" }]
+      : existing.history;
+    const [updated] = await db.update(approvalItems).set({ ...req.body, history }).where(eq(approvalItems.id, existing.id)).returning();
+    await logAudit({ actorUserId: req.session!.userId, tenantId, action: "approval_item.update", details: { approvalItemId: updated.id, status: updated.status } });
+    res.json(updated);
+  }
+);
 
 tenantRouter.get("/approval-delegations", async (req, res) => {
   res.json(await db.select().from(approvalDelegations).where(eq(approvalDelegations.tenantId, req.session!.tenantId!)));
