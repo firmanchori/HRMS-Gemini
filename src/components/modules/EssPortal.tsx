@@ -788,7 +788,7 @@ export const EssPortal: React.FC = () => {
                 <h3 className="font-bold text-slate-900 text-sm">Formulir Permohonan Cuti Karyawan</h3>
               </div>
 
-              <form onSubmit={handleSubmitLeave} className="space-y-4 text-xs">
+              <form onSubmit={handleSubmitLeave} className="space-y-4 text-xs" noValidate>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="font-semibold text-slate-700 block mb-1">Jenis Cuti / Izin Sakit *</label>
