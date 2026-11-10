@@ -426,6 +426,7 @@ export const getCandidateParsingResult = (candidate: Candidate) => {
 import { QRCodeView } from '../common/QRCodeView';
 import { CurrencyInput } from '../common/CurrencyInput';
 import { ScrollableTabNav } from '../common/ScrollableTabNav';
+import { ValidatedInput, ValidatedTextarea, ValidatedSelect } from '../common/ValidatedInput';
 
 export interface CompanyEmployeeItem {
   id: string;
@@ -1911,6 +1912,8 @@ export const RecruitmentManagement: React.FC = () => {
   const [fptkKnockoutDrafts, setFptkKnockoutDrafts] = useState<FptkCriterionDraft[]>([]);
   const [fptkScoredDrafts, setFptkScoredDrafts] = useState<FptkCriterionDraft[]>([]);
   const [fptkEditingDraftId, setFptkEditingDraftId] = useState<string | null>(null);
+  const [fptkSubmitAttempted, setFptkSubmitAttempted] = useState(false);
+  const [fptkFormError, setFptkFormError] = useState<string | null>(null);
 
   // Yang Mengajukan: Readonly pembuat form
   const requesterDisplay = currentUser?.name
@@ -2143,6 +2146,8 @@ export const RecruitmentManagement: React.FC = () => {
     'Website Karir',
   ]);
   const [vacLinkedReqId, setVacLinkedReqId] = useState<string>('');
+  const [vacSubmitAttempted, setVacSubmitAttempted] = useState(false);
+  const [vacFormError, setVacFormError] = useState<string | null>(null);
 
   // ===================== 3. FORM TAMBAH PELAMAR MANUAL / INCOMING =====================
   const [candName, setCandName] = useState('');
@@ -2187,6 +2192,7 @@ export const RecruitmentManagement: React.FC = () => {
   const [testFormWeight, setTestFormWeight] = useState(20);
   const [testFormDesc, setTestFormDesc] = useState('');
   const [testFormIsActive, setTestFormIsActive] = useState(true);
+  const [testFormSubmitAttempted, setTestFormSubmitAttempted] = useState(false);
 
   // ===================== 5. FORM ASSESSMENT / TES KOMPETENSI (ADAPTIF SESUAI DROPDOWN) =====================
   const [assessmentWizardStep, setAssessmentWizardStep] = useState<1 | 2 | 3>(1);
@@ -2304,6 +2310,7 @@ export const RecruitmentManagement: React.FC = () => {
   const [isAddingInterviewType, setIsAddingInterviewType] = useState(false);
   const [editingInterviewType, setEditingInterviewType] = useState<InterviewTypeSetting | null>(null);
   const [interviewFormName, setInterviewFormName] = useState('');
+  const [interviewFormSubmitAttempted, setInterviewFormSubmitAttempted] = useState(false);
   const [interviewFormTargetRole, setInterviewFormTargetRole] = useState('Semua Posisi');
   const [interviewFormInterviewerRoles, setInterviewFormInterviewerRoles] = useState('User Lead / HRBP');
   const [interviewFormDesc, setInterviewFormDesc] = useState('');
@@ -2379,6 +2386,7 @@ export const RecruitmentManagement: React.FC = () => {
 
   // Form input tambah tunjangan baru
   const [isAddAllowanceOpen, setIsAddAllowanceOpen] = useState(false);
+  const [allowanceSubmitAttempted, setAllowanceSubmitAttempted] = useState(false);
   const [newAllowanceName, setNewAllowanceName] = useState('Tunjangan Keahlian Khusus');
   const [newAllowanceCategory, setNewAllowanceCategory] = useState<'Tunjangan Tetap' | 'Tunjangan Tidak Tetap'>('Tunjangan Tetap');
   const [newAllowanceType, setNewAllowanceType] = useState<'fixed' | 'percent'>('fixed');
@@ -2458,6 +2466,7 @@ export const RecruitmentManagement: React.FC = () => {
 
   // Form input tambah asuransi swasta baru
   const [isAddInsuranceOpen, setIsAddInsuranceOpen] = useState(false);
+  const [insuranceSubmitAttempted, setInsuranceSubmitAttempted] = useState(false);
   const [newInsuranceName, setNewInsuranceName] = useState('Asuransi Jiwa & Cacat Total (Life Insurance)');
   const [newInsuranceCompanyAmount, setNewInsuranceCompanyAmount] = useState<number>(350000);
   const [newInsuranceEmployeeAmount, setNewInsuranceEmployeeAmount] = useState<number>(0);
@@ -3079,6 +3088,59 @@ export const RecruitmentManagement: React.FC = () => {
       setToastFeedback('Isi minimal nama posisi sebelum menyimpan sebagai draft.');
       return;
     }
+
+    if (mode === 'submit') {
+      setFptkSubmitAttempted(true);
+      if (!fptkPosition.trim()) {
+        setFptkFormError('Nama posisi / jabatan yang dibutuhkan wajib diisi.');
+        return;
+      }
+      if (!fptkDept.trim()) {
+        setFptkFormError('Departemen/Unit / Divisi pemohon wajib dipilih.');
+        return;
+      }
+      if (!fptkLocationId) {
+        setFptkFormError('Lokasi penempatan wajib dipilih.');
+        return;
+      }
+      if (!fptkHeadcount || fptkHeadcount < 1) {
+        setFptkFormError('Jumlah kebutuhan (headcount) wajib diisi (minimal 1).');
+        return;
+      }
+      if (!fptkTargetDate) {
+        setFptkFormError('Tanggal dibutuhkan (target join) wajib diisi.');
+        return;
+      }
+      if (!fptkJustification.trim()) {
+        setFptkFormError('Justifikasi & penjelasan kebutuhan wajib diisi.');
+        return;
+      }
+      if (!fptkReportingDept.trim()) {
+        setFptkFormError('Bertanggung jawab ke divisi wajib dipilih.');
+        return;
+      }
+      if (!fptkReportingTitle.trim()) {
+        setFptkFormError('Bertanggung jawab ke atasan (jabatan/posisi) wajib dipilih.');
+        return;
+      }
+      if (!fptkMainResponsibilities.trim()) {
+        setFptkFormError('Tugas pokok & tanggung jawab utama wajib diisi.');
+        return;
+      }
+      if (!fptkEduLevelId) {
+        setFptkFormError('Tingkat / strata pendidikan wajib dipilih.');
+        return;
+      }
+      if (!fptkSkills.trim()) {
+        setFptkFormError('Keterampilan khusus (hard/soft skills) wajib diisi.');
+        return;
+      }
+      if (fptkSignatories.some((s) => !s.role.trim())) {
+        setFptkFormError('Setiap kolom penanda tangan wajib diisi perannya (Menyetujui / Mengetahui / Memeriksa).');
+        return;
+      }
+      setFptkFormError(null);
+    }
     const editingDraft = fptkEditingDraftId ? jobRequisitions.find((r) => r.id === fptkEditingDraftId) : undefined;
     const count = jobRequisitions.length + 1;
     const deptPrefix = fptkDept.trim().substring(0, 3).toUpperCase() || 'GEN';
@@ -3146,6 +3208,8 @@ export const RecruitmentManagement: React.FC = () => {
     }
 
     setIsRequisitionModalOpen(false);
+    setFptkSubmitAttempted(false);
+    setFptkFormError(null);
     resetFptkFormExtras();
     setFptkPosition('');
     setFptkLocationId('');
@@ -3254,6 +3318,52 @@ export const RecruitmentManagement: React.FC = () => {
     setToastFeedback(`FPTK ${retractModalFptk.reqNumber} (${retractModalFptk.position}) berhasil dicabut (Retracted).`);
     setRetractModalFptk(null);
     setRetractReason('');
+  };
+
+  const handlePublishVacancy = () => {
+    setVacSubmitAttempted(true);
+    if (!vacTitle.trim()) {
+      setVacFormError('Judul posisi lowongan eksternal wajib diisi.');
+      return;
+    }
+    if (!vacDept.trim()) {
+      setVacFormError('Departemen/Unit / Divisi wajib diisi.');
+      return;
+    }
+    if (!vacOpenings || vacOpenings < 1) {
+      setVacFormError('Formasi (kebutuhan) wajib diisi (minimal 1).');
+      return;
+    }
+    if (!vacDescription.trim()) {
+      setVacFormError('Deskripsi pekerjaan & tanggung jawab eksternal wajib diisi.');
+      return;
+    }
+    if (!vacRequirements.trim()) {
+      setVacFormError('Kualifikasi & persyaratan eksternal wajib diisi.');
+      return;
+    }
+    setVacFormError(null);
+
+    addVacancy({
+      title: vacTitle,
+      department: vacDept,
+      employmentType: vacType,
+      grade: vacGrade,
+      openings: vacOpenings,
+      minExperience: vacExp,
+      salaryRange: showSalaryPublicly ? vacSalary : 'Gaji Kompetitif (Confidential)',
+      rawInternalSalary: vacSalary,
+      showSalaryPublicly,
+      requirements: vacRequirements,
+      description: vacDescription,
+      externalDescription: vacDescription,
+      activeChannels: vacChannels,
+      status: 'Buka',
+      jobRequisitionId: vacLinkedReqId || undefined,
+    });
+    setIsVacancyModalOpen(false);
+    setVacSubmitAttempted(false);
+    alert(`Lowongan '${vacTitle}' berhasil diproses dan disebarkan ke ${vacChannels.length} portal eksternal!`);
   };
 
   const handleCvFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -3555,6 +3665,10 @@ Nama Berkas: ${fileName} (${candidate.cvFileSize || '1.2 MB'})
   };
 
   const handleSendMcuLetterViaWhatsApp = (candidate: Candidate) => {
+    if (!mcuClinic.trim() || !mcuDate) {
+      setToastFeedback('Lengkapi klinik/rumah sakit rujukan dan tanggal pemeriksaan MCU sebelum mengirim surat.');
+      return;
+    }
     const vac = vacancies.find((v) => v.id === candidate.jobVacancyId);
     const phoneClean = (candidate.phone || '').replace(/[^0-9]/g, '');
     const waNumber = phoneClean.startsWith('0') ? '62' + phoneClean.slice(1) : phoneClean;
@@ -3569,6 +3683,10 @@ Nama Berkas: ${fileName} (${candidate.cvFileSize || '1.2 MB'})
   };
 
   const handleSendMcuLetterViaEmail = (candidate: Candidate) => {
+    if (!mcuClinic.trim() || !mcuDate) {
+      setToastFeedback('Lengkapi klinik/rumah sakit rujukan dan tanggal pemeriksaan MCU sebelum mengirim surat.');
+      return;
+    }
     const vac = vacancies.find((v) => v.id === candidate.jobVacancyId);
     const subject = `[Resmi] Surat Pengantar Medical Check-Up (MCU) Pra-Kerja - ${candidate.name} (${vac?.title || 'Formasi'})`;
     const body = `Yth. ${candidate.name},\n\nTerima kasih atas partisipasi Anda dalam rangkaian seleksi rekrutmen di PT Nusantara Multi Talenta Tbk.\n\nBerikut kami lampirkan Surat Pengantar Resmi untuk pelaksanaan Medical Check-Up (MCU) Pra-Kerja:\n\n- Tanggal: ${mcuDate}\n- Waktu: ${mcuTime}\n- RS/Lab Rujukan: ${mcuClinic}\n- Paket: ${mcuPackage}\n\nPetunjuk Puasa & Persiapan:\n${mcuInstructions}\n\nSilakan cetak atau simpan dokumen surat pengantar ini untuk ditunjukkan kepada petugas administrasi lab RS rekanan.\n\nSalam hangat,\nHR Recruitment Team PT Nusantara Multi Talenta Tbk`;
@@ -4741,7 +4859,18 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
 
   const handleSaveTestTypeForm = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!testFormName.trim()) return;
+    setTestFormSubmitAttempted(true);
+    if (
+      !testFormName.trim() ||
+      testFormPassingGrade < 0 ||
+      testFormPassingGrade > 100 ||
+      !testFormDuration ||
+      testFormDuration < 5 ||
+      testFormWeight < 0 ||
+      testFormWeight > 100
+    ) {
+      return;
+    }
 
     if (editingTestType) {
       updateCompetencyTestType(editingTestType.id, {
@@ -4770,6 +4899,7 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
     }
     setIsAddingTestType(false);
     setEditingTestType(null);
+    setTestFormSubmitAttempted(false);
   };
 
   const handleDeleteTestTypeAction = (id: string, name: string) => {
@@ -5505,6 +5635,7 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
 
   const handleSaveInterviewTypeForm = (e: React.FormEvent) => {
     e.preventDefault();
+    setInterviewFormSubmitAttempted(true);
     if (!interviewFormName.trim()) return;
     if (interviewFormCriteria.length === 0) {
       alert('Mohon tambahkan minimal 1 item kriteria scorecard untuk jenis wawancara ini.');
@@ -5534,6 +5665,7 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
     }
     setIsAddingInterviewType(false);
     setEditingInterviewType(null);
+    setInterviewFormSubmitAttempted(false);
   };
 
   const handleDeleteInterviewTypeAction = (id: string, name: string) => {
@@ -5577,7 +5709,8 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
 
   const handleAddAllowanceSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newAllowanceName.trim()) return;
+    setAllowanceSubmitAttempted(true);
+    if (!newAllowanceName.trim() || !newAllowanceValue || newAllowanceValue <= 0) return;
     const newId = 'alw-' + Date.now();
     const newAlw: DynamicOfferingAllowance = {
       id: newId,
@@ -5589,6 +5722,7 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
     };
     setOfferingAllowances((prev) => [...prev, newAlw]);
     setIsAddAllowanceOpen(false);
+    setAllowanceSubmitAttempted(false);
     setNewAllowanceName('Tunjangan Khusus Proyek');
     setNewAllowanceValue(500000);
     setToastFeedback(`Tunjangan '${newAlw.name}' berhasil ditambahkan ke skema penawaran.`);
@@ -5602,6 +5736,7 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
 
   const handleAddInsuranceSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setInsuranceSubmitAttempted(true);
     if (!newInsuranceName.trim()) return;
     const newId = 'ins-' + Date.now();
     const newIns: DynamicOfferingInsurance = {
@@ -5616,6 +5751,7 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
     };
     setOfferingInsurances((prev) => [...prev, newIns]);
     setIsAddInsuranceOpen(false);
+    setInsuranceSubmitAttempted(false);
     setNewInsuranceName('Asuransi Jiwa Tambahan (Life Cover)');
     setNewInsuranceCompanyAmount(250000);
     setNewInsuranceEmployeeAmount(0);
@@ -10364,7 +10500,13 @@ PT Nusantara Multi Talenta Tbk`);
             </div>
 
             {/* Modal Scrollable Body */}
-            <form onSubmit={(e) => handleCreateFptk(e, false)} className="p-6 space-y-6 text-xs overflow-y-auto flex-1">
+            <form onSubmit={(e) => handleCreateFptk(e, false)} className="p-6 space-y-6 text-xs overflow-y-auto flex-1" noValidate>
+              {fptkFormError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg flex items-center gap-2 text-rose-800 text-xs font-semibold animate-fadeIn">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                  <span>{fptkFormError}</span>
+                </div>
+              )}
               {/* SECTION 1: POSISI, JABATAN & DEPARTEMEN */}
               <div className="bg-slate-50/80 p-4 rounded-xl border border-slate-200/80 space-y-3">
                 <div className="flex items-center gap-2 text-slate-900 font-bold border-b border-slate-200 pb-2">
@@ -10373,25 +10515,24 @@ PT Nusantara Multi Talenta Tbk`);
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div>
-                    <label className="font-semibold text-slate-700 block mb-1">
-                      Nama Posisi / Jabatan yang Dibutuhkan *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="Contoh: Senior Fullstack Engineer / Finance Specialist"
-                      value={fptkPosition}
-                      onChange={(e) => setFptkPosition(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-900 font-medium bg-white focus:ring-1 focus:ring-blue-600 focus:outline-none"
-                    />
-                  </div>
+                  <ValidatedInput
+                    label="Nama Posisi / Jabatan yang Dibutuhkan"
+                    required
+                    requiredLabel="Nama posisi / jabatan yang dibutuhkan wajib diisi"
+                    showError={fptkSubmitAttempted}
+                    placeholder="Contoh: Senior Fullstack Engineer / Finance Specialist"
+                    value={fptkPosition}
+                    onChange={setFptkPosition}
+                    className="font-medium"
+                  />
                   <div>
                     <label className="font-semibold text-slate-700 block mb-1">
                       Departemen/Unit / Divisi Pemohon *
                     </label>
                     <SearchableSelect
                       required
+                      requiredLabel="Departemen/Unit / Divisi pemohon wajib dipilih"
+                      showError={fptkSubmitAttempted}
                       options={companyDepartments.map((dept) => ({ value: dept, label: dept }))}
                       value={fptkDept}
                       onChange={(val) => {
@@ -10410,6 +10551,8 @@ PT Nusantara Multi Talenta Tbk`);
                     </label>
                     <SearchableSelect
                       required
+                      requiredLabel="Lokasi penempatan wajib dipilih"
+                      showError={fptkSubmitAttempted}
                       options={officeLocations.filter((loc) => loc.isActive).map((loc) => ({ value: loc.id, label: `${loc.name} (${loc.city})` }))}
                       value={fptkLocationId}
                       onChange={setFptkLocationId}
@@ -10453,6 +10596,8 @@ PT Nusantara Multi Talenta Tbk`);
                       <NumberInput
                         min={1}
                         required
+                        requiredLabel="Jumlah kebutuhan (headcount) wajib diisi (minimal 1)"
+                        showError={fptkSubmitAttempted}
                         value={fptkHeadcount}
                         onChange={(val) => setFptkHeadcount(Math.max(1, val))}
                         className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold text-slate-900 bg-white"
@@ -10462,18 +10607,16 @@ PT Nusantara Multi Talenta Tbk`);
                       </span>
                     </div>
                   </div>
-                  <div>
-                    <label className="font-semibold text-slate-700 block mb-1">
-                      Tanggal Dibutuhkan (Target Join) *
-                    </label>
-                    <input
-                      type="date"
-                      required
-                      value={fptkTargetDate}
-                      onChange={(e) => setFptkTargetDate(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono text-slate-900 bg-white focus:ring-1 focus:ring-blue-600 focus:outline-none"
-                    />
-                  </div>
+                  <ValidatedInput
+                    label="Tanggal Dibutuhkan (Target Join)"
+                    type="date"
+                    required
+                    requiredLabel="Tanggal dibutuhkan (target join) wajib diisi"
+                    showError={fptkSubmitAttempted}
+                    value={fptkTargetDate}
+                    onChange={setFptkTargetDate}
+                    className="font-mono"
+                  />
                   <div>
                     <label className="font-semibold text-slate-700 block mb-1">
                       Status Anggaran (Budget) *
@@ -10541,22 +10684,17 @@ PT Nusantara Multi Talenta Tbk`);
                   </div>
                 </div>
 
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1 flex items-center justify-between">
-                    <span>Justifikasi & Penjelasan Kebutuhan (Deskriptif) *</span>
-                    <span className="text-[10px] text-slate-400 font-normal">
-                      Jelaskan beban kerja, urgensi operasional, dan dampak jika posisi tidak diisi
-                    </span>
-                  </label>
-                  <textarea
-                    rows={3}
-                    required
-                    placeholder="Tuliskan secara deskriptif mengapa kebutuhan ini mendesak, contoh: Penambahan volume sprint 200%, migrasi cloud infrastruktur perbankan, kepatuhan audit PSAK, atau pemenuhan SLA operasional..."
-                    value={fptkJustification}
-                    onChange={(e) => setFptkJustification(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-900 text-xs bg-white focus:ring-1 focus:ring-blue-600 focus:outline-none"
-                  />
-                </div>
+                <ValidatedTextarea
+                  label="Justifikasi & Penjelasan Kebutuhan (Deskriptif)"
+                  required
+                  requiredLabel="Justifikasi & penjelasan kebutuhan wajib diisi"
+                  showError={fptkSubmitAttempted}
+                  helperText="Jelaskan beban kerja, urgensi operasional, dan dampak jika posisi tidak diisi"
+                  rows={3}
+                  placeholder="Tuliskan secara deskriptif mengapa kebutuhan ini mendesak, contoh: Penambahan volume sprint 200%, migrasi cloud infrastruktur perbankan, kepatuhan audit PSAK, atau pemenuhan SLA operasional..."
+                  value={fptkJustification}
+                  onChange={setFptkJustification}
+                />
               </div>
 
               {/* SECTION 3: STRUKTUR ORGANISASI, SUPERVISI & TUGAS UTAMA */}
@@ -10572,6 +10710,9 @@ PT Nusantara Multi Talenta Tbk`);
                       Bertanggung Jawab ke Divisi *
                     </label>
                     <SearchableSelect
+                      required
+                      requiredLabel="Bertanggung jawab ke divisi wajib dipilih"
+                      showError={fptkSubmitAttempted}
                       options={companyDepartments.map((dept) => ({ value: dept, label: dept }))}
                       value={fptkReportingDept}
                       onChange={setFptkReportingDept}
@@ -10603,6 +10744,9 @@ PT Nusantara Multi Talenta Tbk`);
                       Bertanggung Jawab ke Atasan (Jabatan / Posisi) *
                     </label>
                     <SearchableSelect
+                      required
+                      requiredLabel="Bertanggung jawab ke atasan (jabatan/posisi) wajib dipilih"
+                      showError={fptkSubmitAttempted}
                       options={companyPositions.map((pos) => ({ value: pos, label: pos }))}
                       value={fptkReportingTitle}
                       onChange={setFptkReportingTitle}
@@ -10614,19 +10758,16 @@ PT Nusantara Multi Talenta Tbk`);
                   </div>
                 </div>
 
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">
-                    Tugas Pokok & Tanggung Jawab Utama (Job Description) *
-                  </label>
-                  <textarea
-                    rows={3}
-                    required
-                    placeholder="Sebutkan 3-5 tugas kunci yang akan dijalankan oleh pemegang jabatan ini sehari-hari..."
-                    value={fptkMainResponsibilities}
-                    onChange={(e) => setFptkMainResponsibilities(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-900 text-xs bg-white focus:ring-1 focus:ring-blue-600 focus:outline-none"
-                  />
-                </div>
+                <ValidatedTextarea
+                  label="Tugas Pokok & Tanggung Jawab Utama (Job Description)"
+                  required
+                  requiredLabel="Tugas pokok & tanggung jawab utama wajib diisi"
+                  showError={fptkSubmitAttempted}
+                  rows={3}
+                  placeholder="Sebutkan 3-5 tugas kunci yang akan dijalankan oleh pemegang jabatan ini sehari-hari..."
+                  value={fptkMainResponsibilities}
+                  onChange={setFptkMainResponsibilities}
+                />
               </div>
 
               {/* SECTION 4: KUALIFIKASI KANDIDAT */}
@@ -10651,6 +10792,8 @@ PT Nusantara Multi Talenta Tbk`);
                       }}
                       placeholder="-- Pilih tingkat pendidikan --"
                       required
+                      requiredLabel="Tingkat / strata pendidikan wajib dipilih"
+                      showError={fptkSubmitAttempted}
                       emptyMessage="Belum ada master data tingkat pendidikan. Tambahkan di menu Master Data."
                     />
                   </div>
@@ -10707,19 +10850,16 @@ PT Nusantara Multi Talenta Tbk`);
                   </div>
                 </div>
 
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">
-                    Keterampilan Khusus (Hard/Soft Skills) *
-                  </label>
-                  <textarea
-                    rows={3}
-                    required
-                    placeholder="Sebutkan keahlian teknis atau spesifik, contoh: TypeScript, React, Node.js, PostgreSQL, Docker, CI/CD, Brevet A&B, PSAK..."
-                    value={fptkSkills}
-                    onChange={(e) => setFptkSkills(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-900 text-xs bg-white focus:ring-1 focus:ring-blue-600 focus:outline-none"
-                  />
-                </div>
+                <ValidatedTextarea
+                  label="Keterampilan Khusus (Hard/Soft Skills)"
+                  required
+                  requiredLabel="Keterampilan khusus (hard/soft skills) wajib diisi"
+                  showError={fptkSubmitAttempted}
+                  rows={3}
+                  placeholder="Sebutkan keahlian teknis atau spesifik, contoh: TypeScript, React, Node.js, PostgreSQL, Docker, CI/CD, Brevet A&B, PSAK..."
+                  value={fptkSkills}
+                  onChange={setFptkSkills}
+                />
 
                 <div>
                   <label className="font-semibold text-slate-700 block mb-1">
@@ -10997,14 +11137,15 @@ PT Nusantara Multi Talenta Tbk`);
                             <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">
                               Header #{idx + 1}:
                             </span>
-                            <input
-                              type="text"
+                            <ValidatedInput
                               required
+                              requiredLabel="Peran penanda tangan wajib diisi"
+                              showError={fptkSubmitAttempted}
                               value={sig.role}
-                              onChange={(e) => handleUpdateSignatory(sig.id, { role: e.target.value })}
+                              onChange={(val) => handleUpdateSignatory(sig.id, { role: val })}
                               list={`signatory-roles-${sig.id}`}
                               placeholder="Menyetujui / Mengetahui / Memeriksa"
-                              className="px-2.5 py-1 border border-slate-300 rounded-lg text-xs font-bold text-blue-900 bg-blue-50/50 focus:ring-1 focus:ring-blue-600 focus:outline-none"
+                              className="font-bold text-blue-900 bg-blue-50/50"
                             />
                             <datalist id={`signatory-roles-${sig.id}`}>
                               {SIGNATORY_ROLES.map((role) => (
@@ -11966,17 +12107,22 @@ PT Nusantara Multi Talenta Tbk`);
                   </div>
 
                   {/* Form fields */}
+                  {vacFormError && (
+                    <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg flex items-center gap-2 text-rose-800 text-xs font-semibold animate-fadeIn">
+                      <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                      <span>{vacFormError}</span>
+                    </div>
+                  )}
                   <div>
-                    <label className="font-semibold text-slate-700 block mb-1">
-                      Judul Posisi Lowongan Eksternal (Public Job Title) *
-                    </label>
-                    <input
-                      type="text"
+                    <ValidatedInput
+                      label="Judul Posisi Lowongan Eksternal (Public Job Title)"
                       required
+                      requiredLabel="Judul posisi lowongan eksternal wajib diisi"
+                      showError={vacSubmitAttempted}
                       value={vacTitle}
-                      onChange={(e) => setVacTitle(e.target.value)}
+                      onChange={setVacTitle}
                       placeholder="Contoh: Senior Fullstack Engineer / IT Specialist"
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg font-medium focus:ring-1 focus:ring-blue-600 focus:outline-none"
+                      className="font-medium"
                     />
                     <p className="text-[10px] text-slate-400 mt-1">
                       * Anda dapat memoles judul posisi publik (misal menambahkan spesialisasi) agar lebih menarik bagi pelamar eksternal.
@@ -11984,16 +12130,15 @@ PT Nusantara Multi Talenta Tbk`);
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div>
-                      <label className="font-semibold text-slate-700 block mb-1">Departemen/Unit / Divisi</label>
-                      <input
-                        type="text"
-                        required
-                        value={vacDept}
-                        onChange={(e) => setVacDept(e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-slate-50 font-medium"
-                      />
-                    </div>
+                    <ValidatedInput
+                      label="Departemen/Unit / Divisi"
+                      required
+                      requiredLabel="Departemen/Unit / Divisi wajib diisi"
+                      showError={vacSubmitAttempted}
+                      value={vacDept}
+                      onChange={setVacDept}
+                      className="bg-slate-50 font-medium"
+                    />
                     <div>
                       <label className="font-semibold text-slate-700 block mb-1">Status Hubungan Kerja</label>
                       <select
@@ -12006,17 +12151,17 @@ PT Nusantara Multi Talenta Tbk`);
                         <option value="Magang">Magang</option>
                       </select>
                     </div>
-                    <div>
-                      <label className="font-semibold text-slate-700 block mb-1">Formasi (Kebutuhan)</label>
-                      <input
-                        type="number"
-                        min={1}
-                        required
-                        value={vacOpenings}
-                        onChange={(e) => setVacOpenings(Number(e.target.value))}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold"
-                      />
-                    </div>
+                    <ValidatedInput
+                      label="Formasi (Kebutuhan)"
+                      type="number"
+                      min={1}
+                      required
+                      requiredLabel="Formasi (kebutuhan) wajib diisi (minimal 1)"
+                      showError={vacSubmitAttempted}
+                      value={String(vacOpenings)}
+                      onChange={(val) => setVacOpenings(Number(val))}
+                      className="font-mono font-bold"
+                    />
                   </div>
 
                   {/* SALARY MASKING & SHARING CONTROLS */}
@@ -12091,35 +12236,31 @@ PT Nusantara Multi Talenta Tbk`);
                   </div>
 
                   <div>
-                    <label className="font-semibold text-slate-700 block mb-1">
-                      Deskripsi Pekerjaan & Tanggung Jawab Eksternal *
-                    </label>
-                    <textarea
-                      rows={3}
+                    <ValidatedTextarea
+                      label="Deskripsi Pekerjaan & Tanggung Jawab Eksternal"
                       required
+                      requiredLabel="Deskripsi pekerjaan & tanggung jawab eksternal wajib diisi"
+                      showError={vacSubmitAttempted}
+                      rows={3}
                       value={vacDescription}
-                      onChange={(e) => setVacDescription(e.target.value)}
+                      onChange={setVacDescription}
                       placeholder="Uraikan tanggung jawab posisi ini untuk publik..."
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs leading-relaxed focus:ring-1 focus:ring-blue-600 focus:outline-none"
                     />
                     <p className="text-[10px] text-slate-400 mt-0.5">
                       * Redaksi kalimat dapat disesuaikan dengan bahasa promosi karir yang menarik bagi talenta luar.
                     </p>
                   </div>
 
-                  <div>
-                    <label className="font-semibold text-slate-700 block mb-1">
-                      Kualifikasi & Persyaratan Eksternal *
-                    </label>
-                    <textarea
-                      rows={3}
-                      required
-                      value={vacRequirements}
-                      onChange={(e) => setVacRequirements(e.target.value)}
-                      placeholder="Contoh: S1 Teknik Informatika, Min. 3 tahun pengalaman..."
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs leading-relaxed focus:ring-1 focus:ring-blue-600 focus:outline-none"
-                    />
-                  </div>
+                  <ValidatedTextarea
+                    label="Kualifikasi & Persyaratan Eksternal"
+                    required
+                    requiredLabel="Kualifikasi & persyaratan eksternal wajib diisi"
+                    showError={vacSubmitAttempted}
+                    rows={3}
+                    value={vacRequirements}
+                    onChange={setVacRequirements}
+                    placeholder="Contoh: S1 Teknik Informatika, Min. 3 tahun pengalaman..."
+                  />
 
                   <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
                     <label className="font-bold text-slate-800 block text-xs">
@@ -12347,27 +12488,7 @@ PT Nusantara Multi Talenta Tbk`);
 
                 <button
                   type="button"
-                  onClick={() => {
-                    addVacancy({
-                      title: vacTitle,
-                      department: vacDept,
-                      employmentType: vacType,
-                      grade: vacGrade,
-                      openings: vacOpenings,
-                      minExperience: vacExp,
-                      salaryRange: showSalaryPublicly ? vacSalary : 'Gaji Kompetitif (Confidential)',
-                      rawInternalSalary: vacSalary,
-                      showSalaryPublicly,
-                      requirements: vacRequirements,
-                      description: vacDescription,
-                      externalDescription: vacDescription,
-                      activeChannels: vacChannels,
-                      status: 'Buka',
-                      jobRequisitionId: vacLinkedReqId || undefined,
-                    });
-                    setIsVacancyModalOpen(false);
-                    alert(`Lowongan '${vacTitle}' berhasil diproses dan disebarkan ke ${vacChannels.length} portal eksternal!`);
-                  }}
+                  onClick={handlePublishVacancy}
                   className="flex items-center gap-1.5 px-4 py-2 bg-blue-700 hover:bg-blue-800 text-white rounded-lg text-xs font-semibold shadow-2xs transition-colors"
                 >
                   <Send className="w-3.5 h-3.5" />
@@ -16020,6 +16141,7 @@ PT Nusantara Multi Talenta Tbk`);
                 <form
                   onSubmit={handleSaveTestTypeForm}
                   className="p-4 bg-slate-50 border border-blue-200 rounded-xl space-y-3.5 animate-in fade-in duration-100"
+                  noValidate
                 >
                   <div className="flex items-center justify-between pb-2 border-b border-slate-200">
                     <span className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
@@ -16036,17 +16158,16 @@ PT Nusantara Multi Talenta Tbk`);
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="font-semibold text-slate-700 block mb-1">Nama Jenis Tes *</label>
-                      <input
-                        type="text"
-                        required
-                        value={testFormName}
-                        onChange={(e) => setTestFormName(e.target.value)}
-                        placeholder="Contoh: Tes Teknis Mobile Flutter / Arsitektur"
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white text-slate-900 font-medium"
-                      />
-                    </div>
+                    <ValidatedInput
+                      label="Nama Jenis Tes"
+                      required
+                      requiredLabel="Nama jenis tes wajib diisi"
+                      showError={testFormSubmitAttempted}
+                      value={testFormName}
+                      onChange={setTestFormName}
+                      placeholder="Contoh: Tes Teknis Mobile Flutter / Arsitektur"
+                      className="bg-white text-slate-900 font-medium"
+                    />
                     <div>
                       <label className="font-semibold text-slate-700 block mb-1">Kategori Kompetensi *</label>
                       <select
@@ -16066,41 +16187,41 @@ PT Nusantara Multi Talenta Tbk`);
                   </div>
 
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                    <div>
-                      <label className="font-semibold text-slate-700 block mb-1">Passing Grade (0-100) *</label>
-                      <input
-                        type="number"
-                        min={0}
-                        max={100}
-                        required
-                        value={testFormPassingGrade}
-                        onChange={(e) => setTestFormPassingGrade(Number(e.target.value))}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white font-mono font-bold text-slate-900"
-                      />
-                    </div>
-                    <div>
-                      <label className="font-semibold text-slate-700 block mb-1">Durasi Standar (Menit) *</label>
-                      <input
-                        type="number"
-                        min={5}
-                        required
-                        value={testFormDuration}
-                        onChange={(e) => setTestFormDuration(Number(e.target.value))}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white font-mono text-slate-900"
-                      />
-                    </div>
-                    <div>
-                      <label className="font-semibold text-slate-700 block mb-1">Bobot Nilai (%) *</label>
-                      <input
-                        type="number"
-                        min={0}
-                        max={100}
-                        required
-                        value={testFormWeight}
-                        onChange={(e) => setTestFormWeight(Number(e.target.value))}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white font-mono text-slate-900"
-                      />
-                    </div>
+                    <ValidatedInput
+                      label="Passing Grade (0-100)"
+                      type="number"
+                      min={0}
+                      max={100}
+                      required
+                      requiredLabel="Passing grade wajib diisi (0-100)"
+                      showError={testFormSubmitAttempted}
+                      value={String(testFormPassingGrade)}
+                      onChange={(val) => setTestFormPassingGrade(Number(val))}
+                      className="bg-white font-mono font-bold text-slate-900"
+                    />
+                    <ValidatedInput
+                      label="Durasi Standar (Menit)"
+                      type="number"
+                      min={5}
+                      required
+                      requiredLabel="Durasi standar wajib diisi (minimal 5 menit)"
+                      showError={testFormSubmitAttempted}
+                      value={String(testFormDuration)}
+                      onChange={(val) => setTestFormDuration(Number(val))}
+                      className="bg-white font-mono text-slate-900"
+                    />
+                    <ValidatedInput
+                      label="Bobot Nilai (%)"
+                      type="number"
+                      min={0}
+                      max={100}
+                      required
+                      requiredLabel="Bobot nilai wajib diisi (0-100)"
+                      showError={testFormSubmitAttempted}
+                      value={String(testFormWeight)}
+                      onChange={(val) => setTestFormWeight(Number(val))}
+                      className="bg-white font-mono text-slate-900"
+                    />
                     <div>
                       <label className="font-semibold text-slate-700 block mb-1">Metode Uji *</label>
                       <select
@@ -17833,6 +17954,7 @@ PT Nusantara Multi Talenta Tbk`);
                 <form
                   onSubmit={handleSaveInterviewTypeForm}
                   className="p-4 bg-indigo-50/60 border border-indigo-200 rounded-xl space-y-4"
+                  noValidate
                 >
                   <div className="flex items-center justify-between border-b border-indigo-200/80 pb-2">
                     <h4 className="font-bold text-indigo-950 text-xs flex items-center gap-2">
@@ -17849,17 +17971,16 @@ PT Nusantara Multi Talenta Tbk`);
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    <div>
-                      <label className="font-semibold text-slate-700 block mb-1">Nama Format Wawancara *</label>
-                      <input
-                        type="text"
-                        required
-                        value={interviewFormName}
-                        onChange={(e) => setInterviewFormName(e.target.value)}
-                        placeholder="Contoh: Wawancara Teknis & Arsitektur"
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white focus:ring-2 focus:ring-indigo-500 font-semibold"
-                      />
-                    </div>
+                    <ValidatedInput
+                      label="Nama Format Wawancara"
+                      required
+                      requiredLabel="Nama format wawancara wajib diisi"
+                      showError={interviewFormSubmitAttempted}
+                      value={interviewFormName}
+                      onChange={setInterviewFormName}
+                      placeholder="Contoh: Wawancara Teknis & Arsitektur"
+                      className="bg-white font-semibold"
+                    />
                     <div>
                       <label className="font-semibold text-slate-700 block mb-1">Target Posisi / Peran</label>
                       <input
@@ -18203,32 +18324,23 @@ PT Nusantara Multi Talenta Tbk`);
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                    <div>
-                      <label className="font-semibold text-slate-700 block mb-1">
-                        Klinik / Rumah Sakit / Lab Rujukan <span className="text-rose-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        value={mcuClinic}
-                        onChange={(e) => setMcuClinic(e.target.value)}
-                        placeholder="Contoh: RS Siloam Semanggi / Prodia Lab"
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs outline-hidden focus:ring-1 focus:ring-teal-500"
-                      />
-                    </div>
+                    <ValidatedInput
+                      label="Klinik / Rumah Sakit / Lab Rujukan"
+                      required
+                      requiredLabel="Klinik / rumah sakit / lab rujukan wajib diisi"
+                      value={mcuClinic}
+                      onChange={setMcuClinic}
+                      placeholder="Contoh: RS Siloam Semanggi / Prodia Lab"
+                    />
 
-                    <div>
-                      <label className="font-semibold text-slate-700 block mb-1">
-                        Tanggal Pemeriksaan MCU <span className="text-rose-500">*</span>
-                      </label>
-                      <input
-                        type="date"
-                        required
-                        value={mcuDate}
-                        onChange={(e) => setMcuDate(e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs outline-hidden focus:ring-1 focus:ring-teal-500"
-                      />
-                    </div>
+                    <ValidatedInput
+                      label="Tanggal Pemeriksaan MCU"
+                      type="date"
+                      required
+                      requiredLabel="Tanggal pemeriksaan MCU wajib diisi"
+                      value={mcuDate}
+                      onChange={setMcuDate}
+                    />
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
@@ -19019,26 +19131,25 @@ PT Nusantara Multi Talenta Tbk`);
 
                 {/* Metadata Surat */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-200">
-                  <div>
-                    <label className="font-semibold text-slate-700 block mb-1">Nomor Surat Penawaran Resmi *</label>
-                    <input
-                      type="text"
-                      required
-                      value={docNumber}
-                      onChange={(e) => setDocNumber(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold text-slate-800"
-                    />
-                  </div>
-                  <div>
-                    <label className="font-semibold text-slate-700 block mb-1">Target Tanggal Mulai Bekerja (Join Date) *</label>
-                    <input
-                      type="date"
-                      required
-                      value={targetJoinDate}
-                      onChange={(e) => setTargetJoinDate(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono text-slate-800"
-                    />
-                  </div>
+                  <ValidatedInput
+                    label="Nomor Surat Penawaran Resmi"
+                    required
+                    requiredLabel="Nomor dokumen offering letter resmi wajib diisi"
+                    showError={!!offeringFormError && !docNumber.trim()}
+                    value={docNumber}
+                    onChange={setDocNumber}
+                    className="font-mono font-bold text-slate-800"
+                  />
+                  <ValidatedInput
+                    label="Target Tanggal Mulai Bekerja (Join Date)"
+                    type="date"
+                    required
+                    requiredLabel="Target tanggal mulai bekerja (join date) wajib diisi"
+                    showError={!!offeringFormError}
+                    value={targetJoinDate}
+                    onChange={setTargetJoinDate}
+                    className="font-mono text-slate-800"
+                  />
                 </div>
               </div>
 
@@ -19067,20 +19178,18 @@ PT Nusantara Multi Talenta Tbk`);
 
                 {/* Form Tambah Tunjangan Baru */}
                 {isAddAllowanceOpen && (
-                  <form onSubmit={handleAddAllowanceSubmit} className="p-3 bg-blue-50/60 border border-blue-200 rounded-xl space-y-3">
+                  <form onSubmit={handleAddAllowanceSubmit} className="p-3 bg-blue-50/60 border border-blue-200 rounded-xl space-y-3" noValidate>
                     <span className="font-bold text-blue-950 block text-xs">Form Tambah Komponen Tunjangan Baru:</span>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                      <div>
-                        <label className="text-[11px] text-slate-600 block mb-0.5 font-semibold">Nama Tunjangan *</label>
-                        <input
-                          type="text"
-                          required
-                          value={newAllowanceName}
-                          onChange={(e) => setNewAllowanceName(e.target.value)}
-                          placeholder="Misal: Tunjangan Khusus / Proyek"
-                          className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white text-xs"
-                        />
-                      </div>
+                      <ValidatedInput
+                        label="Nama Tunjangan"
+                        required
+                        requiredLabel="Nama tunjangan wajib diisi"
+                        showError={allowanceSubmitAttempted}
+                        value={newAllowanceName}
+                        onChange={setNewAllowanceName}
+                        placeholder="Misal: Tunjangan Khusus / Proyek"
+                      />
                       <div>
                         <label className="text-[11px] text-slate-600 block mb-0.5 font-semibold">Kategori Tunjangan</label>
                         <select
@@ -19103,13 +19212,15 @@ PT Nusantara Multi Talenta Tbk`);
                             <option value="fixed">Nominal (Rp)</option>
                             <option value="percent">Persen (%)</option>
                           </select>
-                          <input
+                          <ValidatedInput
                             type="number"
-                            required
                             min={0}
-                            value={newAllowanceValue}
-                            onChange={(e) => setNewAllowanceValue(Number(e.target.value))}
-                            className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white text-xs font-mono font-bold"
+                            required
+                            requiredLabel="Nilai tunjangan wajib diisi (lebih dari 0)"
+                            showError={allowanceSubmitAttempted}
+                            value={String(newAllowanceValue)}
+                            onChange={(val) => setNewAllowanceValue(Number(val))}
+                            className="font-mono font-bold"
                           />
                         </div>
                       </div>
@@ -19220,31 +19331,28 @@ PT Nusantara Multi Talenta Tbk`);
 
                 {/* Form Tambah Asuransi Swasta */}
                 {isAddInsuranceOpen && (
-                  <form onSubmit={handleAddInsuranceSubmit} className="p-3 bg-emerald-50/60 border border-emerald-200 rounded-xl space-y-3">
+                  <form onSubmit={handleAddInsuranceSubmit} className="p-3 bg-emerald-50/60 border border-emerald-200 rounded-xl space-y-3" noValidate>
                     <span className="font-bold text-emerald-950 block text-xs">Tambah Program Asuransi Komersial:</span>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                       <div className="sm:col-span-2">
-                        <label className="text-[11px] text-slate-600 block mb-0.5 font-semibold">Nama Program Asuransi *</label>
-                        <input
-                          type="text"
+                        <ValidatedInput
+                          label="Nama Program Asuransi"
                           required
+                          requiredLabel="Nama program asuransi wajib diisi"
+                          showError={insuranceSubmitAttempted}
                           value={newInsuranceName}
-                          onChange={(e) => setNewInsuranceName(e.target.value)}
+                          onChange={setNewInsuranceName}
                           placeholder="Misal: Asuransi Jiwa & Penyakit Kritis"
-                          className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white text-xs"
                         />
                       </div>
-                      <div>
-                        <label className="text-[11px] text-slate-600 block mb-0.5 font-semibold">Tanggungan Perusahaan (Rp/bln)</label>
-                        <input
-                          type="number"
-                          required
-                          min={0}
-                          value={newInsuranceCompanyAmount}
-                          onChange={(e) => setNewInsuranceCompanyAmount(Number(e.target.value))}
-                          className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white text-xs font-mono font-bold"
-                        />
-                      </div>
+                      <ValidatedInput
+                        label="Tanggungan Perusahaan (Rp/bln) (Opsional)"
+                        type="number"
+                        min={0}
+                        value={String(newInsuranceCompanyAmount)}
+                        onChange={(val) => setNewInsuranceCompanyAmount(Number(val))}
+                        className="font-mono font-bold"
+                      />
                     </div>
 
                     <div className="flex justify-end gap-2 pt-1">
@@ -20604,19 +20712,13 @@ PT Nusantara Multi Talenta Tbk`);
               {/* DATA PELAMAR: HANYA NAMA LENGKAP, POSISI LOWONGAN, DAN KANAL ASAL/SUMBER PELAMAR */}
               <div className="pt-2 border-t border-slate-100 space-y-3.5">
                 {/* 2. NAMA LENGKAP */}
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">
-                    Nama Lengkap Pelamar <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={candName}
-                    onChange={(e) => setCandName(e.target.value)}
-                    placeholder="Contoh: Raditya Pratama, S.Kom."
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-medium text-xs focus:ring-1 focus:ring-blue-500 outline-hidden"
-                  />
-                </div>
+                <ValidatedInput
+                  label="Nama Lengkap Pelamar (Opsional)"
+                  value={candName}
+                  onChange={setCandName}
+                  placeholder="Contoh: Raditya Pratama, S.Kom. (jika kosong, sistem akan mengisi 'Kandidat Baru')"
+                  className="font-medium text-xs"
+                />
 
                 {/* 3. POSISI LOWONGAN */}
                 <div>
