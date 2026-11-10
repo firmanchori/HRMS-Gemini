@@ -124,6 +124,41 @@ concrete, checkable requirement, not a slogan:
   every check the frontend does must be re-validated server-side per §4,
   since client-side checks are trivially bypassed.
 
+## 6. Supply Chain (OWASP A03 / A08) — added 2026-11-10 security review
+
+- `package-lock.json` is always committed and is what every install uses —
+  `npm ci` (not `npm install`) in CI and on any deploy, so a build can never
+  silently drift to a dependency version nobody reviewed. Never delete or
+  `.gitignore` the lockfile.
+- `.github/dependabot.yml` opens weekly PRs for outdated/vulnerable npm and
+  GitHub Actions dependencies — review and merge these promptly rather than
+  letting them pile up; a Dependabot PR with a security label is a real
+  advisory, not routine busywork.
+- `.github/workflows/ci.yml` runs `npm audit --omit=dev --audit-level=high`
+  on every push/PR to `main` — a new high/critical vulnerability in a
+  *production* dependency fails the build. Dev-only tooling is deliberately
+  excluded from that gate (see the accepted-risk note below) since it never
+  ships in the deployed bundle.
+- **Accepted risk, tracked here so it isn't rediscovered as "new":**
+  `drizzle-kit` (dev-only migration CLI) currently depends on a vulnerable
+  `esbuild` version via `@esbuild-kit/esm-loader` (moderate severity,
+  GHSA-67mh-4wv8-2f99 — a malicious website could read responses from a
+  locally running *esbuild* dev server). This project never runs esbuild's
+  own dev server (Vite's dev server is a different thing), drizzle-kit is
+  never installed in production, and `0.31.11` is the current latest stable
+  release — there is no newer version that resolves it yet. Re-check this
+  note when bumping drizzle-kit; remove it once a release fixes the chain.
+- Never add a `postinstall`/`preinstall` script to this project's own
+  `package.json` without a specific, reviewed reason — it's the single
+  most common supply-chain attack vector in the npm ecosystem (a compromised
+  transitive dependency's install script running arbitrary code on every
+  `npm install`). None exist today; keep it that way by default.
+- A CDN `<script src="...">` tag (if one is ever added) must pin an exact
+  version (never an unpinned/`@latest` URL) and use Subresource Integrity
+  (`integrity="sha384-..."`) — this project doesn't load any third-party
+  script tags today; this rule is here so the first one that's ever added
+  does it correctly from the start.
+
 ## Checklist for every new endpoint (copy into the PR/commit description mentally)
 
 - [ ] Body/params validated with a zod schema (§4)

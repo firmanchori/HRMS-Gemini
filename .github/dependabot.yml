@@ -1,0 +1,29 @@
+version: 2
+updates:
+  # Keeps npm dependencies patched automatically (security review, user
+  # 2026-11-10: "Supply chain (A03)") — there was no mechanism at all
+  # keeping dependencies current; a known-vulnerable package could sit
+  # unpatched indefinitely with nobody ever finding out short of manually
+  # running `npm audit`.
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    groups:
+      # Dev-only tooling (test runner, bundler, type definitions) rarely
+      # needs individual review — batch it into one PR a week instead of
+      # one PR per package.
+      dev-dependencies:
+        dependency-type: "development"
+    labels:
+      - "dependencies"
+      - "security"
+
+  # GitHub Actions versions (e.g. actions/checkout@vX) are also a supply-chain
+  # surface — an Action pinned to a mutable tag can be silently replaced
+  # upstream with malicious code.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"

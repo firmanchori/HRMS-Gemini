@@ -1,0 +1,51 @@
+name: CI
+
+# Supply-chain + basic build hygiene (security review, user 2026-11-10:
+# "Supply chain (A03)") — there was no CI at all before this, so nothing
+# ever actually verified a build installs reproducibly from the committed
+# lockfile, is free of newly-introduced high/critical vulnerabilities, or
+# even type-checks, before code reached main.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  supply-chain-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      # `npm ci` (not `npm install`) installs exactly what package-lock.json
+      # pins — the whole point of committing a lockfile is a build that
+      # can silently drift to a different, unreviewed dependency version
+      # never actually happens in CI.
+      - name: Install dependencies (reproducible, from lockfile)
+        run: npm ci
+
+      # Fails the build on a newly-introduced high/critical vulnerability in
+      # a production dependency. Scoped to --omit=dev: dev-only tooling
+      # (drizzle-kit's current esbuild-kit dependency, tracked and accepted —
+      # see package.json audit notes) never ships in the deployed bundle, so
+      # it's noise for this gate rather than a real exposure.
+      - name: Dependency vulnerability audit (production dependencies)
+        run: npm audit --omit=dev --audit-level=high
+
+      # Type-check deliberately isn't a gate here yet — the existing
+      # codebase has pre-existing `tsc --noEmit` errors unrelated to any
+      # single change (confirmed throughout this session's work), so wiring
+      # it in now would make CI permanently red from the first run. Vite's
+      # own build step below doesn't type-check (esbuild transpiles,
+      # doesn't verify types), so this stays a real gap until the baseline
+      # is cleaned up — tracked here rather than silently ignored.
+      - name: Build
+        run: npm run build
