@@ -341,6 +341,7 @@ export interface ShiftSwapRequest {
   requestShiftId?: string;
   targetShiftId?: string;
   reason: string;
+  attachmentUrl?: string;
   status: 'Menunggu' | 'Disetujui' | 'Ditolak';
   approvedBy?: string;
 }

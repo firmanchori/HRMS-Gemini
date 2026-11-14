@@ -8,7 +8,7 @@ import bcrypt from "bcryptjs";
 import { createApp } from "../app.ts";
 import { withCsrf } from "../lib/testCsrf.ts";
 import { db, pool } from "../db/client.ts";
-import { employeeKpis, tenants, tenantSubscriptions, users, subscriptionPlans, companyEntities, employees, employeeAccounts, sessions, rolePermissionEntries, roleDefinitions, payrollRecords, auditLogEntries, officialDocuments, businessTrips } from "../db/schema.ts";
+import { leaveRequests, employeeKpis, tenants, tenantSubscriptions, users, subscriptionPlans, companyEntities, employees, employeeAccounts, sessions, rolePermissionEntries, roleDefinitions, payrollRecords, auditLogEntries, officialDocuments, businessTrips } from "../db/schema.ts";
 
 /**
  * Proves the RBAC-granular rollout (security review, user 2026-11-10:
@@ -71,6 +71,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await db.delete(rolePermissionEntries).where(eq(rolePermissionEntries.tenantId, tenantId));
   await db.delete(roleDefinitions).where(eq(roleDefinitions.tenantId, tenantId));
+  await db.delete(leaveRequests).where(eq(leaveRequests.tenantId, tenantId));
   await db.delete(employeeKpis).where(eq(employeeKpis.tenantId, tenantId));
   await db.update(employees).set({ managerId: null }).where(eq(employees.tenantId, tenantId));
   await db.delete(payrollRecords).where(eq(payrollRecords.tenantId, tenantId));
@@ -187,5 +188,19 @@ describe("RBAC granular enforcement — employee module access is real, not deco
     const ok = await staffAgent.post("/api/employee/employee-kpis/upsert").set("Origin", origin).send({ ...kpi(report.id), reviewer: "Dipalsukan" });
     expect(ok.status).toBe(201);
     expect(ok.body.reviewer).toBe("Staff Finance Test"); // reviewer name comes from the session, not the body
+  });
+
+  it("self-service 'Sakit dengan Surat Dokter' requires a valid doctor-note attachment", async () => {
+    expect((await grant("attendance", { view: true, create: true })).status).toBe(201);
+    const base = { leaveType: "Sakit dengan Surat Dokter", startDate: "2026-11-10", endDate: "2026-11-11", totalDays: 2, reason: "Demam" };
+    const missing = await staffAgent.post("/api/employee/leave").set("Origin", origin).send(base);
+    expect(missing.status).toBe(400);
+    const wrongType = await staffAgent.post("/api/employee/leave").set("Origin", origin).send({ ...base, attachmentUrl: "data:text/html;base64,PGI+" });
+    expect(wrongType.status).toBe(400);
+    const ok = await staffAgent.post("/api/employee/leave").set("Origin", origin).send({ ...base, attachmentUrl: "data:application/pdf;base64,JVBERi0xLjQ=" });
+    expect(ok.status).toBe(201);
+    expect(ok.body.attachmentUrl).toMatch(/^data:application\/pdf/);
+    const plain = await staffAgent.post("/api/employee/leave").set("Origin", origin).send({ ...base, leaveType: "Sakit Tanpa Surat Dokter" });
+    expect(plain.status).toBe(201);
   });
 });

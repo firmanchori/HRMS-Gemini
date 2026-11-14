@@ -709,6 +709,7 @@ export interface LeaveRequest {
   endDate: string;
   totalDays: number;
   reason: string | null;
+  attachmentUrl?: string | null;
   status: "Menunggu" | "Disetujui" | "Ditolak";
   approvedBy: string | null;
 }

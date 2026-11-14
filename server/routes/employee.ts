@@ -297,11 +297,15 @@ const leaveRequestSchema = z.object({
   endDate: z.string().trim().min(1).max(20),
   totalDays: z.number().int().min(1),
   reason: z.string().trim().max(1000).optional().nullable(),
+  attachmentUrl: z.string().max(950_000).regex(/^data:(image\/(png|jpeg|webp)|application\/pdf);base64,/, "Lampiran harus berupa gambar (PNG/JPG/WebP) atau PDF").optional().nullable(),
 });
 
 /** employeeId and status are never taken from the client — status always starts "Menunggu" and employeeId is always the session's own, so an employee can never file a leave request on someone else's behalf or pre-approve their own. */
 employeeRouter.post("/leave", requirePermission("attendance", "create"), validateBody(leaveRequestSchema), async (req, res) => {
   const session = req.session!;
+  if (req.body.leaveType === "Sakit dengan Surat Dokter" && !req.body.attachmentUrl) {
+    return res.status(400).json({ error: "Surat dokter wajib dilampirkan untuk jenis izin Sakit dengan Surat Dokter.", details: { attachmentUrl: "Lampirkan surat dokter" } });
+  }
   const [created] = await db
     .insert(leaveRequests)
     .values({ ...req.body, employeeId: session.employeeId!, tenantId: session.tenantId!, status: "Menunggu" })

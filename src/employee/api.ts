@@ -91,6 +91,7 @@ export interface LeaveRequest {
   endDate: string;
   totalDays: number;
   reason: string | null;
+  attachmentUrl?: string | null;
   status: string;
   approvedBy: string | null;
   createdAt: string;
@@ -116,7 +117,7 @@ export const employeeApi = {
   clockOut: (lat: number, lng: number) =>
     request<AttendanceRecord>('/api/employee/attendance/clock-out', { method: 'POST', body: JSON.stringify({ lat, lng }) }),
   getLeave: () => request<LeaveRequest[]>('/api/employee/leave'),
-  submitLeave: (body: { leaveType: string; startDate: string; endDate: string; totalDays: number; reason?: string }) =>
+  submitLeave: (body: { leaveType: string; startDate: string; endDate: string; totalDays: number; reason?: string; attachmentUrl?: string }) =>
     request<LeaveRequest>('/api/employee/leave', { method: 'POST', body: JSON.stringify(body) }),
   getApprovalQueue: () => request<LeaveRequest[]>('/api/employee/approvals/leave'),
   decideLeave: (id: string, decision: 'Disetujui' | 'Ditolak') =>

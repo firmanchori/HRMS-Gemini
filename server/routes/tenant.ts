@@ -2822,6 +2822,7 @@ const leaveRequestSchema = z.object({
   endDate: z.string().trim().min(1).max(20),
   totalDays: z.number().int().min(1),
   reason: z.string().trim().max(1000).optional().nullable(),
+  attachmentUrl: z.string().max(950_000).regex(/^data:(image\/(png|jpeg|webp)|application\/pdf);base64,/, "Lampiran harus berupa gambar (PNG/JPG/WebP) atau PDF").optional().nullable(),
   status: z.enum(["Menunggu", "Disetujui", "Ditolak"]).optional(),
   approvedBy: z.string().trim().max(200).optional().nullable(),
 });

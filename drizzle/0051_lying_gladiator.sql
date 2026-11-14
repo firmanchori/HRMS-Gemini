@@ -1,0 +1,1 @@
+ALTER TABLE "leave_requests" ADD COLUMN "attachment_url" text;

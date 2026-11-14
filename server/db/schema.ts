@@ -1358,6 +1358,8 @@ export const leaveRequests = pgTable("leave_requests", {
   endDate: text("end_date").notNull(),
   totalDays: integer("total_days").notNull().default(1),
   reason: text("reason"),
+  /** Proof document (data URL, image/PDF) — mandatory for self-service "Sakit dengan Surat Dokter". */
+  attachmentUrl: text("attachment_url"),
   status: text("status").notNull().default("Menunggu"),
   approvedBy: text("approved_by"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { readAttachment } from '../shared/attachment';
 import { Lock, Mail, Eye, EyeOff, AlertCircle, ArrowRight, LogOut, User, Clock, CalendarDays, CheckSquare, ArrowLeft, KeyRound } from 'lucide-react';
 import { employeeApi, EmployeeApiError, type EmployeeProfile, type AttendanceRecord, type LeaveRequest } from './api';
 import { ValidatedInput } from '../components/common/ValidatedInput';
@@ -500,6 +501,9 @@ const CutiTab: React.FC<{ canCreate: boolean }> = ({ canCreate }) => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [form, setForm] = useState({ leaveType: LEAVE_TYPES[0], startDate: '', endDate: '', reason: '' });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [attachment, setAttachment] = useState<{ name: string; dataUrl: string } | null>(null);
+  const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const needsDoctorNote = form.leaveType === 'Sakit dengan Surat Dokter';
 
   const load = () => employeeApi.getLeave().then(setRequests).catch(() => {}).finally(() => setIsLoading(false));
   useEffect(() => { load(); }, []);
@@ -510,12 +514,18 @@ const CutiTab: React.FC<{ canCreate: boolean }> = ({ canCreate }) => {
     e.preventDefault();
     setSubmitAttempted(true);
     if (!form.startDate || !form.endDate) return;
+    if (needsDoctorNote && !attachment) {
+      setAttachmentError('Surat dokter wajib dilampirkan.');
+      return;
+    }
     setErrorMessage(null);
     setIsSubmitting(true);
     try {
       const days = Math.max(1, Math.round((new Date(form.endDate).getTime() - new Date(form.startDate).getTime()) / 86400000) + 1);
-      await employeeApi.submitLeave({ ...form, totalDays: days });
+      await employeeApi.submitLeave({ ...form, totalDays: days, attachmentUrl: needsDoctorNote ? attachment?.dataUrl : undefined });
       setForm({ leaveType: LEAVE_TYPES[0], startDate: '', endDate: '', reason: '' });
+      setAttachment(null);
+      setAttachmentError(null);
       setSubmitAttempted(false);
       load();
     } catch (err) {
@@ -538,6 +548,30 @@ const CutiTab: React.FC<{ canCreate: boolean }> = ({ canCreate }) => {
             <ValidatedDateInput required showError={submitAttempted} value={form.startDate} onChange={(v) => setForm({ ...form, startDate: v })} maxDate={form.endDate || undefined} />
             <ValidatedDateInput required showError={submitAttempted} value={form.endDate} onChange={(v) => setForm({ ...form, endDate: v })} minDate={form.startDate || undefined} />
           </div>
+          {needsDoctorNote && (
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-700 mb-1">Surat Dokter *</label>
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp,application/pdf"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  setAttachmentError(null);
+                  if (!file) { setAttachment(null); return; }
+                  try {
+                    setAttachment({ name: file.name, dataUrl: await readAttachment(file) });
+                  } catch (err) {
+                    setAttachment(null);
+                    setAttachmentError(err instanceof Error ? err.message : 'Lampiran tidak valid.');
+                    e.target.value = '';
+                  }
+                }}
+                className={`w-full text-xs border rounded-lg p-1.5 ${attachmentError ? 'border-rose-400' : 'border-slate-300'}`}
+              />
+              {attachment && !attachmentError && <div className="text-[11px] text-emerald-700 mt-1">{attachment.name}</div>}
+              {attachmentError && <div className="text-[11px] text-rose-600 mt-1">{attachmentError}</div>}
+            </div>
+          )}
           <textarea value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} placeholder="Alasan (opsional)" className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs" rows={2} />
           <button type="submit" disabled={isSubmitting} className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-semibold disabled:opacity-50">Ajukan</button>
         </form>
@@ -589,6 +623,7 @@ const ApprovalTab: React.FC = () => {
               <div>
                 <div className="font-semibold">{r.leaveType}</div>
                 <div className="text-slate-500">{r.startDate} s/d {r.endDate} ({r.totalDays} hari){r.reason ? ` — ${r.reason}` : ''}</div>
+                {r.attachmentUrl && <a href={r.attachmentUrl} target="_blank" rel="noreferrer" className="text-indigo-600 underline text-[11px]">Lihat surat dokter</a>}
               </div>
               <div className="flex gap-1.5 shrink-0">
                 <button onClick={() => decide(r.id, 'Disetujui')} disabled={busyId === r.id} className="px-2.5 py-1 bg-emerald-600 text-white rounded text-[11px] font-semibold disabled:opacity-50">Setujui</button>

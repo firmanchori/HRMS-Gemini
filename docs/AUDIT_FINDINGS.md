@@ -178,9 +178,10 @@ state hidup di React context + simulasi `localStorage` per-browser.
 - [x] **(Medium)** Field "Usulan Gaji Baru" di Contract Renewal ditangkap di form tapi
   **tidak pernah diterapkan** ke `employee.basicSalary` saat disetujui — hanya
   tersimpan sebagai teks bebas di `notes`.
-- [ ] **(Medium)** `LeaveRequest` tidak punya field lampiran meski salah satu
+- [x] **(Medium)** `LeaveRequest` tidak punya field lampiran meski salah satu
   `leaveType` adalah "Sakit dengan Surat Dokter" (butuh bukti dokter) — bandingkan
   dengan `AttendanceCorrectionRequest` yang sudah punya `attachmentUrl?`.
+  _Selesai: kolom `leave_requests.attachment_url`; jalur self-service (ESS/Employee App) wajib melampirkan surat dokter (PNG/JPG/WebP/PDF ≤600 KB) dan atasan melihatnya di antrean. Form HR (Presensi/Kalender) menerima lampiran opsional._
 - [ ] **(Medium)** Bucket "cuti bersama" hanya hitungan tampilan (`deductsLeaveBucket`
   dihitung ulang tiap render), tidak pernah benar-benar dipotong ke ledger permanen —
   bisa berubah retroaktif jika admin mengubah kalender, dan tidak konsisten ditampilkan
