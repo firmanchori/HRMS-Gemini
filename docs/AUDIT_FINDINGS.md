@@ -175,7 +175,7 @@ state hidup di React context + simulasi `localStorage` per-browser.
 - [x] **(Medium)** Personalia mengizinkan input posisi teks bebas (`__custom__`) yang
   melewati referensi org chart sama sekali, bertentangan dengan klaim PRD "wajib
   mengambil referensi langsung dari Org Structure Nodes".
-- [ ] **(Medium)** Field "Usulan Gaji Baru" di Contract Renewal ditangkap di form tapi
+- [x] **(Medium)** Field "Usulan Gaji Baru" di Contract Renewal ditangkap di form tapi
   **tidak pernah diterapkan** ke `employee.basicSalary` saat disetujui — hanya
   tersimpan sebagai teks bebas di `notes`.
 - [ ] **(Medium)** `LeaveRequest` tidak punya field lampiran meski salah satu

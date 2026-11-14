@@ -1019,6 +1019,10 @@ export const contractRenewalReviews = pgTable("contract_renewal_reviews", {
   currentContractEnd: timestamp("current_contract_end", { withTimezone: true }).notNull(),
   recommendation: contractRecommendationEnum("recommendation").notNull(),
   newDurationMonths: integer("new_duration_months"),
+  /** Proposed new basic salary — applied to the employee only when the review is approved (was previously buried in free-text notes and never applied). */
+  newSalary: integer("new_salary"),
+  effectiveDate: text("effective_date"),
+  appliedAt: timestamp("applied_at", { withTimezone: true }),
   notes: text("notes"),
   status: contractReviewStatusEnum("status").notNull().default("Menunggu Approval"),
   approvedBy: text("approved_by"),

@@ -14,6 +14,7 @@ import {
 import { buildApprovalSteps, currentBlockingStep, finalizeHooks, ApprovalError } from "./approvalEngine.ts";
 import { createOfficialDocumentRecord } from "./documents.ts";
 import { logAudit } from "./audit.ts";
+import { addMonths, todayWib } from "./dates.ts";
 import { logError } from "./logger.ts";
 
 export const PERSONALIA_CATEGORY = "Promosi/Personalia";
@@ -307,22 +308,12 @@ export async function listPersonaliaActions(tenantId: string, employeeId?: strin
   return db.select().from(personaliaActions).where(where).orderBy(desc(personaliaActions.createdAt));
 }
 
-function addMonths(isoDate: string, months: number): string {
-  const d = new Date(`${isoDate}T00:00:00Z`);
-  d.setUTCMonth(d.getUTCMonth() + months);
-  return d.toISOString().slice(0, 10);
-}
 
 function documentTypeFor(type: string): string {
   if (type === "Promosi" || type === "Demosi") return "Surat Promosi";
   if (type === "Mutasi" || type === "Mutasi Departemen" || type === "Rotasi Cabang") return "Surat Mutasi";
   if (type === "Pengangkatan Tetap") return "SK Pengangkatan";
   return "Surat Promosi";
-}
-
-/** Today in Jakarta (the tenant's business timezone) as YYYY-MM-DD. */
-function todayWib(): string {
-  return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Jakarta" });
 }
 
 /**

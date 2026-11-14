@@ -9,7 +9,7 @@ import { createApp } from "../app.ts";
 import { withCsrf } from "../lib/testCsrf.ts";
 import { db, pool } from "../db/client.ts";
 import { applyDuePersonaliaActions } from "../lib/personalia.ts";
-import { tenants, tenantSubscriptions, users, subscriptionPlans, companyEntities, entityClosure, employees, sessions, auditLogEntries, officialDocuments, orgStructureNodes, personaliaActions, approvalItems, complianceRecords } from "../db/schema.ts";
+import { contractRenewalReviews, tenants, tenantSubscriptions, users, subscriptionPlans, companyEntities, entityClosure, employees, sessions, auditLogEntries, officialDocuments, orgStructureNodes, personaliaActions, approvalItems, complianceRecords } from "../db/schema.ts";
 
 /**
  * Personalia end-to-end: an action is created with a server-captured
@@ -58,6 +58,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  await db.delete(contractRenewalReviews).where(eq(contractRenewalReviews.tenantId, tenantId));
   await db.delete(complianceRecords).where(eq(complianceRecords.tenantId, tenantId));
   await db.delete(officialDocuments).where(eq(officialDocuments.tenantId, tenantId));
   await db.delete(personaliaActions).where(eq(personaliaActions.tenantId, tenantId));
@@ -222,5 +223,24 @@ describe("Personalia end-to-end", () => {
     expect(revoked.body.status).toBe("Dicabut");
     const again = await adminAgent.post(`/api/tenant/documents/${docId}/signatories/0/confirm`).set("Origin", origin).send({});
     expect(again.status).toBe(400);
+  });
+
+  it("contract renewal: always born pending; approval applies new end date + salary on the server, once", async () => {
+    const created = await adminAgent.post("/api/tenant/contract-renewal-reviews").set("Origin", origin).send({
+      employeeId: staffId, currentContractEnd: "2026-12-31T00:00:00.000Z", recommendation: "Perpanjang PKWT", newDurationMonths: 6, newSalary: 9_500_000, effectiveDate: "2026-11-01", notes: "Kinerja baik", status: "Disetujui",
+    });
+    expect(created.status).toBe(201);
+    expect(created.body.status).toBe("Menunggu Approval");
+    let [emp] = await db.select().from(employees).where(eq(employees.id, staffId));
+    expect(emp.basicSalary).toBe(8_000_000);
+
+    const ok = await adminAgent.put(`/api/tenant/contract-renewal-reviews/${created.body.id}`).set("Origin", origin).send({ status: "Disetujui", approvedBy: "x" });
+    expect(ok.status).toBe(200);
+    [emp] = await db.select().from(employees).where(eq(employees.id, staffId));
+    expect(emp.basicSalary).toBe(9_500_000);
+    expect((emp.details as Record<string, unknown>).contractEndDate).toBe("2027-06-30");
+
+    const redo = await adminAgent.put(`/api/tenant/contract-renewal-reviews/${created.body.id}`).set("Origin", origin).send({ status: "Ditolak" });
+    expect(redo.status).toBe(409);
   });
 });

@@ -99,7 +99,9 @@ export const ContractRenewalManagement: React.FC = () => {
       currentContractEnd: emp?.contractEndDate || '2026-11-30',
       recommendation,
       newDurationMonths: recommendation === 'Perpanjang PKWT' ? newDurationMonths : undefined,
-      notes: `${notes.trim()}${newSalary > 0 ? ` [Usulan Gaji Baru: ${formatRupiah(newSalary)}]` : ''}`,
+      newSalary: newSalary > 0 && emp && newSalary !== emp.basicSalary ? newSalary : undefined,
+      effectiveDate,
+      notes: notes.trim(),
     });
 
     setIsModalOpen(false);

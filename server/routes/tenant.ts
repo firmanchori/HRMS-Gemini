@@ -77,6 +77,7 @@ import {
 } from "../db/schema.ts";
 import { requireTenantAdmin } from "../middleware/auth.ts";
 import { generateAssetsFromReceivedOrder, isReceivedStatus, deriveUsageStatus, isPostApprovalProcurementStatus, hasPendingProcurementApproval } from "../lib/assetLifecycle.ts";
+import { applyContractRenewalReview } from "../lib/contractRenewal.ts";
 import { createOfficialDocumentRecord, isFullySigned, buildVerificationUrl } from "../lib/documents.ts";
 import { personaliaActionSchema, createPersonaliaAction, submitPersonaliaAction, deletePersonaliaDraft, listPersonaliaActions, PersonaliaError } from "../lib/personalia.ts";
 import { buildApprovalSteps, currentBlockingStep, decideApproval, withDerivedStatus, ApprovalError } from "../lib/approvalEngine.ts";
@@ -2067,6 +2068,8 @@ const contractRenewalReviewSchema = z.object({
   currentContractEnd: zDateTime(),
   recommendation: z.enum(["Perpanjang PKWT", "Alih Status PKWTT (Tetap)", "Tidak Diperpanjang"]),
   newDurationMonths: z.number().int().min(0).optional(),
+  newSalary: z.number().int().min(0).optional().nullable(),
+  effectiveDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
   notes: z.string().trim().max(2000).optional(),
   status: z.enum(["Menunggu Approval", "Disetujui", "Ditolak"]).optional(),
   approvedBy: z.string().trim().max(200).optional(),
@@ -2079,7 +2082,8 @@ tenantRouter.post("/contract-renewal-reviews", validateBody(contractRenewalRevie
   if (!visibleEmployeeIds || !visibleEmployeeIds.includes(req.body.employeeId)) {
     return res.status(404).json({ error: "Karyawan tidak ditemukan" });
   }
-  const [created] = await db.insert(contractRenewalReviews).values({ ...req.body, tenantId }).returning();
+  // A review is always born pending — the client can't create one pre-approved.
+  const [created] = await db.insert(contractRenewalReviews).values({ ...req.body, status: "Menunggu Approval", approvedBy: null, tenantId }).returning();
   await logAudit({ actorUserId: req.session!.userId, tenantId, action: "contract_renewal_review.create", details: { contractRenewalReviewId: created.id } });
   res.status(201).json(created);
 });
@@ -2091,12 +2095,20 @@ tenantRouter.put("/contract-renewal-reviews/:id", validateParams(uuidParam("id")
   if (!existing || !visibleEmployeeIds || !visibleEmployeeIds.includes(existing.employeeId)) {
     return res.status(404).json({ error: "Review kontrak tidak ditemukan" });
   }
+  const decided = existing.status !== "Menunggu Approval";
+  if (decided && ((req.body.status && req.body.status !== existing.status) || req.body.recommendation || req.body.newSalary !== undefined || req.body.newDurationMonths !== undefined)) {
+    return res.status(409).json({ error: "Review ini sudah diputuskan dan tidak dapat diubah." });
+  }
   const [updated] = await db
     .update(contractRenewalReviews)
     .set(req.body)
     .where(eq(contractRenewalReviews.id, req.params.id))
     .returning();
   if (!updated) return res.status(404).json({ error: "Review kontrak tidak ditemukan" });
+  if (existing.status === "Menunggu Approval" && updated.status === "Disetujui") {
+    const [admin] = await db.select({ name: users.name }).from(users).where(eq(users.id, req.session!.userId)).limit(1);
+    await applyContractRenewalReview(updated.id, admin?.name ?? "Admin Tenant");
+  }
   await logAudit({ actorUserId: req.session!.userId, tenantId, action: "contract_renewal_review.update", details: { contractRenewalReviewId: updated.id } });
   res.json(updated);
 });

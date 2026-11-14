@@ -1799,6 +1799,8 @@ export interface ContractRenewalReview {
   currentContractEnd: string;
   recommendation: 'Perpanjang PKWT' | 'Alih Status PKWTT (Tetap)' | 'Tidak Diperpanjang';
   newDurationMonths?: number;
+  newSalary?: number;
+  effectiveDate?: string;
   notes: string;
   status: 'Menunggu Approval' | 'Disetujui' | 'Ditolak';
   approvedBy?: string;

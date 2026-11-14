@@ -4683,6 +4683,8 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const toMockContractReview = (r: ApiContractRenewalReview): ContractRenewalReview => ({
     ...r,
     newDurationMonths: r.newDurationMonths ?? undefined,
+    newSalary: r.newSalary ?? undefined,
+    effectiveDate: r.effectiveDate ?? undefined,
     notes: r.notes || '',
     approvedBy: r.approvedBy || undefined,
     newContractDocNumber: r.newContractDocNumber || undefined,
@@ -4695,43 +4697,29 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   };
 
+  /**
+   * The server applies an approved review (new end date / permanent status /
+   * proposed salary / PKWT-PKWTT document) — this only relays the decision
+   * and re-reads what changed. "Tidak Diperpanjang" still opens Offboarding.
+   */
   const reviewContractReview = (id: string, approved: boolean) => {
     const rev = contractReviews.find((r) => r.id === id);
     if (!rev) return;
-
-    if (approved) {
-      const emp = employees.find((e) => e.id === rev.employeeId);
-      if (emp) {
-        if (rev.recommendation === 'Perpanjang PKWT') {
-          const newEnd = new Date(Date.now() + (rev.newDurationMonths || 12) * 30 * 24 * 3600 * 1000).toISOString().split('T')[0];
-          updateEmployee(emp.id, { contractEndDate: newEnd });
-          createOfficialDocument({
-            type: 'PKWT',
-            title: `Perpanjangan Perjanjian Kerja Waktu Tertentu: ${emp.fullName}`,
-            targetEmployeeId: emp.id,
-            signeeName: currentUser.name,
-            signeeRole: 'VP Human Resources',
-            contentPreview: `Memperpanjang masa kerja kontrak atas nama ${emp.fullName} hingga ${newEnd}.`,
-          });
-        } else if (rev.recommendation === 'Alih Status PKWTT (Tetap)') {
-          updateEmployee(emp.id, { employmentType: 'Tetap', probationStatus: 'Lolos' });
-          createOfficialDocument({
-            type: 'PKWTT',
-            title: `Surat Pengangkatan Karyawan Tetap: ${emp.fullName}`,
-            targetEmployeeId: emp.id,
-            signeeName: currentUser.name,
-            signeeRole: 'President Director',
-            contentPreview: `Mengangkat ${emp.fullName} sebagai Karyawan Tetap.`,
-          });
-        } else if (rev.recommendation === 'Tidak Diperpanjang') {
-          initiateOffboarding(emp.id, 'Habis Kontrak', emp.contractEndDate || new Date().toISOString().split('T')[0], 'Kontrak selesai dan tidak diperpanjang.');
-        }
-      }
-    }
-
     tenantApi
       .updateContractRenewalReview(id, { status: approved ? 'Disetujui' : 'Ditolak', approvedBy: currentUser.name })
-      .then((updated) => setContractReviews((prev) => prev.map((r) => (r.id === id ? toMockContractReview(updated) : r))));
+      .then(async (updated) => {
+        setContractReviews((prev) => prev.map((r) => (r.id === id ? toMockContractReview(updated) : r)));
+        if (!approved) return;
+        if (rev.recommendation === 'Tidak Diperpanjang') {
+          const emp = employees.find((e) => e.id === rev.employeeId);
+          if (emp) initiateOffboarding(emp.id, 'Habis Kontrak', emp.contractEndDate || new Date().toISOString().split('T')[0], 'Kontrak selesai dan tidak diperpanjang.');
+          return;
+        }
+        const [emps, docs] = await Promise.all([tenantApi.listEmployees(), tenantApi.listDocuments()]);
+        setApiEmployees(emps);
+        setApiDocuments(docs);
+      })
+      .catch((err: unknown) => window.alert(err instanceof Error ? err.message : 'Gagal memproses review kontrak.'));
   };
 
   // 30. Calendar Events
