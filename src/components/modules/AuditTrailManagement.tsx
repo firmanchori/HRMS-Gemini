@@ -41,13 +41,8 @@ export const AuditTrailManagement: React.FC = () => {
   const [dateFilter, setDateFilter] = useState<'all' | 'today' | '7days' | '30days'>('all');
   const [selectedLog, setSelectedLog] = useState<AuditLogEntry | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
-  const [isSimulateModalOpen, setIsSimulateModalOpen] = useState(false);
 
-  // Simulation Form State
-  const [simModule, setSimModule] = useState('Personalia');
-  const [simAction, setSimAction] = useState('UPDATE_SALARY');
-  const [simRecordId, setSimRecordId] = useState('EMP-2024-001');
-  const [simSummary, setSimSummary] = useState('Penyesuaian gaji pokok tahunan dan tunjangan fungsional');
+  // Transient notice banner
   const [feedbackNotice, setFeedbackNotice] = useState<string | null>(null);
 
   // Unique lists for filter options
@@ -147,24 +142,6 @@ export const AuditTrailManagement: React.FC = () => {
     });
   }, [tabFilteredLogs, searchQuery, selectedModule, selectedAction, dateFilter]);
 
-  const [simSubmitAttempted, setSimSubmitAttempted] = useState(false);
-
-  const handleSimulateLog = (e: React.FormEvent) => {
-    e.preventDefault();
-    setSimSubmitAttempted(true);
-    if (!simSummary.trim()) return;
-
-    logAuditAction(simModule, simAction, simRecordId, simSummary, [
-      { field: 'status', oldValue: 'Draft', newValue: 'Applied' },
-      { field: 'updatedBy', oldValue: 'System', newValue: currentUser?.name || 'Administrator' },
-      { field: 'timestamp', oldValue: '-', newValue: new Date().toISOString() },
-    ]);
-
-    setIsSimulateModalOpen(false);
-    setSimSummary('');
-    setFeedbackNotice('Log audit baru berhasil dicatat dan diverifikasi ke database audit trail.');
-    setTimeout(() => setFeedbackNotice(null), 4000);
-  };
 
   const handleExportCSV = () => {
     if (filteredLogs.length === 0) {
@@ -255,14 +232,6 @@ export const AuditTrailManagement: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2 shrink-0 flex-wrap">
-          <button
-            onClick={() => setIsSimulateModalOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-md text-xs font-semibold shadow-xs transition-colors border border-slate-200"
-            title="Tambah pencatatan log audit manual untuk uji simulasi"
-          >
-            <Plus className="w-3.5 h-3.5 text-indigo-600" />
-            <span>+ Simulasi Catat Log</span>
-          </button>
           <button
             onClick={handleExportCSV}
             className="flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-md text-xs font-semibold shadow-xs transition-colors"
@@ -780,108 +749,6 @@ export const AuditTrailManagement: React.FC = () => {
         </div>
       )}
 
-      {/* Simulation Modal */}
-      {isSimulateModalOpen && (
-        <div
-          onClick={() => setIsSimulateModalOpen(false)}
-          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4 animate-fadeIn"
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-200"
-          >
-            <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Plus className="w-5 h-5 text-indigo-400" />
-                <h3 className="font-bold text-sm">Simulasi Catat Log Audit Baru</h3>
-              </div>
-              <button
-                onClick={() => setIsSimulateModalOpen(false)}
-                className="p-1 hover:bg-slate-800 text-slate-400 hover:text-white rounded"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSimulateLog} noValidate className="p-5 space-y-4 text-xs">
-              <div className="space-y-1">
-                <label className="font-semibold text-slate-700 block">Pilih Modul:</label>
-                <select
-                  value={simModule}
-                  onChange={(e) => setSimModule(e.target.value)}
-                  className="w-full py-2 px-3 border border-slate-300 rounded-lg text-xs"
-                >
-                  <option value="Personalia">Personalia (Promosi & Demosi)</option>
-                  <option value="Payroll">Payroll & PPh 21 TER</option>
-                  <option value="Presensi">Presensi, Shift & Cuti</option>
-                  <option value="Approval Center">Pusat Approval Bertingkat</option>
-                  <option value="GA Assets">GA & Aset Barcode</option>
-                  <option value="RBAC User">Manajemen User & RBAC</option>
-                  <option value="Dokumen Legal">Tata Kelola Dokumen & Kop</option>
-                </select>
-              </div>
-
-              <div className="space-y-1">
-                <label className="font-semibold text-slate-700 block">Nama Aksi (Action Type):</label>
-                <select
-                  value={simAction}
-                  onChange={(e) => setSimAction(e.target.value)}
-                  className="w-full py-2 px-3 border border-slate-300 rounded-lg text-xs font-mono"
-                >
-                  <option value="UPDATE_SALARY">UPDATE_SALARY</option>
-                  <option value="APPROVE_FINAL">APPROVE_FINAL</option>
-                  <option value="SUBMIT_PROPOSAL">SUBMIT_PROPOSAL</option>
-                  <option value="REJECT">REJECT</option>
-                  <option value="ENROLL_SIGNATURE">ENROLL_SIGNATURE</option>
-                  <option value="GENERATE_PAYROLL">GENERATE_PAYROLL</option>
-                </select>
-              </div>
-
-              <div className="space-y-1">
-                <label className="font-semibold text-slate-700 block">Nomor / ID Rekord Terkait:</label>
-                <input
-                  type="text"
-                  value={simRecordId}
-                  onChange={(e) => setSimRecordId(e.target.value)}
-                  placeholder="Contoh: EMP-2024-001, clm-002, run-2026-10"
-                  className="w-full py-2 px-3 border border-slate-300 rounded-lg text-xs font-mono"
-                />
-              </div>
-
-              <ValidatedTextarea
-                label="Ringkasan Perubahan (Changes Summary):"
-                required
-                requiredLabel="Ringkasan perubahan wajib diisi"
-                rows={3}
-                value={simSummary}
-                onChange={setSimSummary}
-                showError={simSubmitAttempted}
-                placeholder="Deskripsikan perubahan transaksi secara detail..."
-              />
-
-              <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-lg text-[11px] text-indigo-900 leading-relaxed">
-                Log ini akan dicatat atas nama akun aktif <strong>{currentUser?.name || 'Administrator'}</strong> dengan timestamp saat ini dan langsung muncul di tabel audit.
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-200">
-                <button
-                  type="button"
-                  onClick={() => setIsSimulateModalOpen(false)}
-                  className="px-3.5 py-2 border border-slate-300 hover:bg-slate-100 rounded-lg font-semibold"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold"
-                >
-                  Simpan Log Audit
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

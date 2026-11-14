@@ -8,7 +8,7 @@ import bcrypt from "bcryptjs";
 import { createApp } from "../app.ts";
 import { withCsrf } from "../lib/testCsrf.ts";
 import { db, pool } from "../db/client.ts";
-import { tenants, tenantSubscriptions, users, subscriptionPlans, companyEntities, employees, employeeAccounts, sessions, rolePermissionEntries, roleDefinitions, payrollRecords, auditLogEntries, officialDocuments, businessTrips } from "../db/schema.ts";
+import { employeeKpis, tenants, tenantSubscriptions, users, subscriptionPlans, companyEntities, employees, employeeAccounts, sessions, rolePermissionEntries, roleDefinitions, payrollRecords, auditLogEntries, officialDocuments, businessTrips } from "../db/schema.ts";
 
 /**
  * Proves the RBAC-granular rollout (security review, user 2026-11-10:
@@ -71,6 +71,8 @@ beforeAll(async () => {
 afterAll(async () => {
   await db.delete(rolePermissionEntries).where(eq(rolePermissionEntries.tenantId, tenantId));
   await db.delete(roleDefinitions).where(eq(roleDefinitions.tenantId, tenantId));
+  await db.delete(employeeKpis).where(eq(employeeKpis.tenantId, tenantId));
+  await db.update(employees).set({ managerId: null }).where(eq(employees.tenantId, tenantId));
   await db.delete(payrollRecords).where(eq(payrollRecords.tenantId, tenantId));
   await db.delete(officialDocuments).where(eq(officialDocuments.tenantId, tenantId));
   await db.delete(businessTrips).where(eq(businessTrips.tenantId, tenantId));
@@ -169,5 +171,21 @@ describe("RBAC granular enforcement — employee module access is real, not deco
     expect(read.status).toBe(200);
     const write = await staffAgent.post("/api/employee/audit-trail").set("Origin", origin).send({});
     expect([404, 405]).toContain(write.status);
+  });
+
+  it("KPI assessment follows the reporting line: not self, not a stranger, yes for the real superior", async () => {
+    expect((await grant("kpi", { view: true, create: true, edit: true })).status).toBe(201);
+    const kpi = (employeeId: string) => ({ employeeId, period: "2026", quarter: "Q4", evaluatedAt: "2026-11-10", finalScore: 80, metrics: [] });
+    const self = await staffAgent.post("/api/employee/employee-kpis/upsert").set("Origin", origin).send(kpi(employeeId));
+    expect(self.status).toBe(403);
+
+    const [stranger] = await db.insert(employees).values({ tenantId, entityId, nik: "RBAC-0002", fullName: "Bukan Bawahan" }).returning();
+    const denied = await staffAgent.post("/api/employee/employee-kpis/upsert").set("Origin", origin).send(kpi(stranger.id));
+    expect(denied.status).toBe(403);
+
+    const [report] = await db.insert(employees).values({ tenantId, entityId, nik: "RBAC-0003", fullName: "Bawahan Langsung", managerId: employeeId }).returning();
+    const ok = await staffAgent.post("/api/employee/employee-kpis/upsert").set("Origin", origin).send({ ...kpi(report.id), reviewer: "Dipalsukan" });
+    expect(ok.status).toBe(201);
+    expect(ok.body.reviewer).toBe("Staff Finance Test"); // reviewer name comes from the session, not the body
   });
 });

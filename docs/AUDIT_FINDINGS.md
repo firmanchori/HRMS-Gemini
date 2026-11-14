@@ -212,17 +212,17 @@ state hidup di React context + simulasi `localStorage` per-browser.
 - [x] **(High)** Penomoran NIK karyawan hasil auto-onboarding **hardcode**, melewati
   mesin format NIK yang bisa dikonfigurasi admin (`generateNextNik`,
   `HrmsContext.tsx:3480-3499`) — dua aturan penomoran NIK berbeda berjalan paralel.
-- [ ] **(High)** `PerformanceKpi` tidak punya pengecekan hierarki atasan-bawahan sama
+- [x] **(High)** `PerformanceKpi` tidak punya pengecekan hierarki atasan-bawahan sama
   sekali — siapa saja bisa menilai siapa saja. Terputus total dari
   `ProbationManagement` (nol referensi silang) walau keduanya seharusnya saling
   menginformasikan.
 - [x] **(High)** Aksi disiplin (SP1-3, Skorsing, PHK) di `ComplianceManagement` **tidak
   tercatat di audit trail** — tindakan HR yang secara legal sensitif tidak terekam,
   padahal perubahan payroll/RBAC lain konsisten tercatat.
-- [ ] **(Medium)** `MigrationWizardModal` (impor massal karyawan) memalsukan PII untuk
+- [x] **(Medium)** `MigrationWizardModal` (impor massal karyawan) memalsukan PII untuk
   kolom yang tidak ada di file sumber secara diam-diam, dan tidak tercatat di audit
   trail.
-- [ ] **(Low)** Fitur "Simulasi" di `AuditTrailManagement` menyuntikkan entri audit
+- [x] **(Low)** Fitur "Simulasi" di `AuditTrailManagement` menyuntikkan entri audit
   palsu yang tidak bisa dibedakan dari entri asli — risiko tertukar saat audit nyata.
 - [ ] **(Low)** Skor tes online kandidat (`CandidateOnlineTestPortal`) tidak otomatis
   masuk ke skor — HR harus input ulang manual nilainya (bukan "otomatis" seperti

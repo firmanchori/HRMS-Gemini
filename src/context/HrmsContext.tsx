@@ -2291,7 +2291,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       permanentAppointmentDate: employmentType === 'Tetap' ? joinDate : undefined,
       probationStatus: employmentType === 'Tetap' ? 'Sedang Berjalan' : 'Tanpa Percobaan',
       probationEndDate: employmentType === 'Tetap' ? '2027-01-31' : undefined,
-      outsourceVendor: employmentType === 'Outsource' ? 'PT Mitra Prima Solusindo' : undefined,
+      outsourceVendor: undefined,
       department,
       position,
       grade: 'L2',
@@ -2785,7 +2785,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         permanentAppointmentDate: isTetap ? today : undefined,
         probationStatus: isTetap ? 'Lolos' : 'Tanpa Percobaan',
         probationEndDate: isTetap ? today : undefined,
-        outsourceVendor: (r.status as any) === 'Outsource' ? 'PT Mitra Prima Solusindo' : undefined,
+        outsourceVendor: undefined,
         department: r.departemen,
         position: r.jabatan,
         grade: 'L3',
@@ -2835,7 +2835,10 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (newEmps.length > 0) {
       // Fired in the background — successCount/errorCount below is pure
       // row validation and can be reported to the wizard immediately.
-      Promise.all(newEmps.map((e) => addEmployee(e)));
+      Promise.allSettled(newEmps.map((e) => addEmployee(e))).then((results) => {
+        const ok = results.filter((r) => r.status === 'fulfilled').length;
+        logAuditAction('Migrasi Karyawan', 'BULK_IMPORT', 'migration', `Impor massal karyawan: ${ok} berhasil dari ${newEmps.length} baris valid (${errorCount} baris ditolak validasi). Data identitas/pajak/BPJS/rekening dibiarkan kosong untuk dilengkapi.`);
+      });
     }
 
     return { successCount, errorCount };

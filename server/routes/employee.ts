@@ -11,6 +11,7 @@ import { authLimiter } from "../lib/rateLimit.ts";
 import { logAudit } from "../lib/audit.ts";
 import { logLoginAttempt, isAccountLockedOut, LOCKOUT_WINDOW_MINUTES, alertIfAccountJustLockedOut } from "./auth.ts";
 import { getPermission } from "../lib/permissions.ts";
+import { isInManagerChain } from "../lib/orgHierarchy.ts";
 import { checkClockIn, checkClockOut, performClockIn, performClockOut, ClockError } from "../lib/attendanceClock.ts";
 import { encryptSecret, decryptSecret } from "../lib/crypto.ts";
 import { generateTotpSecret, totpOtpauthUrl, verifyTotpCode, generateBackupCodes, hashBackupCode, consumeBackupCode } from "../lib/totp.ts";
@@ -718,6 +719,15 @@ employeeRouter.post("/employee-kpis/upsert", requirePermission("kpi", "create"),
   const tenantId = req.session!.tenantId!;
   const [target] = await db.select({ id: employees.id }).from(employees).where(and(eq(employees.id, req.body.employeeId), eq(employees.tenantId, tenantId))).limit(1);
   if (!target) return res.status(404).json({ error: "Karyawan tidak ditemukan" });
+  // Only the person's real superiors (or an HR role granted kpi "approve") may assess them — never themselves, never an arbitrary peer.
+  const assessorId = req.session!.employeeId!;
+  if (assessorId === target.id) return res.status(403).json({ error: "Anda tidak dapat menilai KPI diri sendiri." });
+  const kpiPerm = await getPermission(tenantId, "kpi", req.session!.roleKey!);
+  if (!kpiPerm.approve && !(await isInManagerChain(tenantId, assessorId, target.id))) {
+    return res.status(403).json({ error: "KPI hanya dapat dinilai oleh atasan langsung/atasan di atasnya atau peran HR yang berwenang." });
+  }
+  const [assessor] = await db.select({ fullName: employees.fullName }).from(employees).where(eq(employees.id, assessorId)).limit(1);
+  req.body.reviewer = assessor?.fullName ?? req.body.reviewer;
   const [existing] = await db
     .select()
     .from(employeeKpis)
