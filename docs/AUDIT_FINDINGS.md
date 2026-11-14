@@ -51,7 +51,7 @@ state hidup di React context + simulasi `localStorage` per-browser.
     tapi `HrmsContext.tsx:3013-3020` langsung set status akhir `'Disetujui'`.
   - `PayrollManagement.tsx:322` → `reviewReimbursementClaim` finalize dari dalam modul
     Payroll, melompati level manager→finance.
-- [ ] **(High)** Procurement PR tidak pernah sinkron balik ke `approvalItems`
+- [x] **(High)** Procurement PR tidak pernah sinkron balik ke `approvalItems`
   (`updateProcurementStatus`, `HrmsContext.tsx:2366-2385` tidak pernah update tiket
   terkait) — tiket "hantu" tertahan selamanya di status `'Menunggu'` di Approval Center
   meski PR-nya sudah selesai diproses di modul Procurement.
@@ -72,7 +72,7 @@ state hidup di React context + simulasi `localStorage` per-browser.
 - [x] **(High)** Tidak ada konsep approver **"mengetahui"** (CC/acknowledge-only) yang
   berbeda dari approver pemutus keputusan — nol hit untuk konsep ini di seluruh model
   data/UI approval.
-- [ ] **(High)** RBAC matrix (`RbacManagement.tsx`, `TenantRbacManagement.tsx`) sama
+- [x] **(High)** RBAC matrix (`RbacManagement.tsx`, `TenantRbacManagement.tsx`) sama
   sekali **tidak ditegakkan**. Toggle "Approve" per role tidak memengaruhi tombol
   Setujui/Tolak di `ApprovalCenter.tsx` (tidak ada pengecekan `getRolePermission` di
   file itu). Konfirmasi lebih luas: tidak ada satu pun modul operasional lain yang
@@ -88,11 +88,11 @@ state hidup di React context + simulasi `localStorage` per-browser.
   approver, atau pihak "mengetahui" (`DocumentManagement.tsx:930-983` dan
   `createOfficialDocument`, `HrmsContext.tsx:2388-2424`). Status `'Draft'` memang ada di
   tipe data tapi tidak pernah benar-benar dipakai (dead code).
-- [ ] **(High)** `OfficialDocument` hanya punya satu `signeeName`/`signeeRole` (string
+- [x] **(High)** `OfficialDocument` hanya punya satu `signeeName`/`signeeRole` (string
   tunggal) — tidak ada array multi-signer dengan status & timestamp konfirmasi
   masing-masing. Tipe `PersonaliaSignatory` yang lebih lengkap sudah ada di tempat lain
   tapi tidak pernah diadopsi oleh `OfficialDocument` (`src/types/hrms.ts:1276-1292`).
-- [ ] **(High)** Blok tanda tangan multi-tier di Studio (Dibuat Oleh/Mengetahui/
+- [x] **(High)** Blok tanda tangan multi-tier di Studio (Dibuat Oleh/Mengetahui/
   Menyetujui) **murni kosmetik untuk tampilan cetak** — tidak ada field `status`,
   `confirmedAt`, atau `userId` per penandatangan, dan nol tombol "konfirmasi/setuju"
   di seluruh `DocumentManagement.tsx` (dikonfirmasi grep). Terlihat seperti alur
@@ -105,7 +105,7 @@ state hidup di React context + simulasi `localStorage` per-browser.
   UU ITE compliance" tidak didukung implementasi nyata — hash QR dibuat dengan
   `Math.random().toString(36)` (`HrmsContext.tsx:2409`), bukan hash kriptografis isi
   dokumen.
-- [ ] **(Medium)** Tidak ada status `'Dicabut'`/`'Digantikan'`/`'Expired'` untuk dokumen
+- [x] **(Medium)** Tidak ada status `'Dicabut'`/`'Digantikan'`/`'Expired'` untuk dokumen
   — hanya `'Resmi Diterbitkan' | 'Draft'`. SP yang direvisi/SK yang digantikan tidak
   punya cara direpresentasikan sebagai tidak berlaku lagi.
 - [ ] **(Medium)** Nomor surat selalu final saat dibuat, bukan setelah disetujui. Modul
@@ -197,26 +197,26 @@ state hidup di React context + simulasi `localStorage` per-browser.
   4 dari ~35+ koleksi data (divisions, departments, masterJobPositions, orgNodes) —
   `employees`, `assets`, `payrollRecords`, `documents`, `loans` dll hanya di-scope per
   tenant, **tidak per entity**, padahal `Employee.entityId` ada di model data.
-- [ ] **(Critical)** `businessTrips` punya fallback bug: jika tenant aktif belum punya
+- [x] **(Critical)** `businessTrips` punya fallback bug: jika tenant aktif belum punya
   data trip, UI malah menampilkan **trip dari SEMUA tenant** (`scoped.length > 0 ?
   scoped : businessTrips`, `HrmsContext.tsx:4549-4552`) — pola kebocoran data
   cross-tenant jika ini tersambung ke database nyata.
 
 ## 5. Rekrutmen, Onboarding, KPI, Compliance, Admin
 
-- [ ] **(Critical)** Karyawan yang dibuat otomatis dari jalur Rekrutmen→Onboarding
+- [x] **(Critical)** Karyawan yang dibuat otomatis dari jalur Rekrutmen→Onboarding
   memiliki **PII yang dipalsukan/di-random** — tanggal lahir, agama, status
   pernikahan, NIK KTP, No KK, NPWP, No BPJS, rekening bank semuanya diisi acak
   (`HrmsContext.tsx:2691-2708`). Berisiko legal/compliance tinggi jika dianggap data
   sungguhan.
-- [ ] **(High)** Penomoran NIK karyawan hasil auto-onboarding **hardcode**, melewati
+- [x] **(High)** Penomoran NIK karyawan hasil auto-onboarding **hardcode**, melewati
   mesin format NIK yang bisa dikonfigurasi admin (`generateNextNik`,
   `HrmsContext.tsx:3480-3499`) — dua aturan penomoran NIK berbeda berjalan paralel.
 - [ ] **(High)** `PerformanceKpi` tidak punya pengecekan hierarki atasan-bawahan sama
   sekali — siapa saja bisa menilai siapa saja. Terputus total dari
   `ProbationManagement` (nol referensi silang) walau keduanya seharusnya saling
   menginformasikan.
-- [ ] **(High)** Aksi disiplin (SP1-3, Skorsing, PHK) di `ComplianceManagement` **tidak
+- [x] **(High)** Aksi disiplin (SP1-3, Skorsing, PHK) di `ComplianceManagement` **tidak
   tercatat di audit trail** — tindakan HR yang secara legal sensitif tidak terekam,
   padahal perubahan payroll/RBAC lain konsisten tercatat.
 - [ ] **(Medium)** `MigrationWizardModal` (impor massal karyawan) memalsukan PII untuk

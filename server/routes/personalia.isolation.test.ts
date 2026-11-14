@@ -202,4 +202,25 @@ describe("Personalia end-to-end", () => {
     [row] = await db.select().from(personaliaActions).where(eq(personaliaActions.id, created.body.id));
     expect(row.appliedAt).not.toBeNull();
   });
+
+  it("compliance writes are audited; an issued document can be revoked (with reason) but not an unsigned one", async () => {
+    const created = await adminAgent.post("/api/tenant/compliance-records").set("Origin", origin).send({ employeeId: staffId, level: "SP 2", violationReason: "Uji audit", letterNumber: "SP-AUD-1", issueDate: "2026-11-01", validUntil: "2027-05-01" });
+    expect(created.status).toBe(201);
+    const logs = await db.select().from(auditLogEntries).where(eq(auditLogEntries.tenantId, tenantId));
+    expect(logs.some((l) => l.action === "compliance.issued")).toBe(true);
+
+    const [action] = await db.select().from(personaliaActions).where(eq(personaliaActions.type, "Promosi"));
+    const docId = action.documentId!;
+    const early = await adminAgent.post(`/api/tenant/documents/${docId}/revoke`).set("Origin", origin).send({ mode: "Dicabut", reason: "Salah ketik" });
+    expect(early.status).toBe(400); // still "Menunggu Tanda Tangan"
+
+    await adminAgent.post(`/api/tenant/documents/${docId}/signatories/0/confirm`).set("Origin", origin).send({}).expect(200);
+    const noReason = await adminAgent.post(`/api/tenant/documents/${docId}/revoke`).set("Origin", origin).send({ mode: "Dicabut", reason: "" });
+    expect(noReason.status).toBe(400);
+    const revoked = await adminAgent.post(`/api/tenant/documents/${docId}/revoke`).set("Origin", origin).send({ mode: "Dicabut", reason: "SK direvisi" });
+    expect(revoked.status).toBe(200);
+    expect(revoked.body.status).toBe("Dicabut");
+    const again = await adminAgent.post(`/api/tenant/documents/${docId}/signatories/0/confirm`).set("Origin", origin).send({});
+    expect(again.status).toBe(400);
+  });
 });

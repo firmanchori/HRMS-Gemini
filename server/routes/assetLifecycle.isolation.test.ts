@@ -8,7 +8,7 @@ import bcrypt from "bcryptjs";
 import { createApp } from "../app.ts";
 import { withCsrf } from "../lib/testCsrf.ts";
 import { db, pool } from "../db/client.ts";
-import { tenants, tenantSubscriptions, users, subscriptionPlans, sessions, auditLogEntries, companyEntities, employees, gaAssets, procurementOrders, offboardingRecords, entityClosure } from "../db/schema.ts";
+import { approvalItems, tenants, tenantSubscriptions, users, subscriptionPlans, sessions, auditLogEntries, companyEntities, employees, gaAssets, procurementOrders, offboardingRecords, entityClosure } from "../db/schema.ts";
 
 /** Procurement -> Asset link, return-to-GA, derived usageStatus, offboarding clearance against the real register. */
 const app = createApp();
@@ -39,6 +39,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await db.delete(offboardingRecords).where(eq(offboardingRecords.tenantId, tenantId));
   await db.delete(gaAssets).where(eq(gaAssets.tenantId, tenantId));
+  await db.delete(approvalItems).where(eq(approvalItems.tenantId, tenantId));
   await db.delete(procurementOrders).where(eq(procurementOrders.tenantId, tenantId));
   await db.delete(employees).where(eq(employees.tenantId, tenantId));
   await db.delete(entityClosure).where(eq(entityClosure.ancestorEntityId, entityId));
@@ -90,5 +91,25 @@ describe("asset lifecycle", () => {
     expect(ret.body.assignedToEmployeeId).toBeNull();
     const ok = await agent.put(`/api/tenant/offboarding-records/${blocked.body.id}`).set("Origin", origin).send({ assetReturned: true });
     expect(ok.status).toBe(200);
+  });
+
+  it("a PR waiting in the Approval Center cannot advance; final approval moves the order itself (no ghost ticket)", async () => {
+    const po = await agent.post("/api/tenant/procurement-orders").set("Origin", origin).send({
+      prNumber: "PR-GATE", poNumber: "", vendorName: "PT Vendor", itemName: "Meja", quantity: 1, estimatedCost: 1000000, requestor: "GA", department: "IT", requestedDate: "2026-11-01",
+    });
+    expect(po.status).toBe(201);
+    const item = await agent.post("/api/tenant/approval-items").set("Origin", origin).send({ category: "Procurement PR", referenceId: po.body.id, title: "PR Meja", requesterId: empId, assignedApproverRole: "manager" });
+    expect(item.status).toBe(201);
+
+    const blocked = await agent.put(`/api/tenant/procurement-orders/${po.body.id}`).set("Origin", origin).send({ status: "PO Terbit" });
+    expect(blocked.status).toBe(409);
+
+    const decide = await agent.post(`/api/tenant/approval-items/${item.body.id}/decision`).set("Origin", origin).send({ decision: "Disetujui" });
+    expect(decide.status).toBe(200);
+    const [order] = await db.select().from(procurementOrders).where(eq(procurementOrders.id, po.body.id));
+    expect(order.status).toBe("Disetujui HR/Finance");
+
+    const next = await agent.put(`/api/tenant/procurement-orders/${po.body.id}`).set("Origin", origin).send({ status: "PO Terbit" });
+    expect(next.status).toBe(200);
   });
 });

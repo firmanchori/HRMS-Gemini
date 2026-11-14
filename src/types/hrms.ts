@@ -1301,7 +1301,7 @@ export interface OfficialDocument {
   signeeName: string;
   signeeRole: string;
   qrVerificationUrl: string | null;
-  status: 'Resmi Diterbitkan' | 'Menunggu Tanda Tangan' | 'Draft';
+  status: 'Resmi Diterbitkan' | 'Menunggu Tanda Tangan' | 'Draft' | 'Dicabut' | 'Digantikan';
   signatories?: { roleLabel: string; isRequired: boolean; sortOrder: number; confirmedByEmployeeId: string | null; confirmedByName: string | null; confirmedAt: string | null }[];
   contentPreview: string;
   renderedHtml?: string;

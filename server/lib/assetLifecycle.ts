@@ -1,6 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "../db/client.ts";
-import { gaAssets, procurementOrders } from "../db/schema.ts";
+import { gaAssets, procurementOrders, approvalItems } from "../db/schema.ts";
+import { finalizeHooks } from "./approvalEngine.ts";
 
 /**
  * Procurement -> Asset link (audit findings §3, "persis contoh pemilik
@@ -80,3 +81,25 @@ export function deriveUsageStatus(a: { assignedToEmployeeId: string | null; cond
   if (a.condition === "Perlu Perbaikan" || a.condition === "Rusak") return "Dalam Perbaikan";
   return a.assignedToEmployeeId ? "Digunakan" : "Tersedia";
 }
+
+export const PROCUREMENT_PR_CATEGORY = "Procurement PR";
+const PRE_APPROVAL_STATUSES = new Set(["Pengajuan PR", "Quotation Diterima"]);
+
+/** True while this order's PR is still waiting in the Approval Center — it must not advance to PO/contract/received until decided. */
+export async function hasPendingProcurementApproval(tenantId: string, orderId: string): Promise<boolean> {
+  const rows = await db.select({ status: approvalItems.status }).from(approvalItems).where(and(eq(approvalItems.tenantId, tenantId), eq(approvalItems.category, PROCUREMENT_PR_CATEGORY), eq(approvalItems.referenceId, orderId)));
+  return rows.some((r) => r.status === "Menunggu" || r.status === "Eskalasi Terlambat");
+}
+
+export function isPostApprovalProcurementStatus(status: string): boolean {
+  return !PRE_APPROVAL_STATUSES.has(status);
+}
+
+// Final PR approval moves the order to "Disetujui HR/Finance" server-side, so the order and its approval ticket can never disagree.
+finalizeHooks[PROCUREMENT_PR_CATEGORY] = async (item) => {
+  if (item.status !== "Disetujui") return;
+  const [order] = await db.select().from(procurementOrders).where(and(eq(procurementOrders.id, item.referenceId), eq(procurementOrders.tenantId, item.tenantId))).limit(1);
+  if (order && PRE_APPROVAL_STATUSES.has(order.status)) {
+    await db.update(procurementOrders).set({ status: "Disetujui HR/Finance" }).where(eq(procurementOrders.id, order.id));
+  }
+};

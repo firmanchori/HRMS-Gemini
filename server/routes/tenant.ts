@@ -76,7 +76,7 @@ import {
   vendorInvoices,
 } from "../db/schema.ts";
 import { requireTenantAdmin } from "../middleware/auth.ts";
-import { generateAssetsFromReceivedOrder, isReceivedStatus, deriveUsageStatus } from "../lib/assetLifecycle.ts";
+import { generateAssetsFromReceivedOrder, isReceivedStatus, deriveUsageStatus, isPostApprovalProcurementStatus, hasPendingProcurementApproval } from "../lib/assetLifecycle.ts";
 import { createOfficialDocumentRecord, isFullySigned, buildVerificationUrl } from "../lib/documents.ts";
 import { personaliaActionSchema, createPersonaliaAction, submitPersonaliaAction, deletePersonaliaDraft, listPersonaliaActions, PersonaliaError } from "../lib/personalia.ts";
 import { buildApprovalSteps, currentBlockingStep, decideApproval, withDerivedStatus, ApprovalError } from "../lib/approvalEngine.ts";
@@ -2912,6 +2912,7 @@ tenantRouter.post("/compliance-records", validateBody(complianceRecordSchema), a
   const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
   if (!visibleEmployeeIds.includes(req.body.employeeId)) return res.status(403).json({ error: "Karyawan di luar ruang lingkup Anda" });
   const [created] = await db.insert(complianceRecords).values({ ...req.body, tenantId }).returning();
+  await logAudit({ actorUserId: req.session!.userId, tenantId, action: "compliance.issued", details: { complianceRecordId: created.id, employeeId: created.employeeId, level: created.level, letterNumber: created.letterNumber } });
   res.status(201).json(created);
 });
 
@@ -2921,6 +2922,7 @@ tenantRouter.put("/compliance-records/:id", validateParams(uuidParam("id")), val
   const [existing] = await db.select().from(complianceRecords).where(and(eq(complianceRecords.id, req.params.id), eq(complianceRecords.tenantId, tenantId))).limit(1);
   if (!existing || !visibleEmployeeIds.includes(existing.employeeId)) return res.status(404).json({ error: "Data kepatuhan tidak ditemukan" });
   const [updated] = await db.update(complianceRecords).set(req.body).where(eq(complianceRecords.id, req.params.id)).returning();
+  await logAudit({ actorUserId: req.session!.userId, tenantId, action: "compliance.updated", details: { complianceRecordId: updated.id, employeeId: updated.employeeId, level: updated.level, status: updated.status, changedFields: Object.keys(req.body) } });
   res.json(updated);
 });
 
@@ -3235,6 +3237,9 @@ tenantRouter.put("/procurement-orders/:id", validateParams(uuidParam("id")), val
   const [existing] = await db.select().from(procurementOrders).where(and(eq(procurementOrders.id, req.params.id), eq(procurementOrders.tenantId, tenantId))).limit(1);
   if (!existing) return res.status(404).json({ error: "Procurement order tidak ditemukan" });
   const { receivingCategory, receivingBuilding, receivingRoom, ...orderPatch } = req.body;
+  if (orderPatch.status && orderPatch.status !== existing.status && isPostApprovalProcurementStatus(orderPatch.status) && (await hasPendingProcurementApproval(tenantId, existing.id))) {
+    return res.status(409).json({ error: "PR ini masih menunggu persetujuan di Approval Center dan belum bisa dilanjutkan." });
+  }
   const [updated] = await db.update(procurementOrders).set(orderPatch).where(eq(procurementOrders.id, req.params.id)).returning();
   // Marking goods received now creates the asset records (vendor/PO/warranty carried over) instead of leaving GA to retype them.
   let generatedAssets: unknown[] = [];
@@ -3577,6 +3582,7 @@ tenantRouter.post(
     const index = Number(req.params.index);
     const [doc] = await db.select().from(officialDocuments).where(and(eq(officialDocuments.id, req.params.id), eq(officialDocuments.tenantId, tenantId))).limit(1);
     if (!doc) return res.status(404).json({ error: "Dokumen tidak ditemukan" });
+    if (doc.status === "Dicabut" || doc.status === "Digantikan") return res.status(400).json({ error: `Dokumen ini berstatus ${doc.status} dan tidak dapat ditandatangani.` });
     if (doc.status === "Resmi Diterbitkan") return res.status(400).json({ error: "Dokumen ini sudah resmi diterbitkan, seluruh tanda tangan sudah lengkap." });
 
     const signatories = [...doc.signatories];
@@ -3610,6 +3616,32 @@ tenantRouter.post(
     res.json(updated);
   }
 );
+
+/**
+ * A document that is no longer valid (a revised SP, a superseded SK, a
+ * withdrawn letter) is marked "Dicabut" or "Digantikan" with a mandatory
+ * reason, never deleted — the number and QR history stay auditable. Only an
+ * already-issued document can be revoked/superseded.
+ */
+const revokeDocumentSchema = z.object({
+  mode: z.enum(["Dicabut", "Digantikan"]),
+  reason: z.string().trim().min(3, "Alasan wajib diisi").max(1000),
+  replacedByDocumentId: z.string().uuid().optional().nullable(),
+});
+tenantRouter.post("/documents/:id/revoke", validateParams(uuidParam("id")), validateBody(revokeDocumentSchema), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [doc] = await db.select().from(officialDocuments).where(and(eq(officialDocuments.id, req.params.id), eq(officialDocuments.tenantId, tenantId))).limit(1);
+  if (!doc) return res.status(404).json({ error: "Dokumen tidak ditemukan" });
+  if (doc.status !== "Resmi Diterbitkan") return res.status(400).json({ error: "Hanya dokumen yang sudah resmi diterbitkan yang dapat dicabut atau digantikan." });
+  if (req.body.mode === "Digantikan") {
+    if (!req.body.replacedByDocumentId) return res.status(400).json({ error: "Dokumen pengganti wajib dipilih." });
+    const [replacement] = await db.select({ id: officialDocuments.id }).from(officialDocuments).where(and(eq(officialDocuments.id, req.body.replacedByDocumentId), eq(officialDocuments.tenantId, tenantId))).limit(1);
+    if (!replacement || replacement.id === doc.id) return res.status(400).json({ error: "Dokumen pengganti tidak valid." });
+  }
+  const [updated] = await db.update(officialDocuments).set({ status: req.body.mode }).where(eq(officialDocuments.id, doc.id)).returning();
+  await logAudit({ actorUserId: req.session!.userId, tenantId, action: "document.revoked", details: { documentId: doc.id, documentNumber: doc.documentNumber, mode: req.body.mode, reason: req.body.reason, replacedByDocumentId: req.body.replacedByDocumentId ?? null } });
+  res.json(updated);
+});
 
 // ---------------------------------------------------------------------------
 // eNPS Engagement Survey
