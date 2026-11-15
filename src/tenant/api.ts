@@ -670,6 +670,24 @@ export interface PayrollPeriod {
   disbursedAt: string | null;
 }
 
+export interface ThrPayment {
+  id: string;
+  tenantId: string;
+  employeeId: string;
+  year: number;
+  occasion: string;
+  paymentDate: string;
+  tenureMonths: number;
+  baseWage: number;
+  grossAmount: number;
+  terCategory: "TER A" | "TER B" | "TER C";
+  terRatePercent: number;
+  taxAmount: number;
+  netAmount: number;
+  status: "Draft" | "Paid";
+  paidAt: string | null;
+}
+
 export interface ReimbursementClaimRow {
   id: string;
   tenantId: string;
@@ -1358,6 +1376,11 @@ export const tenantApi = {
   generatePayrollRun: (periodKey: string) => request<{ period: PayrollPeriod; records: PayrollRecord[] }>("/api/tenant/payroll-runs", { method: "POST", body: JSON.stringify({ periodKey }) }),
   approvePayrollRun: (periodKey: string) => request<{ ok: true }>(`/api/tenant/payroll-runs/${periodKey}/approve`, { method: "POST" }),
   disbursePayrollRun: (periodKey: string) => request<{ ok: true }>(`/api/tenant/payroll-runs/${periodKey}/disburse`, { method: "POST" }),
+
+  listThrPayments: (year?: number) => request<ThrPayment[]>(`/api/tenant/thr-payments${year ? `?year=${year}` : ""}`),
+  /** THR is computed by the server (Permenaker 6/2016 + PPh 21 TER); the client sends only year/occasion/date. */
+  generateThrRun: (data: { year: number; occasion: string; paymentDate: string }) => request<ThrPayment[]>("/api/tenant/thr-runs", { method: "POST", body: JSON.stringify(data) }),
+  payThr: (year: number, employeeIds?: string[]) => request<{ paid: number }>(`/api/tenant/thr-runs/${year}/pay`, { method: "POST", body: JSON.stringify({ employeeIds }) }),
 
   listReimbursementClaims: () => request<ReimbursementClaimRow[]>("/api/tenant/reimbursement-claims"),
   createReimbursementClaim: (data: ReimbursementClaimInput) => request<ReimbursementClaimRow>("/api/tenant/reimbursement-claims", { method: "POST", body: JSON.stringify(data) }),

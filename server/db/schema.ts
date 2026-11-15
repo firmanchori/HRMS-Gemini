@@ -1341,6 +1341,35 @@ export const payrollPeriods = pgTable(
   (table) => [uniqueIndex("payroll_periods_tenant_key_idx").on(table.tenantId, table.periodKey)]
 );
 
+/**
+ * THR (Tunjangan Hari Raya, Permenaker 6/2016) per employee per year,
+ * computed by server/lib/thr.ts (tenure ≥12 months = 1× base wage, 1–11
+ * months pro-rata, <1 month none; PPh 21 TER on the THR). A Paid row is
+ * immutable; Draft rows are recomputed on every run.
+ */
+export const thrPayments = pgTable(
+  "thr_payments",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+    employeeId: uuid("employee_id").references(() => employees.id).notNull(),
+    year: integer("year").notNull(),
+    occasion: text("occasion").notNull(),
+    paymentDate: text("payment_date").notNull(),
+    tenureMonths: integer("tenure_months").notNull().default(0),
+    baseWage: integer("base_wage").notNull().default(0),
+    grossAmount: integer("gross_amount").notNull().default(0),
+    terCategory: text("ter_category").notNull().default("TER A"),
+    terRatePercent: doublePrecision("ter_rate_percent").notNull().default(0),
+    taxAmount: integer("tax_amount").notNull().default(0),
+    netAmount: integer("net_amount").notNull().default(0),
+    status: text("status").notNull().default("Draft"), // Draft | Paid
+    paidAt: timestamp("paid_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [uniqueIndex("thr_payments_tenant_year_emp_idx").on(table.tenantId, table.year, table.employeeId)]
+);
+
 /** Employee expense claims. Created pending; approved/rejected only through the Approval Engine (category "Reimbursement"); approved + opted-in claims are paid by the payroll run and stamped with processedPeriod. */
 export const reimbursementClaims = pgTable(
   "reimbursement_claims",

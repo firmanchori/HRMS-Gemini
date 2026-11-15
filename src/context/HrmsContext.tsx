@@ -38,6 +38,7 @@ import {
   type ComplianceRecord as ApiComplianceRecord,
   type PersonaliaActionRow as ApiPersonaliaActionRow,
   type PayrollPeriod as ApiPayrollPeriod,
+  type ThrPayment as ApiThrPayment,
   type ReimbursementClaimRow as ApiReimbursementClaimRow,
   type PersonaliaActionInput as ApiPersonaliaActionInput,
   type OffboardingRecord as ApiOffboardingRecord,
@@ -254,6 +255,9 @@ interface HrmsContextType {
   generatePayrollRun: (period: string) => Promise<void>;
   approvePayrollRun: (period: string) => Promise<void>;
   disbursePayrollRun: (period: string) => Promise<void>;
+  thrPayments: ApiThrPayment[];
+  generateThrBatch: (data: { year: number; occasion: string; paymentDate: string }) => Promise<void>;
+  payThrBatch: (year: number, employeeIds?: string[]) => Promise<void>;
 
   // 4. Loans & Kasbon
   loans: EmployeeLoan[];
@@ -1106,6 +1110,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Reimbursement claims and payroll periods are real backend data (server computes payroll; approval via the Approval Engine).
   const [apiReimbursementClaims, setApiReimbursementClaims] = useState<ApiReimbursementClaimRow[]>([]);
   const [apiPayrollPeriods, setApiPayrollPeriods] = useState<ApiPayrollPeriod[]>([]);
+  const [thrPayments, setThrPayments] = useState<ApiThrPayment[]>([]);
   const reimbursementClaims = useMemo<ReimbursementClaim[]>(
     () =>
       apiReimbursementClaims.map((c) => ({
@@ -1484,6 +1489,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     tenantApi.listPersonaliaActions().then(setApiPersonalia).catch(() => setApiPersonalia([]));
     tenantApi.listReimbursementClaims().then(setApiReimbursementClaims).catch(() => setApiReimbursementClaims([]));
     tenantApi.listPayrollPeriods().then(setApiPayrollPeriods).catch(() => setApiPayrollPeriods([]));
+    tenantApi.listThrPayments().then(setThrPayments).catch(() => setThrPayments([]));
     setProbationEvaluations(realProbationEvaluations.map(toMockProbationEvaluation));
     setProbationEvaluationTemplates(realProbationEvaluationTemplates as unknown as ProbationEvaluationTemplate[]);
     setContractReviews(realContractReviews.map(toMockContractReview));
@@ -1913,6 +1919,15 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const disbursePayrollRun = async (period: string): Promise<void> => {
     await tenantApi.disbursePayrollRun(periodLabelToKey(period));
     await refreshPayroll();
+  };
+
+  const generateThrBatch = async (data: { year: number; occasion: string; paymentDate: string }): Promise<void> => {
+    await tenantApi.generateThrRun(data);
+    setThrPayments(await tenantApi.listThrPayments());
+  };
+  const payThrBatch = async (year: number, employeeIds?: string[]): Promise<void> => {
+    await tenantApi.payThr(year, employeeIds);
+    setThrPayments(await tenantApi.listThrPayments());
   };
 
   // 4. Loans & Kasbon
@@ -4871,6 +4886,9 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         generatePayrollRun,
         approvePayrollRun,
         disbursePayrollRun,
+        thrPayments,
+        generateThrBatch,
+        payThrBatch,
         loans, // real backend data, already tenant-scoped server-side
         addLoan,
         updateLoanStatus,

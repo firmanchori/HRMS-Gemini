@@ -9,7 +9,7 @@ import { createApp } from "../app.ts";
 import { withCsrf } from "../lib/testCsrf.ts";
 import { db, pool } from "../db/client.ts";
 import { calculateOvertimePay, calculatePPh21TER, calculateBPJS } from "../../src/utils/taxCalculator.ts";
-import { tenants, tenantSubscriptions, users, subscriptionPlans, companyEntities, entityClosure, employees, sessions, auditLogEntries, payrollRecords, payrollPeriods, reimbursementClaims, approvalItems, employeeLoans, overtimeRequests, attendanceRecords } from "../db/schema.ts";
+import { employeeAccounts, thrPayments, tenants, tenantSubscriptions, users, subscriptionPlans, companyEntities, entityClosure, employees, sessions, auditLogEntries, payrollRecords, payrollPeriods, reimbursementClaims, approvalItems, employeeLoans, overtimeRequests, attendanceRecords } from "../db/schema.ts";
 
 /**
  * Payroll is computed on the server from database facts. A client can only
@@ -39,8 +39,8 @@ beforeAll(async () => {
   const [entity] = await db.insert(companyEntities).values({ tenantId, name: "Payroll Co", code: "PAYTEST" }).returning();
   entityId = entity.id;
   await db.insert(entityClosure).values({ ancestorEntityId: entityId, descendantEntityId: entityId, depth: 0 });
-  const [a] = await db.insert(employees).values({ tenantId, entityId, nik: "PAY-A", fullName: "Karyawan A", basicSalary: 10_000_000, details: { ptkp: "K/1", fixedAllowance: 500_000, positionAllowance: 1_000_000 } }).returning();
-  const [b] = await db.insert(employees).values({ tenantId, entityId, nik: "PAY-B", fullName: "Karyawan B", basicSalary: 5_000_000, details: { ptkp: "TK/0" } }).returning();
+  const [a] = await db.insert(employees).values({ tenantId, entityId, nik: "PAY-A", fullName: "Karyawan A", basicSalary: 10_000_000, joinDate: new Date("2024-01-15T00:00:00Z"), details: { ptkp: "K/1", fixedAllowance: 500_000, positionAllowance: 1_000_000 } }).returning();
+  const [b] = await db.insert(employees).values({ tenantId, entityId, nik: "PAY-B", fullName: "Karyawan B", basicSalary: 5_000_000, joinDate: new Date("2026-01-10T00:00:00Z"), details: { ptkp: "TK/0" } }).returning();
   empA = a.id;
   empB = b.id;
   await db.insert(attendanceRecords).values({ tenantId, employeeId: empA, date: "2026-10-05", lateMinutes: 130 });
@@ -55,6 +55,8 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  await db.delete(thrPayments).where(eq(thrPayments.tenantId, tenantId));
+  await db.delete(employeeAccounts).where(eq(employeeAccounts.tenantId, tenantId));
   await db.delete(payrollRecords).where(eq(payrollRecords.tenantId, tenantId));
   await db.delete(payrollPeriods).where(eq(payrollPeriods.tenantId, tenantId));
   await db.delete(reimbursementClaims).where(eq(reimbursementClaims.tenantId, tenantId));
@@ -154,5 +156,65 @@ describe("server-side payroll", () => {
   it("an invalid period key is rejected", async () => {
     const bad = await agent.post("/api/tenant/payroll-runs").set("Origin", origin).send({ periodKey: "Oktober 2026" });
     expect(bad.status).toBe(400);
+  });
+
+  it("THR is computed by the server per Permenaker 6/2016, recomputed while Draft, immutable once Paid", async () => {
+    const bad = await agent.post("/api/tenant/thr-runs").set("Origin", origin).send({ year: 2026, occasion: "Idul Fitri", paymentDate: "2025-03-24" });
+    expect(bad.status).toBe(400);
+
+    const run = await agent.post("/api/tenant/thr-runs").set("Origin", origin).send({ year: 2026, occasion: "Idul Fitri 1447 H", paymentDate: "2026-03-24", grossAmount: 1 });
+    expect(run.status).toBe(201);
+    const a = run.body.find((r: { employeeId: string }) => r.employeeId === empA);
+    const b = run.body.find((r: { employeeId: string }) => r.employeeId === empB);
+    expect(a.tenureMonths).toBe(26);
+    expect(a.grossAmount).toBe(10_000_000); // ≥12 months: 1× wage
+    const taxA = calculatePPh21TER(10_000_000, "K/1");
+    expect(a.terCategory).toBe("TER B"); // uses the employee's real PTKP (K/1), not a default
+    expect(a.taxAmount).toBe(taxA.taxAmount);
+    expect(a.netAmount).toBe(10_000_000 - taxA.taxAmount);
+    expect(b.tenureMonths).toBe(2);
+    expect(b.grossAmount).toBe(Math.round((2 / 12) * 5_000_000)); // pro-rata
+    expect(b.terCategory).toBe("TER A"); // TK/0
+    expect(b.taxAmount).toBe(calculatePPh21TER(b.grossAmount, "TK/0").taxAmount);
+
+    const again = await agent.post("/api/tenant/thr-runs").set("Origin", origin).send({ year: 2026, occasion: "Idul Fitri 1447 H", paymentDate: "2026-03-24" });
+    expect(again.status).toBe(201);
+    expect(await db.select().from(thrPayments).where(eq(thrPayments.tenantId, tenantId))).toHaveLength(2);
+
+    const pay = await agent.post("/api/tenant/thr-runs/2026/pay").set("Origin", origin).send({});
+    expect(pay.status).toBe(200);
+    expect(pay.body.paid).toBe(2);
+    const payAgain = await agent.post("/api/tenant/thr-runs/2026/pay").set("Origin", origin).send({});
+    expect(payAgain.status).toBe(409);
+
+    // A Paid row is not recomputed even if the date/occasion in a new run differ.
+    await agent.post("/api/tenant/thr-runs").set("Origin", origin).send({ year: 2026, occasion: "Dicoba ubah", paymentDate: "2026-12-01" });
+    const [rowA] = await db.select().from(thrPayments).where(eq(thrPayments.employeeId, empA));
+    expect(rowA.occasion).toBe("Idul Fitri 1447 H");
+    expect(rowA.status).toBe("Paid");
+  });
+
+  it("an employee sees only their own Approved/Disbursed payslips and Paid THR", async () => {
+    await db.insert(employeeAccounts).values({ tenantId, employeeId: empA, email: "a@payroll.local", passwordHash: await bcrypt.hash(PASSWORD, 10), roleKey: "staff" });
+    const staff = withCsrf(request.agent(app));
+    expect((await staff.post("/api/employee/login").set("Origin", origin).send({ email: "a@payroll.local", password: PASSWORD })).status).toBe(200);
+
+    const slips = await staff.get("/api/employee/my-payslips").set("Origin", origin);
+    expect(slips.status).toBe(200);
+    expect(slips.body).toHaveLength(1);
+    expect(slips.body[0].employeeId).toBe(empA);
+    expect(slips.body[0].status).toBe("Disbursed");
+
+    // A new Draft run for another month must not leak into the employee's view.
+    await agent.post("/api/tenant/payroll-runs").set("Origin", origin).send({ periodKey: "2026-11" });
+    const after = await staff.get("/api/employee/my-payslips").set("Origin", origin);
+    expect(after.body).toHaveLength(1);
+
+    const thr = await staff.get("/api/employee/my-thr").set("Origin", origin);
+    expect(thr.body).toHaveLength(1);
+    expect(thr.body[0].employeeId).toBe(empA);
+
+    // Without the payroll permission the HR-wide list stays closed.
+    expect((await staff.get("/api/employee/payroll-records").set("Origin", origin)).status).toBe(403);
   });
 });

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { readAttachment } from '../shared/attachment';
-import { Lock, Mail, Eye, EyeOff, AlertCircle, ArrowRight, LogOut, User, Clock, CalendarDays, CheckSquare, ArrowLeft, KeyRound } from 'lucide-react';
-import { employeeApi, EmployeeApiError, type EmployeeProfile, type AttendanceRecord, type LeaveRequest } from './api';
+import { Lock, Mail, Eye, EyeOff, AlertCircle, ArrowRight, LogOut, User, Clock, CalendarDays, CheckSquare, ArrowLeft, KeyRound, Wallet } from 'lucide-react';
+import { employeeApi, EmployeeApiError, type EmployeeProfile, type AttendanceRecord, type LeaveRequest, type Payslip, type ThrSlip } from './api';
 import { ValidatedInput } from '../components/common/ValidatedInput';
 import { ValidatedDateInput } from '../components/common/ValidatedDateInput';
 
@@ -192,7 +192,7 @@ const EmployeeLoginScreen: React.FC<{ onLoginSuccess: (profile: EmployeeProfile)
   );
 };
 
-type Tab = 'profil' | 'presensi' | 'cuti' | 'approval';
+type Tab = 'profil' | 'presensi' | 'cuti' | 'slip' | 'approval';
 
 const EmployeeDashboard: React.FC<{ profile: EmployeeProfile; onLogout: () => void }> = ({ profile, onLogout }) => {
   const canApprove = profile.permissions.attendance.approve;
@@ -202,6 +202,7 @@ const EmployeeDashboard: React.FC<{ profile: EmployeeProfile; onLogout: () => vo
     { id: 'profil', label: 'Profil', icon: <User className="w-4 h-4" /> },
     { id: 'presensi', label: 'Presensi', icon: <Clock className="w-4 h-4" /> },
     { id: 'cuti', label: 'Cuti', icon: <CalendarDays className="w-4 h-4" /> },
+    { id: 'slip', label: 'Slip Gaji', icon: <Wallet className="w-4 h-4" /> },
     ...(canApprove ? [{ id: 'approval' as Tab, label: 'Approval Tim', icon: <CheckSquare className="w-4 h-4" /> }] : []),
   ];
 
@@ -238,6 +239,7 @@ const EmployeeDashboard: React.FC<{ profile: EmployeeProfile; onLogout: () => vo
         {tab === 'profil' && <ProfilTab profile={profile} />}
         {tab === 'presensi' && <PresensiTab canCreate={profile.permissions.attendance.create} />}
         {tab === 'cuti' && <CutiTab canCreate={profile.permissions.attendance.create} />}
+        {tab === 'slip' && <SlipTab />}
         {tab === 'approval' && canApprove && <ApprovalTab />}
       </main>
     </div>
@@ -591,6 +593,70 @@ const CutiTab: React.FC<{ canCreate: boolean }> = ({ canCreate }) => {
           </div>
         )}
       </div>
+    </div>
+  );
+};
+
+const rupiah = (n: number) => 'Rp ' + n.toLocaleString('id-ID');
+
+/** The employee's own payslips (only periods HR has approved/paid) and paid THR — never other people's, never a Draft run. */
+const SlipTab: React.FC = () => {
+  const [slips, setSlips] = useState<Payslip[]>([]);
+  const [thr, setThr] = useState<ThrSlip[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [openId, setOpenId] = useState<string | null>(null);
+
+  useEffect(() => {
+    Promise.all([employeeApi.getMyPayslips(), employeeApi.getMyThr()])
+      .then(([s, t]) => { setSlips(s); setThr(t); })
+      .catch(() => {})
+      .finally(() => setIsLoading(false));
+  }, []);
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-white border border-slate-200 rounded-xl p-5">
+        <h2 className="font-bold text-sm text-slate-800 mb-3">Slip Gaji</h2>
+        {isLoading ? <div className="text-xs text-slate-400">Memuat...</div> : slips.length === 0 ? <div className="text-xs text-slate-400">Belum ada slip gaji yang diterbitkan.</div> : (
+          <div className="space-y-2">
+            {slips.map((s) => (
+              <div key={s.id} className="border border-slate-200 rounded-lg">
+                <button type="button" onClick={() => setOpenId(openId === s.id ? null : s.id)} className="w-full flex items-center justify-between p-3 text-xs text-left">
+                  <span className="font-semibold">{s.period}</span>
+                  <span className="font-mono font-bold text-emerald-700">{rupiah(s.netPay)}</span>
+                </button>
+                {openId === s.id && (
+                  <div className="border-t border-slate-100 p-3 text-xs space-y-1">
+                    {([
+                      ['Gaji Pokok', s.basicSalary], ['Tunjangan', s.allowances], ['Lembur', s.overtimePay], ['Reimbursement', s.reimbursement],
+                    ] as [string, number][]).map(([k, v]) => <div key={k} className="flex justify-between"><span className="text-slate-500">{k}</span><span className="font-mono">{rupiah(v)}</span></div>)}
+                    <div className="flex justify-between font-semibold border-t border-slate-100 pt-1"><span>Penghasilan</span><span className="font-mono">{rupiah(s.grossPay)}</span></div>
+                    {([
+                      ['BPJS Kesehatan', s.bpjsKesEmployee], ['BPJS Ketenagakerjaan', s.bpjsTkEmployee], ['PPh 21', s.pph21Amount], ['Cicilan Pinjaman', s.loanDeduction], ['Potongan Keterlambatan', s.lateDeduction],
+                    ] as [string, number][]).map(([k, v]) => <div key={k} className="flex justify-between"><span className="text-slate-500">{k}</span><span className="font-mono text-rose-700">-{rupiah(v)}</span></div>)}
+                    <div className="flex justify-between font-bold border-t border-slate-200 pt-1"><span>Diterima</span><span className="font-mono text-emerald-700">{rupiah(s.netPay)}</span></div>
+                    <div className="text-[10px] text-slate-400">{s.status === 'Disbursed' ? `Dibayarkan ${s.paidDate ?? ''}` : 'Disetujui, menunggu pembayaran'}</div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      {thr.length > 0 && (
+        <div className="bg-white border border-slate-200 rounded-xl p-5">
+          <h2 className="font-bold text-sm text-slate-800 mb-3">THR</h2>
+          <div className="space-y-1.5">
+            {thr.map((t) => (
+              <div key={t.id} className="flex items-center justify-between text-xs border-b border-slate-100 pb-1.5">
+                <span className="font-semibold">{t.occasion} {t.year}</span>
+                <span className="text-slate-500">Bruto {rupiah(t.grossAmount)} · PPh {rupiah(t.taxAmount)}</span>
+                <span className="font-mono font-bold text-emerald-700">{rupiah(t.netAmount)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -1,10 +1,10 @@
 import { Router } from "express";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import QRCode from "qrcode";
 import { db } from "../db/client.ts";
-import { employeeAccounts, employees, attendanceRecords, leaveRequests, payrollRecords, gaAssets, procurementOrders, complianceRecords, employeeLoans, businessTrips, employeeKpis, jobRequisitions, jobVacancies, candidates, offboardingRecords, companyCalendarEvents, auditTrailEntries, approvalItems, officialDocuments, documentSignatoryConfigs, documentTemplates, companyEntities } from "../db/schema.ts";
+import { employeeAccounts, employees, attendanceRecords, leaveRequests, payrollRecords, gaAssets, procurementOrders, complianceRecords, employeeLoans, businessTrips, employeeKpis, jobRequisitions, jobVacancies, candidates, offboardingRecords, companyCalendarEvents, auditTrailEntries, approvalItems, officialDocuments, documentSignatoryConfigs, documentTemplates, companyEntities, thrPayments } from "../db/schema.ts";
 import { issueSession, requireEmployeeSession, requirePermission, issueMfaTicket, readMfaTicket, clearMfaTicket } from "../middleware/auth.ts";
 import { validateBody, validateParams, uuidParam } from "../lib/validate.ts";
 import { authLimiter } from "../lib/rateLimit.ts";
@@ -380,6 +380,21 @@ employeeRouter.post("/approvals/leave/:id/decision", requirePermission("attendan
 employeeRouter.get("/payroll-records", requirePermission("payroll", "view"), async (req, res) => {
   const tenantId = req.session!.tenantId!;
   res.json(await db.select().from(payrollRecords).where(eq(payrollRecords.tenantId, tenantId)));
+});
+
+// A regular employee's own payslips: only their own rows, only periods that are Approved/Disbursed (never a Draft run in progress).
+employeeRouter.get("/my-payslips", async (req, res) => {
+  const session = req.session!;
+  res.json(
+    await db
+      .select()
+      .from(payrollRecords)
+      .where(and(eq(payrollRecords.tenantId, session.tenantId!), eq(payrollRecords.employeeId, session.employeeId!), inArray(payrollRecords.status, ["Approved", "Disbursed"])))
+  );
+});
+employeeRouter.get("/my-thr", async (req, res) => {
+  const session = req.session!;
+  res.json(await db.select().from(thrPayments).where(and(eq(thrPayments.tenantId, session.tenantId!), eq(thrPayments.employeeId, session.employeeId!), eq(thrPayments.status, "Paid"))));
 });
 
 // Same server-computed engine as the admin routes. view → read; create → run; approve → approve; edit → disburse.

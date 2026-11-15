@@ -78,6 +78,7 @@ import {
 } from "../db/schema.ts";
 import { requireTenantAdmin } from "../middleware/auth.ts";
 import { generateAssetsFromReceivedOrder, isReceivedStatus, deriveUsageStatus, isPostApprovalProcurementStatus, hasPendingProcurementApproval } from "../lib/assetLifecycle.ts";
+import { generateThrRun, payThr, listThrPayments, ThrError } from "../lib/thr.ts";
 import { generatePayrollRun, approvePayrollPeriod, disbursePayrollPeriod, PayrollError } from "../lib/payrollEngine.ts";
 import { reimbursementClaimSchema, createReimbursementClaim, listReimbursementClaims, setClaimPayrollOptIn, ReimbursementError } from "../lib/reimbursement.ts";
 import { applyContractRenewalReview } from "../lib/contractRenewal.ts";
@@ -2758,6 +2759,30 @@ tenantRouter.post("/payroll-runs/:periodKey/disburse", validateParams(payrollPer
     res.json({ ok: true });
   } catch (err) {
     if (err instanceof PayrollError) return res.status(err.status).json({ error: err.message });
+    throw err;
+  }
+});
+
+// --- THR (Permenaker 6/2016): computed by server/lib/thr.ts; a run is requested by year/date, then paid. ---
+tenantRouter.get("/thr-payments", async (req, res) => {
+  const year = Number(req.query.year);
+  res.json(await listThrPayments(req.session!.tenantId!, Number.isInteger(year) ? year : undefined));
+});
+tenantRouter.post("/thr-runs", validateBody(z.object({ year: z.number().int().min(2000).max(2100), occasion: z.string().trim().min(2).max(200), paymentDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) })), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  try {
+    const visible = await resolveVisibleEmployeeIds(req, tenantId);
+    res.status(201).json(await generateThrRun({ tenantId, ...req.body, visibleEmployeeIds: visible, actorUserId: req.session!.userId }));
+  } catch (err) {
+    if (err instanceof ThrError) return res.status(err.status).json({ error: err.message });
+    throw err;
+  }
+});
+tenantRouter.post("/thr-runs/:year/pay", validateParams(z.object({ year: z.coerce.number().int().min(2000).max(2100) })), validateBody(z.object({ employeeIds: z.array(z.string().uuid()).optional() })), async (req, res) => {
+  try {
+    res.json({ paid: await payThr({ tenantId: req.session!.tenantId!, year: Number(req.params.year), employeeIds: req.body.employeeIds, actorUserId: req.session!.userId }) });
+  } catch (err) {
+    if (err instanceof ThrError) return res.status(err.status).json({ error: err.message });
     throw err;
   }
 });

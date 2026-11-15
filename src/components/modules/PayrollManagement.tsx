@@ -64,6 +64,9 @@ export const PayrollManagement: React.FC = () => {
     generatePayrollRun,
     approvePayrollRun,
     disbursePayrollRun,
+    thrPayments,
+    generateThrBatch,
+    payThrBatch,
     moduleSettings,
     updateModuleSettings,
     openFilePreview,
@@ -91,7 +94,7 @@ export const PayrollManagement: React.FC = () => {
         { label: 'No. Kwitansi / Struk', value: claim.receiptNumber || '-' },
         { label: 'Nominal Diajukan', value: formatRupiah(claim.amount) },
         { label: 'Nominal Disetujui', value: formatRupiah(claim.approvedAmount || claim.amount) },
-        { label: 'Tanggal Kwitansi', value: claim.receiptDate || claim.claimDate },
+        { label: 'Tanggal Kwitansi', value: claim.receiptDate || claim.claimDate || '-' },
         { label: 'Status Verifikasi HR', value: claim.status },
       ],
       contentParagraphs: [
@@ -132,7 +135,22 @@ export const PayrollManagement: React.FC = () => {
   const [thrOccasion, setThrOccasion] = useState('Hari Raya Idul Fitri 1447 H');
   const [thrPaymentDate, setThrPaymentDate] = useState('2026-03-24');
   const [thrSearchQuery, setThrSearchQuery] = useState('');
-  const [paidThrEmpIds, setPaidThrEmpIds] = useState<string[]>(['emp-001']);
+  const [thrActionError, setThrActionError] = useState<string | null>(null);
+  const [thrActionBusy, setThrActionBusy] = useState(false);
+  const thrYear = Number((thrPaymentDate || '').slice(0, 4)) || new Date().getFullYear();
+  const runThrAction = async (action: () => Promise<void>) => {
+    setThrActionError(null);
+    setThrActionBusy(true);
+    try {
+      await action();
+    } catch (err) {
+      setThrActionError(err instanceof Error ? err.message : 'Gagal memproses THR.');
+    } finally {
+      setThrActionBusy(false);
+    }
+  };
+  const thrFormula = (tenureMonths: number) =>
+    tenureMonths >= 12 ? '1x Upah Penuh (Masa Kerja ≥ 12 Bln)' : tenureMonths >= 1 ? `Prorata (${tenureMonths}/12) x Upah` : 'Masa Kerja < 1 Bln (Tidak Berhak)';
   const [selectedThrEmployee, setSelectedThrEmployee] = useState<Employee | null>(null);
   const [isThrSlipModalOpen, setIsThrSlipModalOpen] = useState(false);
 
@@ -1017,51 +1035,25 @@ export const PayrollManagement: React.FC = () => {
           {thrSubTab === 'proses_thr' && (() => {
             // Kalkulasi THR untuk semua karyawan aktif
             const activeEmployees = employees.filter((e) => e.status === 'Aktif');
-            const targetPayDate = new Date(thrPaymentDate || '2026-03-24');
-
+            // All figures come from the server's THR run for this year (Permenaker 6/2016 + PPh 21 TER on the employee's real PTKP).
+            const thrByEmp = new Map(thrPayments.filter((r) => r.year === thrYear).map((r) => [r.employeeId, r]));
             const thrCalculations = activeEmployees.map((emp) => {
-              const join = new Date(emp.joinDate || '2024-01-01');
-              // Hitung selisih bulan kerja
-              let months = (targetPayDate.getFullYear() - join.getFullYear()) * 12 + (targetPayDate.getMonth() - join.getMonth());
-              if (targetPayDate.getDate() < join.getDate()) months -= 1;
-              const tenureMonths = Math.max(0, months);
-              const tenureYears = Math.floor(tenureMonths / 12);
-              const remMonths = tenureMonths % 12;
-
-              const baseWage = emp.basicSalary;
-              let thrGross = 0;
-              let formulaDesc = '';
-
-              if (tenureMonths >= 12) {
-                thrGross = baseWage;
-                formulaDesc = '1x Upah Penuh (Masa Kerja ≥ 12 Bln)';
-              } else if (tenureMonths >= 1) {
-                thrGross = Math.round((tenureMonths / 12) * baseWage);
-                formulaDesc = `Prorata (${tenureMonths}/12) x Upah`;
-              } else {
-                thrGross = 0;
-                formulaDesc = 'Masa Kerja < 1 Bln (Tidak Berhak)';
-              }
-
-              // Pajak PPh 21 TER atas THR
-              const terResult = calculatePPh21TER(thrGross, (emp.ptkpStatus as PTKPStatus) || 'TK/0');
-              const thrTax = terResult.taxAmount;
-              const thrNet = Math.max(0, thrGross - thrTax);
-              const isPaid = paidThrEmpIds.includes(emp.id);
-
+              const rec = thrByEmp.get(emp.id);
+              const tenureMonths = rec?.tenureMonths ?? 0;
               return {
                 employee: emp,
                 tenureMonths,
-                tenureYears,
-                remMonths,
-                baseWage,
-                thrGross,
-                formulaDesc,
-                terCategory: terResult.category,
-                terRate: terResult.ratePercent,
-                thrTax,
-                thrNet,
-                isPaid,
+                tenureYears: Math.floor(tenureMonths / 12),
+                remMonths: tenureMonths % 12,
+                baseWage: rec?.baseWage ?? emp.basicSalary,
+                thrGross: rec?.grossAmount ?? 0,
+                formulaDesc: rec ? thrFormula(tenureMonths) : 'Belum dihitung — klik "Hitung THR"',
+                terCategory: rec?.terCategory ?? 'TER A',
+                terRate: rec?.terRatePercent ?? 0,
+                thrTax: rec?.taxAmount ?? 0,
+                thrNet: rec?.netAmount ?? 0,
+                isPaid: rec?.status === 'Paid',
+                calculated: Boolean(rec),
               };
             });
 
@@ -1132,17 +1124,26 @@ export const PayrollManagement: React.FC = () => {
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => {
-                        const allIds = activeEmployees.map((e) => e.id);
-                        setPaidThrEmpIds((prev) => (prev.length === allIds.length ? [] : allIds));
-                      }}
-                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold shadow-2xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                      disabled={thrActionBusy}
+                      onClick={() => runThrAction(() => generateThrBatch({ year: thrYear, occasion: thrOccasion.trim() || 'THR', paymentDate: thrPaymentDate }))}
+                      className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg text-xs font-semibold shadow-2xs transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                    >
+                      <Calculator className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>Hitung THR</span>
+                    </button>
+                    <button
+                      type="button"
+                      disabled={thrActionBusy || totalPaidCount === thrCalculations.filter((t) => t.thrGross > 0).length}
+                      onClick={() => runThrAction(() => payThrBatch(thrYear))}
+                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold shadow-2xs transition-colors flex items-center gap-1.5 disabled:opacity-50"
                     >
                       <CheckCircle2 className="w-3.5 h-3.5" />
-                      <span>{paidThrEmpIds.length === activeEmployees.length ? 'Batalkan Semua' : 'Tandai Semua Lunas'}</span>
+                      <span>Tandai Semua Lunas</span>
                     </button>
                   </div>
                 </div>
+
+                {thrActionError && <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs font-semibold text-rose-700">{thrActionError}</div>}
 
                 {/* Processed THR Table */}
                 <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
@@ -1180,7 +1181,7 @@ export const PayrollManagement: React.FC = () => {
                           </td>
                           <td className="py-2.5 px-3">
                             <span className="text-[11px] text-slate-700 block">{t.formulaDesc}</span>
-                            <span className="text-[10px] text-slate-400">PTKP: {t.employee.ptkpStatus || 'TK/0'}</span>
+                            <span className="text-[10px] text-slate-400">PTKP: {t.employee.ptkp || 'TK/0'}</span>
                           </td>
                           <td className="py-2.5 px-3 text-right font-mono font-bold text-indigo-700">
                             {formatRupiah(t.thrGross)}
@@ -1197,13 +1198,8 @@ export const PayrollManagement: React.FC = () => {
                           <td className="py-2.5 px-3 text-center">
                             <button
                               type="button"
-                              onClick={() => {
-                                setPaidThrEmpIds((prev) =>
-                                  prev.includes(t.employee.id)
-                                    ? prev.filter((id) => id !== t.employee.id)
-                                    : [...prev, t.employee.id]
-                                );
-                              }}
+                              disabled={thrActionBusy || t.isPaid || !t.calculated || t.thrGross <= 0}
+                              onClick={() => runThrAction(() => payThrBatch(thrYear, [t.employee.id]))}
                               className={`px-2.5 py-1 rounded text-[11px] font-bold transition-colors cursor-pointer ${
                                 t.isPaid
                                   ? 'bg-emerald-50 text-emerald-700 border border-emerald-300'
@@ -2559,31 +2555,16 @@ export const PayrollManagement: React.FC = () => {
       {/* Modal: Slip Tunjangan Hari Raya (THR) Resmi */}
       {isThrSlipModalOpen && selectedThrEmployee && (() => {
         const emp = selectedThrEmployee;
-        const targetPayDate = new Date(thrPaymentDate || '2026-03-24');
-        const join = new Date(emp.joinDate || '2024-01-01');
-        let months = (targetPayDate.getFullYear() - join.getFullYear()) * 12 + (targetPayDate.getMonth() - join.getMonth());
-        if (targetPayDate.getDate() < join.getDate()) months -= 1;
-        const tenureMonths = Math.max(0, months);
+        const slipRec = thrPayments.find((r) => r.employeeId === emp.id && r.year === thrYear);
+        const tenureMonths = slipRec?.tenureMonths ?? 0;
         const tenureYears = Math.floor(tenureMonths / 12);
         const remMonths = tenureMonths % 12;
-
-        const baseWage = emp.basicSalary;
-        let thrGross = 0;
-        let formulaDesc = '';
-        if (tenureMonths >= 12) {
-          thrGross = baseWage;
-          formulaDesc = '1x Upah Pokok Penuh (Masa Kerja ≥ 12 Bulan)';
-        } else if (tenureMonths >= 1) {
-          thrGross = Math.round((tenureMonths / 12) * baseWage);
-          formulaDesc = `Prorata (${tenureMonths}/12) x Upah Pokok`;
-        } else {
-          thrGross = 0;
-          formulaDesc = 'Masa Kerja < 1 Bulan';
-        }
-
-        const terRes = calculatePPh21TER(thrGross, (emp.ptkpStatus as PTKPStatus) || 'TK/0');
-        const thrTax = terRes.taxAmount;
-        const thrNet = Math.max(0, thrGross - thrTax);
+        const baseWage = slipRec?.baseWage ?? emp.basicSalary;
+        const thrGross = slipRec?.grossAmount ?? 0;
+        const formulaDesc = slipRec ? thrFormula(tenureMonths) : 'Belum dihitung';
+        const terRes = { category: slipRec?.terCategory ?? 'TER A', ratePercent: slipRec?.terRatePercent ?? 0 };
+        const thrTax = slipRec?.taxAmount ?? 0;
+        const thrNet = slipRec?.netAmount ?? 0;
         const docNo = `THR/${currentTenant.code}/${new Date().getFullYear()}/${emp.nik.slice(-4)}`;
 
         return (
@@ -2680,7 +2661,7 @@ export const PayrollManagement: React.FC = () => {
                       <tr>
                         <td className="py-2 px-3">
                           <span className="font-semibold text-rose-700">Potongan PPh 21 TER ({terRes.category} {terRes.ratePercent}%)</span>
-                          <span className="text-[10px] text-slate-400 block">Berdasarkan PP 58/2023 & PTKP {emp.ptkpStatus || 'TK/0'}</span>
+                          <span className="text-[10px] text-slate-400 block">Berdasarkan PP 58/2023 & PTKP {emp.ptkp || 'TK/0'}</span>
                         </td>
                         <td className="py-2 px-3 text-right font-mono font-semibold text-rose-700">
                           -{formatRupiah(thrTax)}

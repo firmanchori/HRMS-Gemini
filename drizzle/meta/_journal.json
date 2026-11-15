@@ -372,6 +372,13 @@
       "when": 1794711163515,
       "tag": "0052_perfect_karen_page",
       "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1794715673561,
+      "tag": "0053_funny_mad_thinker",
+      "breakpoints": true
     }
   ]
 }

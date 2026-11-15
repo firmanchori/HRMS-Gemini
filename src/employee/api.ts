@@ -83,6 +83,35 @@ export interface ClockOutCheckResult {
   windowEnd: string;
 }
 
+export interface Payslip {
+  id: string;
+  period: string;
+  basicSalary: number;
+  allowances: number;
+  overtimePay: number;
+  reimbursement: number;
+  grossPay: number;
+  bpjsKesEmployee: number;
+  bpjsTkEmployee: number;
+  pph21Amount: number;
+  loanDeduction: number;
+  lateDeduction: number;
+  totalDeductions: number;
+  netPay: number;
+  status: string;
+  paidDate: string | null;
+}
+
+export interface ThrSlip {
+  id: string;
+  year: number;
+  occasion: string;
+  paymentDate: string;
+  grossAmount: number;
+  taxAmount: number;
+  netAmount: number;
+}
+
 export interface LeaveRequest {
   id: string;
   employeeId: string;
@@ -116,6 +145,8 @@ export const employeeApi = {
     request<AttendanceRecord>('/api/employee/attendance/clock-in', { method: 'POST', body: JSON.stringify({ lat, lng, workType }) }),
   clockOut: (lat: number, lng: number) =>
     request<AttendanceRecord>('/api/employee/attendance/clock-out', { method: 'POST', body: JSON.stringify({ lat, lng }) }),
+  getMyPayslips: () => request<Payslip[]>('/api/employee/my-payslips'),
+  getMyThr: () => request<ThrSlip[]>('/api/employee/my-thr'),
   getLeave: () => request<LeaveRequest[]>('/api/employee/leave'),
   submitLeave: (body: { leaveType: string; startDate: string; endDate: string; totalDays: number; reason?: string; attachmentUrl?: string }) =>
     request<LeaveRequest>('/api/employee/leave', { method: 'POST', body: JSON.stringify(body) }),
