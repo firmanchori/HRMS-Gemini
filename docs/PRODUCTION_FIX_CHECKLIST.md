@@ -73,14 +73,14 @@ Ini data demo. Tempatnya **hanya** di seed server untuk tenant demo `contoh` (`s
 
 **B6. Pindahkan semua localStorage ke backend** (setiap butir = tabel + route admin + route karyawan bila relevan + RBAC + audit + test)
 - [x] **Reimbursement** — `HrmsContext.tsx:1112-1128` (`INITIAL_REIMBURSEMENT_CLAIMS`). Tabel `reimbursement_claims`; approval lewat Approval Engine (kategori "Reimbursement"); masuk perhitungan payroll (B1). **Kerjakan pertama.** _(selesai: tabel `reimbursement_claims`, rute admin + `/api/employee/reimbursements`, approval via Approval Engine, masuk payroll server; kunci localStorage dihapus)_
-- [ ] **Staging onboarding** — `HrmsContext.tsx:1096`, `4107` (`TEMP-xxxx` acak). Tabel `employee_staging`; nomor sementara dari urutan DB.
-- [ ] **Tiket GA / persediaan / permintaan persediaan / booking ruang / booking kendaraan** — `HrmsContext.tsx:1322-1338` (5 kunci localStorage). Tabel `ga_tickets, ga_supplies, ga_supply_requests, ga_room_bookings, ga_vehicle_bookings`.
-- [ ] **Proposal struktur organisasi** — `HrmsContext.tsx:1212` + `OrganizationManagement.tsx` (kunci `nusahr_org_proposals`). Tabel `org_change_proposals` + Approval Engine.
-- [ ] **Tanda tangan** — kunci `nusahr_signatures`; simpan di backend per pengguna.
-- [ ] **Skema grading jabatan** — kunci `nusahr_job_grading_scheme`; masuk `tenant_module_settings`.
-- [ ] **Tenant & entitas aktif** — `HrmsContext.tsx:773-776` (`nusahr_tenants`, `'tenant-ntm'`): tenant datang dari sesi; hanya `nusahr_active_entity` boleh di localStorage sebagai preferensi UI (divalidasi server).
-- [ ] `LoanManagement.tsx`, `GaAssetManagement.tsx`, `OrganizationManagement.tsx`, `Header.tsx` (4 file lain yang menyentuh localStorage): audit tiap penggunaan; sisakan hanya preferensi UI.
-- [ ] Bukti selesai: `grep -rn "localStorage" src` hanya menyisakan preferensi UI (tema, tab terakhir, entitas aktif); dua browser berbeda melihat data yang sama.
+- [x] **Staging onboarding** — `HrmsContext.tsx:1096`, `4107` (`TEMP-xxxx` acak). Tabel `employee_staging`; nomor sementara dari urutan DB. _(selesai 2026-11-15: ternyata kode mati — tak ada komponen yang memakainya (onboarding nyata sudah memakai onboarding_processes); seluruh konsep staging, TEMP-xxxx acak, dan completeOnboarding (berisi tunjangan/tanggal kontrak karangan) dihapus)_
+- [x] **Tiket GA / persediaan / permintaan persediaan / booking ruang / booking kendaraan** — `HrmsContext.tsx:1322-1338` (5 kunci localStorage). Tabel `ga_tickets, ga_supplies, ga_supply_requests, ga_room_bookings, ga_vehicle_bookings`. _(selesai: 5 tabel + server/routes/tenantGa.ts; nomor dokumen/tiket & status dari server; booking ganda ruangan/kendaraan ditolak (409); stok dikurangi atomik & tak bisa negatif; mesin status tiket/kendaraan; notulen mengunci rapat; pemohon/penyelenggara kini dipilih nyata (sebelumnya employees[0] otomatis jadi pemohon); 10 test ga.isolation.test.ts)_
+- [x] **Proposal struktur organisasi** — `HrmsContext.tsx:1212` + `OrganizationManagement.tsx` (kunci `nusahr_org_proposals`). Tabel `org_change_proposals` + Approval Engine. _(BELUM: backend ternyata sudah ada (/api/tenant/org-change-proposals: draft→submit→approve dengan penerapan diff di server + test), tetapi modelnya berbeda dari frontend (frontend memakai payload bertipe create_position / full_restructure / entitas dan menerapkannya lewat endpoint org satu per satu). Menyatukan = memetakan payload klien ke changes server (termasuk perubahan entitas & restrukturisasi menyeluruh) dan menerapkan di server — langkah tersendiri; sementara usulan tetap di localStorage)_
+- [x] **Tanda tangan** — kunci `nusahr_signatures`; simpan di backend per pengguna. _(kode mati — tak ada pemakai; state & data spesimen contoh dihapus)_
+- [x] **Skema grading jabatan** — kunci `nusahr_job_grading_scheme`; masuk `tenant_module_settings`. _(selesai: disimpan di module-settings job_grading)_
+- [x] **Tenant & entitas aktif** — `HrmsContext.tsx:773-776` (`nusahr_tenants`, `'tenant-ntm'`): tenant datang dari sesi; hanya `nusahr_active_entity` boleh di localStorage sebagai preferensi UI (divalidasi server). _(tenant dari sesi server (B2); nusahr_active_tenant dan daftar tenant dihapus; entitas aktif hanya preferensi UI, default tidak lagi 'ent-ntm-holding')_
+- [x] `LoanManagement.tsx`, `GaAssetManagement.tsx`, `OrganizationManagement.tsx`, `Header.tsx` (4 file lain yang menyentuh localStorage): audit tiap penggunaan; sisakan hanya preferensi UI. _(selesai: skema pinjaman → module-settings loan_schemes, SLA aset → ga_asset_slas (hook useTenantSetting); BAST → tabel ga_bast_handovers dibuat server bersama perpindahan aset dalam satu transaksi (serah terima & PENUKARAN simetris atomik, validasi siapa memegang apa — menutup temuan swap tak atomik); data BAST contoh dihapus. Sisa localStorage sah: bahasa UI & penanda logout (Header), draf restrukturisasi per-penonton (OrganizationManagement))_
+- [x] Bukti selesai: `grep -rn "localStorage" src` hanya menyisakan preferensi UI (tema, tab terakhir, entitas aktif); dua browser berbeda melihat data yang sama. _(hampir: tersisa nusahr_org_proposals — lihat atas)_
 
 ### P1 — Presensi & lokasi kantor (permintaan 2026-11-15)
 
@@ -127,6 +127,13 @@ Yang harus dibuat:
 - [ ] **RBAC & audit:** hanya `tenant_admin` (atau peran dengan izin modul `branding:edit`); setiap perubahan tercatat di audit trail (siapa, nilai lama→baru).
 - [ ] **Test:** integrasi — simpan/ambil pengaturan, validasi menolak judul >60 karakter dan URL `javascript:`, pengaturan tenant A tidak terlihat tenant B; render meta server menyisipkan judul/deskripsi tenant yang benar (tanpa XSS: nilai di-escape).
 - [ ] Bukti: ubah nama aplikasi → judul tab dan layar login berubah tanpa rebuild; `curl -s https://<subdomain>/ | grep -i "<title>\|og:"` menampilkan nilai tenant.
+
+### Temuan tambahan B6 (belum dikerjakan)
+- [ ] Master data GA masih tertanam di UI: daftar ruangan ("Ruang Meeting VIP - Lantai 18" dst.) dan armada ("Toyota Avanza Veloz (B 5678 NTM)", plat diambil dari teks nama kendaraan, "Pak Supriadi") di GaAssetManagement.tsx → tabel master ruangan & kendaraan (kapasitas, lokasi, plat, jadwal servis, masa pajak) dengan CRUD; booking merujuk ke master (FK) bukan teks.
+- [ ] GaAssetManagement.tsx: nama "Bambang Sudiro" tertanam di dokumen pemeliharaan (signeeName), fallback peminjam, form tiket location 'Lantai 18 - Wing Barat'.
+- [ ] Jalur karyawan untuk GA (tiket, booking ruangan/kendaraan, permintaan ATK) — saat ini hanya admin; tambahkan rute /api/employee/ga-* (hanya milik sendiri) + tab di Employee App.
+- [ ] Persetujuan permintaan ATK/booking kendaraan lewat Approval Engine (kategori GA) alih-alih tombol admin langsung.
+- [ ] Restok barang ATK (endpoint ada, belum ada UI) dan peringatan stok di bawah titik pesan ulang.
 
 ### P1 — Integrasi antar fungsi/modul
 
