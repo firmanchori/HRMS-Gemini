@@ -56,8 +56,6 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     complianceRecords,
     vacancies,
     setActiveModule,
-    clockIn,
-    clockOut,
     onboardingProcesses,
     offboardingRecords,
     approvalItems,
@@ -70,8 +68,6 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     leaveRequests,
   } = useHrms();
 
-  const [essClocked, setEssClocked] = useState(false);
-  const [essNote, setEssNote] = useState('');
   const [activeProcessFilter, setActiveProcessFilter] = useState<
     'all' | 'kepegawaian' | 'approval' | 'payroll' | 'ga'
   >('all');
@@ -121,18 +117,6 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     activeSanctions.length +
     activeProcurements.length +
     openGATickets.length;
-
-  // Quick clock in ESS simulation
-  const handleQuickClock = () => {
-    if (!employees[0]) return;
-    if (!essClocked) {
-      clockIn(employees[0].id, essNote || 'Presensi ESS Mandiri (Webcam GPS Valid)');
-      setEssClocked(true);
-    } else {
-      clockOut(employees[0].id, 'Clock-out Mandiri selesai bertugas');
-      setEssClocked(false);
-    }
-  };
 
   return (
     <div className="space-y-6">
@@ -958,67 +942,10 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         </button>
       </div>
 
-      {/* 2-Column Split: Interactive ESS Quick Punch + Department Distribution */}
+      {/* Workforce composition */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* ESS Punch Card */}
-        <div className="bg-white border border-slate-200 rounded-xl p-5 lg:col-span-1 flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-                Presensi Mandiri ESS
-              </span>
-              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-mono font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                Live Terminal
-              </span>
-            </div>
-            <p className="text-xs text-slate-600 leading-relaxed mb-4">
-              Simulasi presensi karyawan mandiri (Employee Self-Service) dengan geolocation & timestamp instan.
-            </p>
-
-            <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg mb-4 text-xs space-y-1.5">
-              <div className="flex justify-between">
-                <span className="text-slate-500">Akun:</span>
-                <span className="font-semibold text-slate-800">{employees[0]?.fullName || 'Karyawan'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">Waktu Server:</span>
-                <span className="font-mono text-slate-800 font-medium">08:24:19 WIB</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">Lokasi:</span>
-                <span className="text-emerald-700 font-medium">Dalam Radius Kantor Pusat (12m)</span>
-              </div>
-            </div>
-
-            <div>
-              <label className="text-[11px] font-medium text-slate-600 block mb-1">
-                Catatan Presensi (Opsional)
-              </label>
-              <input
-                type="text"
-                placeholder="Contoh: WFO Lantai 18 / Tugas Luar"
-                value={essNote}
-                onChange={(e) => setEssNote(e.target.value)}
-                className="w-full text-xs px-3 py-2 bg-white border border-slate-300 rounded-md focus:ring-1 focus:ring-indigo-500"
-              />
-            </div>
-          </div>
-
-          <button
-            onClick={handleQuickClock}
-            className={`w-full mt-5 py-2.5 px-4 rounded-md text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-2 ${
-              !essClocked
-                ? 'bg-indigo-600 hover:bg-indigo-700 text-white'
-                : 'bg-rose-600 hover:bg-rose-700 text-white'
-            }`}
-          >
-            <Clock className="w-4 h-4" />
-            <span>{!essClocked ? 'Clock-In Masuk (08:24)' : 'Clock-Out Pulang'}</span>
-          </button>
-        </div>
-
         {/* Workforce Breakdown & Responsive Cards / Horizontal Table */}
-        <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-5 lg:col-span-2">
+        <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-5 lg:col-span-3">
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="text-sm font-bold text-slate-900">

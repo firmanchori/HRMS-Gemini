@@ -219,13 +219,15 @@ export const ProcurementManagement: React.FC = () => {
   const [requireQuotationCompare, setRequireQuotationCompare] = useState(true);
 
   const reqEmp = employees.find((e) => e.id === requestorEmpId);
+  const [prError, setPrError] = useState<string | null>(null);
 
-  const handleSubmitPR = (e: React.FormEvent) => {
+  const handleSubmitPR = async (e: React.FormEvent) => {
     e.preventDefault();
     setPrSubmitAttempted(true);
     if (!itemName.trim() || !vendorName || !quantity || quantity < 1 || !estimatedCost || estimatedCost <= 0) return;
 
-    addProcurementOrder({
+try {
+      await addProcurementOrder({
       vendorId: vendors.find((v) => v.name === vendorName)?.id,
       vendorName,
       itemName: `[${procurementCategory}] ${itemName}`,
@@ -234,11 +236,14 @@ export const ProcurementManagement: React.FC = () => {
       requestor: reqEmp?.fullName || '',
       department,
     });
+    } catch (err) {
+      setPrError(err instanceof Error ? err.message : 'Gagal membuat PR.');
+      return;
+    }
 
     setIsPRModalOpen(false);
     setItemName('');
     setPrSubmitAttempted(false);
-    alert('Pengajuan Purchase Requisition (PR) berhasil dibuat dan diteruskan ke bagian Purchasing!');
   };
 
   const handleAddVendor = (e: React.FormEvent) => {
@@ -1031,6 +1036,7 @@ export const ProcurementManagement: React.FC = () => {
             </div>
 
             <form onSubmit={handleSubmitPR} className="p-5 space-y-3.5 text-xs" noValidate>
+              {prError && <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 font-semibold text-xs">{prError}</div>}
               <div>
                 <label className="font-semibold text-slate-700 block mb-1">Jenis Pengadaan</label>
                 <div className="grid grid-cols-2 gap-2">

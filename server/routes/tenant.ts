@@ -2891,6 +2891,13 @@ tenantRouter.put("/offboarding-records/:id", validateParams(uuidParam("id")), va
       return res.status(409).json({ error: `Karyawan masih memegang ${held.length} aset: ${held.map((a) => a.code).join(", ")}. Kembalikan ke GA terlebih dahulu.` });
     }
   }
+  // Finance clearance is verified against the loan register too: an outstanding loan is settled (recorded payment / final-pay deduction) BEFORE clearance, never silently written off.
+  if (req.body.financeCleared === true) {
+    const open = await db.select({ type: employeeLoans.loanType, remaining: employeeLoans.remainingAmount }).from(employeeLoans).where(and(eq(employeeLoans.tenantId, tenantId), eq(employeeLoans.employeeId, existing.employeeId), eq(employeeLoans.status, "Aktif")));
+    if (open.length > 0) {
+      return res.status(409).json({ error: `Karyawan masih memiliki ${open.length} pinjaman aktif (sisa Rp ${open.reduce((t, l) => t + l.remaining, 0).toLocaleString("id-ID")}). Selesaikan pelunasan terlebih dahulu.` });
+    }
+  }
   const [updated] = await db.update(offboardingRecords).set(req.body).where(eq(offboardingRecords.id, req.params.id)).returning();
   res.json(updated);
 });

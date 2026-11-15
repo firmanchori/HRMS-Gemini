@@ -90,6 +90,17 @@ export function buildTenantRequestsRouter(resolveVisibleEmployeeIds: (req: impor
     res.json(updated);
   }));
 
+  /** Records that an outstanding loan was settled outside payroll (cash/transfer or final-pay deduction). An explicit, audited, reasoned action — it is never done as a side effect of something else. */
+  router.post("/loans/:id/settle", validateParams(uuidParam("id")), validateBody(z.object({ note: z.string().trim().min(3, "Catatan pelunasan wajib diisi").max(500) })), wrap(async (req, res) => {
+    const tenantId = req.session!.tenantId!;
+    const [loan] = await db.select().from(employeeLoans).where(and(eq(employeeLoans.id, req.params.id), eq(employeeLoans.tenantId, tenantId))).limit(1);
+    if (!loan || !(await visible(req, loan.employeeId))) return res.status(404).json({ error: "Data pinjaman tidak ditemukan" });
+    if (loan.status !== "Aktif") return res.status(409).json({ error: "Hanya pinjaman aktif yang dapat dilunasi." });
+    const [updated] = await db.update(employeeLoans).set({ status: "Lunas", remainingAmount: 0 }).where(eq(employeeLoans.id, loan.id)).returning();
+    await logAudit({ actorUserId: req.session!.userId, tenantId, action: "loan.settled_manually", details: { loanId: loan.id, outstanding: loan.remainingAmount, note: req.body.note } });
+    res.json(updated);
+  }));
+
   // Leave balances (ledger-derived) for the employees in scope.
   router.get("/leave-balances", async (req, res) => {
     const tenantId = req.session!.tenantId!;

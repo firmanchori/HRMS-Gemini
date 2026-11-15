@@ -265,7 +265,7 @@ export const LoanManagement: React.FC = () => {
     .filter((l) => l.status === 'Aktif')
     .reduce((sum, l) => sum + l.remainingAmount, 0);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!employeeId) {
       setLoanFormError('Pilih nama karyawan yang mengajukan pinjaman');
@@ -306,7 +306,8 @@ export const LoanManagement: React.FC = () => {
     }
 
     setLoanFormError(null);
-    addLoan({
+try {
+      await addLoan({
       employeeId,
       loanType,
       totalAmount,
@@ -317,6 +318,10 @@ export const LoanManagement: React.FC = () => {
         loanReason ||
         `Pengajuan ${selectedScheme.name} (${selectedScheme.interestMethod}, Biaya Admin: ${formatRupiah(schemeAdminFeeNominal)})`,
     });
+    } catch (err) {
+      setLoanFormError(err instanceof Error ? err.message : 'Gagal menyimpan pengajuan pinjaman.');
+      return;
+    }
 
     setIsModalOpen(false);
     setLoanReason('');
@@ -326,8 +331,9 @@ export const LoanManagement: React.FC = () => {
 
   const [loanNotice, setLoanNotice] = useState<string | null>(null);
 
-  const handleApplyFromSimulation = () => {
-    addLoan({
+  const handleApplyFromSimulation = async () => {
+try {
+      await addLoan({
       employeeId: simEmployeeId,
       loanType: 'Pinjaman Fleksibel',
       totalAmount: simAmount,
@@ -336,6 +342,10 @@ export const LoanManagement: React.FC = () => {
       startDate: new Date().toISOString().split('T')[0],
       reason: `Pengajuan dari simulasi kalkulator (DSR: ${dsrPercent}%)`,
     });
+    } catch (err) {
+      setLoanNotice(err instanceof Error ? err.message : 'Gagal mengajukan pinjaman.');
+      return;
+    }
 
     setLoanNotice('Pengajuan pinjaman dari hasil simulasi berhasil diajukan dan masuk ke daftar persetujuan!');
     setTimeout(() => setLoanNotice(null), 4000);

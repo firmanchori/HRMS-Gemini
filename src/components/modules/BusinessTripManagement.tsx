@@ -168,7 +168,7 @@ export const BusinessTripManagement: React.FC = () => {
   const totalDays = calculateDays();
   const estimatedCost = totalDays * perDiemDaily + accommodationCost + ticketCost;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!employeeId) {
       setSppdFormError('Pilih nama karyawan yang ditugaskan dinas');
@@ -189,7 +189,8 @@ export const BusinessTripManagement: React.FC = () => {
     }
 
     setSppdFormError(null);
-    submitBusinessTrip({
+try {
+      await submitBusinessTrip({
       employeeId,
       destinationCity,
       startDate,
@@ -201,6 +202,10 @@ export const BusinessTripManagement: React.FC = () => {
       accommodationCost,
       estimatedCost,
     });
+    } catch (err) {
+      setSppdFormError(err instanceof Error ? err.message : 'Gagal mengirim pengajuan SPPD.');
+      return;
+    }
 
     setIsModalOpen(false);
     setDestinationCity('');

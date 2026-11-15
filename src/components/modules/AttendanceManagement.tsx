@@ -53,8 +53,6 @@ export const AttendanceManagement: React.FC = () => {
     attendance,
     currentTenant,
     leaveRequests,
-    clockIn,
-    clockOut,
     submitLeaveRequest,
     reviewLeaveRequest,
     submitOvertimeRequest,
@@ -292,7 +290,7 @@ export const AttendanceManagement: React.FC = () => {
     return isNaN(diff) || diff < 1 ? 0 : diff;
   };
 
-  const handleLeaveSubmit = (e: React.FormEvent) => {
+  const handleLeaveSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!leaveEmpId) {
       setLeaveFormError('Pilih nama karyawan yang mengajukan cuti');
@@ -306,7 +304,8 @@ export const AttendanceManagement: React.FC = () => {
     }
 
     setLeaveFormError(null);
-    submitLeaveRequest({
+    try {
+      await submitLeaveRequest({
       employeeId: leaveEmpId,
       leaveType,
       startDate,
@@ -314,12 +313,16 @@ export const AttendanceManagement: React.FC = () => {
       totalDays: calculateDays(),
       reason: leaveReason || 'Pengajuan cuti terjadwal',
     });
+    } catch (err) {
+      setLeaveFormError(err instanceof Error ? err.message : 'Gagal mengirim pengajuan.');
+      return;
+    }
 
-    setIsLeaveModalOpen(false);
+        setIsLeaveModalOpen(false);
     setLeaveReason('');
   };
 
-  const handleOvertimeInputSubmit = (e: React.FormEvent) => {
+  const handleOvertimeInputSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const emp = employees.find((em) => em.id === overtimeEmpId);
     if (!emp) {
@@ -334,14 +337,20 @@ export const AttendanceManagement: React.FC = () => {
     }
     const [startH, startM] = overtimeStartTime.split(':').map(Number);
     const [endH, endM] = overtimeEndTime.split(':').map(Number);
-    const hours = Number((((endH * 60 + endM) - (startH * 60 + startM)) / 60).toFixed(1));
-    if (!(hours > 0)) {
+    const rawMinutes = (endH * 60 + endM) - (startH * 60 + startM);
+    const hours = Math.floor(rawMinutes / 60);
+    if (!(rawMinutes > 0)) {
       setOvertimeFormError('Jam selesai harus setelah jam mulai.');
+      return;
+    }
+    if (hours < 1) {
+      setOvertimeFormError('Lembur minimal 1 jam penuh.');
       return;
     }
 
     setOvertimeFormError(null);
-    submitOvertimeRequest({
+    try {
+      await submitOvertimeRequest({
       employeeId: overtimeEmpId,
       date: overtimeDate,
       startTime: overtimeStartTime,
@@ -351,12 +360,16 @@ export const AttendanceManagement: React.FC = () => {
       type: 'Perintah Atasan',
       compensationType: overtimeCompensationType,
     });
+    } catch (err) {
+      setOvertimeFormError(err instanceof Error ? err.message : 'Gagal mengirim pengajuan.');
+      return;
+    }
 
-    setIsOvertimeModalOpen(false);
+        setIsOvertimeModalOpen(false);
     setOvertimeReason('');
   };
 
-  const handleShiftSwapSubmit = (e: React.FormEvent) => {
+  const handleShiftSwapSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!swapRequesterId || !swapTargetId) {
       setSwapFormError('Pilih pemohon dan karyawan target pertukaran shift');
@@ -370,19 +383,24 @@ export const AttendanceManagement: React.FC = () => {
     }
     setSwapFormError(null);
 
-    addShiftSwapRequest({
+    try {
+      await addShiftSwapRequest({
       requesterId: swapRequesterId,
       targetEmployeeId: swapTargetId,
       requestDate: swapRequestDate,
       targetDate: swapTargetDate,
       reason: swapReason || 'Penyesuaian jam kerja terjadwal',
     });
+    } catch (err) {
+      setSwapFormError(err instanceof Error ? err.message : 'Gagal mengirim pengajuan.');
+      return;
+    }
 
-    setIsShiftSwapModalOpen(false);
+        setIsShiftSwapModalOpen(false);
     setSwapReason('');
   };
 
-  const handleCorrectionSubmit = (e: React.FormEvent) => {
+  const handleCorrectionSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!corrEmpId) {
       setCorrFormError('Pilih karyawan yang mengajukan koreksi');
@@ -400,7 +418,8 @@ export const AttendanceManagement: React.FC = () => {
     }
     setCorrFormError(null);
 
-    submitAttendanceCorrection({
+    try {
+      await submitAttendanceCorrection({
       employeeId: corrEmpId,
       date: corrDate,
       type: corrType,
@@ -408,8 +427,12 @@ export const AttendanceManagement: React.FC = () => {
       proposedClockOut: corrClockOut,
       reason: corrReason || 'Koreksi log jam kerja mandiri',
     });
+    } catch (err) {
+      setCorrFormError(err instanceof Error ? err.message : 'Gagal mengirim pengajuan.');
+      return;
+    }
 
-    setIsCorrectionModalOpen(false);
+        setIsCorrectionModalOpen(false);
     setCorrReason('');
   };
 

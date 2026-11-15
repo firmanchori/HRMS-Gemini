@@ -176,7 +176,7 @@ export const CompanyCalendarManagement: React.FC = () => {
     });
   };
 
-  const handleAddEmployeeLeave = (e: React.FormEvent) => {
+  const handleAddEmployeeLeave = async (e: React.FormEvent) => {
     e.preventDefault();
     setShowValidationErrors(true);
     if (!selectedDayDate) return;
@@ -197,7 +197,8 @@ export const CompanyCalendarManagement: React.FC = () => {
     endD.setDate(startD.getDate() + (Number(dayLeaveForm.totalDays) - 1));
     const endDateStr = endD.toISOString().split('T')[0];
 
-    submitLeaveRequest({
+    try {
+      await submitLeaveRequest({
       employeeId: dayLeaveForm.employeeId,
       leaveType: dayLeaveForm.leaveType,
       startDate: selectedDayDate,
@@ -205,6 +206,10 @@ export const CompanyCalendarManagement: React.FC = () => {
       totalDays: Number(dayLeaveForm.totalDays),
       reason: dayLeaveForm.reason.trim(),
     });
+    } catch (err) {
+      setCalendarNotice(err instanceof Error ? err.message : 'Gagal menyimpan pengajuan cuti.');
+      return;
+    }
 
     setIsDayModalOpen(false);
     setCalendarNotice(`Pengajuan cuti untuk ${emp?.fullName || 'karyawan'} tanggal ${selectedDayDate} berhasil disimpan.`);

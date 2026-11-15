@@ -39,6 +39,7 @@ import {
   type PersonaliaActionRow as ApiPersonaliaActionRow,
   type PayrollPeriod as ApiPayrollPeriod,
   type ThrPayment as ApiThrPayment,
+  type LeaveBalanceView,
   type GaRoomBookingRow,
   type GaVehicleBookingRow,
   type GaOfficeSupplyRow,
@@ -241,9 +242,7 @@ interface HrmsContextType {
   attendance: AttendanceRecord[];
   setAttendance: React.Dispatch<React.SetStateAction<AttendanceRecord[]>>;
   leaveRequests: LeaveRequest[];
-  clockIn: (employeeId: string, notes?: string, workType?: 'WFO' | 'WFH' | 'WFA') => void;
-  clockOut: (employeeId: string, notes?: string) => void;
-  submitLeaveRequest: (request: Omit<LeaveRequest, 'id' | 'tenantId' | 'status'>) => void;
+  submitLeaveRequest: (request: Omit<LeaveRequest, 'id' | 'tenantId' | 'status'>) => Promise<void>;
   reviewLeaveRequest: (id: string, approved: boolean) => void;
 
   // 3. Payroll & Tax
@@ -257,7 +256,7 @@ interface HrmsContextType {
 
   // 4. Loans & Kasbon
   loans: EmployeeLoan[];
-  addLoan: (loan: Omit<EmployeeLoan, 'id' | 'tenantId' | 'remainingAmount' | 'status'>) => void;
+  addLoan: (loan: Omit<EmployeeLoan, 'id' | 'tenantId' | 'remainingAmount' | 'status'>) => Promise<void>;
   updateLoanStatus: (id: string, status: 'Aktif' | 'Lunas' | 'Menunggu Approval' | 'Ditolak') => void;
 
   // 5. Real-time KPI
@@ -334,7 +333,7 @@ interface HrmsContextType {
 
   // 10. Procurement
   procurementOrders: ProcurementOrder[];
-  addProcurementOrder: (order: Omit<ProcurementOrder, 'id' | 'tenantId' | 'prNumber' | 'poNumber' | 'status' | 'requestedDate'>) => void;
+  addProcurementOrder: (order: Omit<ProcurementOrder, 'id' | 'tenantId' | 'prNumber' | 'poNumber' | 'status' | 'requestedDate'>) => Promise<void>;
   updateProcurementStatus: (id: string, status: ProcurementOrder['status'], poNumber?: string) => void;
 
   // 11. Documents & QR Signatures
@@ -379,17 +378,17 @@ interface HrmsContextType {
   upsertSchedules: (items: { employeeId: string; date: string; shiftId: string | null }[]) => void;
   clearSchedules: (employeeIds: string[], dateFrom: string, dateTo: string) => void;
   shiftSwaps: ShiftSwapRequest[];
-  addShiftSwapRequest: (swap: Omit<ShiftSwapRequest, 'id' | 'tenantId' | 'status'>) => void;
+  addShiftSwapRequest: (swap: Omit<ShiftSwapRequest, 'id' | 'tenantId' | 'status'>) => Promise<void>;
   reviewShiftSwapRequest: (id: string, approved: boolean) => void;
 
   // 15. Attendance Corrections (Lupa Absen, Keterlambatan, etc.)
   attendanceCorrections: AttendanceCorrectionRequest[];
-  submitAttendanceCorrection: (req: Omit<AttendanceCorrectionRequest, 'id' | 'tenantId' | 'status'>) => void;
+  submitAttendanceCorrection: (req: Omit<AttendanceCorrectionRequest, 'id' | 'tenantId' | 'status'>) => Promise<void>;
   reviewAttendanceCorrection: (id: string, approved: boolean) => void;
 
   // 16. Business Trips (SPPD)
   businessTrips: BusinessTripRequest[];
-  submitBusinessTrip: (trip: Omit<BusinessTripRequest, 'id' | 'tenantId' | 'tripNumber' | 'status'>) => void;
+  submitBusinessTrip: (trip: Omit<BusinessTripRequest, 'id' | 'tenantId' | 'tripNumber' | 'status'>) => Promise<void>;
   reviewBusinessTrip: (id: string, status: BusinessTripRequest['status']) => void;
 
   // 17. Multi-tier Approval Center & Delegations
@@ -461,7 +460,7 @@ interface HrmsContextType {
 
   // 24. Overtime Request & Approval Flow
   overtimeRequests: OvertimeRequest[];
-  submitOvertimeRequest: (req: Omit<OvertimeRequest, 'id' | 'tenantId' | 'status'>) => void;
+  submitOvertimeRequest: (req: Omit<OvertimeRequest, 'id' | 'tenantId' | 'status'>) => Promise<void>;
   reviewOvertimeRequest: (id: string, approved: boolean, approvedHours?: number, notes?: string) => void;
 
   // 25. Reimbursement Claim & Payroll Opt-In
@@ -867,7 +866,16 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // `details` (see buildEmployeeApiPayload below), same pattern already
   // proven for candidates/jobVacancies/onboardingProcesses.
   const [apiEmployees, setApiEmployees] = useState<ApiEmployee[]>([]);
-  const employees = useMemo(() => apiEmployees.map((r) => mergeRowIntoMock(r) as unknown as Employee), [apiEmployees]);
+  // Leave balances come from the server's ledger; the employee's displayed remaining days is overlaid from it (never computed or stored in the browser).
+  const [apiLeaveBalances, setApiLeaveBalances] = useState<LeaveBalanceView[]>([]);
+  const employees = useMemo(() => {
+    const byEmp = new Map(apiLeaveBalances.map((b) => [b.employeeId, b]));
+    return apiEmployees.map((r) => {
+      const emp = mergeRowIntoMock(r) as unknown as Employee;
+      const bal = byEmp.get(r.id);
+      return bal ? { ...emp, remainingLeaveDays: bal.remaining } : emp;
+    });
+  }, [apiEmployees, apiLeaveBalances]);
 
   // Personalia is real backend data (personalia_actions); logs/requests below are derived views of the same rows.
   const [apiPersonalia, setApiPersonalia] = useState<ApiPersonaliaActionRow[]>([]);
@@ -1003,33 +1011,10 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Real backend data, hydrated via loadTenantOrgData() — the Approval
   // Engine (user, 2026-11-02: fix this before the modules that depend on
-  // it). createApprovalItem/persistApprovalItemUpdate below replace the
-  // old setApprovalItems local-only setter everywhere it was used to add
-  // or change a row.
+  // it). Items for employee requests are created by the SERVER together with
+  // the request; the browser only reads them and asks the engine to decide.
   const [approvalItems, setApprovalItems] = useState<ApprovalWorkflowItem[]>([]);
   const [approvalDelegations, setApprovalDelegations] = useState<ApprovalDelegation[]>([]);
-
-  const createApprovalItem = (item: Omit<ApprovalWorkflowItem, 'id' | 'tenantId'>) => {
-    tenantApi.createApprovalItem(item as unknown as Omit<ApiApprovalWorkflowItem, 'id' | 'tenantId'>).then((created) => {
-      setApprovalItems((prev) => [created as unknown as ApprovalWorkflowItem, ...prev]);
-    });
-  };
-
-  const persistApprovalItemUpdate = (id: string, updates: Partial<ApprovalWorkflowItem>) => {
-    const current = approvalItems.find((a) => a.id === id);
-    if (!current) return;
-    const merged = { ...current, ...updates };
-    tenantApi.updateApprovalItem(id, merged as unknown as Partial<ApiApprovalWorkflowItem>).then((updated) => {
-      setApprovalItems((prev) => prev.map((a) => (a.id === id ? (updated as unknown as ApprovalWorkflowItem) : a)));
-    });
-  };
-
-  /** Most review actions sync the hub by referenceId+category, not by the approval item's own id (that's only known inside this module). */
-  const persistApprovalItemByReference = (referenceId: string, category: string, updates: Partial<ApprovalWorkflowItem>) => {
-    const current = approvalItems.find((a) => a.referenceId === referenceId && a.category === category);
-    if (!current) return;
-    persistApprovalItemUpdate(current.id, updates);
-  };
 
   const [apiVendors, setApiVendors] = useState<ApiVendor[]>([]);
   const vendors = useMemo(() => apiVendors as unknown as Vendor[], [apiVendors]);
@@ -1470,6 +1455,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     tenantApi.listReimbursementClaims().then(setApiReimbursementClaims).catch(() => setApiReimbursementClaims([]));
     tenantApi.listPayrollPeriods().then(setApiPayrollPeriods).catch(() => setApiPayrollPeriods([]));
     tenantApi.listThrPayments().then(setThrPayments).catch(() => setThrPayments([]));
+    tenantApi.listLeaveBalances().then(setApiLeaveBalances).catch(() => setApiLeaveBalances([]));
     tenantApi.listGaRoomBookings().then(setApiRoomBookings).catch(() => setApiRoomBookings([]));
     tenantApi.listGaVehicleBookings().then(setApiVehicleBookings).catch(() => setApiVehicleBookings([]));
     tenantApi.listGaOfficeSupplies().then(setApiOfficeSupplies).catch(() => setApiOfficeSupplies([]));
@@ -1745,117 +1731,56 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   };
 
-  const clockIn = (employeeId: string, notes?: string, workType?: 'WFO' | 'WFH' | 'WFA') => {
-    const now = new Date();
-    const today = now.toISOString().split('T')[0];
-    const timeStr = now.toTimeString().substring(0, 5);
-
-    // Standard start hour 08:30
-    const [hours, mins] = timeStr.split(':').map(Number);
-    const lateMinutes = Math.max(0, hours * 60 + mins - (8 * 60 + 30));
-    const status = lateMinutes > 0 ? 'Terlambat' : 'Hadir';
-
-    const existing = attendance.find((a) => a.tenantId === currentTenant.id && a.employeeId === employeeId && a.date === today);
-
-    persistAttendanceUpsert({
-      employeeId,
-      date: today,
-      clockIn: timeStr,
-      clockOut: existing?.clockOut,
-      status,
-      overtimeHours: existing?.overtimeHours ?? 0,
-      lateMinutes,
-      notes: notes || existing?.notes || 'Presensi ESS Mobile/Webcam Terverifikasi',
-      shiftId: existing?.shiftId,
-      workType: workType || existing?.workType,
-    });
+  // ===== Employee requests are SERVER-owned (B7): the server creates each request together with its Approval Engine item (approver =
+  // the requester's real manager) and applies the outcome exactly once. The browser only describes the request, asks the engine to
+  // decide it (admin override), and re-reads the result — it never sets a status, an approver, a number or a balance.
+  const refreshRequests = async () => {
+    const [leave, ot, loansNow, corr, swaps, trips, items, balances, orders, att] = await Promise.all([
+      tenantApi.listLeaveRequests(),
+      tenantApi.listOvertimeRequests(),
+      tenantApi.listLoans(),
+      tenantApi.listAttendanceCorrections(),
+      tenantApi.listShiftSwapRequests(),
+      tenantApi.listBusinessTrips(),
+      tenantApi.listApprovalItems(),
+      tenantApi.listLeaveBalances(),
+      tenantApi.listProcurementOrders(),
+      tenantApi.listAttendanceRecords(),
+    ]);
+    setApiLeaveRequests(leave);
+    setOvertimeRequests(ot as unknown as OvertimeRequest[]);
+    setApiLoans(loansNow);
+    setAttendanceCorrections(corr as unknown as AttendanceCorrectionRequest[]);
+    setShiftSwaps(swaps as unknown as ShiftSwapRequest[]);
+    setApiBusinessTrips(trips);
+    setApprovalItems(items as unknown as ApprovalWorkflowItem[]);
+    setApiLeaveBalances(balances);
+    setApiProcurementOrders(orders);
+    setAttendance(att as unknown as AttendanceRecord[]);
   };
 
-  const clockOut = (employeeId: string, notes?: string) => {
-    const now = new Date();
-    const today = now.toISOString().split('T')[0];
-    const timeStr = now.toTimeString().substring(0, 5);
-
-    const [hours, mins] = timeStr.split(':').map(Number);
-    // Overtime calculated after 17:30
-    const outTotalMins = hours * 60 + mins;
-    const standardOutMins = 17 * 60 + 30;
-    const otMinutes = Math.max(0, outTotalMins - standardOutMins);
-    const overtimeHours = Number((otMinutes / 60).toFixed(1));
-
-    const existing = attendance.find((a) => a.tenantId === currentTenant.id && a.employeeId === employeeId && a.date === today);
-    if (!existing) return;
-
-    persistAttendanceUpsert({
-      ...existing,
-      clockOut: timeStr,
-      overtimeHours,
-      notes: notes || existing.notes,
-    });
-  };
-
-  const submitLeaveRequest = (requestData: Omit<LeaveRequest, 'id' | 'tenantId' | 'status'>) => {
-    tenantApi
-      .createLeaveRequest({ ...requestData, status: 'Menunggu' } as unknown as Omit<ApiLeaveRequest, 'id' | 'tenantId'>)
-      .then((created) => {
-        setApiLeaveRequests((prev) => [created, ...prev]);
-        const emp = employees.find((e) => e.id === created.employeeId);
-        createApprovalItem({
-          category: 'Cuti',
-          referenceId: created.id,
-          title: `Permohonan ${created.leaveType} (${created.totalDays} Hari) - ${emp?.fullName || 'Karyawan'}`,
-          requesterId: created.employeeId,
-          department: emp?.department || 'Operasional',
-          submittedAt: new Date().toISOString(),
-          deadlineAt: new Date(Date.now() + 48 * 3600 * 1000).toISOString(),
-          level: 1,
-          totalLevels: 2,
-          assignedApproverRole: 'manager',
-          status: 'Menunggu',
-          notes: `${created.startDate} s/d ${created.endDate}: ${created.reason ?? ''}`,
-        });
-      });
-  };
-
-  const reviewLeaveRequest = (id: string, approved: boolean) => {
-    const req = leaveRequests.find((l) => l.id === id);
-    persistApprovalItemByReference(id, 'Cuti', { status: approved ? 'Disetujui' : 'Ditolak' });
-    if (req && approved) {
-      const attStatus: AttendanceRecord['status'] = req.leaveType.includes('Sakit')
-        ? 'Sakit'
-        : req.leaveType.includes('Izin')
-        ? 'Izin'
-        : 'Cuti';
-      const existing = attendance.find((a) => a.tenantId === currentTenant.id && a.employeeId === req.employeeId && a.date === req.startDate);
-      persistAttendanceUpsert(
-        existing
-          ? { ...existing, status: attStatus, lateMinutes: 0, notes: `${req.leaveType}: ${req.reason}` }
-          : {
-              employeeId: req.employeeId,
-              date: req.startDate,
-              clockIn: '-',
-              clockOut: '-',
-              status: attStatus,
-              overtimeHours: 0,
-              lateMinutes: 0,
-              notes: `${req.leaveType} Disetujui: ${req.reason}`,
-            }
-      );
+  /** Decide the pending approval item behind a request through the Approval Engine (tenant_admin override; audited server-side). */
+  const decideRequest = async (category: string, referenceId: string, approved: boolean, reason?: string): Promise<void> => {
+    let item = approvalItems.find((a) => a.category === category && a.referenceId === referenceId && (a.status === 'Menunggu' || a.status === 'Eskalasi Terlambat'));
+    if (!item) {
+      const fresh = (await tenantApi.listApprovalItems()) as unknown as ApprovalWorkflowItem[];
+      setApprovalItems(fresh);
+      item = fresh.find((a) => a.category === category && a.referenceId === referenceId && (a.status === 'Menunggu' || a.status === 'Eskalasi Terlambat'));
     }
-    if (!req) return;
-
-    tenantApi
-      .updateLeaveRequest(id, { status: approved ? 'Disetujui' : 'Ditolak', approvedBy: currentUser.name })
-      .then((updated) => setApiLeaveRequests((prev) => prev.map((l) => (l.id === id ? updated : l))));
-
-    // If approved, deduct leave days from employee
-    if (approved) {
-      const emp = employees.find((e) => e.id === req.employeeId);
-      if (emp && req.leaveType === 'Cuti Tahunan') {
-        updateEmployee(emp.id, { remainingLeaveDays: Math.max(0, (emp.remainingLeaveDays ?? 12) - req.totalDays) });
-      }
-    }
+    if (!item) throw new Error('Item approval untuk pengajuan ini tidak ditemukan atau sudah diputuskan.');
+    await tenantApi.decideApprovalItem(item.id, approved ? 'Disetujui' : 'Ditolak', approved ? undefined : reason || 'Ditolak oleh admin');
+    await refreshRequests();
   };
+  const decideRequestSafely = (category: string, referenceId: string, approved: boolean, reason?: string) => {
+    decideRequest(category, referenceId, approved, reason).catch((err: unknown) => window.alert(err instanceof Error ? err.message : 'Gagal memproses keputusan.'));
+  };
+
+  const submitLeaveRequest = async (requestData: Omit<LeaveRequest, 'id' | 'tenantId' | 'status'>): Promise<void> => {
+    await tenantApi.createLeaveRequest(requestData as unknown as Record<string, unknown>);
+    await refreshRequests();
+  };
+
+  const reviewLeaveRequest = (id: string, approved: boolean) => decideRequestSafely('Cuti', id, approved);
 
   // 3. Payroll — computed ONLY by the server (PPh 21 TER, BPJS, overtime, loans, reimbursement, pro-rata). The browser asks
   // for a run by period, approves it, and disburses it; it never sends or computes a number.
@@ -1901,37 +1826,15 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // 4. Loans & Kasbon
-  const addLoan = (
-    loanData: Omit<EmployeeLoan, 'id' | 'tenantId' | 'remainingAmount' | 'status'>
-  ) => {
-    tenantApi
-      .createLoan({ ...loanData, remainingAmount: loanData.totalAmount, status: 'Menunggu Approval' } as unknown as Omit<ApiEmployeeLoan, 'id' | 'tenantId'>)
-      .then((created) => {
-        setApiLoans((prev) => [created, ...prev]);
-        const emp = employees.find((e) => e.id === created.employeeId);
-        createApprovalItem({
-          category: 'Pinjaman',
-          referenceId: created.id,
-          title: `Pengajuan ${created.loanType}: ${emp?.fullName || 'Karyawan'} (Tenor ${created.tenorMonths} Bln)`,
-          requesterId: created.employeeId,
-          department: emp?.department || 'Operasional',
-          amount: created.totalAmount,
-          submittedAt: new Date().toISOString(),
-          deadlineAt: new Date(Date.now() + 48 * 3600 * 1000).toISOString(),
-          level: 1,
-          totalLevels: 2,
-          assignedApproverRole: 'payroll_admin',
-          status: 'Menunggu',
-          notes: created.reason ?? undefined,
-        });
-      });
+  const addLoan = async (loanData: Omit<EmployeeLoan, 'id' | 'tenantId' | 'remainingAmount' | 'status'>): Promise<void> => {
+    await tenantApi.createLoan(loanData as unknown as Record<string, unknown>);
+    await refreshRequests();
   };
 
+  /** Approving/rejecting a loan is the Approval Engine's decision; only 'Aktif' (approve) and 'Ditolak' (reject) are meaningful here. */
   const updateLoanStatus = (id: string, status: 'Aktif' | 'Lunas' | 'Menunggu Approval' | 'Ditolak') => {
-    persistApprovalItemByReference(id, 'Pinjaman', {
-      status: status === 'Aktif' || status === 'Lunas' ? 'Disetujui' : status === 'Ditolak' ? 'Ditolak' : 'Menunggu',
-    });
-    tenantApi.updateLoan(id, { status }).then((updated) => setApiLoans((prev) => prev.map((l) => (l.id === id ? updated : l))));
+    if (status === 'Aktif') decideRequestSafely('Pinjaman', id, true);
+    else if (status === 'Ditolak') decideRequestSafely('Pinjaman', id, false);
   };
 
   // 5. Performance & KPI
@@ -2444,13 +2347,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updateAsset(ast.id, { assignedToEmployeeId: undefined, condition: 'Baik' });
       }
     }
-    if (checklist.financeCleared && !o.financeCleared) {
-      const employeeActiveLoans = apiLoans.filter((ln) => ln.employeeId === o.employeeId && ln.status === 'Aktif');
-      Promise.all(employeeActiveLoans.map((ln) => tenantApi.updateLoan(ln.id, { remainingAmount: 0, status: 'Lunas' }))).then((updatedLoans) => {
-        const updatedIds = new Set(updatedLoans.map((u) => u.id));
-        setApiLoans((prev) => [...updatedLoans, ...prev.filter((ln) => !updatedIds.has(ln.id))]);
-      });
-    }
+    // Finance clearance is verified by the server against the loan register (an outstanding loan blocks it) — nothing is written off here.
     // If parklaring just issued, create document
     if (checklist.parklaringIssued && !o.parklaringIssued) {
       const emp = employees.find((e) => e.id === o.employeeId);
@@ -2513,41 +2410,19 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // 10. Procurement
-  const addProcurementOrder = (
+  const addProcurementOrder = async (
     orderData: Omit<ProcurementOrder, 'id' | 'tenantId' | 'prNumber' | 'poNumber' | 'status' | 'requestedDate'>
-  ) => {
-    const count = procurementOrders.length + 1;
+  ): Promise<void> => {
     const year = new Date().getFullYear();
-    const prNumber = `PR-${year}-${String(count).padStart(3, '0')}`;
-
-    tenantApi
-      .createProcurementOrder({
-        ...orderData,
-        prNumber,
-        poNumber: '',
-        status: 'Pengajuan PR',
-        requestedDate: new Date().toISOString().split('T')[0],
-      } as unknown as Omit<ApiProcurementOrder, 'id' | 'tenantId'>)
-      .then((created) => {
-        setApiProcurementOrders((prev) => [created, ...prev]);
-
-        const requesterEmp = employees.find((e) => e.fullName === orderData.requestor);
-        createApprovalItem({
-          category: 'Procurement PR',
-          referenceId: created.id,
-          title: `PR ${created.itemName} (${created.quantity} unit) - ${orderData.vendorName}`,
-          requesterId: requesterEmp?.id || '',
-          department: orderData.department,
-          submittedAt: new Date().toISOString(),
-          deadlineAt: new Date(Date.now() + 72 * 3600 * 1000).toISOString(),
-          level: 1,
-          totalLevels: 2,
-          assignedApproverRole: 'manager',
-          status: 'Menunggu',
-          amount: orderData.estimatedCost,
-          notes: `PR ${created.prNumber}`,
-        });
-      });
+    const prNumber = `PR-${year}-${String(procurementOrders.length + 1).padStart(3, '0')}`;
+    const requesterEmp = employees.find((e) => e.fullName === orderData.requestor);
+    await tenantApi.createProcurementOrder({
+      ...orderData,
+      requestorEmployeeId: requesterEmp?.id ?? null,
+      prNumber,
+      requestedDate: new Date().toISOString().split('T')[0],
+    } as unknown as Omit<ApiProcurementOrder, 'id' | 'tenantId'>);
+    await refreshRequests();
   };
 
   const updateProcurementStatus = (
@@ -3003,54 +2878,13 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // 14. Shifts & Roaster Actions — real backend.
-  const addShiftSwapRequest = (swap: Omit<ShiftSwapRequest, 'id' | 'tenantId' | 'status'>) => {
-    tenantApi.createShiftSwapRequest({ ...swap, status: 'Menunggu' } as unknown as Omit<ApiShiftSwapRequest, 'id' | 'tenantId'>).then((created) => {
-      const newSwap = created as unknown as ShiftSwapRequest;
-      setShiftSwaps((prev) => [newSwap, ...prev]);
-
-      // Add to approval hub
-      const requester = employees.find((e) => e.id === swap.requesterId);
-      createApprovalItem({
-        category: 'Tukar Shift',
-        referenceId: newSwap.id,
-        title: `Pengajuan Tukar Shift: ${requester?.fullName || 'Karyawan'}`,
-        requesterId: swap.requesterId,
-        department: requester?.department || 'Operasional',
-        submittedAt: new Date().toISOString(),
-        deadlineAt: new Date(Date.now() + 48 * 3600 * 1000).toISOString(),
-        level: 1,
-        totalLevels: 1,
-        assignedApproverRole: 'manager',
-        status: 'Menunggu',
-        notes: swap.reason,
-      });
-    });
+  const addShiftSwapRequest = async (swap: Omit<ShiftSwapRequest, 'id' | 'tenantId' | 'status'>): Promise<void> => {
+    await tenantApi.createShiftSwapRequest(swap as unknown as Record<string, unknown>);
+    await refreshRequests();
   };
 
-  const reviewShiftSwapRequest = (id: string, approved: boolean) => {
-    const swap = shiftSwaps.find((s) => s.id === id);
-    tenantApi.updateShiftSwapRequest(id, { status: approved ? 'Disetujui' : 'Ditolak', approvedBy: currentUser.name }).then((updated) => {
-      setShiftSwaps((prev) => prev.map((s) => (s.id === id ? (updated as unknown as ShiftSwapRequest) : s)));
-    });
-    persistApprovalItemByReference(id, 'Tukar Shift', { status: approved ? 'Disetujui' : 'Ditolak' });
-    // Tukar shift disetujui -> roster kedua karyawan ikut ditukar
-    if (approved && swap && swap.status === 'Menunggu') {
-      const findEntry = (empId: string, date: string) =>
-        schedules.find((p) => p.tenantId === swap.tenantId && p.employeeId === empId && p.date === date);
-      const a = findEntry(swap.requesterId, swap.requestDate);
-      const b = findEntry(swap.targetEmployeeId, swap.targetDate);
-      if (a && b) {
-        tenantApi.updateEmployeeSchedule(a.id, { shiftId: b.shiftId }).then((u) => setSchedules((prev) => prev.map((s) => (s.id === a.id ? (u as unknown as EmployeeSchedule) : s))));
-        tenantApi.updateEmployeeSchedule(b.id, { shiftId: a.shiftId }).then((u) => setSchedules((prev) => prev.map((s) => (s.id === b.id ? (u as unknown as EmployeeSchedule) : s))));
-      } else if (a && !b) {
-        tenantApi.createEmployeeSchedule({ employeeId: swap.targetEmployeeId, date: swap.targetDate, shiftId: a.shiftId }).then((c) => setSchedules((prev) => [c as unknown as EmployeeSchedule, ...prev]));
-        tenantApi.deleteEmployeeSchedule(a.id).then(() => setSchedules((prev) => prev.filter((s) => s.id !== a.id)));
-      } else if (b && !a) {
-        tenantApi.createEmployeeSchedule({ employeeId: swap.requesterId, date: swap.requestDate, shiftId: b.shiftId }).then((c) => setSchedules((prev) => [c as unknown as EmployeeSchedule, ...prev]));
-        tenantApi.deleteEmployeeSchedule(b.id).then(() => setSchedules((prev) => prev.filter((s) => s.id !== b.id)));
-      }
-    }
-  };
+  // The server swaps both roster entries atomically when the engine approves.
+  const reviewShiftSwapRequest = (id: string, approved: boolean) => decideRequestSafely('Tukar Shift', id, approved);
 
   // Master shift & roster
   const addShift = (shift: Omit<WorkShift, 'id' | 'tenantId'>) => {
@@ -3106,95 +2940,28 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // 15. Attendance Corrections Actions — real backend.
-  const submitAttendanceCorrection = (req: Omit<AttendanceCorrectionRequest, 'id' | 'tenantId' | 'status'>) => {
-    tenantApi.createAttendanceCorrection({ ...req, status: 'Menunggu' } as unknown as Omit<ApiAttendanceCorrectionRequest, 'id' | 'tenantId'>).then((created) => {
-      const newReq = created as unknown as AttendanceCorrectionRequest;
-      setAttendanceCorrections((prev) => [newReq, ...prev]);
-
-      const requester = employees.find((e) => e.id === req.employeeId);
-      createApprovalItem({
-        category: 'Perbaikan Presensi',
-        referenceId: newReq.id,
-        title: `Koreksi Presensi (${req.type}) - ${requester?.fullName || 'Karyawan'}`,
-        requesterId: req.employeeId,
-        department: requester?.department || 'Operasional',
-        submittedAt: new Date().toISOString(),
-        deadlineAt: new Date(Date.now() + 48 * 3600 * 1000).toISOString(),
-        level: 1,
-        totalLevels: 1,
-        assignedApproverRole: 'hr_admin',
-        status: 'Menunggu',
-        notes: req.reason,
-      });
-    });
+  const submitAttendanceCorrection = async (req: Omit<AttendanceCorrectionRequest, 'id' | 'tenantId' | 'status'>): Promise<void> => {
+    await tenantApi.createAttendanceCorrection(req as unknown as Record<string, unknown>);
+    await refreshRequests();
   };
 
-  const reviewAttendanceCorrection = (id: string, approved: boolean) => {
-    const corr = attendanceCorrections.find((c) => c.id === id);
-    if (approved && corr) {
-      const existing = attendance.find((a) => a.employeeId === corr.employeeId && a.date === corr.date);
-      persistAttendanceUpsert(
-        existing
-          ? {
-              ...existing,
-              clockIn: corr.proposedClockIn || existing.clockIn,
-              clockOut: corr.proposedClockOut || existing.clockOut,
-              status: 'Hadir',
-              lateMinutes: 0,
-              notes: `Koreksi Presensi (${corr.type}) disetujui: ${corr.reason}`,
-            }
-          : {
-              employeeId: corr.employeeId,
-              date: corr.date,
-              clockIn: corr.proposedClockIn || '08:00',
-              clockOut: corr.proposedClockOut || '17:00',
-              status: 'Hadir',
-              lateMinutes: 0,
-              overtimeHours: 0,
-              notes: `Koreksi Presensi (${corr.type}) disetujui: ${corr.reason}`,
-            }
-      );
-    }
-    tenantApi.updateAttendanceCorrection(id, { status: approved ? 'Disetujui' : 'Ditolak', approvedBy: currentUser.name }).then((updated) => {
-      setAttendanceCorrections((prev) => prev.map((c) => (c.id === id ? (updated as unknown as AttendanceCorrectionRequest) : c)));
-    });
-    persistApprovalItemByReference(id, 'Perbaikan Presensi', { status: approved ? 'Disetujui' : 'Ditolak' });
-  };
+  // The server writes the corrected times (lateness re-derived from the shift) when the engine approves.
+  const reviewAttendanceCorrection = (id: string, approved: boolean) => decideRequestSafely('Perbaikan Presensi', id, approved);
 
   // 16. Business Trips Actions
-  const submitBusinessTrip = (trip: Omit<BusinessTripRequest, 'id' | 'tenantId' | 'tripNumber' | 'status'>) => {
-    const seq = businessTrips.length + 1;
-    const tripNumber = `${String(seq).padStart(3, '0')}/SPPD-HC/${currentTenant.code}/X/2026`;
-
-    tenantApi
-      .createBusinessTrip({ ...trip, tripNumber, status: 'Menunggu Approval' } as unknown as Omit<ApiBusinessTripRequest, 'id' | 'tenantId'>)
-      .then((created) => {
-        setApiBusinessTrips((prev) => [created, ...prev]);
-
-        const requester = employees.find((e) => e.id === trip.employeeId);
-        createApprovalItem({
-          category: 'Perjalanan Dinas',
-          referenceId: created.id,
-          title: `SPPD ke ${trip.destinationCity} (${trip.totalDays} Hari) - ${requester?.fullName || 'Karyawan'}`,
-          requesterId: trip.employeeId,
-          department: requester?.department || 'General',
-          submittedAt: new Date().toISOString(),
-          deadlineAt: new Date(Date.now() + 48 * 3600 * 1000).toISOString(),
-          level: 1,
-          totalLevels: 2,
-          assignedApproverRole: 'manager',
-          status: 'Menunggu',
-          amount: trip.estimatedCost,
-          notes: trip.purpose,
-        });
-      });
+  const submitBusinessTrip = async (trip: Omit<BusinessTripRequest, 'id' | 'tenantId' | 'tripNumber' | 'status'>): Promise<void> => {
+    await tenantApi.createBusinessTrip(trip as unknown as Record<string, unknown>);
+    await refreshRequests();
   };
 
   const reviewBusinessTrip = (id: string, status: BusinessTripRequest['status']) => {
-    tenantApi.updateBusinessTrip(id, { status, approvedBy: currentUser.name }).then((updated) => {
-      setApiBusinessTrips((prev) => prev.map((t) => (t.id === id ? updated : t)));
-    });
-    persistApprovalItemByReference(id, 'Perjalanan Dinas', { status: status === 'Disetujui Atasan' || status === 'Disetujui Finance' ? 'Disetujui' : 'Ditolak' });
+    if (status === 'Ditolak') decideRequestSafely('Perjalanan Dinas', id, false);
+    else if (status === 'Selesai') {
+      tenantApi
+        .completeBusinessTrip(id)
+        .then(() => refreshRequests())
+        .catch((err: unknown) => window.alert(err instanceof Error ? err.message : 'Gagal menyelesaikan perjalanan dinas.'));
+    } else if (status === 'Disetujui Atasan' || status === 'Disetujui Finance') decideRequestSafely('Perjalanan Dinas', id, true);
   };
 
   // 17. Multi-tier Approval Center Actions
@@ -3222,63 +2989,14 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
   };
 
-  const runApprovalSideEffects = (item: ApprovalWorkflowItem, approved: boolean, notes?: string) => {
-    const id = item.id;
-    if (approved) {
-      if (item.category === 'Cuti') {
-        reviewLeaveRequest(item.referenceId, true);
-        const emp = employees.find((e) => e.id === item.requesterId);
-        if (emp) {
-          createOfficialDocument({
-            type: 'Surat Keputusan Cuti',
-            title: `Surat Keterangan Hak Cuti: ${emp.fullName}`,
-            targetEmployeeId: emp.id,
-            signeeName: currentUser.name,
-            signeeRole: 'VP Human Resources',
-            contentPreview: `Menerangkan bahwa permohonan cuti Saudara/i ${emp.fullName} telah disetujui secara resmi.`,
-          });
-        }
-      } else if (item.category === 'Pinjaman') {
-        updateLoanStatus(item.referenceId, 'Aktif');
-      } else if (item.category === 'Perbaikan Presensi') {
-        reviewAttendanceCorrection(item.referenceId, true);
-      } else if (item.category === 'Tukar Shift') {
-        reviewShiftSwapRequest(item.referenceId, true);
-      } else if (item.category === 'Perjalanan Dinas') {
-        reviewBusinessTrip(item.referenceId, 'Disetujui Finance');
-      } else if (item.category === 'Procurement PR') {
-        updateProcurementStatus(item.referenceId, 'PO Terbit');
-      } else if (item.category === 'Promosi/Personalia') {
-        // The server already applied the SK on final approval; just re-read what it changed.
-        refreshAfterPersonaliaChange().catch(() => undefined);
-      } else if (item.category === 'Lembur') {
-        reviewOvertimeRequest(item.referenceId, true);
-      } else if (item.category === 'Reimbursement') {
-        refreshReimbursements().catch(() => undefined);
-      }
-      logAuditAction('Approval Center', 'APPROVE_FINAL', id, `Persetujuan final selesai untuk kategori ${item.category}`);
-    } else {
-      if (item.category === 'Cuti') {
-        reviewLeaveRequest(item.referenceId, false);
-      } else if (item.category === 'Pinjaman') {
-        updateLoanStatus(item.referenceId, 'Ditolak');
-      } else if (item.category === 'Perbaikan Presensi') {
-        reviewAttendanceCorrection(item.referenceId, false);
-      } else if (item.category === 'Tukar Shift') {
-        reviewShiftSwapRequest(item.referenceId, false);
-      } else if (item.category === 'Perjalanan Dinas') {
-        reviewBusinessTrip(item.referenceId, 'Ditolak');
-      } else if (item.category === 'Procurement PR') {
-        updateProcurementStatus(item.referenceId, 'Pengajuan PR');
-      } else if (item.category === 'Promosi/Personalia') {
-        refreshPersonaliaQueue().catch(() => undefined);
-      } else if (item.category === 'Lembur') {
-        reviewOvertimeRequest(item.referenceId, false);
-      } else if (item.category === 'Reimbursement') {
-        refreshReimbursements().catch(() => undefined);
-      }
-      logAuditAction('Approval Center', 'REJECT', id, `Ditolak untuk kategori ${item.category}`);
-    }
+  // The server already applied the outcome (balance deduction, loan activation, roster swap, attendance correction, PO gate, SK, …) when
+  // the engine finalized the item; the browser just re-reads what changed.
+  const runApprovalSideEffects = (item: ApprovalWorkflowItem, approved: boolean, _notes?: string) => {
+    void _notes;
+    if (item.category === 'Promosi/Personalia') (approved ? refreshAfterPersonaliaChange() : refreshPersonaliaQueue()).catch(() => undefined);
+    else if (item.category === 'Reimbursement') refreshReimbursements().catch(() => undefined);
+    else refreshRequests().catch(() => undefined);
+    logAuditAction('Approval Center', approved ? 'APPROVE_FINAL' : 'REJECT', item.id, `${approved ? 'Persetujuan final selesai' : 'Ditolak'} untuk kategori ${item.category}`);
   };
 
   const setApprovalDelegation = (delegation: Omit<ApprovalDelegation, 'id' | 'tenantId'>) => {
@@ -3955,43 +3673,12 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // 24. Overtime Handlers — real backend.
-  const submitOvertimeRequest = (req: Omit<OvertimeRequest, 'id' | 'tenantId' | 'status'>) => {
-    tenantApi.createOvertimeRequest({ ...req, status: 'Menunggu' } as unknown as Omit<ApiOvertimeRequest, 'id' | 'tenantId'>).then((created) => {
-      const newReq = created as unknown as OvertimeRequest;
-      setOvertimeRequests((prev) => [newReq, ...prev]);
-
-      const emp = employees.find((e) => e.id === req.employeeId);
-      createApprovalItem({
-        category: 'Lembur',
-        referenceId: newReq.id,
-        title: `Lembur: ${emp?.fullName || 'Karyawan'} (${req.hours} jam - ${req.date})`,
-        requesterId: req.employeeId,
-        department: emp?.department || 'Operasional',
-        submittedAt: new Date().toISOString(),
-        deadlineAt: new Date(Date.now() + 48 * 3600 * 1000).toISOString(),
-        level: 1,
-        totalLevels: 1,
-        assignedApproverRole: 'manager',
-        status: 'Menunggu',
-        notes: req.reason,
-      });
-
-      logAuditAction('Presensi', 'SUBMIT_LEMBUR', newReq.id, `Pengajuan lembur ${req.hours} jam oleh ${emp?.fullName}`);
-    });
+  const submitOvertimeRequest = async (req: Omit<OvertimeRequest, 'id' | 'tenantId' | 'status'>): Promise<void> => {
+    await tenantApi.createOvertimeRequest(req as unknown as Record<string, unknown>);
+    await refreshRequests();
   };
 
-  const reviewOvertimeRequest = (id: string, approved: boolean, approvedHours?: number, notes?: string) => {
-    const current = overtimeRequests.find((o) => o.id === id);
-    tenantApi
-      .updateOvertimeRequest(id, {
-        status: approved ? 'Disetujui' : 'Ditolak',
-        approvedBy: currentUser.name,
-        approvedHours: approvedHours || current?.hours,
-        notes: notes || current?.notes,
-      })
-      .then((updated) => setOvertimeRequests((prev) => prev.map((o) => (o.id === id ? (updated as unknown as OvertimeRequest) : o))));
-    persistApprovalItemByReference(id, 'Lembur', { status: approved ? 'Disetujui' : 'Ditolak' });
-  };
+  const reviewOvertimeRequest = (id: string, approved: boolean) => decideRequestSafely('Lembur', id, approved);
 
   // 25. Reimbursement Handlers — server creates the claim + its Approval Engine item; the decision is the engine's.
   const refreshReimbursements = async () => {
@@ -4617,8 +4304,6 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         attendance, // real backend data, already tenant-scoped server-side
         setAttendance,
         leaveRequests, // real backend data, already tenant-scoped server-side
-        clockIn,
-        clockOut,
         submitLeaveRequest,
         reviewLeaveRequest,
         payrollRecords, // real backend data, already tenant-scoped server-side

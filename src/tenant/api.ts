@@ -678,6 +678,8 @@ export interface GaTicketRow { id: string; tenantId: string; ticketNumber: strin
 
 export interface GaBastHandoverRow { id: string; tenantId: string; bastNumber: string; handoverDate: string; handoverCategory: string; gaOfficerName: string; gaOfficerRole: string; recipientEmployeeId: string; recipientName: string; recipientRole: string; swapPartyAEmployeeId: string | null; building: string; roomOrArea: string; status: string; notes: string; details: Record<string, unknown>; createdAt: string }
 
+export interface LeaveBalanceView { employeeId: string; year: number; entitlement: number; carried: number; used: number; pending: number; remaining: number; available: number }
+
 export interface ThrPayment {
   id: string;
   tenantId: string;
@@ -1328,10 +1330,9 @@ export const tenantApi = {
     request<EmployeeSchedule[]>("/api/tenant/employee-schedules/bulk", { method: "POST", body: JSON.stringify({ entries }) }),
 
   listShiftSwapRequests: () => request<ShiftSwapRequest[]>("/api/tenant/shift-swap-requests"),
-  createShiftSwapRequest: (data: Omit<ShiftSwapRequest, "id" | "tenantId">) =>
+  /** The server fixes status/approver/number; the body is only what the requester describes. */
+  createShiftSwapRequest: (data: Record<string, unknown>) =>
     request<ShiftSwapRequest>("/api/tenant/shift-swap-requests", { method: "POST", body: JSON.stringify(data) }),
-  updateShiftSwapRequest: (id: string, data: Partial<ShiftSwapRequest>) =>
-    request<ShiftSwapRequest>(`/api/tenant/shift-swap-requests/${id}`, { method: "PUT", body: JSON.stringify(data) }),
 
   listAttendanceRecords: () => request<AttendanceRecord[]>("/api/tenant/attendance-records"),
   createAttendanceRecord: (data: Omit<AttendanceRecord, "id" | "tenantId">) =>
@@ -1354,16 +1355,14 @@ export const tenantApi = {
     request<AttendanceRecord>(`/api/tenant/employees/${employeeId}/attendance/clock-out`, { method: "POST", body: JSON.stringify({ lat, lng }) }),
 
   listAttendanceCorrections: () => request<AttendanceCorrectionRequest[]>("/api/tenant/attendance-corrections"),
-  createAttendanceCorrection: (data: Omit<AttendanceCorrectionRequest, "id" | "tenantId">) =>
+  /** The server fixes status/approver/number; the body is only what the requester describes. */
+  createAttendanceCorrection: (data: Record<string, unknown>) =>
     request<AttendanceCorrectionRequest>("/api/tenant/attendance-corrections", { method: "POST", body: JSON.stringify(data) }),
-  updateAttendanceCorrection: (id: string, data: Partial<AttendanceCorrectionRequest>) =>
-    request<AttendanceCorrectionRequest>(`/api/tenant/attendance-corrections/${id}`, { method: "PUT", body: JSON.stringify(data) }),
 
   listOvertimeRequests: () => request<OvertimeRequest[]>("/api/tenant/overtime-requests"),
-  createOvertimeRequest: (data: Omit<OvertimeRequest, "id" | "tenantId">) =>
+  /** The server fixes status/approver/number; the body is only what the requester describes. */
+  createOvertimeRequest: (data: Record<string, unknown>) =>
     request<OvertimeRequest>("/api/tenant/overtime-requests", { method: "POST", body: JSON.stringify(data) }),
-  updateOvertimeRequest: (id: string, data: Partial<OvertimeRequest>) =>
-    request<OvertimeRequest>(`/api/tenant/overtime-requests/${id}`, { method: "PUT", body: JSON.stringify(data) }),
 
   listSalaryComponents: () => request<SalaryComponent[]>("/api/tenant/salary-components"),
   createSalaryComponent: (data: Omit<SalaryComponent, "id" | "tenantId">) =>
@@ -1424,17 +1423,18 @@ export const tenantApi = {
   setReimbursementPayrollOptIn: (id: string, processInPayroll: boolean) =>
     request<ReimbursementClaimRow>(`/api/tenant/reimbursement-claims/${id}/payroll-opt-in`, { method: "PUT", body: JSON.stringify({ processInPayroll }) }),
 
+  listLeaveBalances: (year?: number) => request<LeaveBalanceView[]>(`/api/tenant/leave-balances${year ? `?year=${year}` : ""}`),
+  completeBusinessTrip: (id: string) => request<BusinessTripRequest>(`/api/tenant/business-trips/${id}/complete`, { method: "POST" }),
+  settleLoan: (id: string, note: string) => request<EmployeeLoan>(`/api/tenant/loans/${id}/settle`, { method: "POST", body: JSON.stringify({ note }) }),
   listLoans: () => request<EmployeeLoan[]>("/api/tenant/loans"),
-  createLoan: (data: Omit<EmployeeLoan, "id" | "tenantId">) =>
+  /** The server fixes status/approver/number; the body is only what the requester describes. */
+  createLoan: (data: Record<string, unknown>) =>
     request<EmployeeLoan>("/api/tenant/loans", { method: "POST", body: JSON.stringify(data) }),
-  updateLoan: (id: string, data: Partial<EmployeeLoan>) =>
-    request<EmployeeLoan>(`/api/tenant/loans/${id}`, { method: "PUT", body: JSON.stringify(data) }),
 
   listLeaveRequests: () => request<LeaveRequest[]>("/api/tenant/leave-requests"),
-  createLeaveRequest: (data: Omit<LeaveRequest, "id" | "tenantId">) =>
+  /** The server fixes status/approver/number; the body is only what the requester describes. */
+  createLeaveRequest: (data: Record<string, unknown>) =>
     request<LeaveRequest>("/api/tenant/leave-requests", { method: "POST", body: JSON.stringify(data) }),
-  updateLeaveRequest: (id: string, data: Partial<LeaveRequest>) =>
-    request<LeaveRequest>(`/api/tenant/leave-requests/${id}`, { method: "PUT", body: JSON.stringify(data) }),
 
   listEmployeeKpis: () => request<EmployeeKpi[]>("/api/tenant/employee-kpis"),
   upsertEmployeeKpi: (data: Omit<EmployeeKpi, "id" | "tenantId">) =>
@@ -1453,10 +1453,9 @@ export const tenantApi = {
     request<OffboardingRecord>(`/api/tenant/offboarding-records/${id}`, { method: "PUT", body: JSON.stringify(data) }),
 
   listBusinessTrips: () => request<BusinessTripRequest[]>("/api/tenant/business-trips"),
-  createBusinessTrip: (data: Omit<BusinessTripRequest, "id" | "tenantId">) =>
+  /** The server fixes status/approver/number; the body is only what the requester describes. */
+  createBusinessTrip: (data: Record<string, unknown>) =>
     request<BusinessTripRequest>("/api/tenant/business-trips", { method: "POST", body: JSON.stringify(data) }),
-  updateBusinessTrip: (id: string, data: Partial<BusinessTripRequest>) =>
-    request<BusinessTripRequest>(`/api/tenant/business-trips/${id}`, { method: "PUT", body: JSON.stringify(data) }),
 
   listVendors: () => request<Vendor[]>("/api/tenant/vendors"),
   createVendor: (data: Omit<Vendor, "id" | "tenantId">) =>
