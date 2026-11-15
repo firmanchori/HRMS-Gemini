@@ -8850,7 +8850,7 @@ PT Nusantara Multi Talenta Tbk`);
                       setOfferingGateCandidate(
                         firstInterviewCand || {
                           id: 'dummy',
-                          tenantId: safeTenant.id || 'tenant-ntm',
+                          tenantId: safeTenant.id,
                           jobVacancyId: '',
                           name: 'Kandidat Wawancara',
                           email: '',

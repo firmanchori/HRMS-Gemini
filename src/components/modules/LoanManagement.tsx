@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTenantSetting } from '../../tenant/useTenantSetting';
 import { useHrms } from '../../context/HrmsContext';
 import {
   Wallet,
@@ -144,29 +145,12 @@ export const LoanManagement: React.FC = () => {
   const [isDocModalOpen, setIsDocModalOpen] = useState(false);
 
   // Master Skema / Jenis Pinjaman (Configurable in Sub Menu Pengaturan Plafon Pinjaman)
-  const [loanSchemes, setLoanSchemes] = useState<LoanSchemeConfig[]>(() => {
-    try {
-      const saved = localStorage.getItem('nusahr_loan_schemes');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const filtered = parsed.filter((s: LoanSchemeConfig) => s.name !== 'Kepemilikan Aset');
-          if (filtered.length > 0) return filtered;
-        }
-      }
-    } catch {
-      // ignore
-    }
-    return DEFAULT_LOAN_SCHEMES;
-  });
-
+  const loanSchemeSetting = useTenantSetting<LoanSchemeConfig[]>('loan_schemes', DEFAULT_LOAN_SCHEMES);
+  const loanSchemes = loanSchemeSetting.value;
+  const [schemeSaveError, setSchemeSaveError] = useState<string | null>(null);
   const saveLoanSchemes = (nextSchemes: LoanSchemeConfig[]) => {
-    setLoanSchemes(nextSchemes);
-    try {
-      localStorage.setItem('nusahr_loan_schemes', JSON.stringify(nextSchemes));
-    } catch {
-      // ignore
-    }
+    setSchemeSaveError(null);
+    loanSchemeSetting.save(nextSchemes).catch((err: unknown) => setSchemeSaveError(err instanceof Error ? err.message : 'Gagal menyimpan skema pinjaman.'));
   };
 
   // Modal Tambah / Edit Skema Pinjaman

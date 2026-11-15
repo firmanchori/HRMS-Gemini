@@ -39,6 +39,11 @@ import {
   type PersonaliaActionRow as ApiPersonaliaActionRow,
   type PayrollPeriod as ApiPayrollPeriod,
   type ThrPayment as ApiThrPayment,
+  type GaRoomBookingRow,
+  type GaVehicleBookingRow,
+  type GaOfficeSupplyRow,
+  type GaSupplyRequestRow,
+  type GaTicketRow,
   type ReimbursementClaimRow as ApiReimbursementClaimRow,
   type PersonaliaActionInput as ApiPersonaliaActionInput,
   type OffboardingRecord as ApiOffboardingRecord,
@@ -96,7 +101,6 @@ import {
   OnboardingSubItem,
   ModuleSettingsConfig,
   CompanyEntity,
-  EmployeeStaging,
   OvertimeRequest,
   ReimbursementClaim,
   PersonaliaRequest,
@@ -154,7 +158,6 @@ import {
   INITIAL_ONBOARDING,
   DEFAULT_ONBOARDING_CHECKLIST_TEMPLATES,
   INITIAL_MODULE_SETTINGS,
-  INITIAL_EMPLOYEE_STAGING,
   INITIAL_OVERTIME_REQUESTS,
   INITIAL_ORG_NODES,
   INITIAL_ORG_PROPOSALS,
@@ -162,11 +165,6 @@ import {
   INITIAL_CONTRACT_REVIEWS,
   INITIAL_SALARY_COMPONENTS,
   INITIAL_EMPLOYEE_SALARY_ASSIGNMENTS,
-  INITIAL_GA_ROOM_BOOKINGS,
-  INITIAL_GA_VEHICLE_BOOKINGS,
-  INITIAL_GA_SUPPLIES,
-  INITIAL_GA_SUPPLY_REQUESTS,
-  INITIAL_GA_TICKETS,
   INITIAL_PAYROLL_RECORDS,
   INITIAL_ROLE_PERMISSIONS,
   INITIAL_DIVISIONS,
@@ -329,6 +327,7 @@ interface HrmsContextType {
   assets: GAAsset[];
   addAsset: (asset: Omit<GAAsset, 'id' | 'tenantId' | 'lastStockOpname' | 'qrPayload'>) => void;
   updateAsset: (id: string, updates: Partial<GAAsset>) => void;
+  reloadAssets: () => Promise<void>;
   /** Server-side "Kembalikan ke GA": releases the holder, status becomes Tersedia. */
   returnAssetToGa: (id: string) => Promise<void>;
   performStockOpname: (assetCode: string, condition: GAAsset['condition'], notes?: string) => boolean;
@@ -460,12 +459,6 @@ interface HrmsContextType {
   updateFlexibleNikSettings: (settings: FlexibleNikSettings) => void;
   generateNextNik: (employmentType: string, entityId?: string) => string;
 
-  // 23. Employee Staging (Onboarding Gate)
-  employeeStaging: EmployeeStaging[];
-  addEmployeeStaging: (staging: Omit<EmployeeStaging, 'id' | 'tenantId' | 'tempNik' | 'status'>) => void;
-  updateEmployeeStagingTask: (stagingId: string, taskId: string, isCompleted: boolean) => void;
-  completeOnboarding: (stagingId: string) => Promise<Employee | null>;
-
   // 24. Overtime Request & Approval Flow
   overtimeRequests: OvertimeRequest[];
   submitOvertimeRequest: (req: Omit<OvertimeRequest, 'id' | 'tenantId' | 'status'>) => void;
@@ -547,19 +540,19 @@ interface HrmsContextType {
 
   // 33. GA Facilities, Fleet & Supply
   roomBookings: GARoomBooking[];
-  addRoomBooking: (booking: Omit<GARoomBooking, 'id' | 'tenantId' | 'bookingDocNumber' | 'status'>) => void;
-  saveMeetingMinutes: (bookingId: string, notes: string) => void;
+  addRoomBooking: (booking: Omit<GARoomBooking, 'id' | 'tenantId' | 'bookingDocNumber' | 'status'>) => Promise<void>;
+  saveMeetingMinutes: (bookingId: string, notes: string) => Promise<void>;
   vehicleBookings: GAVehicleBooking[];
-  addVehicleBooking: (booking: Omit<GAVehicleBooking, 'id' | 'tenantId' | 'formDocNumber' | 'status'>) => void;
-  updateVehicleBookingStatus: (id: string, status: GAVehicleBooking['status'], endOdometer?: number, fuelCost?: number) => void;
+  addVehicleBooking: (booking: Omit<GAVehicleBooking, 'id' | 'tenantId' | 'formDocNumber' | 'status'>) => Promise<void>;
+  updateVehicleBookingStatus: (id: string, status: GAVehicleBooking['status'], endOdometer?: number, fuelCost?: number) => Promise<void>;
   officeSupplies: GAOfficeSupply[];
-  addOfficeSupply: (item: Omit<GAOfficeSupply, 'id' | 'tenantId'>) => void;
+  addOfficeSupply: (item: Omit<GAOfficeSupply, 'id' | 'tenantId'>) => Promise<void>;
   officeSupplyRequests: GAOfficeSupplyRequest[];
-  addOfficeSupplyRequest: (req: Omit<GAOfficeSupplyRequest, 'id' | 'tenantId' | 'status' | 'requestDate'>) => void;
-  reviewOfficeSupplyRequest: (id: string, approved: boolean) => void;
+  addOfficeSupplyRequest: (req: Omit<GAOfficeSupplyRequest, 'id' | 'tenantId' | 'status' | 'requestDate'>) => Promise<void>;
+  reviewOfficeSupplyRequest: (id: string, approved: boolean) => Promise<void>;
   gaTickets: GATicket[];
-  addGaTicket: (ticket: Omit<GATicket, 'id' | 'tenantId' | 'ticketNumber' | 'createdAt' | 'status'>) => void;
-  updateGaTicketStatus: (id: string, status: GATicket['status'], notes?: string) => void;
+  addGaTicket: (ticket: Omit<GATicket, 'id' | 'tenantId' | 'ticketNumber' | 'createdAt' | 'status'>) => Promise<void>;
+  updateGaTicketStatus: (id: string, status: GATicket['status'], notes?: string) => Promise<void>;
 
   // 34. Procurement Vendor Invoices (AP)
   vendorInvoices: VendorInvoice[];
@@ -574,17 +567,12 @@ interface HrmsContextType {
   enpsSurvey: ENpsSurvey;
   submitEnpsResponse: (score: number, department: string, feedback?: string) => void;
 
-  // 37. User Signatures
-  userSignatures: Record<string, string>;
-  saveUserSignature: (userId: string, signatureUrl: string) => void;
-
   // 38. Universal File & Document Preview Modal
   activePreviewItem: UniversalPreviewItem | null;
   openFilePreview: (item: UniversalPreviewItem) => void;
   closeFilePreview: () => void;
 
   // 39. Sample Business Flow Reset
-  resetToSampleFlowData: () => void;
 
   // 40. Master Lokasi Kantor & Geofencing
   officeLocations: OfficeLocation[];
@@ -1067,7 +1055,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     [apiEntities]
   );
   const [currentEntityId, setCurrentEntityId] = useState<string>(() => {
-    return localStorage.getItem('nusahr_active_entity') || 'ent-ntm-holding';
+    return localStorage.getItem('nusahr_active_entity') || '';
   });
   const currentEntity = useMemo(() => {
     return entities.find((e) => e.id === currentEntityId) || entities[0];
@@ -1102,12 +1090,6 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     () => apiPositions.map((p) => mapApiPositionToMock(p, divisionNameById, departmentNameById)),
     [apiPositions, divisionNameById, departmentNameById]
   );
-
-  // 23. Employee Staging
-  const [employeeStaging, setEmployeeStaging] = useState<EmployeeStaging[]>(() => {
-    const saved = localStorage.getItem('nusahr_staging');
-    return saved ? JSON.parse(saved) : INITIAL_EMPLOYEE_STAGING;
-  });
 
   // 24. Overtime Requests
   const [overtimeRequests, setOvertimeRequests] = useState<OvertimeRequest[]>([]);
@@ -1314,10 +1296,11 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [apiGrades, setApiGrades] = useState<ApiGradeSalaryRange[]>([]);
   const gradeSalaryRanges = useMemo<GradeSalaryRange[]>(() => apiGrades.map(mapApiGradeToMock), [apiGrades]);
 
-  const [jobGradingScheme, setJobGradingScheme] = useState<'single' | 'broadbanding'>(() => {
-    const saved = localStorage.getItem('nusahr_job_grading_scheme');
-    return saved === 'broadbanding' || saved === 'single' ? saved : 'single';
-  });
+  const [jobGradingScheme, setJobGradingSchemeState] = useState<'single' | 'broadbanding'>('single');
+  const setJobGradingScheme = (scheme: 'single' | 'broadbanding') => {
+    setJobGradingSchemeState(scheme);
+    tenantApi.updateModuleSettings('job_grading', { value: scheme }).catch((err) => console.error('Gagal menyimpan skema grading:', err));
+  };
 
   // 32. Salary Components & Assignments — real backend data, loaded via loadTenantOrgData().
   const [apiSalaryComponents, setApiSalaryComponents] = useState<ApiSalaryComponent[]>([]);
@@ -1328,27 +1311,18 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     [apiEmployeeSalaryAssignments]
   );
 
-  // 33. GA Facilities, Fleet & Supply
-  const [roomBookings, setRoomBookings] = useState<GARoomBooking[]>(() => {
-    const saved = localStorage.getItem('nusahr_room_bookings');
-    return saved ? JSON.parse(saved) : INITIAL_GA_ROOM_BOOKINGS;
-  });
-  const [vehicleBookings, setVehicleBookings] = useState<GAVehicleBooking[]>(() => {
-    const saved = localStorage.getItem('nusahr_vehicle_bookings');
-    return saved ? JSON.parse(saved) : INITIAL_GA_VEHICLE_BOOKINGS;
-  });
-  const [officeSupplies, setOfficeSupplies] = useState<GAOfficeSupply[]>(() => {
-    const saved = localStorage.getItem('nusahr_supplies');
-    return saved ? JSON.parse(saved) : INITIAL_GA_SUPPLIES;
-  });
-  const [officeSupplyRequests, setOfficeSupplyRequests] = useState<GAOfficeSupplyRequest[]>(() => {
-    const saved = localStorage.getItem('nusahr_supply_requests');
-    return saved ? JSON.parse(saved) : INITIAL_GA_SUPPLY_REQUESTS;
-  });
-  const [gaTickets, setGaTickets] = useState<GATicket[]>(() => {
-    const saved = localStorage.getItem('nusahr_ga_tickets');
-    return saved ? JSON.parse(saved) : INITIAL_GA_TICKETS;
-  });
+  // 33. GA Facilities, Fleet & Supply — real backend (server owns numbers, statuses, overlap checks, stock).
+  const stripNulls = <T extends object>(row: T) => Object.fromEntries(Object.entries(row).filter(([, v]) => v !== null)) as unknown;
+  const [apiRoomBookings, setApiRoomBookings] = useState<GaRoomBookingRow[]>([]);
+  const [apiVehicleBookings, setApiVehicleBookings] = useState<GaVehicleBookingRow[]>([]);
+  const [apiOfficeSupplies, setApiOfficeSupplies] = useState<GaOfficeSupplyRow[]>([]);
+  const [apiOfficeSupplyRequests, setApiOfficeSupplyRequests] = useState<GaSupplyRequestRow[]>([]);
+  const [apiGaTickets, setApiGaTickets] = useState<GaTicketRow[]>([]);
+  const roomBookings = useMemo(() => apiRoomBookings.map((r) => stripNulls(r) as GARoomBooking), [apiRoomBookings]);
+  const vehicleBookings = useMemo(() => apiVehicleBookings.map((r) => stripNulls(r) as GAVehicleBooking), [apiVehicleBookings]);
+  const officeSupplies = useMemo(() => apiOfficeSupplies.map((r) => stripNulls(r) as GAOfficeSupply), [apiOfficeSupplies]);
+  const officeSupplyRequests = useMemo(() => apiOfficeSupplyRequests.map((r) => stripNulls(r) as GAOfficeSupplyRequest), [apiOfficeSupplyRequests]);
+  const gaTickets = useMemo(() => apiGaTickets.map((r) => stripNulls(r) as GATicket), [apiGaTickets]);
 
   // 40. Master Lokasi Kantor — real backend data, loaded via loadTenantOrgData().
   const [apiOfficeLocations, setApiOfficeLocations] = useState<ApiOfficeLocation[]>([]);
@@ -1496,12 +1470,18 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     tenantApi.listReimbursementClaims().then(setApiReimbursementClaims).catch(() => setApiReimbursementClaims([]));
     tenantApi.listPayrollPeriods().then(setApiPayrollPeriods).catch(() => setApiPayrollPeriods([]));
     tenantApi.listThrPayments().then(setThrPayments).catch(() => setThrPayments([]));
+    tenantApi.listGaRoomBookings().then(setApiRoomBookings).catch(() => setApiRoomBookings([]));
+    tenantApi.listGaVehicleBookings().then(setApiVehicleBookings).catch(() => setApiVehicleBookings([]));
+    tenantApi.listGaOfficeSupplies().then(setApiOfficeSupplies).catch(() => setApiOfficeSupplies([]));
+    tenantApi.listGaSupplyRequests().then(setApiOfficeSupplyRequests).catch(() => setApiOfficeSupplyRequests([]));
+    tenantApi.listGaTickets().then(setApiGaTickets).catch(() => setApiGaTickets([]));
     setProbationEvaluations(realProbationEvaluations.map(toMockProbationEvaluation));
     setProbationEvaluationTemplates(realProbationEvaluationTemplates as unknown as ProbationEvaluationTemplate[]);
     setContractReviews(realContractReviews.map(toMockContractReview));
     setModuleSettings((prev) => {
       const merged = { ...prev };
       if (realModuleSettings.profile) setTenantProfile(realModuleSettings.profile as Partial<Tenant>);
+      if (realModuleSettings.job_grading?.value === 'single' || realModuleSettings.job_grading?.value === 'broadbanding') setJobGradingSchemeState(realModuleSettings.job_grading.value);
       for (const key of Object.keys(realModuleSettings)) {
         (merged as any)[key] = { ...(merged as any)[key], ...realModuleSettings[key] };
       }
@@ -1574,19 +1554,6 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     [apiEnpsSurvey, currentTenant.id]
   );
 
-  // 37. User Signatures
-  const [userSignatures, setUserSignatures] = useState<Record<string, string>>(() => {
-    const saved = localStorage.getItem('nusahr_signatures');
-    return saved ? JSON.parse(saved) : {
-      'usr-1': 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="160" height="60"><path d="M10 40 Q 30 10, 60 30 T 110 20 T 150 45" stroke="%231e293b" stroke-width="2.5" fill="none"/></svg>'
-    };
-  });
-
-
-  // Sync to local storage
-  useEffect(() => {
-    localStorage.setItem('nusahr_active_tenant', currentTenantId);
-  }, [currentTenantId]);
 
 
   // assets/procurementOrders/businessTrips/vendors/assetMaintenanceTickets/assetRelocations/
@@ -1597,10 +1564,6 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // entities is now derived from real backend data (apiEntities) — no mock persistence.
 
   // divisions/departments/masterJobPositions/gradeSalaryRanges are now derived from real backend data — no mock persistence.
-
-  useEffect(() => {
-    localStorage.setItem('nusahr_job_grading_scheme', jobGradingScheme);
-  }, [jobGradingScheme]);
 
 
   // Real backend data, already tenant-scoped server-side — NOT re-filtered by
@@ -2520,6 +2483,10 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     tenantApi
       .createGAAsset({ ...assetData, lastStockOpname: today, qrPayload } as unknown as Omit<ApiGAAsset, 'id' | 'tenantId'>)
       .then((created) => setApiAssets((prev) => [created, ...prev]));
+  };
+
+  const reloadAssets = async (): Promise<void> => {
+    setApiAssets(await tenantApi.listGAAssets());
   };
 
   const updateAsset = (id: string, updates: Partial<GAAsset>) => {
@@ -3987,132 +3954,6 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   };
 
-  // 23. Employee Staging Handlers
-  const addEmployeeStaging = (staging: Omit<EmployeeStaging, 'id' | 'tenantId' | 'tempNik' | 'status'>) => {
-    const tempNik = `TEMP-${Math.floor(1000 + Math.random() * 9000)}`;
-    const newStaging: EmployeeStaging = {
-      ...staging,
-      id: `stg-${Date.now()}`,
-      tenantId: currentTenant.id,
-      tempNik,
-      status: 'In Progress',
-    };
-    setEmployeeStaging((prev) => [newStaging, ...prev]);
-    logAuditAction('Onboarding Staging', 'CREATE_STAGING', newStaging.id, `Karyawan baru masuk staging dengan NIK sementara: ${tempNik}`);
-  };
-
-  const updateEmployeeStagingTask = (stagingId: string, taskId: string, isCompleted: boolean) => {
-    setEmployeeStaging((prev) =>
-      prev.map((s) => {
-        if (s.id !== stagingId) return s;
-        const updatedTasks = s.tasks.map((t) =>
-          t.id === taskId
-            ? { ...t, isCompleted, completedAt: isCompleted ? new Date().toISOString() : undefined }
-            : t
-        );
-        const contractDone = updatedTasks.find((t) => t.title.toLowerCase().includes('pkwt') || t.title.toLowerCase().includes('kontrak'))?.isCompleted || s.contractSigned;
-        const ndaDone = updatedTasks.find((t) => t.title.toLowerCase().includes('nda'))?.isCompleted || s.ndaSigned;
-        const docsDone = updatedTasks.find((t) => t.title.toLowerCase().includes('verifikasi'))?.isCompleted || s.docsVerified;
-
-        return {
-          ...s,
-          tasks: updatedTasks,
-          contractSigned: contractDone,
-          ndaSigned: ndaDone,
-          docsVerified: docsDone,
-        };
-      })
-    );
-  };
-
-  const completeOnboarding = async (stagingId: string): Promise<Employee | null> => {
-    const stg = employeeStaging.find((s) => s.id === stagingId);
-    if (!stg) return null;
-
-    const ent = entities.find((e) => e.id === stg.entityId) || currentEntity;
-    const seq = employees.length + 1;
-    const isTetap = stg.employmentType === 'Tetap';
-    const finalNik = `${ent.code}-${new Date().getFullYear()}-${String(seq).padStart(3, '0')}`;
-    const docNumber = stg.contractDocNumber || `${String(seq).padStart(3, '0')}/${ent.docPrefix}/${new Date().getFullYear()}`;
-
-    const newEmp = await addEmployee({
-      entityId: ent.id,
-      nik: finalNik,
-      fullName: stg.fullName,
-      email: stg.email,
-      personalEmail: stg.email,
-      phone: stg.phone,
-      employmentType: stg.employmentType,
-      contractDocNumber: docNumber,
-      contractStartDate: stg.joinDate,
-      contractEndDate: !isTetap ? '2027-10-31' : undefined,
-      permanentAppointmentDate: isTetap ? stg.joinDate : undefined,
-      probationStatus: isTetap ? 'Sedang Berjalan' : 'Tanpa Percobaan',
-      probationEndDate: isTetap ? '2027-01-31' : undefined,
-      department: stg.department,
-      position: stg.position,
-      managerId: stg.managerId,
-      grade: 'L2',
-      joinDate: stg.joinDate,
-      status: 'Aktif',
-      remainingLeaveDays: 12,
-      nikKtp: '',
-      noKk: '',
-      birthPlace: '',
-      birthDate: '',
-      gender: '' as Employee['gender'],
-      religion: '' as Employee['religion'],
-      maritalStatus: '' as Employee['maritalStatus'],
-      ktpAddress: '',
-      currentAddress: '',
-      npwp: '',
-      ptkp: 'TK/0',
-      kppPratama: '',
-      bpjsTkNo: '',
-      bpjsKesNo: '',
-      faskes1Bpjs: '',
-      bankName: '',
-      bankAccount: '',
-      bankAccountHolder: stg.fullName,
-      basicSalary: stg.basicSalary,
-      fixedAllowance: 1500000,
-      transportAllowance: 800000,
-      mealAllowance: 700000,
-      positionAllowance: 1000000,
-      lastEducationDegree: '' as Employee['lastEducationDegree'],
-      institution: '',
-      major: '',
-      graduationYear: 0,
-      familyMembers: [],
-      emergencyContacts: [
-        {
-          id: `emg-${Date.now()}`,
-          fullName: 'Bapak / Ibu ' + stg.fullName.split(' ')[0],
-          relation: 'Orang Tua',
-          phone: stg.phone,
-          address: `Jl. Melati No. 15, ${ent.city}`,
-        },
-      ],
-      sourceOfTruth: 'native',
-    });
-
-    setEmployeeStaging((prev) =>
-      prev.map((s) => (s.id === stagingId ? { ...s, status: 'Completed' } : s))
-    );
-
-    createOfficialDocument({
-      type: isTetap ? 'PKWTT' : 'PKWT',
-      title: `Perjanjian Kerja (${isTetap ? 'PKWTT' : 'PKWT'}): ${newEmp.fullName}`,
-      targetEmployeeId: newEmp.id,
-      signeeName: currentUser.name,
-      signeeRole: 'VP Human Resources',
-      contentPreview: `Perjanjian Kerja resmi diterbitkan untuk ${newEmp.fullName} dengan NIK ${finalNik}.`,
-    });
-
-    logAuditAction('Onboarding', 'COMPLETE_ONBOARDING', newEmp.id, `Onboarding 100% selesai: NIK Resmi ${finalNik} terbit untuk ${newEmp.fullName}`);
-    return newEmp;
-  };
-
   // 24. Overtime Handlers — real backend.
   const submitOvertimeRequest = (req: Omit<OvertimeRequest, 'id' | 'tenantId' | 'status'>) => {
     tenantApi.createOvertimeRequest({ ...req, status: 'Menunggu' } as unknown as Omit<ApiOvertimeRequest, 'id' | 'tenantId'>).then((created) => {
@@ -4658,132 +4499,58 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       .then((created) => setApiEmployeeSalaryAssignments((prev) => [...prev, created]));
   };
 
-  // 33. GA Facilities, Fleet & Supply
-  const addRoomBooking = (booking: Omit<GARoomBooking, 'id' | 'tenantId' | 'bookingDocNumber' | 'status'>) => {
-    const seq = roomBookings.length + 1;
-    const bookingDocNumber = `BKG-ROOM-${new Date().getFullYear()}-${String(seq).padStart(3, '0')}`;
-    const newBkg: GARoomBooking = {
-      ...booking,
-      id: `rm-bkg-${Date.now()}`,
-      tenantId: currentTenant.id,
-      bookingDocNumber,
-      status: 'Terkonfirmasi',
-    };
-    setRoomBookings((prev) => [newBkg, ...prev]);
-    logAuditAction('GA Ruangan', 'BOOKING_ROOM', newBkg.id, `Reservasi ${newBkg.roomName} untuk ${newBkg.meetingTitle}`);
+  // 33. GA Facilities, Fleet & Supply — every action is a server call; errors (double booking, insufficient stock, illegal
+  // transition) are thrown with the server's message so the form can show them inline.
+  const addRoomBooking = async (booking: Omit<GARoomBooking, 'id' | 'tenantId' | 'bookingDocNumber' | 'status'>): Promise<void> => {
+    const created = await tenantApi.createGaRoomBooking(booking as unknown as Record<string, unknown>);
+    setApiRoomBookings((prev) => [created, ...prev]);
+    logAuditAction('GA Ruangan', 'BOOKING_ROOM', created.id, `Reservasi ${created.roomName} untuk ${created.meetingTitle}`);
   };
 
-  const saveMeetingMinutes = (bookingId: string, notes: string) => {
-    const seq = roomBookings.length + 1;
-    const momDocNumber = `MOM-${currentTenant.code}-${new Date().getFullYear()}-${String(seq).padStart(3, '0')}`;
-    setRoomBookings((prev) =>
-      prev.map((b) => (b.id === bookingId ? { ...b, momNotes: notes, momDocNumber, momRecordedBy: currentUser.name, status: 'Selesai' } : b))
-    );
-    logAuditAction('GA Ruangan', 'SAVE_MOM', bookingId, `Menyimpan MoM Rapat: ${momDocNumber}`);
+  const saveMeetingMinutes = async (bookingId: string, notes: string): Promise<void> => {
+    const updated = await tenantApi.saveGaRoomMinutes(bookingId, notes);
+    setApiRoomBookings((prev) => prev.map((b) => (b.id === bookingId ? updated : b)));
   };
 
-  const addVehicleBooking = (booking: Omit<GAVehicleBooking, 'id' | 'tenantId' | 'formDocNumber' | 'status'>) => {
-    const seq = vehicleBookings.length + 1;
-    const formDocNumber = `SPK-ARMADA-${new Date().getFullYear()}-${String(seq).padStart(3, '0')}`;
-    const newBkg: GAVehicleBooking = {
-      ...booking,
-      id: `veh-bkg-${Date.now()}`,
-      tenantId: currentTenant.id,
-      formDocNumber,
-      status: 'Disetujui',
-    };
-    setVehicleBookings((prev) => [newBkg, ...prev]);
-    logAuditAction('GA Kendaraan', 'BOOKING_VEHICLE', newBkg.id, `Peminjaman kendaraan ${newBkg.vehicleName} plat ${newBkg.plateNumber}`);
+  const addVehicleBooking = async (booking: Omit<GAVehicleBooking, 'id' | 'tenantId' | 'formDocNumber' | 'status'>): Promise<void> => {
+    const created = await tenantApi.createGaVehicleBooking(booking as unknown as Record<string, unknown>);
+    setApiVehicleBookings((prev) => [created, ...prev]);
+    logAuditAction('GA Kendaraan', 'BOOKING_VEHICLE', created.id, `Peminjaman kendaraan ${created.vehicleName} plat ${created.plateNumber}`);
   };
 
-  const updateVehicleBookingStatus = (id: string, status: GAVehicleBooking['status'], endOdometer?: number, fuelCost?: number) => {
-    setVehicleBookings((prev) =>
-      prev.map((v) =>
-        v.id === id
-          ? {
-              ...v,
-              status,
-              endOdometer: endOdometer !== undefined ? endOdometer : v.endOdometer,
-              fuelCost: fuelCost !== undefined ? fuelCost : v.fuelCost,
-            }
-          : v
-      )
-    );
+  const updateVehicleBookingStatus = async (id: string, status: GAVehicleBooking['status'], endOdometer?: number, fuelCost?: number): Promise<void> => {
+    if (status === 'Menunggu Approval') throw new Error('Status tidak valid.');
+    const updated = await tenantApi.setGaVehicleStatus(id, { status, endOdometer, fuelCost });
+    setApiVehicleBookings((prev) => prev.map((v) => (v.id === id ? updated : v)));
   };
 
-  const addOfficeSupply = (item: Omit<GAOfficeSupply, 'id' | 'tenantId'>) => {
-    const newItem: GAOfficeSupply = {
-      ...item,
-      id: `atk-${Date.now()}`,
-      tenantId: currentTenant.id,
-    };
-    setOfficeSupplies((prev) => [...prev, newItem]);
-    logAuditAction('GA ATK', 'ADD_SUPPLY_ITEM', newItem.id, `Mendaftarkan master ATK: ${newItem.itemName}`);
+  const addOfficeSupply = async (item: Omit<GAOfficeSupply, 'id' | 'tenantId'>): Promise<void> => {
+    const created = await tenantApi.createGaOfficeSupply(item);
+    setApiOfficeSupplies((prev) => [...prev, created]);
+    logAuditAction('GA ATK', 'ADD_SUPPLY_ITEM', created.id, `Mendaftarkan master ATK: ${created.itemName}`);
   };
 
-  const addOfficeSupplyRequest = (req: Omit<GAOfficeSupplyRequest, 'id' | 'tenantId' | 'status' | 'requestDate'>) => {
-    const newReq: GAOfficeSupplyRequest = {
-      ...req,
-      id: `spl-req-${Date.now()}`,
-      tenantId: currentTenant.id,
-      requestDate: new Date().toISOString().split('T')[0],
-      status: 'Menunggu Approval',
-    };
-    setOfficeSupplyRequests((prev) => [newReq, ...prev]);
-    logAuditAction('GA ATK', 'REQUEST_SUPPLY', newReq.id, `Permintaan ATK sebanyak ${newReq.qty}`);
+  const addOfficeSupplyRequest = async (req: Omit<GAOfficeSupplyRequest, 'id' | 'tenantId' | 'status' | 'requestDate'>): Promise<void> => {
+    const created = await tenantApi.createGaSupplyRequest({ requesterId: req.requesterId, department: req.department, itemId: req.itemId, qty: req.qty, reason: req.reason });
+    setApiOfficeSupplyRequests((prev) => [created, ...prev]);
   };
 
-  const reviewOfficeSupplyRequest = (id: string, approved: boolean) => {
-    const req = officeSupplyRequests.find((r) => r.id === id);
-    if (!req) return;
-
-    if (approved) {
-      setOfficeSupplies((prev) =>
-        prev.map((s) => (s.id === req.itemId ? { ...s, currentStock: Math.max(0, s.currentStock - req.qty) } : s))
-      );
-    }
-
-    setOfficeSupplyRequests((prev) =>
-      prev.map((r) =>
-        r.id === id
-          ? {
-              ...r,
-              status: approved ? 'Didistribusikan' : 'Ditolak',
-              distributedAt: approved ? new Date().toISOString().split('T')[0] : undefined,
-            }
-          : r
-      )
-    );
+  /** Approve = distribute: the server decrements stock atomically (and refuses when stock is insufficient). */
+  const reviewOfficeSupplyRequest = async (id: string, approved: boolean): Promise<void> => {
+    const updated = await tenantApi.decideGaSupplyRequest(id, approved);
+    setApiOfficeSupplyRequests((prev) => prev.map((r) => (r.id === id ? updated : r)));
+    if (approved) setApiOfficeSupplies(await tenantApi.listGaOfficeSupplies());
   };
 
-  const addGaTicket = (ticket: Omit<GATicket, 'id' | 'tenantId' | 'ticketNumber' | 'createdAt' | 'status'>) => {
-    const seq = gaTickets.length + 1;
-    const ticketNumber = `TKT-GA-${new Date().getFullYear()}-${String(seq).padStart(3, '0')}`;
-    const newTkt: GATicket = {
-      ...ticket,
-      id: `ga-tkt-${Date.now()}`,
-      tenantId: currentTenant.id,
-      ticketNumber,
-      status: 'Terbuka',
-      createdAt: new Date().toISOString(),
-    };
-    setGaTickets((prev) => [newTkt, ...prev]);
-    logAuditAction('GA Tiketing', 'CREATE_TICKET', newTkt.id, `Tiket GA baru: ${newTkt.ticketNumber} (${newTkt.category})`);
+  const addGaTicket = async (ticket: Omit<GATicket, 'id' | 'tenantId' | 'ticketNumber' | 'createdAt' | 'status'>): Promise<void> => {
+    const created = await tenantApi.createGaTicket(ticket as unknown as Record<string, unknown>);
+    setApiGaTickets((prev) => [created, ...prev]);
   };
 
-  const updateGaTicketStatus = (id: string, status: GATicket['status'], notes?: string) => {
-    setGaTickets((prev) =>
-      prev.map((t) =>
-        t.id === id
-          ? {
-              ...t,
-              status,
-              resolvedAt: status === 'Selesai' ? new Date().toISOString() : t.resolvedAt,
-              resolutionNotes: notes || t.resolutionNotes,
-            }
-          : t
-      )
-    );
+  const updateGaTicketStatus = async (id: string, status: GATicket['status'], notes?: string): Promise<void> => {
+    if (status === 'Terbuka') throw new Error('Status tidak valid.');
+    const updated = await tenantApi.setGaTicketStatus(id, { status, notes });
+    setApiGaTickets((prev) => prev.map((t) => (t.id === id ? updated : t)));
   };
 
   // 34. Procurement Vendor Invoices
@@ -4815,40 +4582,6 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     tenantApi.submitEnpsResponse({ score, department, feedback }).then((updated) => {
       setApiEnpsSurvey(updated);
     });
-  };
-
-  // 37. User Signatures
-  const saveUserSignature = (userId: string, signatureUrl: string) => {
-    setUserSignatures((prev) => ({
-      ...prev,
-      [userId]: signatureUrl,
-    }));
-    logAuditAction('RBAC User', 'ENROLL_SIGNATURE', userId, `Spesimen tanda tangan digital QR terdaftar`);
-  };
-
-  // 39. Reset & Reload Complete Business Flow Simulation
-  const resetToSampleFlowData = () => {
-    try {
-      localStorage.removeItem('nusahr_employees');
-      localStorage.removeItem('nusahr_attendance');
-      localStorage.removeItem('nusahr_payroll');
-      localStorage.removeItem('nusahr_loans');
-      localStorage.removeItem('nusahr_leaves');
-      localStorage.removeItem('nusahr_compliance');
-      localStorage.removeItem('nusahr_approvals');
-      localStorage.removeItem('nusahr_candidates');
-      localStorage.removeItem('nusahr_contract_reviews');
-      localStorage.removeItem('nusahr_probation_evals');
-      localStorage.removeItem('nusahr_reimbursements');
-      localStorage.removeItem('nusahr_overtime');
-    } catch {
-      // storage unavailable
-    }
-
-    // payrollRecords/loans/leaveRequests/kpis/complianceRecords/offboardingRecords/
-    // procurementOrders/assets/businessTrips/vendors/assetMaintenanceTickets/assetRelocations
-    // are now real backend data — no local mock to reset.
-    setApiPersonalia([]);
   };
 
   return (
@@ -4933,6 +4666,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         assets, // real backend data, already tenant-scoped server-side
         addAsset,
         updateAsset,
+        reloadAssets,
         returnAssetToGa,
         performStockOpname,
         procurementOrders, // real backend data, already tenant-scoped server-side
@@ -5019,10 +4753,6 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         flexibleNikSettings,
         updateFlexibleNikSettings,
         generateNextNik,
-        employeeStaging: employeeStaging.filter((s) => s.tenantId === currentTenant.id),
-        addEmployeeStaging,
-        updateEmployeeStagingTask,
-        completeOnboarding,
         overtimeRequests, // real backend data, already tenant-scoped server-side
         submitOvertimeRequest,
         reviewOvertimeRequest,
@@ -5090,12 +4820,9 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         logAuditAction,
         enpsSurvey,
         submitEnpsResponse,
-        userSignatures,
-        saveUserSignature,
         activePreviewItem,
         openFilePreview,
         closeFilePreview,
-        resetToSampleFlowData,
         // Same reasoning as `entities` above — real backend data, already tenant-scoped server-side.
         officeLocations,
         addOfficeLocation,

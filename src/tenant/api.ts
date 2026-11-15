@@ -670,6 +670,14 @@ export interface PayrollPeriod {
   disbursedAt: string | null;
 }
 
+export interface GaRoomBookingRow { id: string; tenantId: string; entityId: string | null; roomName: string; floorLocation: string; capacity: number; organizerId: string; meetingTitle: string; date: string; startTime: string; endTime: string; attendeesInternal: string[]; attendeesExternal: { name: string; organization: string; email: string; phone?: string; checkedIn?: boolean }[]; status: "Terkonfirmasi" | "Berjalan" | "Selesai" | "Dibatalkan"; bookingDocNumber: string; momNotes: string | null; momDocNumber: string | null; momRecordedBy: string | null }
+export interface GaVehicleBookingRow { id: string; tenantId: string; entityId: string | null; vehicleName: string; plateNumber: string; driverType: "Sopir Kantor" | "Bawa Sendiri"; driverName: string; borrowerId: string; purpose: string; destination: string; startDate: string; endDate: string; startOdometer: number; endOdometer: number | null; fuelCost: number | null; status: "Menunggu Approval" | "Disetujui" | "Sedang Digunakan" | "Dikembalikan"; formDocNumber: string; nextServiceDate: string | null; taxExpiryDate: string | null }
+export interface GaOfficeSupplyRow { id: string; tenantId: string; itemCode: string; itemName: string; category: "Kertas & Dokumen" | "Alat Tulis" | "Tinta & Toner" | "Peralatan Kantor" | "Kebersihan & Pantry"; currentStock: number; unit: string; reorderPoint: number; standardReorderQty: number; estimatedUnitPrice: number }
+export interface GaSupplyRequestRow { id: string; tenantId: string; requesterId: string; department: string; itemId: string; qty: number; reason: string; requestDate: string; status: "Menunggu Approval" | "Disetujui" | "Didistribusikan" | "Ditolak"; distributedAt: string | null }
+export interface GaTicketRow { id: string; tenantId: string; ticketNumber: string; category: "Aset Rusak/Perawatan" | "Pinjam Ruangan/Fasilitas" | "Pinjam Kendaraan" | "Minta ATK/Perlengkapan" | "Lainnya (Umum)"; requesterId: string; title: string; description: string; priority: "Rendah" | "Normal" | "Tinggi" | "Darurat"; status: "Terbuka" | "Sedang Diproses" | "Menunggu Konfirmasi" | "Selesai" | "Ditolak"; assignedStaff: string | null; slaHours: number; createdAt: string; resolvedAt: string | null; resolutionNotes: string | null }
+
+export interface GaBastHandoverRow { id: string; tenantId: string; bastNumber: string; handoverDate: string; handoverCategory: string; gaOfficerName: string; gaOfficerRole: string; recipientEmployeeId: string; recipientName: string; recipientRole: string; swapPartyAEmployeeId: string | null; building: string; roomOrArea: string; status: string; notes: string; details: Record<string, unknown>; createdAt: string }
+
 export interface ThrPayment {
   id: string;
   tenantId: string;
@@ -1382,6 +1390,29 @@ export const tenantApi = {
     request<{ account: { id: string; employeeId: string; email: string; roleKey: string; isActive: boolean }; delivery: "email" | "manual"; activationLink: string | null }>("/api/tenant/employee-accounts", { method: "POST", body: JSON.stringify(data) }),
   sendEmployeeResetLink: (accountId: string) =>
     request<{ delivery: "email" | "manual"; resetLink: string | null }>(`/api/tenant/employee-accounts/${accountId}/send-reset`, { method: "POST" }),
+
+  // General Affairs — server owns numbering, status machines, double-booking checks and stock arithmetic.
+  listGaRoomBookings: () => request<GaRoomBookingRow[]>("/api/tenant/ga-room-bookings"),
+  createGaRoomBooking: (data: Record<string, unknown>) => request<GaRoomBookingRow>("/api/tenant/ga-room-bookings", { method: "POST", body: JSON.stringify(data) }),
+  saveGaRoomMinutes: (id: string, notes: string) => request<GaRoomBookingRow>(`/api/tenant/ga-room-bookings/${id}/minutes`, { method: "POST", body: JSON.stringify({ notes }) }),
+  setGaRoomStatus: (id: string, status: "Berjalan" | "Dibatalkan") => request<GaRoomBookingRow>(`/api/tenant/ga-room-bookings/${id}/status`, { method: "PUT", body: JSON.stringify({ status }) }),
+  listGaVehicleBookings: () => request<GaVehicleBookingRow[]>("/api/tenant/ga-vehicle-bookings"),
+  createGaVehicleBooking: (data: Record<string, unknown>) => request<GaVehicleBookingRow>("/api/tenant/ga-vehicle-bookings", { method: "POST", body: JSON.stringify(data) }),
+  setGaVehicleStatus: (id: string, data: { status: "Disetujui" | "Sedang Digunakan" | "Dikembalikan"; endOdometer?: number; fuelCost?: number }) =>
+    request<GaVehicleBookingRow>(`/api/tenant/ga-vehicle-bookings/${id}/status`, { method: "PUT", body: JSON.stringify(data) }),
+  listGaOfficeSupplies: () => request<GaOfficeSupplyRow[]>("/api/tenant/ga-office-supplies"),
+  createGaOfficeSupply: (data: Omit<GaOfficeSupplyRow, "id" | "tenantId">) => request<GaOfficeSupplyRow>("/api/tenant/ga-office-supplies", { method: "POST", body: JSON.stringify(data) }),
+  listGaSupplyRequests: () => request<GaSupplyRequestRow[]>("/api/tenant/ga-supply-requests"),
+  createGaSupplyRequest: (data: { requesterId: string; department?: string; itemId: string; qty: number; reason?: string }) =>
+    request<GaSupplyRequestRow>("/api/tenant/ga-supply-requests", { method: "POST", body: JSON.stringify(data) }),
+  decideGaSupplyRequest: (id: string, approved: boolean) => request<GaSupplyRequestRow>(`/api/tenant/ga-supply-requests/${id}/decision`, { method: "POST", body: JSON.stringify({ approved }) }),
+  listGaBastHandovers: () => request<GaBastHandoverRow[]>("/api/tenant/ga-bast-handovers"),
+  /** Creates the BAST AND moves/swaps the assets in one server transaction; the number and item snapshot are the server's. */
+  createGaBastHandover: (data: Record<string, unknown>) => request<GaBastHandoverRow>("/api/tenant/ga-bast-handovers", { method: "POST", body: JSON.stringify(data) }),
+  listGaTickets: () => request<GaTicketRow[]>("/api/tenant/ga-tickets"),
+  createGaTicket: (data: Record<string, unknown>) => request<GaTicketRow>("/api/tenant/ga-tickets", { method: "POST", body: JSON.stringify(data) }),
+  setGaTicketStatus: (id: string, data: { status: "Sedang Diproses" | "Menunggu Konfirmasi" | "Selesai" | "Ditolak"; notes?: string; assignedStaff?: string }) =>
+    request<GaTicketRow>(`/api/tenant/ga-tickets/${id}/status`, { method: "PUT", body: JSON.stringify(data) }),
 
   listThrPayments: (year?: number) => request<ThrPayment[]>(`/api/tenant/thr-payments${year ? `?year=${year}` : ""}`),
   /** THR is computed by the server (Permenaker 6/2016 + PPh 21 TER); the client sends only year/occasion/date. */

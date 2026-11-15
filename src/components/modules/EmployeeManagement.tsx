@@ -100,7 +100,6 @@ export const EmployeeManagement: React.FC = () => {
     onboardingProcesses,
     addOnboardingProcess,
     updateOnboardingTask,
-    completeOnboarding,
     moduleSettings,
     updateModuleSettings,
     openFilePreview,

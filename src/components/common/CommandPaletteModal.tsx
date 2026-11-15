@@ -302,7 +302,6 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
     documents,
     setActiveModule,
     openFilePreview,
-    resetToSampleFlowData,
     currentTenant,
     currentUser,
     roles = [],
@@ -363,32 +362,12 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
           onClose();
         },
       },
-      {
-        id: 'action-reset-flow',
-        category: 'actions',
-        groupTitle: 'Aksi Sistem & Tampilan',
-        title: 'Muat Ulang Data Contoh Proses Bisnis (PT Nusantara Jaya)',
-        subtitle: 'Pulihkan 10 profil karyawan lengkap, presensi, SPPD, kasbon, dan approval bertingkat',
-        shortcut: 'Flow',
-        badge: 'Data Sample',
-        icon: RotateCcw,
-        score: 0,
-        onSelect: () => {
-          resetToSampleFlowData();
-          setActionFeedback('Data proses bisnis contoh berhasil dimuat ulang!');
-          setTimeout(() => {
-            setActionFeedback(null);
-            onClose();
-          }, 1000);
-        },
-      },
     ];
 
     return actions;
   }, [
     onToggleSidebar,
     onOpenMigrationWizard,
-    resetToSampleFlowData,
     onClose,
   ]);
 

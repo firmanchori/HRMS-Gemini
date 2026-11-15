@@ -79,6 +79,7 @@ import {
 import { requireTenantAdmin } from "../middleware/auth.ts";
 import { generateAssetsFromReceivedOrder, isReceivedStatus, deriveUsageStatus, isPostApprovalProcurementStatus, hasPendingProcurementApproval } from "../lib/assetLifecycle.ts";
 import { employeeFormatError } from "../lib/personalia.ts";
+import { gaRouter } from "./tenantGa.ts";
 import { revokeAllSessionsForUser } from "../lib/sessionStore.ts";
 import { provisionEmployeeAccount, sendEmployeeResetLink, EmployeeAccountError } from "../lib/employeeAccounts.ts";
 import { generateThrRun, payThr, listThrPayments, ThrError } from "../lib/thr.ts";
@@ -98,6 +99,7 @@ import { checkClockIn, checkClockOut, performClockIn, performClockOut, ClockErro
 
 export const tenantRouter = Router();
 tenantRouter.use(requireTenantAdmin);
+tenantRouter.use(gaRouter); // General Affairs routes live in tenantGa.ts
 
 /**
  * Which entity a tenant_admin is personally scoped to — the entity whose own

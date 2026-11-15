@@ -57,7 +57,6 @@ export const Header: React.FC<HeaderProps> = ({
     setCurrentEntityId,
     currentUser,
     roles = [],
-    resetToSampleFlowData,
     employees = [],
     setActiveModule,
   } = useHrms();

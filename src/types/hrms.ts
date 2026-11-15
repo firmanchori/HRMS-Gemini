@@ -1572,28 +1572,6 @@ export interface CompanyEntity {
 }
 
 // 23. Employee Staging (Onboarding Gate)
-export interface EmployeeStaging {
-  id: string;
-  tenantId: string;
-  entityId: string;
-  tempNik: string; // format "TEMP-XXXX"
-  candidateId?: string;
-  fullName: string;
-  email: string;
-  phone: string;
-  position: string;
-  department: string;
-  managerId?: string;
-  employmentType: EmploymentType;
-  joinDate: string;
-  basicSalary: number;
-  contractDocNumber: string;
-  tasks: OnboardingTask[];
-  status: 'In Progress' | 'Completed' | 'Withdrawn';
-  contractSigned: boolean;
-  ndaSigned: boolean;
-  docsVerified: boolean;
-}
 
 // 24. Overtime Request & Approval Flow
 export interface OvertimeRequest {

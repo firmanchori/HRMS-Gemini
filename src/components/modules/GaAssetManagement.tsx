@@ -1,4 +1,6 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import { useTenantSetting } from '../../tenant/useTenantSetting';
+import { tenantApi } from '../../tenant/api';
 import { useHrms } from '../../context/HrmsContext';
 import {
   QrCode,
@@ -62,6 +64,7 @@ import { ModuleDocumentModal } from '../common/ModuleDocumentModal';
 export const GaAssetManagement: React.FC = () => {
   const {
     assets,
+    reloadAssets,
     employees,
     addAsset,
     updateAsset,
@@ -193,19 +196,8 @@ export const GaAssetManagement: React.FC = () => {
     },
   ];
 
-  const [assetCategorySlas, setAssetCategorySlas] = useState<GAAssetCategorySla[]>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('hrms_ga_asset_sla_settings');
-      if (saved) {
-        try {
-          return JSON.parse(saved);
-        } catch (e) {
-          // ignore
-        }
-      }
-    }
-    return DEFAULT_ASSET_SLAS;
-  });
+  const slaSetting = useTenantSetting<GAAssetCategorySla[]>('ga_asset_slas', DEFAULT_ASSET_SLAS);
+  const assetCategorySlas = slaSetting.value;
 
   const [editingSlaCat, setEditingSlaCat] = useState<GAAssetCategorySla | null>(null);
   const [slaSubmitAttempted, setSlaSubmitAttempted] = useState(false);
@@ -225,24 +217,26 @@ export const GaAssetManagement: React.FC = () => {
     const updated = assetCategorySlas.map((s) =>
       s.id === slaToSave.id ? { ...slaToSave, updatedAt: new Date().toISOString().split('T')[0] } : s
     );
-    setAssetCategorySlas(updated);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('hrms_ga_asset_sla_settings', JSON.stringify(updated));
-    }
-    setEditingSlaCat(null);
-    setSlaSubmitAttempted(false);
-    setSlaToastMessage(`SLA Kategori '${slaToSave.category}' berhasil diperbarui!`);
-    setTimeout(() => setSlaToastMessage(null), 4000);
+    slaSetting
+      .save(updated)
+      .then(() => {
+        setEditingSlaCat(null);
+        setSlaSubmitAttempted(false);
+        setSlaToastMessage(`SLA Kategori '${slaToSave.category}' berhasil diperbarui!`);
+        setTimeout(() => setSlaToastMessage(null), 4000);
+      })
+      .catch((err: unknown) => setGaError(err instanceof Error ? err.message : 'Gagal menyimpan SLA.'));
   };
 
   const handleResetDefaultSla = () => {
     if (confirm('Kembalikan konfigurasi SLA Kategori Aset ke standar default perusahaan?')) {
-      setAssetCategorySlas(DEFAULT_ASSET_SLAS);
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('hrms_ga_asset_sla_settings');
-      }
-      setSlaToastMessage('Konfigurasi SLA Kategori Aset berhasil dikembalikan ke standar default.');
-      setTimeout(() => setSlaToastMessage(null), 4000);
+      slaSetting
+        .reset()
+        .then(() => {
+          setSlaToastMessage('Konfigurasi SLA Kategori Aset berhasil dikembalikan ke standar default.');
+          setTimeout(() => setSlaToastMessage(null), 4000);
+        })
+        .catch((err: unknown) => setGaError(err instanceof Error ? err.message : 'Gagal mengembalikan SLA.'));
     }
   };
 
@@ -334,192 +328,14 @@ export const GaAssetManagement: React.FC = () => {
     status: 'Aktif / Diserahterimakan' | 'Ditukar Melalui GA' | 'Dikembalikan ke GA';
   }
 
-  const DEFAULT_BAST_HANDOVERS: BastHandoverRecord[] = [
-    {
-      id: 'bast-1',
-      bastNumber: 'BAST/GA-EMP/2026/10/001',
-      handoverDate: '2026-10-10',
-      handoverCategory: 'Aset Karyawan (Personal)',
-      gaOfficerName: 'Bambang Sudiro',
-      gaOfficerRole: 'General Affairs & Asset Custodian',
-      recipientEmployeeId: employees[0]?.id || 'emp-1',
-      recipientName: employees[0]?.fullName || 'Budi Santoso',
-      recipientRole: `${employees[0]?.position || 'Senior Software Engineer'} (${employees[0]?.department || 'Engineering'})`,
-      building: 'Menara Palma Kuningan',
-      roomOrArea: 'Lantai 18 - Dev Wing',
-      items: [
-        {
-          assetId: assets[0]?.id || 'ast-1',
-          assetCode: assets[0]?.assetCode || 'AST-LTP-001',
-          assetName: assets[0]?.name || 'MacBook Pro 16" M3 Max 36GB',
-          category: 'Laptop & Komputer',
-          condition: 'Baik',
-        },
-        {
-          assetId: 'ast-acc-mouse-01',
-          assetCode: 'AST-ACC-014',
-          assetName: 'Logitech MX Master 3S Wireless Mouse',
-          category: 'Laptop & Komputer',
-          condition: 'Baik',
-        },
-        {
-          assetId: 'ast-acc-mon-01',
-          assetCode: 'AST-ELK-022',
-          assetName: 'Monitor Dell UltraSharp 27" 4K USB-C Hub',
-          category: 'Elektronik & Server',
-          condition: 'Baik',
-        },
-      ],
-      additionalAccessories: 'Adaptor MagSafe 140W, Kabel USB-C DisplayPort, Tas Laptop Ransel',
-      notes: 'Serah terima 3 perangkat kerja personal karyawan sekaligus dalam 1 BAST antara GA dan Karyawan Penerima.',
-      status: 'Aktif / Diserahterimakan',
-    },
-    {
-      id: 'bast-2',
-      bastNumber: 'BAST/GA-ROOM/2026/10/002',
-      handoverDate: '2026-10-12',
-      handoverCategory: 'Aset Menetap di Ruangan',
-      gaOfficerName: 'Siti Rahma',
-      gaOfficerRole: 'General Affairs Officer',
-      recipientEmployeeId: employees[1]?.id || 'emp-2',
-      recipientName: employees[1]?.fullName || 'Siti Aminah',
-      recipientRole: `Pimpinan Ruangan / Head of ${employees[1]?.department || 'HR & GA'}`,
-      isRoomLeaderResponsible: true,
-      building: 'Menara Palma Kuningan',
-      roomOrArea: 'Ruang Meeting Utama & Area Kerja Lantai 18',
-      items: [
-        {
-          assetId: 'ast-room-tv',
-          assetCode: 'AST-RM-101',
-          assetName: 'Smart TV Interactive 75 Inch 4K Conference',
-          category: 'Elektronik & Server',
-          condition: 'Baik',
-        },
-        {
-          assetId: 'ast-room-prj',
-          assetCode: 'AST-RM-102',
-          assetName: 'Proyektor Laser Epson EB-L200F + Layar Elektrik',
-          category: 'Elektronik & Server',
-          condition: 'Baik',
-        },
-        {
-          assetId: 'ast-room-ac',
-          assetCode: 'AST-RM-103',
-          assetName: 'AC Split Ducting Daikin 3 PK (2 Unit) & Meja Konferensi 16 Kursi',
-          category: 'Furniture & Kantor',
-          condition: 'Baik',
-        },
-      ],
-      additionalAccessories: '2 Remote AC, 1 Remote TV, 1 Kabel HDMI 10 Meter, Speakerphone Poly Sync',
-      notes: 'Aset menetap di ruangan menjadi tanggung jawab Pimpinan di ruangan tersebut (serah terima GA dengan Pimpinan Ruangan).',
-      status: 'Aktif / Diserahterimakan',
-    },
-    {
-      id: 'bast-3',
-      bastNumber: 'BAST/GA-FAC-VEH/2026/10/003',
-      handoverDate: '2026-10-15',
-      handoverCategory: 'Fasilitas Kendaraan Karyawan (Melekat ke 1 Karyawan)',
-      gaOfficerName: 'Bambang Sudiro',
-      gaOfficerRole: 'Fleet & GA Manager',
-      recipientEmployeeId: employees[2]?.id || employees[0]?.id || 'emp-3',
-      recipientName: employees[2]?.fullName || employees[0]?.fullName || 'Rizky Pratama',
-      recipientRole: `${employees[2]?.position || 'Operations Manager'} (Penerima Fasilitas Kendaraan Perusahaan)`,
-      building: 'Menara Palma Kuningan',
-      roomOrArea: 'Fasilitas Jabatan Melekat (Parkir Khusus B2 - Lot M-04)',
-      items: [
-        {
-          assetId: assets.find((a) => a.category === 'Kendaraan Operasional')?.id || 'ast-veh-1',
-          assetCode: assets.find((a) => a.category === 'Kendaraan Operasional')?.assetCode || 'AST-VEH-001',
-          assetName:
-            assets.find((a) => a.category === 'Kendaraan Operasional')?.name ||
-            'Toyota Kijang Innova Zenix 2.0 G HV CVT',
-          category: 'Kendaraan Operasional',
-          condition: 'Baik',
-        },
-      ],
-      vehiclePlateNumber: 'B 1234 NTM',
-      vehicleStartOdometerKm: 12450,
-      vehicleDocumentsIncluded: 'STNK Asli, Kartu Asuransi All-Risk, Kunci Utama & Cadangan, Buku Servis Berkala, Tool Kit',
-      facilitySkNumber: 'SK-HRD/FAC-CAR/2026/019 (Fasilitas Kendaraan Jabatan Manager)',
-      notes: 'Serah terima kendaraan sebagai fasilitas perusahaan yang diberikan khusus dan melekat ke 1 karyawan tersebut selama menjabat.',
-      status: 'Aktif / Diserahterimakan',
-    },
-    {
-      id: 'bast-4',
-      bastNumber: 'BAST/GA-SWAP/2026/10/004',
-      handoverDate: '2026-10-20',
-      handoverCategory: 'Penukaran Aset Antar Karyawan (Melalui GA)',
-      gaOfficerName: 'Bambang Sudiro',
-      gaOfficerRole: 'General Affairs & Asset Custodian (Verifikator Penukaran)',
-      swapPartyAEmployeeId: employees[3]?.id || 'emp-4',
-      swapPartyAName: employees[3]?.fullName || 'Dimas Wicaksono',
-      swapPartyARole: `${employees[3]?.position || 'Senior Software Engineer'} (${employees[3]?.department || 'Engineering'})`,
-      recipientEmployeeId: employees[1]?.id || 'emp-2',
-      recipientName: employees[1]?.fullName || 'Siti Aminah',
-      recipientRole: `${employees[1]?.position || 'HR & Finance Manager'} (${employees[1]?.department || 'HR & Finance'})`,
-      swapPartyAItems: [
-        {
-          assetId: 'ast-1',
-          assetCode: 'AST-LTP-001',
-          assetName: 'MacBook Pro 16" M3 Max 36GB / 1TB',
-          category: 'Laptop & Komputer',
-          condition: 'Baik',
-        },
-      ],
-      swapPartyBItems: [
-        {
-          assetId: 'ast-2',
-          assetCode: 'AST-LTP-002',
-          assetName: 'ThinkPad X1 Carbon Gen 11 16GB / 512GB',
-          category: 'Laptop & Komputer',
-          condition: 'Baik',
-        },
-      ],
-      building: 'Menara Palma Kuningan',
-      roomOrArea: 'Lantai 18 - Engineering & HR Wing (Melalui Meja Verifikasi GA)',
-      items: [
-        {
-          assetId: 'ast-1',
-          assetCode: 'AST-LTP-001',
-          assetName: 'MacBook Pro 16" M3 Max 36GB / 1TB (Dari Pihak I → Pihak II)',
-          category: 'Laptop & Komputer',
-          condition: 'Baik',
-        },
-        {
-          assetId: 'ast-2',
-          assetCode: 'AST-LTP-002',
-          assetName: 'ThinkPad X1 Carbon Gen 11 16GB / 512GB (Dari Pihak II → Pihak I)',
-          category: 'Laptop & Komputer',
-          condition: 'Baik',
-        },
-      ],
-      additionalAccessories: 'Masing-masing beserta Charger Original & Tas Laptop',
-      notes: 'Penukaran aset kerja antar karyawan yang telah diperiksa kondisi fisiknya dan disahkan melalui General Affairs (GA).',
-      status: 'Ditukar Melalui GA',
-    },
-  ];
-
-  const [bastHandovers, setBastHandovers] = useState<BastHandoverRecord[]>(() => {
-    try {
-      const saved = localStorage.getItem('nusahr_ga_bast_handovers_v3');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch {
-      // ignore
-    }
-    return DEFAULT_BAST_HANDOVERS;
-  });
-
-  const saveBastHandovers = (nextList: BastHandoverRecord[]) => {
-    setBastHandovers(nextList);
-    try {
-      localStorage.setItem('nusahr_ga_bast_handovers_v3', JSON.stringify(nextList));
-    } catch {
-      // ignore
-    }
-  };
+  // BAST records are server data (the server numbers them and moves the assets in the same transaction).
+  const [bastHandovers, setBastHandovers] = useState<BastHandoverRecord[]>([]);
+  useEffect(() => {
+    tenantApi
+      .listGaBastHandovers()
+      .then((rows) => setBastHandovers(rows.map((r) => ({ ...r, ...(r.details as object) }) as unknown as BastHandoverRecord)))
+      .catch(() => setBastHandovers([]));
+  }, []);
 
   const unassignedAssets = assets.filter((a) => !a.assignedToEmployeeId);
 
@@ -537,7 +353,7 @@ export const GaAssetManagement: React.FC = () => {
   const [selectedSwapAssetAIds, setSelectedSwapAssetAIds] = useState<string[]>([]);
   const [selectedSwapAssetBIds, setSelectedSwapAssetBIds] = useState<string[]>([]);
   const [extraBatchItemsText, setExtraBatchItemsText] = useState('Mouse Wireless Logitech, Tas Laptop & Adaptor Charger');
-  const [gaHandoverOfficerName, setGaHandoverOfficerName] = useState('Bambang Sudiro (GA Asset Custodian)');
+  const [gaHandoverOfficerName, setGaHandoverOfficerName] = useState('');
   const [newTargetEmpId, setNewTargetEmpId] = useState(employees[0]?.id || '');
   const [newTargetBuilding, setNewTargetBuilding] = useState('Menara Palma Kuningan');
   const [newTargetRoom, setNewTargetRoom] = useState('Lantai 18 - Dev Wing');
@@ -567,7 +383,19 @@ export const GaAssetManagement: React.FC = () => {
   const [roomSubmitAttempted, setRoomSubmitAttempted] = useState(false);
   const [selectedBookingForMinutes, setSelectedBookingForMinutes] = useState<GARoomBooking | null>(null);
   const [minutesSubmitAttempted, setMinutesSubmitAttempted] = useState(false);
+  const [gaError, setGaError] = useState<string | null>(null);
+  const runGa = async (fn: () => Promise<void>): Promise<boolean> => {
+    setGaError(null);
+    try {
+      await fn();
+      return true;
+    } catch (err) {
+      setGaError(err instanceof Error ? err.message : 'Gagal memproses permintaan.');
+      return false;
+    }
+  };
   const [roomForm, setRoomForm] = useState({
+    organizerId: '',
     roomName: 'Ruang Meeting VIP - Lantai 18',
     meetingDate: new Date().toISOString().split('T')[0],
     startTime: '10:00',
@@ -582,16 +410,16 @@ export const GaAssetManagement: React.FC = () => {
   const [vehicleSubmitAttempted, setVehicleSubmitAttempted] = useState(false);
   const [vehicleForm, setVehicleForm] = useState({
     vehicleName: 'Toyota Avanza Veloz (B 5678 NTM) — Armada Pool Operasional',
-    borrowerId: employees[0]?.id || '',
+    borrowerId: '',
     driverType: 'Sopir Kantor' as 'Sopir Kantor' | 'Bawa Sendiri',
-    driverName: 'Pak Supriadi (Driver Internal GA)',
+    driverName: '',
     purpose: '',
-    destination: 'Kunjungan Klien Sudirman & Site Project',
+    destination: '',
     startDate: new Date().toISOString().split('T')[0],
     endDate: new Date().toISOString().split('T')[0],
     startTime: '09:00',
     endTime: '14:00',
-    startMileageKm: 12450,
+    startMileageKm: 0,
   });
   const [selectedVehicleForReturn, setSelectedVehicleForReturn] = useState<GAVehicleBooking | null>(null);
   const [returnSubmitAttempted, setReturnSubmitAttempted] = useState(false);
@@ -627,7 +455,8 @@ export const GaAssetManagement: React.FC = () => {
     unit: 'Rim',
   });
   const [supplyForm, setSupplyForm] = useState({
-    supplyId: officeSupplies[0]?.id || 'sup-1',
+    requesterId: '',
+    supplyId: officeSupplies[0]?.id || '',
     quantity: 2,
     purpose: '',
   });
@@ -637,6 +466,7 @@ export const GaAssetManagement: React.FC = () => {
   const [ticketSubmitAttempted, setTicketSubmitAttempted] = useState(false);
   const [selectedTicketForResolve, setSelectedTicketForResolve] = useState<GATicket | null>(null);
   const [ticketForm, setTicketForm] = useState({
+    requesterId: '',
     title: '',
     category: 'Aset Rusak/Perawatan' as const,
     location: 'Lantai 18 - Wing Barat',
@@ -693,96 +523,105 @@ export const GaAssetManagement: React.FC = () => {
     });
   };
 
-  const handleCreateRoomBooking = (e: React.FormEvent) => {
+  const handleCreateRoomBooking = async (e: React.FormEvent) => {
     e.preventDefault();
     setRoomSubmitAttempted(true);
-    if (!roomForm.topic.trim() || !roomForm.meetingDate || !roomForm.startTime || !roomForm.endTime) return;
-    addRoomBooking({
-      roomName: roomForm.roomName,
-      floorLocation: 'Lantai 18',
-      capacity: Number(roomForm.participantsCount),
-      organizerId: employees[0]?.id || 'emp-001',
-      meetingTitle: roomForm.topic,
-      date: roomForm.meetingDate,
-      startTime: roomForm.startTime,
-      endTime: roomForm.endTime,
-      attendeesInternal: [employees[0]?.id || 'emp-001'],
-      attendeesExternal: [],
-    });
+    if (!roomForm.organizerId || !roomForm.topic.trim() || !roomForm.meetingDate || !roomForm.startTime || !roomForm.endTime) return;
+    const ok = await runGa(() =>
+      addRoomBooking({
+        roomName: roomForm.roomName,
+        floorLocation: roomForm.roomName.includes(' - ') ? roomForm.roomName.split(' - ').slice(1).join(' - ') : '',
+        capacity: Number(roomForm.participantsCount),
+        organizerId: roomForm.organizerId,
+        meetingTitle: roomForm.topic,
+        date: roomForm.meetingDate,
+        startTime: roomForm.startTime,
+        endTime: roomForm.endTime,
+        attendeesInternal: [roomForm.organizerId],
+        attendeesExternal: [],
+      })
+    );
+    if (!ok) return;
     setIsRoomModalOpen(false);
     setRoomSubmitAttempted(false);
     setRoomForm({ ...roomForm, topic: '' });
   };
 
-  const handleSaveMinutes = (e: React.FormEvent) => {
+  const handleSaveMinutes = async (e: React.FormEvent) => {
     e.preventDefault();
     setMinutesSubmitAttempted(true);
     if (!selectedBookingForMinutes || !meetingMinutesText.trim()) return;
-    saveMeetingMinutes(selectedBookingForMinutes.id, meetingMinutesText);
+    const ok = await runGa(() => saveMeetingMinutes(selectedBookingForMinutes.id, meetingMinutesText));
+    if (!ok) return;
     setSelectedBookingForMinutes(null);
     setMinutesSubmitAttempted(false);
     setMeetingMinutesText('');
   };
 
-  const handleCreateVehicleBooking = (e: React.FormEvent) => {
+  const handleCreateVehicleBooking = async (e: React.FormEvent) => {
     e.preventDefault();
     setVehicleSubmitAttempted(true);
+    const plate = vehicleForm.vehicleName.match(/\(([^)]+)\)/)?.[1];
+    const borrower = employees.find((x) => x.id === vehicleForm.borrowerId);
     if (
+      !borrower ||
+      !plate ||
       !vehicleForm.purpose.trim() ||
+      !vehicleForm.destination.trim() ||
       !vehicleForm.startDate ||
       !vehicleForm.endDate ||
       !vehicleForm.startTime ||
-      !vehicleForm.endTime
+      !vehicleForm.endTime ||
+      (vehicleForm.driverType === 'Sopir Kantor' && !vehicleForm.driverName.trim()) ||
+      !(Number(vehicleForm.startMileageKm) > 0)
     ) {
       return;
     }
-    const purposeWithTime = `[${vehicleForm.startTime} - ${vehicleForm.endTime} WIB] ${vehicleForm.purpose}${
-      vehicleForm.destination ? ` (Tujuan: ${vehicleForm.destination})` : ''
-    }`;
-    addVehicleBooking({
-      vehicleName: vehicleForm.vehicleName,
-      plateNumber: vehicleForm.vehicleName.match(/\(([^)]+)\)/)?.[1] || 'B 5678 NTM',
-      driverType: vehicleForm.driverType,
-      driverName:
-        vehicleForm.driverType === 'Sopir Kantor'
-          ? vehicleForm.driverName || 'Sopir Kantor GA'
-          : 'Bawa Sendiri (Lepas Kunci Operasional)',
-      borrowerId: vehicleForm.borrowerId || employees[0]?.id || 'emp-001',
-      purpose: purposeWithTime,
-      destination: vehicleForm.destination || 'Jabodetabek & Site Project',
-      startDate: vehicleForm.startDate,
-      endDate: vehicleForm.endDate,
-      startOdometer: Number(vehicleForm.startMileageKm),
-      nextServiceDate: '2027-01-15',
-      taxExpiryDate: '2027-06-30',
-    });
+    const purposeWithTime = `[${vehicleForm.startTime} - ${vehicleForm.endTime} WIB] ${vehicleForm.purpose}`;
+    const ok = await runGa(() =>
+      addVehicleBooking({
+        vehicleName: vehicleForm.vehicleName,
+        plateNumber: plate,
+        driverType: vehicleForm.driverType,
+        driverName: vehicleForm.driverType === 'Sopir Kantor' ? vehicleForm.driverName.trim() : borrower.fullName,
+        borrowerId: borrower.id,
+        purpose: purposeWithTime,
+        destination: vehicleForm.destination.trim(),
+        startDate: vehicleForm.startDate,
+        endDate: vehicleForm.endDate,
+        startOdometer: Number(vehicleForm.startMileageKm),
+      } as Parameters<typeof addVehicleBooking>[0])
+    );
+    if (!ok) return;
     setIsVehicleModalOpen(false);
     setVehicleSubmitAttempted(false);
     setVehicleForm({ ...vehicleForm, purpose: '' });
-    setSlaToastMessage(
-      `Reservasi penggunaan kendaraan operasional sewaktu-waktu (${vehicleForm.vehicleName} · ${vehicleForm.startTime}-${vehicleForm.endTime} WIB) berhasil dicatat!`
-    );
+    setSlaToastMessage(`Reservasi kendaraan (${vehicleForm.vehicleName} · ${vehicleForm.startTime}-${vehicleForm.endTime} WIB) berhasil dicatat.`);
     setTimeout(() => setSlaToastMessage(null), 4000);
   };
 
-  const handleCreateSupplyRequest = (e: React.FormEvent) => {
+  const handleCreateSupplyRequest = async (e: React.FormEvent) => {
     e.preventDefault();
     setSupplySubmitAttempted(true);
-    const item = officeSupplies.find((s) => s.id === supplyForm.supplyId);
-    if (!item || !supplyForm.quantity || supplyForm.quantity < 1) return;
-    addOfficeSupplyRequest({
-      requesterId: employees[0]?.id || 'emp-001',
-      department: 'General Affairs',
-      itemId: item.id,
-      qty: Number(supplyForm.quantity),
-      reason: supplyForm.purpose || 'Kebutuhan operasional kantor harian',
-    });
+    const item = officeSupplies.find((x) => x.id === supplyForm.supplyId);
+    const requester = employees.find((x) => x.id === supplyForm.requesterId);
+    if (!item || !requester || !supplyForm.quantity || supplyForm.quantity < 1) return;
+    const ok = await runGa(() =>
+      addOfficeSupplyRequest({
+        requesterId: requester.id,
+        department: requester.department || '',
+        itemId: item.id,
+        qty: Number(supplyForm.quantity),
+        reason: supplyForm.purpose.trim(),
+      })
+    );
+    if (!ok) return;
     setIsSupplyModalOpen(false);
     setSupplySubmitAttempted(false);
     setSupplyForm({ ...supplyForm, purpose: '' });
   };
 
-  const handleReturnVehicle = (e: React.FormEvent) => {
+  const handleReturnVehicle = async (e: React.FormEvent) => {
     e.preventDefault();
     setReturnSubmitAttempted(true);
     if (
@@ -795,38 +634,39 @@ export const GaAssetManagement: React.FC = () => {
     ) {
       return;
     }
-    updateVehicleBookingStatus(
-      selectedVehicleForReturn.id,
-      'Dikembalikan',
-      Number(returnForm.endOdometer),
-      Number(returnForm.tollFuelCost)
-    );
+    const ok = await runGa(() => updateVehicleBookingStatus(selectedVehicleForReturn.id, 'Dikembalikan', Number(returnForm.endOdometer), Number(returnForm.tollFuelCost)));
+    if (!ok) return;
     setSelectedVehicleForReturn(null);
     setReturnSubmitAttempted(false);
   };
 
-  const handleAddSupplyItem = (e: React.FormEvent) => {
+  const handleAddSupplyItem = async (e: React.FormEvent) => {
     e.preventDefault();
     setAddSupplySubmitAttempted(true);
     if (
+      !newSupplyForm.itemCode.trim() ||
       !newSupplyForm.itemName.trim() ||
-      !newSupplyForm.currentStock ||
-      newSupplyForm.currentStock < 1 ||
+      !newSupplyForm.unit.trim() ||
+      newSupplyForm.currentStock == null ||
+      newSupplyForm.currentStock < 0 ||
       !newSupplyForm.reorderPoint ||
       newSupplyForm.reorderPoint < 1
     ) {
       return;
     }
-    addOfficeSupply({
-      itemCode: newSupplyForm.itemCode || `ATK-${Date.now().toString().slice(-4)}`,
-      itemName: newSupplyForm.itemName,
-      category: newSupplyForm.category,
-      currentStock: Number(newSupplyForm.currentStock),
-      reorderPoint: Number(newSupplyForm.reorderPoint),
-      standardReorderQty: Number(newSupplyForm.standardReorderQty || 10),
-      estimatedUnitPrice: Number(newSupplyForm.estimatedUnitPrice || 45000),
-      unit: newSupplyForm.unit,
-    });
+    const ok = await runGa(() =>
+      addOfficeSupply({
+        itemCode: newSupplyForm.itemCode.trim(),
+        itemName: newSupplyForm.itemName.trim(),
+        category: newSupplyForm.category,
+        currentStock: Number(newSupplyForm.currentStock),
+        reorderPoint: Number(newSupplyForm.reorderPoint),
+        standardReorderQty: Number(newSupplyForm.standardReorderQty) || 0,
+        estimatedUnitPrice: Number(newSupplyForm.estimatedUnitPrice) || 0,
+        unit: newSupplyForm.unit.trim(),
+      })
+    );
+    if (!ok) return;
     setIsAddSupplyModalOpen(false);
     setNewSupplyForm({
       itemCode: `ATK-${Date.now().toString().slice(-4)}`,
@@ -841,27 +681,40 @@ export const GaAssetManagement: React.FC = () => {
     setAddSupplySubmitAttempted(false);
   };
 
-  const handleCreateTicket = (e: React.FormEvent) => {
+  const handleCreateTicket = async (e: React.FormEvent) => {
     e.preventDefault();
     setTicketSubmitAttempted(true);
-    if (!ticketForm.title.trim()) return;
-    addGaTicket({
-      category: ticketForm.category,
-      title: ticketForm.title,
-      description: ticketForm.description,
-      priority: ticketForm.urgency,
-      requesterId: employees[0]?.id || 'emp-001',
-      slaHours: ticketForm.urgency === 'Darurat' ? 2 : ticketForm.urgency === 'Tinggi' ? 8 : 24,
-    });
+    if (!ticketForm.title.trim() || !ticketForm.requesterId) return;
+    const ok = await runGa(() =>
+      addGaTicket({
+        category: ticketForm.category,
+        title: ticketForm.title.trim(),
+        description: ticketForm.description.trim(),
+        priority: ticketForm.urgency,
+        requesterId: ticketForm.requesterId,
+        slaHours: ticketForm.urgency === 'Darurat' ? 2 : ticketForm.urgency === 'Tinggi' ? 8 : 24,
+      })
+    );
+    if (!ok) return;
     setIsTicketModalOpen(false);
     setTicketSubmitAttempted(false);
     setTicketForm({ ...ticketForm, title: '', description: '' });
   };
 
-  const handleResolveTicket = (e: React.FormEvent) => {
+  const handleResolveTicket = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedTicketForResolve) return;
-    updateGaTicketStatus(selectedTicketForResolve.id, 'Selesai', ticketResolutionNotes || 'Masalah telah ditangani oleh tim teknisi GA.');
+    const current = selectedTicketForResolve;
+    if (!ticketResolutionNotes.trim()) {
+      setGaError('Catatan penyelesaian wajib diisi.');
+      return;
+    }
+    // A ticket must be "Sedang Diproses" before it can be closed — move it there first when it is still open.
+    const ok = await runGa(async () => {
+      if (current.status === 'Terbuka') await updateGaTicketStatus(current.id, 'Sedang Diproses');
+      await updateGaTicketStatus(current.id, 'Selesai', ticketResolutionNotes.trim());
+    });
+    if (!ok) return;
     setSelectedTicketForResolve(null);
     setTicketResolutionNotes('');
   };
@@ -989,7 +842,7 @@ export const GaAssetManagement: React.FC = () => {
     });
   };
 
-  const handleExecuteMutasi = (e: React.FormEvent) => {
+  const handleExecuteMutasi = async (e: React.FormEvent) => {
     e.preventDefault();
     setMutasiSubmitAttempted(true);
 
@@ -1002,178 +855,52 @@ export const GaAssetManagement: React.FC = () => {
       return;
     }
 
-    // Cabang Khusus: Penukaran Aset Antar Karyawan (Melalui GA)
-    if (mutasiCategory === 'Penukaran Aset Antar Karyawan (Melalui GA)') {
-      if (!swapEmpAId || !swapEmpBId || swapEmpAId === swapEmpBId) return;
-      const empA = employees.find((emp) => emp.id === swapEmpAId);
-      const empB = employees.find((emp) => emp.id === swapEmpBId);
-      const assetsA = assets.filter(
-        (a) => a.assignedToEmployeeId === swapEmpAId && selectedSwapAssetAIds.includes(a.id)
-      );
-      const assetsB = assets.filter(
-        (a) => a.assignedToEmployeeId === swapEmpBId && selectedSwapAssetBIds.includes(a.id)
-      );
-      if (assetsA.length === 0 && assetsB.length === 0) return;
-
-      // Tukar kepemilikan/penanggung jawab aset di master inventaris melalui GA
-      assetsA.forEach((a) => {
-        updateAsset(a.id, {
-          assignedToEmployeeId: swapEmpBId,
-          building: newTargetBuilding,
-          room: newTargetRoom,
-        });
-      });
-      assetsB.forEach((b) => {
-        updateAsset(b.id, {
-          assignedToEmployeeId: swapEmpAId,
-          building: newTargetBuilding,
-          room: newTargetRoom,
-        });
-      });
-
-      const partyAItems: BastHandoverItem[] = assetsA.map((a) => ({
-        assetId: a.id,
-        assetCode: a.assetCode,
-        assetName: `${a.name} (Diserahkan dari ${empA?.fullName || 'Pihak I'} → ke ${empB?.fullName || 'Pihak II'})`,
-        category: a.category,
-        condition: a.condition,
-      }));
-      const partyBItems: BastHandoverItem[] = assetsB.map((b) => ({
-        assetId: b.id,
-        assetCode: b.assetCode,
-        assetName: `${b.name} (Diserahkan dari ${empB?.fullName || 'Pihak II'} → ke ${empA?.fullName || 'Pihak I'})`,
-        category: b.category,
-        condition: b.condition,
-      }));
-
-      const combinedItems = [...partyAItems, ...partyBItems];
-
-      const swapRecord: BastHandoverRecord = {
-        id: `bast-${Date.now()}`,
-        bastNumber: `BAST/GA-SWAP/2026/10/${String(bastHandovers.length + 1).padStart(3, '0')}`,
-        handoverDate: new Date().toISOString().split('T')[0],
-        handoverCategory: 'Penukaran Aset Antar Karyawan (Melalui GA)',
-        gaOfficerName: gaHandoverOfficerName.split('(')[0].trim() || 'Bambang Sudiro',
-        gaOfficerRole: 'General Affairs & Asset Custodian (Verifikator Penukaran)',
-        swapPartyAEmployeeId: empA?.id || swapEmpAId,
-        swapPartyAName: empA?.fullName || 'Karyawan Pihak I',
-        swapPartyARole: `${empA?.position || 'Staff'} (${empA?.department || 'Operasional'})`,
-        recipientEmployeeId: empB?.id || swapEmpBId,
-        recipientName: empB?.fullName || 'Karyawan Pihak II',
-        recipientRole: `${empB?.position || 'Staff'} (${empB?.department || 'Operasional'})`,
-        swapPartyAItems: partyAItems,
-        swapPartyBItems: partyBItems,
-        building: newTargetBuilding,
-        roomOrArea: newTargetRoom,
-        items: combinedItems,
-        additionalAccessories: extraBatchItemsText || undefined,
-        notes:
-          mutasiNotes ||
-          `Penukaran aset antar karyawan (${empA?.fullName} ⇄ ${empB?.fullName}) yang telah diperiksa dan disahkan melalui General Affairs (GA).`,
-        status: 'Ditukar Melalui GA',
-      };
-
-      saveBastHandovers([swapRecord, ...bastHandovers]);
-      setSlaToastMessage(
-        `Berhasil menerbitkan BAST Penukaran Aset Antar Karyawan melalui GA (${swapRecord.bastNumber}: ${empA?.fullName} ⇄ ${empB?.fullName})!`
-      );
-      setTimeout(() => setSlaToastMessage(null), 4000);
-      setIsMutasiModalOpen(false);
-      setMutasiSubmitAttempted(false);
-      setSelectedSwapAssetAIds([]);
-      setSelectedSwapAssetBIds([]);
-      setMutasiNotes('');
+    const officer = gaHandoverOfficerName.split('(')[0].trim();
+    if (officer.length < 2) {
+      setGaError('Nama petugas General Affairs wajib diisi.');
       return;
     }
-
-    const validUnassignedIds = selectedMutasiAssetIds.filter((id) =>
-      unassignedAssets.some((u) => u.id === id)
-    );
-    if (validUnassignedIds.length === 0) return;
-
-    const targetEmp = employees.find((emp) => emp.id === newTargetEmpId) || employees[0];
-    const selectedAssetObjs = unassignedAssets.filter((a) => validUnassignedIds.includes(a.id));
-
-    // Update each selected asset in master inventory
-    validUnassignedIds.forEach((id) => {
-      updateAsset(id, {
-        assignedToEmployeeId: newTargetEmpId || undefined,
-        building: newTargetBuilding,
-        room: newTargetRoom,
-      });
-    });
-
-    const itemsPayload: BastHandoverItem[] = selectedAssetObjs.map((a) => ({
-      assetId: a.id,
-      assetCode: a.assetCode,
-      assetName: a.name,
-      category: a.category,
-      condition: a.condition,
-    }));
-
-    const prefix =
-      mutasiCategory === 'Aset Menetap di Ruangan'
-        ? 'BAST/GA-ROOM'
-        : mutasiCategory === 'Fasilitas Kendaraan Karyawan (Melekat ke 1 Karyawan)'
-        ? 'BAST/GA-FAC-VEH'
-        : 'BAST/GA-EMP';
-
-    const newRecord: BastHandoverRecord = {
-      id: `bast-${Date.now()}`,
-      bastNumber: `${prefix}/2026/10/${String(bastHandovers.length + 1).padStart(3, '0')}`,
-      handoverDate: new Date().toISOString().split('T')[0],
+    const isSwap = mutasiCategory === 'Penukaran Aset Antar Karyawan (Melalui GA)';
+    const payload: Record<string, unknown> = {
       handoverCategory: mutasiCategory,
-      gaOfficerName: gaHandoverOfficerName.split('(')[0].trim() || 'Bambang Sudiro',
-      gaOfficerRole: 'General Affairs & Asset Custodian',
-      recipientEmployeeId: targetEmp?.id || 'emp-1',
-      recipientName: targetEmp?.fullName || 'Karyawan Penerima',
-      recipientRole:
-        mutasiCategory === 'Aset Menetap di Ruangan'
-          ? `Pimpinan Penanggung Jawab Ruangan (${targetEmp?.position || 'Manager'} · ${targetEmp?.department || ''})`
-          : mutasiCategory === 'Fasilitas Kendaraan Karyawan (Melekat ke 1 Karyawan)'
-          ? `${targetEmp?.position || 'Manager'} (Penerima Fasilitas Kendaraan Perusahaan)`
-          : `${targetEmp?.position || 'Staff'} (${targetEmp?.department || 'Operasional'})`,
-      isRoomLeaderResponsible: mutasiCategory === 'Aset Menetap di Ruangan',
-      building: newTargetBuilding,
-      roomOrArea: newTargetRoom,
-      items: itemsPayload,
-      additionalAccessories:
-        mutasiCategory === 'Aset Karyawan (Personal)' || mutasiCategory === 'Aset Menetap di Ruangan'
-          ? extraBatchItemsText
-          : undefined,
-      vehiclePlateNumber:
-        mutasiCategory === 'Fasilitas Kendaraan Karyawan (Melekat ke 1 Karyawan)'
-          ? vehiclePlateInput
-          : undefined,
-      vehicleStartOdometerKm:
-        mutasiCategory === 'Fasilitas Kendaraan Karyawan (Melekat ke 1 Karyawan)'
-          ? Number(vehicleOdometerInput)
-          : undefined,
-      vehicleDocumentsIncluded:
-        mutasiCategory === 'Fasilitas Kendaraan Karyawan (Melekat ke 1 Karyawan)'
-          ? vehicleDocsInput
-          : undefined,
-      facilitySkNumber:
-        mutasiCategory === 'Fasilitas Kendaraan Karyawan (Melekat ke 1 Karyawan)'
-          ? facilitySkInput
-          : undefined,
-      notes:
-        mutasiNotes ||
-        (mutasiCategory === 'Aset Menetap di Ruangan'
-          ? 'Serah terima inventaris aset menetap di ruangan kepada Pimpinan Ruangan.'
-          : mutasiCategory === 'Fasilitas Kendaraan Karyawan (Melekat ke 1 Karyawan)'
-          ? 'Serah terima kendaraan sebagai fasilitas perusahaan yang diberikan dan melekat khusus ke 1 karyawan tersebut.'
-          : `Serah terima ${itemsPayload.length} unit aset kerja karyawan dengan General Affairs.`),
-      status: 'Aktif / Diserahterimakan',
+      gaOfficerName: officer,
+      building: newTargetBuilding.trim(),
+      roomOrArea: newTargetRoom.trim(),
+      notes: mutasiNotes.trim(),
+      additionalAccessories: extraBatchItemsText.trim() || undefined,
     };
+    if (isSwap) {
+      if (!swapEmpAId || !swapEmpBId || swapEmpAId === swapEmpBId) return;
+      payload.swapPartyAEmployeeId = swapEmpAId;
+      payload.recipientEmployeeId = swapEmpBId;
+      payload.swapPartyAAssetIds = selectedSwapAssetAIds;
+      payload.swapPartyBAssetIds = selectedSwapAssetBIds;
+    } else {
+      if (!newTargetEmpId || selectedMutasiAssetIds.length === 0) return;
+      payload.recipientEmployeeId = newTargetEmpId;
+      payload.assetIds = selectedMutasiAssetIds;
+      if (mutasiCategory === 'Fasilitas Kendaraan Karyawan (Melekat ke 1 Karyawan)') {
+        payload.vehiclePlateNumber = vehiclePlateInput.trim();
+        payload.vehicleStartOdometerKm = Number(vehicleOdometerInput);
+        payload.vehicleDocumentsIncluded = vehicleDocsInput.trim() || undefined;
+        payload.facilitySkNumber = facilitySkInput.trim();
+      }
+    }
 
-    saveBastHandovers([newRecord, ...bastHandovers]);
-    setSlaToastMessage(
-      `Berhasil membuat dokumen ${newRecord.bastNumber} (${itemsPayload.length} aset) untuk ${newRecord.recipientName}!`
-    );
+    let created: Awaited<ReturnType<typeof tenantApi.createGaBastHandover>> | null = null;
+    const ok = await runGa(async () => {
+      created = await tenantApi.createGaBastHandover(payload);
+      await reloadAssets();
+    });
+    if (!ok || !created) return;
+    const row = created as Awaited<ReturnType<typeof tenantApi.createGaBastHandover>>;
+    setBastHandovers((prev) => [{ ...row, ...(row.details as object) } as unknown as BastHandoverRecord, ...prev]);
+    setSlaToastMessage(`Berhasil menerbitkan ${row.bastNumber} untuk ${row.recipientName}.`);
     setTimeout(() => setSlaToastMessage(null), 4000);
     setIsMutasiModalOpen(false);
     setMutasiSubmitAttempted(false);
+    setSelectedSwapAssetAIds([]);
+    setSelectedSwapAssetBIds([]);
     setMutasiNotes('');
   };
 
@@ -1226,6 +953,12 @@ export const GaAssetManagement: React.FC = () => {
 
   return (
     <div className="space-y-5">
+      {gaError && (
+        <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs font-semibold text-rose-700 flex items-center justify-between gap-3">
+          <span>{gaError}</span>
+          <button type="button" onClick={() => setGaError(null)} className="text-rose-500 hover:text-rose-700">Tutup</button>
+        </div>
+      )}
       {/* Row 1: Module Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
         <div>
@@ -2096,7 +1829,7 @@ export const GaAssetManagement: React.FC = () => {
                         {vb.status === 'Disetujui' && (
                           <button
                             type="button"
-                            onClick={() => updateVehicleBookingStatus(vb.id, 'Sedang Digunakan')}
+                            onClick={() => runGa(() => updateVehicleBookingStatus(vb.id, 'Sedang Digunakan'))}
                             className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded text-[10px] font-semibold"
                           >
                             Mulai Pakai
@@ -2718,7 +2451,7 @@ export const GaAssetManagement: React.FC = () => {
                     <td className="p-3 text-right">
                       {vb.status === 'Disetujui' && (
                         <button
-                          onClick={() => updateVehicleBookingStatus(vb.id, 'Sedang Digunakan')}
+                          onClick={() => runGa(() => updateVehicleBookingStatus(vb.id, 'Sedang Digunakan'))}
                           className="px-2 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded text-[10px] font-semibold"
                         >
                           Mulai Jalan
@@ -2844,13 +2577,13 @@ export const GaAssetManagement: React.FC = () => {
                         {req.status === 'Menunggu Approval' && (
                           <div className="inline-flex gap-1.5">
                             <button
-                              onClick={() => reviewOfficeSupplyRequest(req.id, true)}
+                              onClick={() => runGa(() => reviewOfficeSupplyRequest(req.id, true))}
                               className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[10px] font-semibold"
                             >
                               Setujui
                             </button>
                             <button
-                              onClick={() => reviewOfficeSupplyRequest(req.id, false)}
+                              onClick={() => runGa(() => reviewOfficeSupplyRequest(req.id, false))}
                               className="px-2 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded text-[10px] font-semibold"
                             >
                               Tolak
@@ -3307,11 +3040,13 @@ export const GaAssetManagement: React.FC = () => {
                   {/* PETUGAS GA VERIFIKATOR & AKSESORIS PENDAMPING */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <ValidatedInput
-                      label="Petugas General Affairs (GA) Verifikator & Pengesah Penukaran (Opsional)"
+                      label="Petugas General Affairs (GA) Penyerah / Verifikator"
+                      required
+                      requiredLabel="Nama petugas GA wajib diisi"
+                      showError={mutasiSubmitAttempted}
                       value={gaHandoverOfficerName}
                       onChange={setGaHandoverOfficerName}
                       className="font-medium"
-                      helperText="Jika kosong, sistem akan mengisi petugas GA default"
                     />
                     <div>
                       <label className="font-semibold text-slate-700 block mb-1">
@@ -3679,6 +3414,8 @@ export const GaAssetManagement: React.FC = () => {
               </button>
             </div>
             <form onSubmit={handleCreateRoomBooking} className="p-5 space-y-3.5 text-xs" noValidate>
+{gaError && <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 font-semibold">{gaError}</div>}
+<EmployeeSelect employees={employees} label="Penyelenggara Rapat" required requiredLabel="Penyelenggara wajib dipilih" showError={roomSubmitAttempted} selectedEmployeeId={roomForm.organizerId} onSelect={(id) => setRoomForm({ ...roomForm, organizerId: id })} />
               <div>
                 <label className="font-semibold text-slate-700 block mb-1">Pilihan Ruangan</label>
                 <select
@@ -3782,6 +3519,7 @@ export const GaAssetManagement: React.FC = () => {
               </button>
             </div>
             <form onSubmit={handleSaveMinutes} className="p-5 space-y-3.5 text-xs" noValidate>
+{gaError && <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 font-semibold">{gaError}</div>}
               <div className="p-3 bg-slate-50 rounded border border-slate-200">
                 <div className="font-bold text-slate-900">{selectedBookingForMinutes.meetingTitle}</div>
                 <div className="text-[11px] text-slate-500 mt-0.5">
@@ -3844,6 +3582,7 @@ export const GaAssetManagement: React.FC = () => {
               </button>
             </div>
             <form onSubmit={handleCreateVehicleBooking} className="p-5 space-y-3.5 text-xs" noValidate>
+{gaError && <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 font-semibold">{gaError}</div>}
               <div>
                 <label className="font-semibold text-slate-700 block mb-1">
                   Pilihan Armada Kendaraan Operasional (Pool Kantor) *
@@ -4015,6 +3754,8 @@ export const GaAssetManagement: React.FC = () => {
               </button>
             </div>
             <form onSubmit={handleCreateSupplyRequest} className="p-5 space-y-3.5 text-xs" noValidate>
+{gaError && <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 font-semibold">{gaError}</div>}
+<EmployeeSelect employees={employees} label="Pemohon" required requiredLabel="Pemohon wajib dipilih" showError={supplySubmitAttempted} selectedEmployeeId={supplyForm.requesterId} onSelect={(id) => setSupplyForm({ ...supplyForm, requesterId: id })} />
               <div>
                 <label className="font-semibold text-slate-700 block mb-1">Pilihan Barang ATK</label>
                 <select
@@ -4087,6 +3828,8 @@ export const GaAssetManagement: React.FC = () => {
               </button>
             </div>
             <form onSubmit={handleCreateTicket} className="p-5 space-y-3.5 text-xs" noValidate>
+{gaError && <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 font-semibold">{gaError}</div>}
+<EmployeeSelect employees={employees} label="Pelapor" required requiredLabel="Pelapor wajib dipilih" showError={ticketSubmitAttempted} selectedEmployeeId={ticketForm.requesterId} onSelect={(id) => setTicketForm({ ...ticketForm, requesterId: id })} />
               <div>
                 <label className="font-semibold text-slate-700 block mb-1">Kategori Masalah</label>
                 <select
@@ -4185,6 +3928,7 @@ export const GaAssetManagement: React.FC = () => {
               </button>
             </div>
             <form onSubmit={handleResolveTicket} className="p-5 space-y-3.5 text-xs" noValidate>
+{gaError && <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 font-semibold">{gaError}</div>}
               <div className="p-3 bg-slate-50 border border-slate-200 rounded">
                 <div className="font-bold text-slate-900">{selectedTicketForResolve.title}</div>
                 <div className="text-[11px] text-slate-500 mt-0.5">{selectedTicketForResolve.category} · Pelapor: {employees.find((e) => e.id === selectedTicketForResolve.requesterId)?.fullName || ''}</div>
@@ -4341,6 +4085,7 @@ export const GaAssetManagement: React.FC = () => {
             </div>
 
             <form onSubmit={handleReturnVehicle} className="p-5 space-y-3.5 text-xs" noValidate>
+{gaError && <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 font-semibold">{gaError}</div>}
               <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
                 <div className="font-bold text-slate-800 text-sm">{selectedVehicleForReturn.vehicleName}</div>
                 <div className="text-slate-500 text-[11px] mt-0.5">
@@ -4444,6 +4189,7 @@ export const GaAssetManagement: React.FC = () => {
             </div>
 
             <form onSubmit={handleAddSupplyItem} className="p-5 space-y-3.5 text-xs" noValidate>
+{gaError && <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 font-semibold">{gaError}</div>}
               <ValidatedInput
                 label="Nama Barang / ATK"
                 required

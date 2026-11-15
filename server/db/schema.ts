@@ -1956,3 +1956,146 @@ export const personaliaActions = pgTable("personalia_actions", {
   createdByUserId: uuid("created_by_user_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [uniqueIndex("personalia_actions_tenant_letter_idx").on(table.tenantId, table.letterNumber)]);
+
+// ---------------------------------------------------------------------------
+// General Affairs: facilities (rooms), fleet, office supplies, helpdesk tickets.
+// Previously browser localStorage only (B6). Numbers and status transitions are
+// decided by the server; stock changes are atomic.
+// ---------------------------------------------------------------------------
+
+export const gaRoomBookings = pgTable(
+  "ga_room_bookings",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+    entityId: uuid("entity_id").references(() => companyEntities.id),
+    roomName: text("room_name").notNull(),
+    floorLocation: text("floor_location").notNull().default(""),
+    capacity: integer("capacity").notNull().default(1),
+    organizerId: uuid("organizer_id").references(() => employees.id).notNull(),
+    meetingTitle: text("meeting_title").notNull(),
+    date: text("date").notNull(),
+    startTime: text("start_time").notNull(),
+    endTime: text("end_time").notNull(),
+    attendeesInternal: jsonb("attendees_internal").notNull().default([]).$type<string[]>(),
+    attendeesExternal: jsonb("attendees_external").notNull().default([]).$type<{ name: string; organization: string; email: string; phone?: string; checkedIn?: boolean }[]>(),
+    status: text("status").notNull().default("Terkonfirmasi"), // Terkonfirmasi | Berjalan | Selesai | Dibatalkan
+    bookingDocNumber: text("booking_doc_number").notNull(),
+    momNotes: text("mom_notes"),
+    momDocNumber: text("mom_doc_number"),
+    momRecordedBy: text("mom_recorded_by"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [uniqueIndex("ga_room_bookings_tenant_doc_idx").on(table.tenantId, table.bookingDocNumber)]
+);
+
+export const gaVehicleBookings = pgTable(
+  "ga_vehicle_bookings",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+    entityId: uuid("entity_id").references(() => companyEntities.id),
+    vehicleName: text("vehicle_name").notNull(),
+    plateNumber: text("plate_number").notNull(),
+    driverType: text("driver_type").notNull(), // Sopir Kantor | Bawa Sendiri
+    driverName: text("driver_name").notNull(),
+    borrowerId: uuid("borrower_id").references(() => employees.id).notNull(),
+    purpose: text("purpose").notNull(),
+    destination: text("destination").notNull(),
+    startDate: text("start_date").notNull(),
+    endDate: text("end_date").notNull(),
+    startOdometer: integer("start_odometer").notNull().default(0),
+    endOdometer: integer("end_odometer"),
+    fuelCost: integer("fuel_cost"),
+    status: text("status").notNull().default("Disetujui"), // Menunggu Approval | Disetujui | Sedang Digunakan | Dikembalikan
+    formDocNumber: text("form_doc_number").notNull(),
+    nextServiceDate: text("next_service_date"),
+    taxExpiryDate: text("tax_expiry_date"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [uniqueIndex("ga_vehicle_bookings_tenant_doc_idx").on(table.tenantId, table.formDocNumber)]
+);
+
+export const gaOfficeSupplies = pgTable(
+  "ga_office_supplies",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+    itemCode: text("item_code").notNull(),
+    itemName: text("item_name").notNull(),
+    category: text("category").notNull(),
+    currentStock: integer("current_stock").notNull().default(0),
+    unit: text("unit").notNull(),
+    reorderPoint: integer("reorder_point").notNull().default(0),
+    standardReorderQty: integer("standard_reorder_qty").notNull().default(0),
+    estimatedUnitPrice: integer("estimated_unit_price").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [uniqueIndex("ga_office_supplies_tenant_code_idx").on(table.tenantId, table.itemCode)]
+);
+
+export const gaSupplyRequests = pgTable("ga_supply_requests", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  requesterId: uuid("requester_id").references(() => employees.id).notNull(),
+  department: text("department").notNull().default(""),
+  itemId: uuid("item_id").references(() => gaOfficeSupplies.id).notNull(),
+  qty: integer("qty").notNull(),
+  reason: text("reason").notNull().default(""),
+  requestDate: text("request_date").notNull(),
+  status: text("status").notNull().default("Menunggu Approval"), // Menunggu Approval | Disetujui | Didistribusikan | Ditolak
+  distributedAt: text("distributed_at"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const gaTickets = pgTable(
+  "ga_tickets",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+    ticketNumber: text("ticket_number").notNull(),
+    category: text("category").notNull(),
+    requesterId: uuid("requester_id").references(() => employees.id).notNull(),
+    title: text("title").notNull(),
+    description: text("description").notNull().default(""),
+    priority: text("priority").notNull().default("Normal"), // Rendah | Normal | Tinggi | Darurat
+    status: text("status").notNull().default("Terbuka"), // Terbuka | Sedang Diproses | Menunggu Konfirmasi | Selesai | Ditolak
+    assignedStaff: text("assigned_staff"),
+    slaHours: integer("sla_hours").notNull().default(24),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+    resolutionNotes: text("resolution_notes"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [uniqueIndex("ga_tickets_tenant_number_idx").on(table.tenantId, table.ticketNumber)]
+);
+
+/**
+ * BAST (Berita Acara Serah Terima) for asset handovers: personal assets, room-resident assets, company vehicle facility, and
+ * employee-to-employee swaps through GA. Created by the server together with the asset movement in ONE transaction, so a handover
+ * document can never exist without the assets actually having moved (and vice versa). Items are snapshotted from the asset table.
+ */
+export const gaBastHandovers = pgTable(
+  "ga_bast_handovers",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+    bastNumber: text("bast_number").notNull(),
+    handoverDate: text("handover_date").notNull(),
+    handoverCategory: text("handover_category").notNull(),
+    gaOfficerName: text("ga_officer_name").notNull(),
+    gaOfficerRole: text("ga_officer_role").notNull(),
+    recipientEmployeeId: uuid("recipient_employee_id").references(() => employees.id).notNull(),
+    recipientName: text("recipient_name").notNull(),
+    recipientRole: text("recipient_role").notNull(),
+    swapPartyAEmployeeId: uuid("swap_party_a_employee_id").references(() => employees.id),
+    building: text("building").notNull(),
+    roomOrArea: text("room_or_area").notNull(),
+    status: text("status").notNull().default("Aktif / Diserahterimakan"),
+    notes: text("notes").notNull().default(""),
+    details: jsonb("details").notNull().default({}).$type<Record<string, unknown>>(),
+    createdByUserId: uuid("created_by_user_id"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [uniqueIndex("ga_bast_tenant_number_idx").on(table.tenantId, table.bastNumber)]
+);
+
