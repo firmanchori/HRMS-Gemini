@@ -11,6 +11,11 @@ import { authLimiter } from "../lib/rateLimit.ts";
 import { logAudit } from "../lib/audit.ts";
 import { logLoginAttempt, isAccountLockedOut, LOCKOUT_WINDOW_MINUTES, alertIfAccountJustLockedOut } from "./auth.ts";
 import { getPermission } from "../lib/permissions.ts";
+import { createProcurementRequest, updateProcurementOrder, ProcurementError } from "../lib/assetLifecycle.ts";
+import { applyCollectiveLeave } from "../lib/leaveBalance.ts";
+import { employeeRequestsRouter } from "./employeeRequests.ts";
+import "../lib/requests.ts";
+import { RequestError, loanInputSchema, tripInputSchema, submitLeaveRequest, submitLoanRequest, submitBusinessTrip } from "../lib/requests.ts";
 import { employeeFormatError } from "../lib/personalia.ts";
 import { redeemEmployeeToken, requestEmployeeReset, EmployeeAccountError } from "../lib/employeeAccounts.ts";
 import { rejectBreachedPassword } from "../middleware/passwordCheck.ts";
@@ -146,6 +151,7 @@ employeeRouter.post("/mfa/verify-login", authLimiter, validateBody(employeeMfaVe
 });
 
 employeeRouter.use(requireEmployeeSession);
+employeeRouter.use("/requests", employeeRequestsRouter); // self-service requests live in employeeRequests.ts
 
 /** Current MFA status for the logged-in employee — drives the ESS profile/security tab's "aktif/tidak aktif" state. */
 employeeRouter.get("/mfa/status", async (req, res) => {
@@ -328,57 +334,19 @@ employeeRouter.post("/leave", requirePermission("attendance", "create"), validat
   if (req.body.leaveType === "Sakit dengan Surat Dokter" && !req.body.attachmentUrl) {
     return res.status(400).json({ error: "Surat dokter wajib dilampirkan untuk jenis izin Sakit dengan Surat Dokter.", details: { attachmentUrl: "Lampirkan surat dokter" } });
   }
-  const [created] = await db
-    .insert(leaveRequests)
-    .values({ ...req.body, employeeId: session.employeeId!, tenantId: session.tenantId!, status: "Menunggu" })
-    .returning();
-  res.status(201).json(created);
+  try {
+    res.status(201).json(await submitLeaveRequest({ tenantId: session.tenantId!, employeeId: session.employeeId!, input: req.body, actorUserId: null }));
+  } catch (err) {
+    if (err instanceof RequestError) return res.status(err.status).json({ error: err.message });
+    throw err;
+  }
 });
 
 // --- Manager Approval Queue (direct reports only) ---
 
 /** "Atasan" here means direct reports only (employees.managerId === this manager's own employeeId) — not the full entity-visibility tree admins get, which is a different and much wider scope than "my team". */
-employeeRouter.get("/approvals/leave", requirePermission("attendance", "approve"), async (req, res) => {
-  const session = req.session!;
-  const directReports = await db.select({ id: employees.id }).from(employees).where(and(eq(employees.tenantId, session.tenantId!), eq(employees.managerId, session.employeeId!)));
-  const reportIds = directReports.map((e) => e.id);
-  if (reportIds.length === 0) return res.json([]);
 
-  const pending = await db
-    .select()
-    .from(leaveRequests)
-    .where(and(eq(leaveRequests.tenantId, session.tenantId!), eq(leaveRequests.status, "Menunggu")));
-  res.json(pending.filter((r) => reportIds.includes(r.employeeId)));
-});
 
-const leaveDecisionSchema = z.object({
-  decision: z.enum(["Disetujui", "Ditolak"]),
-});
-
-employeeRouter.post("/approvals/leave/:id/decision", requirePermission("attendance", "approve"), validateParams(uuidParam("id")), validateBody(leaveDecisionSchema), async (req, res) => {
-  const session = req.session!;
-  const [target] = await db.select().from(leaveRequests).where(and(eq(leaveRequests.id, req.params.id), eq(leaveRequests.tenantId, session.tenantId!))).limit(1);
-  if (!target) return res.status(404).json({ error: "Pengajuan cuti tidak ditemukan" });
-
-  // Permission grants "can approve leave in general" — this checks the
-  // specific target actually reports to this manager, the same
-  // check-then-act pattern every admin route in tenant.ts uses for its
-  // own visibility scope.
-  const [targetEmployee] = await db.select({ managerId: employees.managerId }).from(employees).where(eq(employees.id, target.employeeId)).limit(1);
-  if (!targetEmployee || targetEmployee.managerId !== session.employeeId) {
-    return res.status(403).json({ error: "Karyawan ini bukan bawahan langsung Anda" });
-  }
-
-  const [manager] = await db.select({ fullName: employees.fullName }).from(employees).where(eq(employees.id, session.employeeId!)).limit(1);
-  const [updated] = await db
-    .update(leaveRequests)
-    .set({ status: req.body.decision, approvedBy: manager?.fullName ?? session.employeeId })
-    .where(eq(leaveRequests.id, target.id))
-    .returning();
-
-  await logAudit({ actorUserId: null, tenantId: session.tenantId, action: "leave.decision", details: { leaveRequestId: target.id, decision: req.body.decision, managerEmployeeId: session.employeeId } });
-  res.json(updated);
-});
 
 // ---------------------------------------------------------------------------
 // Payroll — first module of the RBAC granular-enforcement rollout beyond
@@ -524,6 +492,7 @@ const employeeProcurementOrderSchema = z.object({
   quantity: z.number().int().min(1),
   estimatedCost: z.number().int().min(0),
   requestor: z.string().trim().min(1).max(200),
+  requestorEmployeeId: z.string().uuid().optional().nullable(),
   department: z.string().trim().min(1).max(200),
   status: z.enum(["Pengajuan PR", "Quotation Diterima", "Disetujui HR/Finance", "PO Terbit", "Kontrak Berjalan", "Barang Diterima / Project Selesai", "Barang Diterima"]).optional(),
   requestedDate: z.string().trim().min(1).max(20),
@@ -535,19 +504,21 @@ employeeRouter.get("/procurement-orders", requirePermission("procurement", "view
 });
 
 employeeRouter.post("/procurement-orders", requirePermission("procurement", "create"), validateBody(employeeProcurementOrderSchema), async (req, res) => {
-  const tenantId = req.session!.tenantId!;
-  const [created] = await db.insert(procurementOrders).values({ ...req.body, tenantId }).returning();
-  await logAudit({ actorUserId: null, tenantId, action: "procurement_order.created", details: { orderId: created.id, employeeAccountId: req.session!.userId } });
-  res.status(201).json(created);
+  try {
+    res.status(201).json(await createProcurementRequest({ tenantId: req.session!.tenantId!, body: req.body, actorUserId: null }));
+  } catch (err) {
+    if (err instanceof Error && err.message === "Karyawan pemohon tidak ditemukan") return res.status(400).json({ error: err.message });
+    throw err;
+  }
 });
 
 employeeRouter.put("/procurement-orders/:id", requirePermission("procurement", "edit"), validateParams(uuidParam("id")), validateBody(employeeProcurementOrderSchema.partial()), async (req, res) => {
-  const tenantId = req.session!.tenantId!;
-  const [existing] = await db.select().from(procurementOrders).where(and(eq(procurementOrders.id, req.params.id), eq(procurementOrders.tenantId, tenantId))).limit(1);
-  if (!existing) return res.status(404).json({ error: "Procurement order tidak ditemukan" });
-  const [updated] = await db.update(procurementOrders).set(req.body).where(eq(procurementOrders.id, req.params.id)).returning();
-  await logAudit({ actorUserId: null, tenantId, action: "procurement_order.updated", details: { orderId: updated.id, employeeAccountId: req.session!.userId } });
-  res.json(updated);
+  try {
+    res.json(await updateProcurementOrder({ tenantId: req.session!.tenantId!, orderId: req.params.id, body: req.body, actorUserId: null }));
+  } catch (err) {
+    if (err instanceof ProcurementError) return res.status(err.status).json({ error: err.message });
+    throw err;
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -590,44 +561,22 @@ employeeRouter.put("/compliance-records/:id", requirePermission("compliance", "e
 // Loans & Kasbon — fifth module of the RBAC rollout (moduleKey "loans").
 // ---------------------------------------------------------------------------
 
-const employeeLoanRecordSchema = z.object({
-  employeeId: z.string().uuid(),
-  loanType: z.string().trim().min(1).max(100),
-  totalAmount: z.number().int().min(0),
-  tenorMonths: z.number().int().min(1),
-  monthlyInstallment: z.number().int().min(0),
-  remainingAmount: z.number().int().min(0).optional(),
-  startDate: z.string().trim().min(1).max(20),
-  reason: z.string().trim().max(1000).optional().nullable(),
-  status: z.enum(["Aktif", "Lunas", "Menunggu Approval", "Ditolak"]).optional(),
-  adminFee: z.number().int().min(0).optional().nullable(),
-  interestMethod: z.string().trim().max(100).optional().nullable(),
-  interestRatePercent: z.number().min(0).optional().nullable(),
-});
 
 employeeRouter.get("/loans", requirePermission("loans", "view"), async (req, res) => {
   const tenantId = req.session!.tenantId!;
   res.json(await db.select().from(employeeLoans).where(eq(employeeLoans.tenantId, tenantId)));
 });
 
-employeeRouter.post("/loans", requirePermission("loans", "create"), validateBody(employeeLoanRecordSchema), async (req, res) => {
-  const tenantId = req.session!.tenantId!;
-  const [created] = await db
-    .insert(employeeLoans)
-    .values({ ...req.body, remainingAmount: req.body.remainingAmount ?? req.body.totalAmount, tenantId })
-    .returning();
-  await logAudit({ actorUserId: null, tenantId, action: "loan.created", details: { loanId: created.id, employeeAccountId: req.session!.userId } });
-  res.status(201).json(created);
+employeeRouter.post("/loans", requirePermission("loans", "create"), validateBody(loanInputSchema.extend({ employeeId: z.string().uuid() })), async (req, res) => {
+  const { employeeId, ...input } = req.body;
+  try {
+    res.status(201).json(await submitLoanRequest({ tenantId: req.session!.tenantId!, employeeId, input, actorUserId: null }));
+  } catch (err) {
+    if (err instanceof RequestError) return res.status(err.status).json({ error: err.message });
+    throw err;
+  }
 });
 
-employeeRouter.put("/loans/:id", requirePermission("loans", "edit"), validateParams(uuidParam("id")), validateBody(employeeLoanRecordSchema.partial()), async (req, res) => {
-  const tenantId = req.session!.tenantId!;
-  const [existing] = await db.select().from(employeeLoans).where(and(eq(employeeLoans.id, req.params.id), eq(employeeLoans.tenantId, tenantId))).limit(1);
-  if (!existing) return res.status(404).json({ error: "Data pinjaman tidak ditemukan" });
-  const [updated] = await db.update(employeeLoans).set(req.body).where(eq(employeeLoans.id, req.params.id)).returning();
-  await logAudit({ actorUserId: null, tenantId, action: "loan.updated", details: { loanId: updated.id, employeeAccountId: req.session!.userId } });
-  res.json(updated);
-});
 
 
 // ---------------------------------------------------------------------------
@@ -700,43 +649,21 @@ employeeRouter.put("/employees/:id", requirePermission("employees", "edit"), val
 });
 
 // --- Business Trips / SPPD (moduleKey "trips") ---
-const employeeBusinessTripSchema = z.object({
-  tripNumber: z.string().trim().min(1).max(100),
-  employeeId: z.string().uuid(),
-  destinationCity: z.string().trim().min(1).max(200),
-  startDate: z.string().trim().min(1).max(20),
-  endDate: z.string().trim().min(1).max(20),
-  totalDays: z.number().int().min(1),
-  purpose: z.string().trim().min(1).max(2000),
-  transportType: z.enum(["Pesawat", "Kereta Api", "Mobil Operasional", "Travel"]),
-  estimatedCost: z.number().int().min(0),
-  perDiemDaily: z.number().int().min(0),
-  accommodationCost: z.number().int().min(0),
-  status: z.enum(["Menunggu Approval", "Disetujui Atasan", "Disetujui Finance", "Selesai", "Ditolak"]).optional(),
-  approvedBy: z.string().trim().max(200).optional().nullable(),
-});
 
 employeeRouter.get("/business-trips", requirePermission("trips", "view"), async (req, res) => {
   res.json(await db.select().from(businessTrips).where(eq(businessTrips.tenantId, req.session!.tenantId!)));
 });
 
-employeeRouter.post("/business-trips", requirePermission("trips", "create"), validateBody(employeeBusinessTripSchema), async (req, res) => {
-  const tenantId = req.session!.tenantId!;
-  const [target] = await db.select({ id: employees.id }).from(employees).where(and(eq(employees.id, req.body.employeeId), eq(employees.tenantId, tenantId))).limit(1);
-  if (!target) return res.status(404).json({ error: "Karyawan tidak ditemukan" });
-  const [created] = await db.insert(businessTrips).values({ ...req.body, tenantId }).returning();
-  await logAudit({ actorUserId: null, tenantId, action: "business_trip.created", details: { tripId: created.id, employeeAccountId: req.session!.userId } });
-  res.status(201).json(created);
+employeeRouter.post("/business-trips", requirePermission("trips", "create"), validateBody(tripInputSchema.extend({ employeeId: z.string().uuid() })), async (req, res) => {
+  const { employeeId, ...input } = req.body;
+  try {
+    res.status(201).json(await submitBusinessTrip({ tenantId: req.session!.tenantId!, employeeId, input, actorUserId: null }));
+  } catch (err) {
+    if (err instanceof RequestError) return res.status(err.status).json({ error: err.message });
+    throw err;
+  }
 });
 
-employeeRouter.put("/business-trips/:id", requirePermission("trips", "edit"), validateParams(uuidParam("id")), validateBody(employeeBusinessTripSchema.partial()), async (req, res) => {
-  const tenantId = req.session!.tenantId!;
-  const [existing] = await db.select().from(businessTrips).where(and(eq(businessTrips.id, req.params.id), eq(businessTrips.tenantId, tenantId))).limit(1);
-  if (!existing) return res.status(404).json({ error: "Data perjalanan dinas tidak ditemukan" });
-  const [updated] = await db.update(businessTrips).set(req.body).where(eq(businessTrips.id, req.params.id)).returning();
-  await logAudit({ actorUserId: null, tenantId, action: "business_trip.updated", details: { tripId: updated.id, employeeAccountId: req.session!.userId } });
-  res.json(updated);
-});
 
 // --- KPI (moduleKey "kpi") ---
 const employeeKpiRecordSchema = z.object({
@@ -946,6 +873,7 @@ employeeRouter.post("/calendar-events", requirePermission("calendar", "create"),
   const tenantId = req.session!.tenantId!;
   if (!(await assertEntityInTenant(tenantId, req.body.entityId))) return res.status(404).json({ error: "Entitas tidak ditemukan" });
   const [created] = await db.insert(companyCalendarEvents).values({ ...req.body, tenantId }).returning();
+  await applyCollectiveLeave(created);
   await logAudit({ actorUserId: null, tenantId, action: "calendar_event.created", details: { eventId: created.id, employeeAccountId: req.session!.userId } });
   res.status(201).json(created);
 });

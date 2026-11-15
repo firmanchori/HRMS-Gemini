@@ -8,7 +8,7 @@ import bcrypt from "bcryptjs";
 import { createApp } from "../app.ts";
 import { withCsrf } from "../lib/testCsrf.ts";
 import { db, pool } from "../db/client.ts";
-import { leaveRequests, employeeKpis, tenants, tenantSubscriptions, users, subscriptionPlans, companyEntities, employees, employeeAccounts, sessions, rolePermissionEntries, roleDefinitions, payrollRecords, auditLogEntries, officialDocuments, businessTrips } from "../db/schema.ts";
+import { leaveBalances, leaveLedger, approvalItems, leaveRequests, employeeKpis, tenants, tenantSubscriptions, users, subscriptionPlans, companyEntities, employees, employeeAccounts, sessions, rolePermissionEntries, roleDefinitions, payrollRecords, auditLogEntries, officialDocuments, businessTrips } from "../db/schema.ts";
 
 /**
  * Proves the RBAC-granular rollout (security review, user 2026-11-10:
@@ -71,6 +71,9 @@ beforeAll(async () => {
 afterAll(async () => {
   await db.delete(rolePermissionEntries).where(eq(rolePermissionEntries.tenantId, tenantId));
   await db.delete(roleDefinitions).where(eq(roleDefinitions.tenantId, tenantId));
+  await db.delete(leaveLedger).where(eq(leaveLedger.tenantId, tenantId));
+  await db.delete(leaveBalances).where(eq(leaveBalances.tenantId, tenantId));
+  await db.delete(approvalItems).where(eq(approvalItems.tenantId, tenantId));
   await db.delete(leaveRequests).where(eq(leaveRequests.tenantId, tenantId));
   await db.delete(employeeKpis).where(eq(employeeKpis.tenantId, tenantId));
   await db.update(employees).set({ managerId: null }).where(eq(employees.tenantId, tenantId));
@@ -200,7 +203,7 @@ describe("RBAC granular enforcement — employee module access is real, not deco
     const ok = await staffAgent.post("/api/employee/leave").set("Origin", origin).send({ ...base, attachmentUrl: "data:application/pdf;base64,JVBERi0xLjQ=" });
     expect(ok.status).toBe(201);
     expect(ok.body.attachmentUrl).toMatch(/^data:application\/pdf/);
-    const plain = await staffAgent.post("/api/employee/leave").set("Origin", origin).send({ ...base, leaveType: "Sakit Tanpa Surat Dokter" });
+    const plain = await staffAgent.post("/api/employee/leave").set("Origin", origin).send({ ...base, leaveType: "Sakit Tanpa Surat Dokter", startDate: "2026-12-10", endDate: "2026-12-11" });
     expect(plain.status).toBe(201);
   });
 });

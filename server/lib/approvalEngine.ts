@@ -85,6 +85,9 @@ export type DecisionActor =
 /** category -> callback invoked once an item reaches a final status. Modules register themselves (avoids a circular import into this file). */
 export const finalizeHooks: Record<string, (item: typeof approvalItems.$inferSelect, decidedByName: string) => Promise<void>> = {};
 
+/** category -> check run BEFORE an item is finally approved; throw ApprovalError to refuse (e.g. leave balance no longer sufficient). */
+export const approvalPrechecks: Record<string, (item: typeof approvalItems.$inferSelect) => Promise<void>> = {};
+
 export class ApprovalError extends Error {
   constructor(message: string, public status: number) {
     super(message);
@@ -159,6 +162,11 @@ export async function decideApproval(params: { tenantId: string; itemId: string;
       level = next.level;
       assignedApproverId = next.approverEmployeeId ?? item.assignedApproverId;
     }
+  }
+
+  if (status === "Disetujui") {
+    const precheck = approvalPrechecks[item.category];
+    if (precheck) await precheck(item);
   }
 
   const [updated] = await db

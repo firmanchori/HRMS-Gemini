@@ -1429,6 +1429,7 @@ export const employeeLoans = pgTable("employee_loans", {
   reason: text("reason"),
   status: text("status").notNull().default("Menunggu Approval"),
   adminFee: integer("admin_fee"),
+  rejectionReason: text("rejection_reason"),
   interestMethod: text("interest_method"),
   interestRatePercent: doublePrecision("interest_rate_percent"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
@@ -1615,6 +1616,8 @@ export const assetRelocationLogs = pgTable("asset_relocation_logs", {
 export const procurementOrders = pgTable("procurement_orders", {
   id: uuid("id").defaultRandom().primaryKey(),
   tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+  /** The requesting employee — the Approval Engine routes the PR to this person's real manager (the free-text requestor name is display only). */
+  requestorEmployeeId: uuid("requestor_employee_id").references(() => employees.id),
   type: text("type"),
   prNumber: text("pr_number").notNull(),
   poNumber: text("po_number").notNull(),
@@ -2099,3 +2102,40 @@ export const gaBastHandovers = pgTable(
   (table) => [uniqueIndex("ga_bast_tenant_number_idx").on(table.tenantId, table.bastNumber)]
 );
 
+
+// ---------------------------------------------------------------------------
+// Leave balance ledger (B8). A balance row fixes the year's entitlement; every
+// movement is a ledger entry (deduct / restore / grant), idempotent per source
+// so approving twice or re-running a calendar sync can never double-deduct.
+// remaining = entitlement + carried + grants − deducts + restores.
+// ---------------------------------------------------------------------------
+export const leaveBalances = pgTable(
+  "leave_balances",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+    employeeId: uuid("employee_id").references(() => employees.id).notNull(),
+    year: integer("year").notNull(),
+    entitlement: integer("entitlement").notNull(),
+    carried: integer("carried").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [uniqueIndex("leave_balances_emp_year_idx").on(table.employeeId, table.year)]
+);
+
+export const leaveLedger = pgTable(
+  "leave_ledger",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+    employeeId: uuid("employee_id").references(() => employees.id).notNull(),
+    year: integer("year").notNull(),
+    kind: text("kind").notNull(), // deduct | restore | grant
+    days: integer("days").notNull(), // always positive; the kind gives the sign
+    sourceType: text("source_type").notNull(), // leave_request | calendar_event | manual
+    sourceId: text("source_id").notNull(),
+    note: text("note"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [uniqueIndex("leave_ledger_source_idx").on(table.employeeId, table.sourceType, table.sourceId, table.kind)]
+);

@@ -75,11 +75,11 @@ afterAll(async () => {
   await pool.end();
 });
 
-const itemBody = (ref: string) => ({ category: "Pinjaman", referenceId: ref, title: "Pinjaman uji", requesterId, assignedApproverRole: "manager" });
+const itemBody = (ref: string) => ({ category: "Pengujian Engine", referenceId: ref, title: "Item uji", requesterId, assignedApproverRole: "manager" });
 
 describe("approval engine", () => {
   it("resolves approvers from the real reporting line and ignores client-supplied status/level", async () => {
-    const cfg = await agent.put("/api/tenant/approval-workflow-configs/Pinjaman").set("Origin", origin).send({
+    const cfg = await agent.put("/api/tenant/approval-workflow-configs/Pengujian%20Engine").set("Origin", origin).send({
       steps: [
         { mode: "approve", label: "Atasan Langsung", approverType: "direct_manager", slaHours: 24 },
         { mode: "approve", label: "Atasan dari Atasan", approverType: "manager_of_manager", slaHours: 48 },
@@ -164,7 +164,7 @@ describe("approval engine", () => {
   });
 
   it("rejects a workflow config with no approve step", async () => {
-    const res = await agent.put("/api/tenant/approval-workflow-configs/Cuti").set("Origin", origin).send({
+    const res = await agent.put("/api/tenant/approval-workflow-configs/Pengujian%20Engine").set("Origin", origin).send({
       steps: [{ mode: "acknowledge", label: "Hanya mengetahui", approverType: "direct_manager", slaHours: 24 }],
     });
     expect(res.status).toBe(400);

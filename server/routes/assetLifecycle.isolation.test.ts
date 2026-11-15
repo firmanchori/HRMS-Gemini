@@ -61,7 +61,13 @@ describe("asset lifecycle", () => {
       requestor: "GA", department: "IT", requestedDate: "2026-11-01", warrantyMonths: 24,
     });
     expect(po.status).toBe(201);
-    const recv = await agent.put(`/api/tenant/procurement-orders/${po.body.id}`).set("Origin", origin).send({ status: "Barang Diterima", receivedDate: "2026-11-10" });
+    expect(po.body.status).toBe("Pengajuan PR"); // always born as a PR, whatever the client sends
+    // The server opened an approval item; until it is approved the order can't progress.
+    const prItem = (await agent.get("/api/tenant/approval-items").set("Origin", origin)).body.find((i: { referenceId: string }) => i.referenceId === po.body.id);
+    expect(prItem.category).toBe("Procurement PR");
+    expect((await agent.put(`/api/tenant/procurement-orders/${po.body.id}`).set("Origin", origin).send({ status: "Barang Diterima" })).status).toBe(409);
+    await agent.post(`/api/tenant/approval-items/${prItem.id}/decision`).set("Origin", origin).send({ decision: "Disetujui" }).expect(200);
+    const recv = await agent.put(`/api/tenant/procurement-orders/${po.body.id}`).set("Origin", origin).send({ status: "Barang Diterima", receivedDate: "2026-11-10", poNumber: "PO-1" });
     expect(recv.status).toBe(200);
     expect(recv.body.generatedAssetCount).toBe(2);
     const again = await agent.put(`/api/tenant/procurement-orders/${po.body.id}`).set("Origin", origin).send({ status: "Barang Diterima" });
@@ -98,8 +104,10 @@ describe("asset lifecycle", () => {
       prNumber: "PR-GATE", poNumber: "", vendorName: "PT Vendor", itemName: "Meja", quantity: 1, estimatedCost: 1000000, requestor: "GA", department: "IT", requestedDate: "2026-11-01",
     });
     expect(po.status).toBe(201);
-    const item = await agent.post("/api/tenant/approval-items").set("Origin", origin).send({ category: "Procurement PR", referenceId: po.body.id, title: "PR Meja", requesterId: empId, assignedApproverRole: "manager" });
-    expect(item.status).toBe(201);
+    // The server opened the PR's approval item itself — a client cannot open (or pre-approve) one.
+    const forged = await agent.post("/api/tenant/approval-items").set("Origin", origin).send({ category: "Procurement PR", referenceId: po.body.id, title: "PR Meja", requesterId: empId, assignedApproverRole: "manager" });
+    expect(forged.status).toBe(400);
+    const item = { body: (await agent.get("/api/tenant/approval-items").set("Origin", origin)).body.find((i: { referenceId: string }) => i.referenceId === po.body.id) };
 
     const blocked = await agent.put(`/api/tenant/procurement-orders/${po.body.id}`).set("Origin", origin).send({ status: "PO Terbit" });
     expect(blocked.status).toBe(409);

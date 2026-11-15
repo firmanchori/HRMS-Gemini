@@ -2,6 +2,8 @@ import { and, eq, inArray } from "drizzle-orm";
 import { db } from "../db/client.ts";
 import { employees, officeLocations, tenantModuleSettings, attendanceRecords } from "../db/schema.ts";
 import { isWithinAnyLocation, type GeofenceLocation } from "./geofence.ts";
+import { nowWib, timeToMinutes } from "./dates.ts";
+import { deriveAttendanceFacts } from "./attendanceFacts.ts";
 
 /**
  * Core Clock-In/Out business logic (user, 2026-11-09 ESS redesign),
@@ -25,11 +27,9 @@ const DEFAULT_CLOCK_WINDOWS = { clockInWindowStart: "06:00", clockInWindowEnd: "
 
 /** "jam mulai clock in dan batas clock-in" — a hard window: outside it, clock-in/out is refused outright, not just flagged late. Compares the server's local clock, same WIB assumption the rest of this app already makes (e.g. Header.tsx's "Hari ini, {time} WIB"). */
 export function isWithinTimeWindow(start: string, end: string): boolean {
-  const now = new Date();
-  const nowMinutes = now.getHours() * 60 + now.getMinutes();
-  const [startH, startM] = start.split(":").map(Number);
-  const [endH, endM] = end.split(":").map(Number);
-  return nowMinutes >= startH * 60 + startM && nowMinutes <= endH * 60 + endM;
+  // Jakarta wall-clock, not the server's local timezone.
+  const nowMinutes = nowWib().minutes;
+  return nowMinutes >= timeToMinutes(start) && nowMinutes <= timeToMinutes(end);
 }
 
 export async function getClockWindows(tenantId: string) {
@@ -123,14 +123,16 @@ export async function performClockIn(tenantId: string, employeeId: string, lat: 
     throw new ClockError("WFO hanya bisa clock-in di dalam radius/area lokasi kantor yang ditugaskan.", 400);
   }
 
-  const date = new Date().toISOString().slice(0, 10);
+  const { date, time } = nowWib();
+  const facts = await deriveAttendanceFacts(tenantId, employeeId, date, time, null);
   const fields = {
-    clockIn: new Date().toTimeString().slice(0, 5),
+    clockIn: time,
     workType,
     clockInLat: lat,
     clockInLng: lng,
     clockInInsideRadius: insideRadius,
-    status: "Hadir",
+    status: facts.status ?? "Hadir",
+    lateMinutes: facts.lateMinutes,
   };
 
   const [existing] = await db.select().from(attendanceRecords).where(and(eq(attendanceRecords.tenantId, tenantId), eq(attendanceRecords.employeeId, employeeId), eq(attendanceRecords.date, date))).limit(1);
@@ -149,7 +151,7 @@ export async function performClockOut(tenantId: string, employeeId: string, lat:
     throw new ClockError(`Clock-out hanya bisa dilakukan antara pukul ${windows.clockOutWindowStart} - ${windows.clockOutWindowEnd}.`, 400);
   }
 
-  const date = new Date().toISOString().slice(0, 10);
+  const { date, time } = nowWib();
   const [existing] = await db.select().from(attendanceRecords).where(and(eq(attendanceRecords.tenantId, tenantId), eq(attendanceRecords.employeeId, employeeId), eq(attendanceRecords.date, date))).limit(1);
   if (!existing || !existing.clockIn) {
     throw new ClockError("Belum ada clock-in hari ini — clock-in terlebih dahulu.", 400);
@@ -157,10 +159,12 @@ export async function performClockOut(tenantId: string, employeeId: string, lat:
 
   const locations = await getAssignedLocations(tenantId, employeeId);
   const insideRadius = isWithinAnyLocation(lat, lng, locations);
+  const facts = await deriveAttendanceFacts(tenantId, employeeId, date, existing.clockIn, time);
   const [updated] = await db
     .update(attendanceRecords)
     .set({
-      clockOut: new Date().toTimeString().slice(0, 5),
+      clockOut: time,
+      overtimeHours: facts.overtimeHours,
       clockOutLat: lat,
       clockOutLng: lng,
       clockOutInsideRadius: insideRadius,

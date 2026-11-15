@@ -1,6 +1,8 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "../db/client.ts";
-import { gaAssets, procurementOrders, approvalItems } from "../db/schema.ts";
+import { gaAssets, procurementOrders, approvalItems, employees } from "../db/schema.ts";
+import { openApprovalItem } from "./approvalFlows.ts";
+import { logAudit } from "./audit.ts";
 import { finalizeHooks } from "./approvalEngine.ts";
 
 /**
@@ -103,3 +105,62 @@ finalizeHooks[PROCUREMENT_PR_CATEGORY] = async (item) => {
     await db.update(procurementOrders).set({ status: "Disetujui HR/Finance" }).where(eq(procurementOrders.id, order.id));
   }
 };
+
+/**
+ * A purchase request is always created as "Pengajuan PR" together with its Approval Engine item (routed to the requesting employee's
+ * manager). The client cannot create it pre-approved or at a later stage, and the PR → PO progression is then blocked until approved.
+ */
+export async function createProcurementRequest(params: { tenantId: string; body: Record<string, unknown>; actorUserId: string | null }) {
+  const { tenantId } = params;
+  const { receivingCategory: _c, receivingBuilding: _b, receivingRoom: _r, status: _s, poNumber: _p, ...rest } = params.body as Record<string, unknown> & { requestorEmployeeId?: string | null };
+  void _c; void _b; void _r; void _s; void _p;
+  let requesterId: string | null = null;
+  if (rest.requestorEmployeeId) {
+    const [emp] = await db.select({ id: employees.id }).from(employees).where(and(eq(employees.id, rest.requestorEmployeeId as string), eq(employees.tenantId, tenantId))).limit(1);
+    if (!emp) throw new Error("Karyawan pemohon tidak ditemukan");
+    requesterId = emp.id;
+  }
+  const [created] = await db.insert(procurementOrders).values({ ...(rest as typeof procurementOrders.$inferInsert), tenantId, status: "Pengajuan PR", poNumber: "" }).returning();
+  await openApprovalItem({ tenantId, category: PROCUREMENT_PR_CATEGORY, referenceId: created.id, title: `PR ${created.itemName} (${created.quantity} unit) - ${created.vendorName}`, requesterId, amount: created.estimatedCost, notes: `${created.requestor} · ${created.department}` });
+  await logAudit({ actorUserId: params.actorUserId, tenantId, action: "procurement.pr_submitted", details: { orderId: created.id, prNumber: created.prNumber } });
+  return created;
+}
+
+export class ProcurementError extends Error {
+  constructor(message: string, public status = 400) {
+    super(message);
+  }
+}
+
+/** "none" for legacy orders created before PRs had approval items. */
+export async function procurementApprovalState(tenantId: string, orderId: string): Promise<"none" | "pending" | "approved" | "rejected"> {
+  const rows = await db.select({ status: approvalItems.status }).from(approvalItems).where(and(eq(approvalItems.tenantId, tenantId), eq(approvalItems.category, PROCUREMENT_PR_CATEGORY), eq(approvalItems.referenceId, orderId)));
+  if (rows.length === 0) return "none";
+  if (rows.some((r) => r.status === "Disetujui")) return "approved";
+  if (rows.some((r) => r.status === "Menunggu" || r.status === "Eskalasi Terlambat")) return "pending";
+  return "rejected";
+}
+
+/**
+ * The one place a procurement order is updated (admin and employee routes): an order cannot move past "Quotation Diterima" until its
+ * PR approval is granted (pending or rejected PRs are refused), and marking goods received generates the assets.
+ */
+export async function updateProcurementOrder(params: { tenantId: string; orderId: string; body: Record<string, unknown>; actorUserId: string | null }) {
+  const { tenantId, orderId } = params;
+  const { receivingCategory, receivingBuilding, receivingRoom, requestorEmployeeId: _re, ...patch } = params.body as Record<string, unknown> & { status?: string; requestorEmployeeId?: unknown; receivingCategory?: string; receivingBuilding?: string; receivingRoom?: string };
+  void _re;
+  const [existing] = await db.select().from(procurementOrders).where(and(eq(procurementOrders.id, orderId), eq(procurementOrders.tenantId, tenantId))).limit(1);
+  if (!existing) throw new ProcurementError("Procurement order tidak ditemukan", 404);
+  if (patch.status && patch.status !== existing.status && isPostApprovalProcurementStatus(patch.status)) {
+    const state = await procurementApprovalState(tenantId, orderId);
+    if (state === "pending") throw new ProcurementError("PR ini masih menunggu persetujuan di Approval Center dan belum bisa dilanjutkan.", 409);
+    if (state === "rejected") throw new ProcurementError("PR ini ditolak di Approval Center dan tidak dapat dilanjutkan. Ajukan PR baru.", 409);
+  }
+  const [updated] = await db.update(procurementOrders).set(patch as Partial<typeof procurementOrders.$inferInsert>).where(eq(procurementOrders.id, orderId)).returning();
+  let generated: unknown[] = [];
+  if (isReceivedStatus(updated.status)) {
+    generated = await generateAssetsFromReceivedOrder({ tenantId, orderId: updated.id, category: receivingCategory as never, building: receivingBuilding, room: receivingRoom });
+    if (generated.length) await logAudit({ actorUserId: params.actorUserId, tenantId, action: "procurement.assets_generated", details: { orderId: updated.id, count: generated.length } });
+  }
+  return { ...updated, generatedAssetCount: generated.length };
+}

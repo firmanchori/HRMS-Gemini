@@ -77,17 +77,22 @@ import {
   vendorInvoices,
 } from "../db/schema.ts";
 import { requireTenantAdmin } from "../middleware/auth.ts";
-import { generateAssetsFromReceivedOrder, isReceivedStatus, deriveUsageStatus, isPostApprovalProcurementStatus, hasPendingProcurementApproval } from "../lib/assetLifecycle.ts";
+import { generateAssetsFromReceivedOrder, isReceivedStatus, deriveUsageStatus, createProcurementRequest, updateProcurementOrder, ProcurementError } from "../lib/assetLifecycle.ts";
+import { deriveAttendanceFacts } from "../lib/attendanceFacts.ts";
 import { employeeFormatError } from "../lib/personalia.ts";
 import { gaRouter } from "./tenantGa.ts";
+import { buildTenantRequestsRouter } from "./tenantRequests.ts";
 import { revokeAllSessionsForUser } from "../lib/sessionStore.ts";
 import { provisionEmployeeAccount, sendEmployeeResetLink, EmployeeAccountError } from "../lib/employeeAccounts.ts";
 import { generateThrRun, payThr, listThrPayments, ThrError } from "../lib/thr.ts";
 import { generatePayrollRun, approvePayrollPeriod, disbursePayrollPeriod, PayrollError } from "../lib/payrollEngine.ts";
 import { reimbursementClaimSchema, createReimbursementClaim, listReimbursementClaims, setClaimPayrollOptIn, ReimbursementError } from "../lib/reimbursement.ts";
+import { applyCollectiveLeave } from "../lib/leaveBalance.ts";
 import { applyContractRenewalReview } from "../lib/contractRenewal.ts";
 import { createOfficialDocumentRecord, isFullySigned, buildVerificationUrl } from "../lib/documents.ts";
 import { personaliaActionSchema, createPersonaliaAction, submitPersonaliaAction, deletePersonaliaDraft, listPersonaliaActions, PersonaliaError } from "../lib/personalia.ts";
+import { SERVER_MANAGED_CATEGORIES } from "../lib/approvalFlows.ts";
+import "../lib/requests.ts"; // registers the finalize hooks/prechecks for leave, overtime, loans, corrections, swaps and trips
 import { buildApprovalSteps, currentBlockingStep, decideApproval, withDerivedStatus, ApprovalError } from "../lib/approvalEngine.ts";
 import { validateBody, validateParams, uuidParam } from "../lib/validate.ts";
 import { rejectBreachedPassword } from "../middleware/passwordCheck.ts";
@@ -100,6 +105,7 @@ import { checkClockIn, checkClockOut, performClockIn, performClockOut, ClockErro
 export const tenantRouter = Router();
 tenantRouter.use(requireTenantAdmin);
 tenantRouter.use(gaRouter); // General Affairs routes live in tenantGa.ts
+tenantRouter.use(buildTenantRequestsRouter(resolveVisibleEmployeeIds)); // employee requests (leave, overtime, loans, corrections, swaps, trips) live in tenantRequests.ts
 
 /**
  * Which entity a tenant_admin is personally scoped to — the entity whose own
@@ -2206,6 +2212,8 @@ const approvalItemSchema = z.object({
  */
 tenantRouter.post("/approval-items", validateBody(approvalItemSchema), async (req, res) => {
   const tenantId = req.session!.tenantId!;
+  // Requests of these categories are opened by the server together with the request itself; a client can never open (or pre-shape) one.
+  if (SERVER_MANAGED_CATEGORIES.has(req.body.category)) return res.status(400).json({ error: `Item approval kategori "${req.body.category}" dibuat otomatis oleh sistem saat pengajuan dibuat.` });
   const { level: _l, totalLevels: _t, status: _s, assignedApproverId: _a, substituteApproverId: _sa, deadlineAt: _d, ...rest } = req.body;
   const steps = await buildApprovalSteps(tenantId, rest.category, rest.requesterId);
   const first = currentBlockingStep(steps);
@@ -2319,6 +2327,9 @@ tenantRouter.put(
     const tenantId = req.session!.tenantId!;
     const [existing] = await db.select().from(approvalItems).where(and(eq(approvalItems.id, req.params.id), eq(approvalItems.tenantId, tenantId))).limit(1);
     if (!existing) return res.status(404).json({ error: "Item approval tidak ditemukan" });
+    if (SERVER_MANAGED_CATEGORIES.has(existing.category) && req.body.status !== undefined && req.body.status !== existing.status) {
+      return res.status(400).json({ error: "Status item ini hanya dapat berubah lewat keputusan approval (POST /approval-items/:id/decision)." });
+    }
     const history = req.body.status && req.body.status !== existing.status
       ? [...existing.history, { at: new Date().toISOString(), level: existing.level, action: `Sinkron status → ${req.body.status} (override admin dari modul sumber)`, byEmployeeId: null, byName: "Admin Tenant" }]
       : existing.history;
@@ -2463,41 +2474,9 @@ tenantRouter.post("/employee-schedules/bulk", validateBody(z.object({ entries: z
 
 // --- Shift Swap Requests ---
 
-tenantRouter.get("/shift-swap-requests", async (req, res) => {
-  const tenantId = req.session!.tenantId!;
-  const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
-  if (visibleEmployeeIds.length === 0) return res.json([]);
-  res.json(await db.select().from(shiftSwapRequests).where(and(eq(shiftSwapRequests.tenantId, tenantId), inArray(shiftSwapRequests.requesterId, visibleEmployeeIds))));
-});
 
-const shiftSwapRequestSchema = z.object({
-  requesterId: z.string().uuid(),
-  targetEmployeeId: z.string().uuid(),
-  requestDate: z.string().trim().min(1).max(20),
-  targetDate: z.string().trim().min(1).max(20),
-  requestShiftId: z.string().trim().max(50).optional(),
-  targetShiftId: z.string().trim().max(50).optional(),
-  reason: z.string().trim().max(1000).optional(),
-  status: z.enum(["Menunggu", "Disetujui", "Ditolak"]).optional(),
-  approvedBy: z.string().trim().max(200).optional(),
-});
 
-tenantRouter.post("/shift-swap-requests", validateBody(shiftSwapRequestSchema), async (req, res) => {
-  const tenantId = req.session!.tenantId!;
-  const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
-  if (!visibleEmployeeIds.includes(req.body.requesterId)) return res.status(403).json({ error: "Karyawan di luar ruang lingkup Anda" });
-  const [created] = await db.insert(shiftSwapRequests).values({ ...req.body, tenantId }).returning();
-  res.status(201).json(created);
-});
 
-tenantRouter.put("/shift-swap-requests/:id", validateParams(uuidParam("id")), validateBody(shiftSwapRequestSchema.partial()), async (req, res) => {
-  const tenantId = req.session!.tenantId!;
-  const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
-  const [existing] = await db.select().from(shiftSwapRequests).where(and(eq(shiftSwapRequests.id, req.params.id), eq(shiftSwapRequests.tenantId, tenantId))).limit(1);
-  if (!existing || !visibleEmployeeIds.includes(existing.requesterId)) return res.status(404).json({ error: "Pengajuan tukar shift tidak ditemukan" });
-  const [updated] = await db.update(shiftSwapRequests).set(req.body).where(eq(shiftSwapRequests.id, req.params.id)).returning();
-  res.json(updated);
-});
 
 // --- Attendance Records ---
 
@@ -2511,21 +2490,33 @@ tenantRouter.get("/attendance-records", async (req, res) => {
 const attendanceRecordSchema = z.object({
   employeeId: z.string().uuid(),
   date: z.string().trim().min(1).max(20),
-  clockIn: z.string().trim().max(10).optional(),
-  clockOut: z.string().trim().max(10).optional(),
+  clockIn: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Format jam harus HH:MM").optional(),
+  clockOut: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Format jam harus HH:MM").optional(),
   status: z.string().trim().min(1).max(50).optional(),
-  overtimeHours: z.number().min(0).optional(),
-  lateMinutes: z.number().int().min(0).optional(),
+  // lateMinutes / overtimeHours are intentionally NOT accepted: the server derives them from the rostered shift (lib/attendanceFacts.ts).
   notes: z.string().trim().max(1000).optional(),
   shiftId: z.string().trim().max(50).optional(),
   workType: z.enum(["WFO", "WFH", "WFA"]).optional(),
 });
 
+/** Applies the server-derived late/overtime facts. A manually entered non-presence status (Izin, Sakit, Alpha…) is kept and carries no lateness. */
+async function withDerivedAttendanceFacts(tenantId: string, input: { employeeId: string; date: string; clockIn?: string; clockOut?: string; status?: string }, existing?: { clockIn: string | null; clockOut: string | null }) {
+  const clockIn = input.clockIn ?? existing?.clockIn ?? null;
+  const clockOut = input.clockOut ?? existing?.clockOut ?? null;
+  const facts = await deriveAttendanceFacts(tenantId, input.employeeId, input.date, clockIn, clockOut);
+  const manualStatus = input.status && input.status !== "Hadir" && input.status !== "Terlambat";
+  return {
+    lateMinutes: manualStatus ? 0 : facts.lateMinutes,
+    overtimeHours: manualStatus ? 0 : facts.overtimeHours,
+    status: manualStatus ? input.status : facts.status ?? input.status,
+  };
+}
+
 tenantRouter.post("/attendance-records", validateBody(attendanceRecordSchema), async (req, res) => {
   const tenantId = req.session!.tenantId!;
   const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
   if (!visibleEmployeeIds.includes(req.body.employeeId)) return res.status(403).json({ error: "Karyawan di luar ruang lingkup Anda" });
-  const [created] = await db.insert(attendanceRecords).values({ ...req.body, tenantId }).returning();
+  const [created] = await db.insert(attendanceRecords).values({ ...req.body, ...(await withDerivedAttendanceFacts(tenantId, req.body)), tenantId }).returning();
   res.status(201).json(created);
 });
 
@@ -2534,7 +2525,7 @@ tenantRouter.put("/attendance-records/:id", validateParams(uuidParam("id")), val
   const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
   const [existing] = await db.select().from(attendanceRecords).where(and(eq(attendanceRecords.id, req.params.id), eq(attendanceRecords.tenantId, tenantId))).limit(1);
   if (!existing || !visibleEmployeeIds.includes(existing.employeeId)) return res.status(404).json({ error: "Data presensi tidak ditemukan" });
-  const [updated] = await db.update(attendanceRecords).set(req.body).where(eq(attendanceRecords.id, req.params.id)).returning();
+  const [updated] = await db.update(attendanceRecords).set({ ...req.body, ...(await withDerivedAttendanceFacts(tenantId, { employeeId: existing.employeeId, date: existing.date, ...req.body }, existing)) }).where(eq(attendanceRecords.id, req.params.id)).returning();
   res.json(updated);
 });
 
@@ -2548,93 +2539,26 @@ tenantRouter.post("/attendance-records/upsert", validateBody(attendanceRecordSch
     .from(attendanceRecords)
     .where(and(eq(attendanceRecords.tenantId, tenantId), eq(attendanceRecords.employeeId, req.body.employeeId), eq(attendanceRecords.date, req.body.date)))
     .limit(1);
+  const facts = await withDerivedAttendanceFacts(tenantId, req.body, existing);
   if (existing) {
-    const [updated] = await db.update(attendanceRecords).set(req.body).where(eq(attendanceRecords.id, existing.id)).returning();
+    const [updated] = await db.update(attendanceRecords).set({ ...req.body, ...facts }).where(eq(attendanceRecords.id, existing.id)).returning();
     return res.json(updated);
   }
-  const [created] = await db.insert(attendanceRecords).values({ ...req.body, tenantId }).returning();
+  const [created] = await db.insert(attendanceRecords).values({ ...req.body, ...facts, tenantId }).returning();
   res.status(201).json(created);
 });
 
 // --- Attendance Correction Requests ---
 
-tenantRouter.get("/attendance-corrections", async (req, res) => {
-  const tenantId = req.session!.tenantId!;
-  const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
-  if (visibleEmployeeIds.length === 0) return res.json([]);
-  res.json(await db.select().from(attendanceCorrectionRequests).where(and(eq(attendanceCorrectionRequests.tenantId, tenantId), inArray(attendanceCorrectionRequests.employeeId, visibleEmployeeIds))));
-});
 
-const attendanceCorrectionSchema = z.object({
-  employeeId: z.string().uuid(),
-  date: z.string().trim().min(1).max(20),
-  type: z.string().trim().min(1).max(100),
-  proposedClockIn: z.string().trim().max(10).optional(),
-  proposedClockOut: z.string().trim().max(10).optional(),
-  reason: z.string().trim().max(1000).optional(),
-  status: z.enum(["Menunggu", "Disetujui", "Ditolak"]).optional(),
-  approvedBy: z.string().trim().max(200).optional(),
-  attachmentUrl: z.string().trim().max(2000).optional(),
-});
 
-tenantRouter.post("/attendance-corrections", validateBody(attendanceCorrectionSchema), async (req, res) => {
-  const tenantId = req.session!.tenantId!;
-  const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
-  if (!visibleEmployeeIds.includes(req.body.employeeId)) return res.status(403).json({ error: "Karyawan di luar ruang lingkup Anda" });
-  const [created] = await db.insert(attendanceCorrectionRequests).values({ ...req.body, tenantId }).returning();
-  res.status(201).json(created);
-});
 
-tenantRouter.put("/attendance-corrections/:id", validateParams(uuidParam("id")), validateBody(attendanceCorrectionSchema.partial()), async (req, res) => {
-  const tenantId = req.session!.tenantId!;
-  const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
-  const [existing] = await db.select().from(attendanceCorrectionRequests).where(and(eq(attendanceCorrectionRequests.id, req.params.id), eq(attendanceCorrectionRequests.tenantId, tenantId))).limit(1);
-  if (!existing || !visibleEmployeeIds.includes(existing.employeeId)) return res.status(404).json({ error: "Pengajuan koreksi tidak ditemukan" });
-  const [updated] = await db.update(attendanceCorrectionRequests).set(req.body).where(eq(attendanceCorrectionRequests.id, req.params.id)).returning();
-  res.json(updated);
-});
 
 // --- Overtime Requests ---
 
-tenantRouter.get("/overtime-requests", async (req, res) => {
-  const tenantId = req.session!.tenantId!;
-  const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
-  if (visibleEmployeeIds.length === 0) return res.json([]);
-  res.json(await db.select().from(overtimeRequests).where(and(eq(overtimeRequests.tenantId, tenantId), inArray(overtimeRequests.employeeId, visibleEmployeeIds))));
-});
 
-const overtimeRequestSchema = z.object({
-  entityId: z.string().uuid().optional(),
-  employeeId: z.string().uuid(),
-  date: z.string().trim().min(1).max(20),
-  startTime: z.string().trim().min(1).max(10),
-  endTime: z.string().trim().min(1).max(10),
-  hours: z.number().min(0),
-  reason: z.string().trim().max(1000).optional(),
-  type: z.enum(["Pengajuan Karyawan", "Perintah Atasan"]).optional(),
-  status: z.enum(["Menunggu", "Disetujui", "Ditolak"]).optional(),
-  approvedBy: z.string().trim().max(200).optional(),
-  approvedHours: z.number().min(0).optional(),
-  compensationType: z.enum(["Lembur Berbayar", "Cuti Pengganti"]).optional(),
-  notes: z.string().trim().max(1000).optional(),
-});
 
-tenantRouter.post("/overtime-requests", validateBody(overtimeRequestSchema), async (req, res) => {
-  const tenantId = req.session!.tenantId!;
-  const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
-  if (!visibleEmployeeIds.includes(req.body.employeeId)) return res.status(403).json({ error: "Karyawan di luar ruang lingkup Anda" });
-  const [created] = await db.insert(overtimeRequests).values({ ...req.body, tenantId }).returning();
-  res.status(201).json(created);
-});
 
-tenantRouter.put("/overtime-requests/:id", validateParams(uuidParam("id")), validateBody(overtimeRequestSchema.partial()), async (req, res) => {
-  const tenantId = req.session!.tenantId!;
-  const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
-  const [existing] = await db.select().from(overtimeRequests).where(and(eq(overtimeRequests.id, req.params.id), eq(overtimeRequests.tenantId, tenantId))).limit(1);
-  if (!existing || !visibleEmployeeIds.includes(existing.employeeId)) return res.status(404).json({ error: "Pengajuan lembur tidak ditemukan" });
-  const [updated] = await db.update(overtimeRequests).set(req.body).where(eq(overtimeRequests.id, req.params.id)).returning();
-  res.json(updated);
-});
 
 // ---------------------------------------------------------------------------
 // Payroll — salary component master/assignments + payroll records. The
@@ -2822,87 +2746,17 @@ tenantRouter.put("/reimbursement-claims/:id/payroll-opt-in", validateParams(uuid
 // Employee Loans & Kasbon
 // ---------------------------------------------------------------------------
 
-const employeeLoanSchema = z.object({
-  employeeId: z.string().uuid(),
-  loanType: z.string().trim().min(1).max(100),
-  totalAmount: z.number().int().min(0),
-  tenorMonths: z.number().int().min(1),
-  monthlyInstallment: z.number().int().min(0),
-  remainingAmount: z.number().int().min(0).optional(),
-  startDate: z.string().trim().min(1).max(20),
-  reason: z.string().trim().max(1000).optional().nullable(),
-  status: z.enum(["Aktif", "Lunas", "Menunggu Approval", "Ditolak"]).optional(),
-  adminFee: z.number().int().min(0).optional().nullable(),
-  interestMethod: z.string().trim().max(100).optional().nullable(),
-  interestRatePercent: z.number().min(0).optional().nullable(),
-});
 
-tenantRouter.get("/loans", async (req, res) => {
-  const tenantId = req.session!.tenantId!;
-  const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
-  if (visibleEmployeeIds.length === 0) return res.json([]);
-  res.json(await db.select().from(employeeLoans).where(and(eq(employeeLoans.tenantId, tenantId), inArray(employeeLoans.employeeId, visibleEmployeeIds))));
-});
 
-tenantRouter.post("/loans", validateBody(employeeLoanSchema), async (req, res) => {
-  const tenantId = req.session!.tenantId!;
-  const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
-  if (!visibleEmployeeIds.includes(req.body.employeeId)) return res.status(403).json({ error: "Karyawan di luar ruang lingkup Anda" });
-  const [created] = await db
-    .insert(employeeLoans)
-    .values({ ...req.body, remainingAmount: req.body.remainingAmount ?? req.body.totalAmount, tenantId })
-    .returning();
-  res.status(201).json(created);
-});
 
-tenantRouter.put("/loans/:id", validateParams(uuidParam("id")), validateBody(employeeLoanSchema.partial()), async (req, res) => {
-  const tenantId = req.session!.tenantId!;
-  const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
-  const [existing] = await db.select().from(employeeLoans).where(and(eq(employeeLoans.id, req.params.id), eq(employeeLoans.tenantId, tenantId))).limit(1);
-  if (!existing || !visibleEmployeeIds.includes(existing.employeeId)) return res.status(404).json({ error: "Data pinjaman tidak ditemukan" });
-  const [updated] = await db.update(employeeLoans).set(req.body).where(eq(employeeLoans.id, req.params.id)).returning();
-  res.json(updated);
-});
 
 // ---------------------------------------------------------------------------
 // Leave Requests (Cuti)
 // ---------------------------------------------------------------------------
 
-const leaveRequestSchema = z.object({
-  employeeId: z.string().uuid(),
-  leaveType: z.enum(["Cuti Tahunan", "Sakit Tanpa Surat Dokter", "Sakit dengan Surat Dokter", "Cuti Menikah", "Cuti Melahirkan", "Izin Urusan Pribadi"]),
-  startDate: z.string().trim().min(1).max(20),
-  endDate: z.string().trim().min(1).max(20),
-  totalDays: z.number().int().min(1),
-  reason: z.string().trim().max(1000).optional().nullable(),
-  attachmentUrl: z.string().max(950_000).regex(/^data:(image\/(png|jpeg|webp)|application\/pdf);base64,/, "Lampiran harus berupa gambar (PNG/JPG/WebP) atau PDF").optional().nullable(),
-  status: z.enum(["Menunggu", "Disetujui", "Ditolak"]).optional(),
-  approvedBy: z.string().trim().max(200).optional().nullable(),
-});
 
-tenantRouter.get("/leave-requests", async (req, res) => {
-  const tenantId = req.session!.tenantId!;
-  const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
-  if (visibleEmployeeIds.length === 0) return res.json([]);
-  res.json(await db.select().from(leaveRequests).where(and(eq(leaveRequests.tenantId, tenantId), inArray(leaveRequests.employeeId, visibleEmployeeIds))));
-});
 
-tenantRouter.post("/leave-requests", validateBody(leaveRequestSchema), async (req, res) => {
-  const tenantId = req.session!.tenantId!;
-  const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
-  if (!visibleEmployeeIds.includes(req.body.employeeId)) return res.status(403).json({ error: "Karyawan di luar ruang lingkup Anda" });
-  const [created] = await db.insert(leaveRequests).values({ ...req.body, tenantId }).returning();
-  res.status(201).json(created);
-});
 
-tenantRouter.put("/leave-requests/:id", validateParams(uuidParam("id")), validateBody(leaveRequestSchema.partial()), async (req, res) => {
-  const tenantId = req.session!.tenantId!;
-  const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
-  const [existing] = await db.select().from(leaveRequests).where(and(eq(leaveRequests.id, req.params.id), eq(leaveRequests.tenantId, tenantId))).limit(1);
-  if (!existing || !visibleEmployeeIds.includes(existing.employeeId)) return res.status(404).json({ error: "Pengajuan cuti tidak ditemukan" });
-  const [updated] = await db.update(leaveRequests).set(req.body).where(eq(leaveRequests.id, req.params.id)).returning();
-  res.json(updated);
-});
 
 // ---------------------------------------------------------------------------
 // Employee KPI reviews
@@ -3045,45 +2899,9 @@ tenantRouter.put("/offboarding-records/:id", validateParams(uuidParam("id")), va
 // Business Trips (SPPD)
 // ---------------------------------------------------------------------------
 
-const businessTripSchema = z.object({
-  tripNumber: z.string().trim().min(1).max(100),
-  employeeId: z.string().uuid(),
-  destinationCity: z.string().trim().min(1).max(200),
-  startDate: z.string().trim().min(1).max(20),
-  endDate: z.string().trim().min(1).max(20),
-  totalDays: z.number().int().min(1),
-  purpose: z.string().trim().min(1).max(2000),
-  transportType: z.enum(["Pesawat", "Kereta Api", "Mobil Operasional", "Travel"]),
-  estimatedCost: z.number().int().min(0),
-  perDiemDaily: z.number().int().min(0),
-  accommodationCost: z.number().int().min(0),
-  status: z.enum(["Menunggu Approval", "Disetujui Atasan", "Disetujui Finance", "Selesai", "Ditolak"]).optional(),
-  approvedBy: z.string().trim().max(200).optional().nullable(),
-});
 
-tenantRouter.get("/business-trips", async (req, res) => {
-  const tenantId = req.session!.tenantId!;
-  const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
-  if (visibleEmployeeIds.length === 0) return res.json([]);
-  res.json(await db.select().from(businessTrips).where(and(eq(businessTrips.tenantId, tenantId), inArray(businessTrips.employeeId, visibleEmployeeIds))));
-});
 
-tenantRouter.post("/business-trips", validateBody(businessTripSchema), async (req, res) => {
-  const tenantId = req.session!.tenantId!;
-  const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
-  if (!visibleEmployeeIds.includes(req.body.employeeId)) return res.status(403).json({ error: "Karyawan di luar ruang lingkup Anda" });
-  const [created] = await db.insert(businessTrips).values({ ...req.body, tenantId }).returning();
-  res.status(201).json(created);
-});
 
-tenantRouter.put("/business-trips/:id", validateParams(uuidParam("id")), validateBody(businessTripSchema.partial()), async (req, res) => {
-  const tenantId = req.session!.tenantId!;
-  const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
-  const [existing] = await db.select().from(businessTrips).where(and(eq(businessTrips.id, req.params.id), eq(businessTrips.tenantId, tenantId))).limit(1);
-  if (!existing || !visibleEmployeeIds.includes(existing.employeeId)) return res.status(404).json({ error: "Data perjalanan dinas tidak ditemukan" });
-  const [updated] = await db.update(businessTrips).set(req.body).where(eq(businessTrips.id, req.params.id)).returning();
-  res.json(updated);
-});
 
 // ---------------------------------------------------------------------------
 // GA Asset & Procurement — Vendors
@@ -3276,6 +3094,7 @@ const procurementOrderSchema = z.object({
   quantity: z.number().int().min(1),
   estimatedCost: z.number().int().min(0),
   requestor: z.string().trim().min(1).max(200),
+  requestorEmployeeId: z.string().uuid().optional().nullable(),
   department: z.string().trim().min(1).max(200),
   status: z.enum(["Pengajuan PR", "Quotation Diterima", "Disetujui HR/Finance", "PO Terbit", "Kontrak Berjalan", "Barang Diterima / Project Selesai", "Barang Diterima"]).optional(),
   requestedDate: z.string().trim().min(1).max(20),
@@ -3293,27 +3112,21 @@ tenantRouter.get("/procurement-orders", async (req, res) => {
 });
 
 tenantRouter.post("/procurement-orders", validateBody(procurementOrderSchema), async (req, res) => {
-  const tenantId = req.session!.tenantId!;
-  const [created] = await db.insert(procurementOrders).values({ ...req.body, tenantId }).returning();
-  res.status(201).json(created);
+  try {
+    res.status(201).json(await createProcurementRequest({ tenantId: req.session!.tenantId!, body: req.body, actorUserId: req.session!.userId }));
+  } catch (err) {
+    if (err instanceof Error && err.message === "Karyawan pemohon tidak ditemukan") return res.status(400).json({ error: err.message });
+    throw err;
+  }
 });
 
 tenantRouter.put("/procurement-orders/:id", validateParams(uuidParam("id")), validateBody(procurementOrderSchema.partial()), async (req, res) => {
-  const tenantId = req.session!.tenantId!;
-  const [existing] = await db.select().from(procurementOrders).where(and(eq(procurementOrders.id, req.params.id), eq(procurementOrders.tenantId, tenantId))).limit(1);
-  if (!existing) return res.status(404).json({ error: "Procurement order tidak ditemukan" });
-  const { receivingCategory, receivingBuilding, receivingRoom, ...orderPatch } = req.body;
-  if (orderPatch.status && orderPatch.status !== existing.status && isPostApprovalProcurementStatus(orderPatch.status) && (await hasPendingProcurementApproval(tenantId, existing.id))) {
-    return res.status(409).json({ error: "PR ini masih menunggu persetujuan di Approval Center dan belum bisa dilanjutkan." });
+  try {
+    res.json(await updateProcurementOrder({ tenantId: req.session!.tenantId!, orderId: req.params.id, body: req.body, actorUserId: req.session!.userId }));
+  } catch (err) {
+    if (err instanceof ProcurementError) return res.status(err.status).json({ error: err.message });
+    throw err;
   }
-  const [updated] = await db.update(procurementOrders).set(orderPatch).where(eq(procurementOrders.id, req.params.id)).returning();
-  // Marking goods received now creates the asset records (vendor/PO/warranty carried over) instead of leaving GA to retype them.
-  let generatedAssets: unknown[] = [];
-  if (isReceivedStatus(updated.status)) {
-    generatedAssets = await generateAssetsFromReceivedOrder({ tenantId, orderId: updated.id, category: receivingCategory, building: receivingBuilding, room: receivingRoom });
-    if (generatedAssets.length) await logAudit({ actorUserId: req.session!.userId, tenantId, action: "procurement.assets_generated", details: { orderId: updated.id, count: generatedAssets.length } });
-  }
-  res.json({ ...updated, generatedAssetCount: generatedAssets.length });
 });
 
 // ---------------------------------------------------------------------------
@@ -3488,6 +3301,7 @@ tenantRouter.post("/calendar-events", validateBody(calendarEventSchema), async (
     if (!visibleEntityIds.includes(req.body.entityId)) return res.status(403).json({ error: "Entitas di luar ruang lingkup Anda" });
   }
   const [created] = await db.insert(companyCalendarEvents).values({ ...req.body, tenantId }).returning();
+  await applyCollectiveLeave(created);
   res.status(201).json(created);
 });
 
