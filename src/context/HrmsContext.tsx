@@ -37,6 +37,8 @@ import {
   type EmployeeKpi as ApiEmployeeKpi,
   type ComplianceRecord as ApiComplianceRecord,
   type PersonaliaActionRow as ApiPersonaliaActionRow,
+  type PayrollPeriod as ApiPayrollPeriod,
+  type ReimbursementClaimRow as ApiReimbursementClaimRow,
   type PersonaliaActionInput as ApiPersonaliaActionInput,
   type OffboardingRecord as ApiOffboardingRecord,
   type BusinessTripRequest as ApiBusinessTripRequest,
@@ -154,7 +156,6 @@ import {
   INITIAL_MODULE_SETTINGS,
   INITIAL_EMPLOYEE_STAGING,
   INITIAL_OVERTIME_REQUESTS,
-  INITIAL_REIMBURSEMENT_CLAIMS,
   INITIAL_ORG_NODES,
   INITIAL_ORG_PROPOSALS,
   INITIAL_PROBATION_EVALUATIONS,
@@ -250,9 +251,9 @@ interface HrmsContextType {
 
   // 3. Payroll & Tax
   payrollRecords: PayrollRecord[];
-  generatePayrollRun: (period: string) => void;
-  approvePayrollRun: (period: string) => void;
-  disbursePayrollRun: (period: string) => void;
+  generatePayrollRun: (period: string) => Promise<void>;
+  approvePayrollRun: (period: string) => Promise<void>;
+  disbursePayrollRun: (period: string) => Promise<void>;
 
   // 4. Loans & Kasbon
   loans: EmployeeLoan[];
@@ -470,7 +471,7 @@ interface HrmsContextType {
 
   // 25. Reimbursement Claim & Payroll Opt-In
   reimbursementClaims: ReimbursementClaim[];
-  addReimbursementClaim: (claim: Omit<ReimbursementClaim, 'id' | 'tenantId' | 'claimNumber' | 'status'>) => void;
+  addReimbursementClaim: (claim: Omit<ReimbursementClaim, 'id' | 'tenantId' | 'claimNumber' | 'status'>) => Promise<void>;
   reviewReimbursementClaim: (id: string, approved: boolean, notes?: string) => void;
   toggleReimbursementPayrollOptIn: (id: string) => void;
 
@@ -1100,34 +1101,32 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [overtimeRequests, setOvertimeRequests] = useState<OvertimeRequest[]>([]);
 
   // 25. Reimbursements
-  const [reimbursementClaims, setReimbursementClaims] = useState<ReimbursementClaim[]>(() => {
-    const saved = localStorage.getItem('nusahr_reimbursements_v3');
-    const normalizeClaim = (c: any): ReimbursementClaim => ({
-      ...c,
-      category:
-        typeof c.category === 'object' && c.category !== null
-          ? String(c.category.value || c.category.label || 'Lainnya')
-          : String(c.category || c.type || 'Lainnya'),
-      receiptDate: c.receiptDate || c.claimDate || '2026-10-15',
-      claimDate: c.claimDate || c.receiptDate || '2026-10-15',
-      status: c.status || 'Menunggu Review',
-    });
-    if (saved) {
-      try {
-        const parsed = (JSON.parse(saved) as any[]).map(normalizeClaim);
-        const existingIds = new Set(parsed.map((c) => c.id));
-        const merged = [...parsed];
-        for (const initClaim of INITIAL_REIMBURSEMENT_CLAIMS) {
-          if (!existingIds.has(initClaim.id)) merged.push(normalizeClaim(initClaim));
-        }
-        return merged;
-      } catch {
-        return INITIAL_REIMBURSEMENT_CLAIMS.map(normalizeClaim);
-      }
-    }
-    return INITIAL_REIMBURSEMENT_CLAIMS.map(normalizeClaim);
-
-  });
+  // Reimbursement claims and payroll periods are real backend data (server computes payroll; approval via the Approval Engine).
+  const [apiReimbursementClaims, setApiReimbursementClaims] = useState<ApiReimbursementClaimRow[]>([]);
+  const [apiPayrollPeriods, setApiPayrollPeriods] = useState<ApiPayrollPeriod[]>([]);
+  const reimbursementClaims = useMemo<ReimbursementClaim[]>(
+    () =>
+      apiReimbursementClaims.map((c) => ({
+        id: c.id,
+        tenantId: c.tenantId,
+        employeeId: c.employeeId,
+        claimNumber: c.claimNumber,
+        category: c.category as ReimbursementClaim['category'],
+        amount: c.amount,
+        approvedAmount: c.approvedAmount ?? undefined,
+        description: c.description,
+        receiptDate: c.receiptDate,
+        claimDate: c.receiptDate,
+        receiptNumber: c.receiptNumber ?? undefined,
+        proofUrl: c.proofUrl ?? undefined,
+        status: c.status,
+        processInPayroll: c.processInPayroll,
+        processedPeriod: c.processedPeriod ?? undefined,
+        approvedBy: c.approvedBy ?? undefined,
+        notes: c.notes ?? undefined,
+      })),
+    [apiReimbursementClaims]
+  );
 
 
   // 27. Org Nodes & Proposals — real backend data for the nodes themselves.
@@ -1477,6 +1476,8 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setOnboardingChecklistTemplates(realOnboardingChecklistTemplates.map(toMockChecklistTemplate));
     setApiEmployees(realEmployees);
     tenantApi.listPersonaliaActions().then(setApiPersonalia).catch(() => setApiPersonalia([]));
+    tenantApi.listReimbursementClaims().then(setApiReimbursementClaims).catch(() => setApiReimbursementClaims([]));
+    tenantApi.listPayrollPeriods().then(setApiPayrollPeriods).catch(() => setApiPayrollPeriods([]));
     setProbationEvaluations(realProbationEvaluations.map(toMockProbationEvaluation));
     setProbationEvaluationTemplates(realProbationEvaluationTemplates as unknown as ProbationEvaluationTemplate[]);
     setContractReviews(realContractReviews.map(toMockContractReview));
@@ -1581,10 +1582,6 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     localStorage.setItem('nusahr_job_grading_scheme', jobGradingScheme);
   }, [jobGradingScheme]);
-
-  useEffect(() => {
-    localStorage.setItem('nusahr_reimbursements_v3', JSON.stringify(reimbursementClaims));
-  }, [reimbursementClaims]);
 
 
   // Real backend data, already tenant-scoped server-side — NOT re-filtered by
@@ -1878,178 +1875,38 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // 3. Payroll Calculation Engine (with PPh 21 TER 2024 & BPJS)
-  const generatePayrollRun = (period: string) => {
-    // Determine period date filter (e.g. "Oktober 2026" -> "2026-10")
-    const periodLower = period.toLowerCase();
-    const monthNames = [
-      'januari', 'februari', 'maret', 'april', 'mei', 'juni',
-      'juli', 'agustus', 'september', 'oktober', 'november', 'desember'
-    ];
-    let monthIdx = -1;
-    monthNames.forEach((m, idx) => {
-      if (periodLower.includes(m)) monthIdx = idx + 1;
-    });
-    const yearMatch = period.match(/\b(20\d\d)\b/);
-    const yearStr = yearMatch ? yearMatch[1] : String(new Date().getFullYear());
-    const monthStr = monthIdx > 0 ? String(monthIdx).padStart(2, '0') : String(new Date().getMonth() + 1).padStart(2, '0');
-    const periodDatePrefix = `${yearStr}-${monthStr}`;
-
-    // Generate payroll records for all active employees of current tenant
-    const newRecords = tenantEmployees.filter((e) => e.status === 'Aktif').map((emp) => {
-      // 1. Find employee's attendance strictly filtered by this period (FR-0.1)
-      const empAttendance = attendance.filter(
-        (a) => a.tenantId === currentTenant.id && a.employeeId === emp.id && a.date.startsWith(periodDatePrefix)
-      );
-      const totalLateMins = empAttendance.reduce((acc, curr) => acc + (curr.lateMinutes || 0), 0);
-
-      // 2. Overtime hours derived exclusively from approved OvertimeRequests (FR-0.1, Catalog Bug #2)
-      const approvedOvtRequests = overtimeRequests.filter(
-        (o) =>
-          o.tenantId === currentTenant.id &&
-          o.employeeId === emp.id &&
-          o.status === 'Disetujui' &&
-          o.date.startsWith(periodDatePrefix)
-      );
-      const totalApprovedOvertimeHours = approvedOvtRequests.reduce(
-        (acc, curr) => acc + (curr.approvedHours || curr.hours || 0),
-        0
-      );
-      const overtimePay = calculateOvertimePay(emp.basicSalary, totalApprovedOvertimeHours);
-
-      // 3. Reimbursement derived exclusively from approved ReimbursementClaims with payroll opt-in (FR-0.2, Catalog Bug #5)
-      const approvedClaims = reimbursementClaims.filter(
-        (c) =>
-          c.tenantId === currentTenant.id &&
-          c.employeeId === emp.id &&
-          c.status === 'Disetujui' &&
-          c.processInPayroll &&
-          (!c.processedPeriod || c.processedPeriod === period)
-      );
-      const totalReimbursement = approvedClaims.reduce((acc, curr) => acc + curr.amount, 0);
-
-      // 4. Pro-rata salary check (if joined or resigned during this month)
-      let proRataRatio = 1.0;
-      if (emp.joinDate && emp.joinDate.startsWith(periodDatePrefix)) {
-        const joinDay = parseInt(emp.joinDate.split('-')[2], 10) || 1;
-        const daysInMonth = new Date(parseInt(yearStr, 10), parseInt(monthStr, 10), 0).getDate();
-        const workedDays = Math.max(1, daysInMonth - joinDay + 1);
-        proRataRatio = Math.min(1.0, workedDays / daysInMonth);
-      }
-      const effectiveBasicSalary = Math.round(emp.basicSalary * proRataRatio);
-
-      // 5. Allowances
-      const customAssignedComponents = employeeSalaryAssignments
-        .filter((asg) => asg.tenantId === currentTenant.id && asg.employeeId === emp.id && asg.isActive !== false)
-        .reduce((sum, asg) => {
-          const comp = salaryComponents.find((sc) => sc.id === asg.componentId);
-          if (comp && comp.category === 'Potongan') return sum;
-          return sum + (asg.amount ?? comp?.defaultValue ?? 0);
-        }, 0);
-      const allowances =
-        (emp.fixedAllowance || 0) +
-        (emp.positionAllowance || 0) +
-        (emp.transportAllowance || 0) +
-        (emp.mealAllowance || 0) +
-        customAssignedComponents;
-
-      // 6. Active Loan Deductions
-      const activeLoan = loans.find(
-        (l) => l.employeeId === emp.id && l.tenantId === currentTenant.id && l.status === 'Aktif'
-      );
-      const loanDeduction = activeLoan ? activeLoan.monthlyInstallment : 0;
-
-      // 7. Late deduction based on attendance penalty config
-      const penaltyPerHour = moduleSettings.attendance.latePenaltyPerHour || 50000;
-      const lateDeduction = Math.floor(totalLateMins / 60) * penaltyPerHour;
-
-      // 8. BPJS calculations
-      const bpjs = calculateBPJS(effectiveBasicSalary + (emp.fixedAllowance || 0));
-
-      // 9. Gross pay for PPh 21 TER: Gaji Pokok + Tunjangan Tetap + Lembur + BPJS Dibayar Pemberi Kerja (JKK, JKM, Kes)
-      const grossIncomeForTax =
-        effectiveBasicSalary +
-        allowances +
-        overtimePay +
-        bpjs.breakdown.jkkCompany +
-        bpjs.breakdown.jkmCompany +
-        bpjs.bpjsKesCompany;
-
-      // 10. Calculate PPh 21 TER
-      const taxResult = calculatePPh21TER(grossIncomeForTax, emp.ptkp);
-
-      // 11. Net Pay = (Effective Gaji Pokok + Tunjangan + Lembur + Reimbursement) - Deductions
-      const totalTakeHomeIncome = effectiveBasicSalary + allowances + overtimePay + totalReimbursement;
-      const totalDeductions =
-        bpjs.bpjsKesEmployee +
-        bpjs.bpjsTkEmployee +
-        taxResult.taxAmount +
-        loanDeduction +
-        lateDeduction;
-
-      const netPay = Math.max(0, totalTakeHomeIncome - totalDeductions);
-
-      return {
-        employeeId: emp.id,
-        period,
-        basicSalary: effectiveBasicSalary,
-        allowances,
-        overtimePay,
-        reimbursement: totalReimbursement,
-        thrBonus: 0,
-        grossPay: totalTakeHomeIncome,
-        bpjsKesCompany: bpjs.bpjsKesCompany,
-        bpjsKesEmployee: bpjs.bpjsKesEmployee,
-        bpjsTkCompany: bpjs.bpjsTkCompany,
-        bpjsTkEmployee: bpjs.bpjsTkEmployee,
-        pph21TERCategory: taxResult.category,
-        pph21RatePercent: taxResult.ratePercent,
-        pph21Amount: taxResult.taxAmount,
-        loanDeduction,
-        lateDeduction,
-        totalDeductions,
-        netPay,
-        status: 'Draft' as const,
-      };
-    });
-
-    // Upsert by (employeeId, period) — re-generating a draft for a period
-    // that already has records replaces them instead of duplicating.
-    Promise.all(newRecords.map((r) => tenantApi.upsertPayrollRecord(r as unknown as Omit<ApiPayrollRecord, 'id' | 'tenantId'>))).then((saved) => {
-      const savedIds = new Set(saved.map((s) => s.id));
-      setApiPayrollRecords((prev) => [...saved, ...prev.filter((p) => !savedIds.has(p.id) && p.period !== period)]);
-    });
-
-    logAuditAction('Payroll', 'GENERATE_PAYROLL', `run-${period}`, `Generate draft payroll periode ${period} untuk ${newRecords.length} karyawan`);
+  // 3. Payroll — computed ONLY by the server (PPh 21 TER, BPJS, overtime, loans, reimbursement, pro-rata). The browser asks
+  // for a run by period, approves it, and disburses it; it never sends or computes a number.
+  const MONTH_NAMES_ID = ['januari', 'februari', 'maret', 'april', 'mei', 'juni', 'juli', 'agustus', 'september', 'oktober', 'november', 'desember'];
+  const periodLabelToKey = (label: string): string => {
+    const m = MONTH_NAMES_ID.findIndex((n) => label.toLowerCase().includes(n));
+    const y = label.match(/\b(20\d\d)\b/);
+    if (m < 0 || !y) throw new Error('Periode payroll tidak valid.');
+    return `${y[1]}-${String(m + 1).padStart(2, '0')}`;
   };
-
-  const approvePayrollRun = (period: string) => {
-    const targets = apiPayrollRecords.filter((p) => p.period === period);
-    Promise.all(targets.map((p) => tenantApi.updatePayrollRecord(p.id, { status: 'Approved' }))).then((updated) => {
-      const updatedIds = new Set(updated.map((u) => u.id));
-      setApiPayrollRecords((prev) => [...updated, ...prev.filter((p) => !updatedIds.has(p.id))]);
-    });
+  const refreshPayroll = async () => {
+    const [records, periods, loansNow, claims] = await Promise.all([
+      tenantApi.listPayrollRecords(),
+      tenantApi.listPayrollPeriods(),
+      tenantApi.listLoans(),
+      tenantApi.listReimbursementClaims(),
+    ]);
+    setApiPayrollRecords(records);
+    setApiPayrollPeriods(periods);
+    setApiLoans(loansNow);
+    setApiReimbursementClaims(claims);
   };
-
-  const disbursePayrollRun = (period: string) => {
-    const today = new Date().toISOString().split('T')[0];
-    const targets = apiPayrollRecords.filter((p) => p.period === period);
-    Promise.all(targets.map((p) => tenantApi.updatePayrollRecord(p.id, { status: 'Disbursed', paidDate: today }))).then((updated) => {
-      const updatedIds = new Set(updated.map((u) => u.id));
-      setApiPayrollRecords((prev) => [...updated, ...prev.filter((p) => !updatedIds.has(p.id))]);
-    });
-
-    // Also deduct remaining amount on active loans
-    const activeLoans = apiLoans.filter((l) => l.status === 'Aktif');
-    Promise.all(
-      activeLoans.map((l) => {
-        const newRemaining = Math.max(0, l.remainingAmount - l.monthlyInstallment);
-        return tenantApi.updateLoan(l.id, { remainingAmount: newRemaining, status: newRemaining === 0 ? 'Lunas' : 'Aktif' });
-      })
-    ).then((updated) => {
-      const updatedIds = new Set(updated.map((u) => u.id));
-      setApiLoans((prev) => [...updated, ...prev.filter((l) => !updatedIds.has(l.id))]);
-    });
+  const generatePayrollRun = async (period: string): Promise<void> => {
+    await tenantApi.generatePayrollRun(periodLabelToKey(period));
+    await refreshPayroll();
+  };
+  const approvePayrollRun = async (period: string): Promise<void> => {
+    await tenantApi.approvePayrollRun(periodLabelToKey(period));
+    await refreshPayroll();
+  };
+  const disbursePayrollRun = async (period: string): Promise<void> => {
+    await tenantApi.disbursePayrollRun(periodLabelToKey(period));
+    await refreshPayroll();
   };
 
   // 4. Loans & Kasbon
@@ -3402,7 +3259,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } else if (item.category === 'Lembur') {
         reviewOvertimeRequest(item.referenceId, true);
       } else if (item.category === 'Reimbursement') {
-        reviewReimbursementClaim(item.referenceId, true, notes);
+        refreshReimbursements().catch(() => undefined);
       }
       logAuditAction('Approval Center', 'APPROVE_FINAL', id, `Persetujuan final selesai untuk kategori ${item.category}`);
     } else {
@@ -3423,7 +3280,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } else if (item.category === 'Lembur') {
         reviewOvertimeRequest(item.referenceId, false);
       } else if (item.category === 'Reimbursement') {
-        reviewReimbursementClaim(item.referenceId, false, notes);
+        refreshReimbursements().catch(() => undefined);
       }
       logAuditAction('Approval Center', 'REJECT', id, `Ditolak untuk kategori ${item.category}`);
     }
@@ -4267,61 +4124,43 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     persistApprovalItemByReference(id, 'Lembur', { status: approved ? 'Disetujui' : 'Ditolak' });
   };
 
-  // 25. Reimbursement Handlers
-  const addReimbursementClaim = (claim: Omit<ReimbursementClaim, 'id' | 'tenantId' | 'claimNumber' | 'status'>) => {
-    const seq = reimbursementClaims.length + 1;
-    const claimNumber = `CLM-${currentTenant.code}-${new Date().getFullYear()}-${String(seq).padStart(3, '0')}`;
-    const newClaim: ReimbursementClaim = {
-      ...claim,
-      id: `clm-${Date.now()}`,
-      tenantId: currentTenant.id,
-      claimNumber,
-      status: 'Menunggu Review',
-    };
-    setReimbursementClaims((prev) => [newClaim, ...prev]);
-    const emp = employees.find((e) => e.id === newClaim.employeeId);
-    createApprovalItem({
-      category: 'Reimbursement',
-      referenceId: newClaim.id,
-      title: `Klaim ${newClaim.category}: ${emp?.fullName || newClaim.employeeId} (${newClaim.claimNumber})`,
-      requesterId: newClaim.employeeId,
-      department: emp?.department || 'Operasional',
-      amount: newClaim.amount,
-      submittedAt: new Date().toISOString(),
-      deadlineAt: new Date(Date.now() + 48 * 3600 * 1000).toISOString(),
-      level: 1,
-      totalLevels: 2,
-      assignedApproverRole: 'manager',
-      status: 'Menunggu',
-      notes: newClaim.description,
+  // 25. Reimbursement Handlers — server creates the claim + its Approval Engine item; the decision is the engine's.
+  const refreshReimbursements = async () => {
+    const [claims, items] = await Promise.all([tenantApi.listReimbursementClaims(), tenantApi.listApprovalItems()]);
+    setApiReimbursementClaims(claims);
+    setApprovalItems(items as unknown as ApprovalWorkflowItem[]);
+  };
+
+  const addReimbursementClaim = async (claim: Omit<ReimbursementClaim, 'id' | 'tenantId' | 'claimNumber' | 'status'>): Promise<void> => {
+    await tenantApi.createReimbursementClaim({
+      employeeId: claim.employeeId,
+      category: claim.category,
+      amount: claim.amount,
+      description: claim.description,
+      receiptDate: claim.receiptDate,
+      receiptNumber: claim.receiptNumber ?? null,
+      proofUrl: claim.proofUrl ?? null,
+      processInPayroll: claim.processInPayroll,
     });
-    logAuditAction('Reimbursement', 'SUBMIT_CLAIM', newClaim.id, `Pengajuan klaim ${newClaim.category} Rp ${newClaim.amount.toLocaleString('id-ID')}`);
+    await refreshReimbursements();
   };
 
   const reviewReimbursementClaim = (id: string, approved: boolean, notes?: string) => {
-    const current = approvalItems.find((a) => a.referenceId === id && a.category === 'Reimbursement');
-    persistApprovalItemByReference(id, 'Reimbursement', { status: approved ? 'Disetujui' : 'Ditolak', notes: notes || current?.notes });
-    logAuditAction('Reimbursement', approved ? 'APPROVE_CLAIM' : 'REJECT_CLAIM', id, `Klaim biaya ${approved ? 'disetujui' : 'ditolak'}`);
-    setReimbursementClaims((prev) =>
-      prev.map((c) =>
-        c.id === id
-          ? {
-              ...c,
-              status: approved ? 'Disetujui' : 'Ditolak',
-              approvedBy: currentUser.name,
-              notes: notes || c.notes,
-              approvedAmount: approved ? c.amount : 0,
-              processInPayroll: approved ? (c.processInPayroll ?? true) : false,
-            }
-          : c
-      )
-    );
+    const row = apiReimbursementClaims.find((c) => c.id === id);
+    if (!row?.approvalItemId) return;
+    tenantApi
+      .decideApprovalItem(row.approvalItemId, approved ? 'Disetujui' : 'Ditolak', approved ? undefined : notes || 'Ditolak oleh HR')
+      .then(() => refreshReimbursements())
+      .catch((err: unknown) => window.alert(err instanceof Error ? err.message : 'Gagal memproses klaim.'));
   };
 
   const toggleReimbursementPayrollOptIn = (id: string) => {
-    setReimbursementClaims((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, processInPayroll: !c.processInPayroll } : c))
-    );
+    const row = apiReimbursementClaims.find((c) => c.id === id);
+    if (!row) return;
+    tenantApi
+      .setReimbursementPayrollOptIn(id, !row.processInPayroll)
+      .then((updated) => setApiReimbursementClaims((prev) => prev.map((c) => (c.id === id ? updated : c))))
+      .catch((err: unknown) => window.alert(err instanceof Error ? err.message : 'Gagal mengubah pengaturan payroll klaim.'));
   };
 
   // 26. Personalia request handlers — thin wrappers over the same server flow.

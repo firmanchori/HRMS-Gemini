@@ -1317,6 +1317,56 @@ export const payrollRecords = pgTable("payroll_records", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+/**
+ * One row per tenant per month (periodKey "YYYY-MM"). The period status is
+ * the payroll lock: only Draft periods can be (re)generated; Approved
+ * periods wait for disbursement; Disbursed is final and immutable. Payroll
+ * numbers are computed by server/lib/payrollEngine.ts — the client can
+ * only ask for a run, approve it, or disburse it.
+ */
+export const payrollPeriods = pgTable(
+  "payroll_periods",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+    periodKey: text("period_key").notNull(),
+    label: text("label").notNull(),
+    status: text("status").notNull().default("Draft"), // Draft | Approved | Disbursed
+    generatedAt: timestamp("generated_at", { withTimezone: true }),
+    approvedBy: text("approved_by"),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+    disbursedAt: timestamp("disbursed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [uniqueIndex("payroll_periods_tenant_key_idx").on(table.tenantId, table.periodKey)]
+);
+
+/** Employee expense claims. Created pending; approved/rejected only through the Approval Engine (category "Reimbursement"); approved + opted-in claims are paid by the payroll run and stamped with processedPeriod. */
+export const reimbursementClaims = pgTable(
+  "reimbursement_claims",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id").references(() => tenants.id).notNull(),
+    employeeId: uuid("employee_id").references(() => employees.id).notNull(),
+    claimNumber: text("claim_number").notNull(),
+    category: text("category").notNull(),
+    amount: integer("amount").notNull(),
+    approvedAmount: integer("approved_amount"),
+    description: text("description").notNull(),
+    receiptDate: text("receipt_date").notNull(),
+    receiptNumber: text("receipt_number"),
+    proofUrl: text("proof_url"),
+    status: text("status").notNull().default("Menunggu Review"), // Menunggu Review | Disetujui | Ditolak
+    processInPayroll: boolean("process_in_payroll").notNull().default(true),
+    processedPeriod: text("processed_period"),
+    approvedBy: text("approved_by"),
+    notes: text("notes"),
+    approvalItemId: uuid("approval_item_id"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [uniqueIndex("reimbursement_claims_tenant_number_idx").on(table.tenantId, table.claimNumber)]
+);
+
 // ---------------------------------------------------------------------------
 // Employee Loans & Kasbon — real backend (user, 2026-11-05: disbursePayrollRun
 // was deducting installments against mock loan state since Loans itself

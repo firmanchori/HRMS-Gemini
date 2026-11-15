@@ -365,6 +365,13 @@
       "when": 1794643252773,
       "tag": "0051_lying_gladiator",
       "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1794711163515,
+      "tag": "0052_perfect_karen_page",
+      "breakpoints": true
     }
   ]
 }

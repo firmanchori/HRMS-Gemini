@@ -56,53 +56,6 @@ import { printPagesDirectly, exportPagesToPdf } from '../../utils/documentPdfExp
 import { openWhatsAppChat, WhatsAppTemplates } from '../../utils/whatsappHelper';
 import { ModuleDocumentModal } from '../common/ModuleDocumentModal';
 
-interface LegacyReimbursementClaim {
-  id: string;
-  employeeId: string;
-  type: 'Rawat Jalan (Kesehatan)' | 'Kacamata / Optik' | 'Gigi' | 'Transportasi & Bensin' | 'Komunikasi & Internet';
-  amount: number;
-  claimDate: string;
-  receiptNumber: string;
-  description: string;
-  status: 'Menunggu Review' | 'Disetujui (Dibayarkan di Payroll)' | 'Ditolak';
-  approvedAmount?: number;
-}
-
-const INITIAL_REIMBURSEMENTS: LegacyReimbursementClaim[] = [
-  {
-    id: 'clm-001',
-    employeeId: 'emp-001',
-    type: 'Rawat Jalan (Kesehatan)',
-    amount: 850000,
-    claimDate: '2026-10-12',
-    receiptNumber: 'KWT/RS-PI/8892',
-    description: 'Konsultasi dokter spesialis penyakit dalam + resep obat antibiotik',
-    status: 'Disetujui (Dibayarkan di Payroll)',
-    approvedAmount: 850000,
-  },
-  {
-    id: 'clm-002',
-    employeeId: 'emp-002',
-    type: 'Kacamata / Optik',
-    amount: 1500000,
-    claimDate: '2026-10-14',
-    receiptNumber: 'OPT/MEL-2931',
-    description: 'Plafon lensa minus & frame kacamata kerja tahunan',
-    status: 'Disetujui (Dibayarkan di Payroll)',
-    approvedAmount: 1500000,
-  },
-  {
-    id: 'clm-003',
-    employeeId: 'emp-003',
-    type: 'Transportasi & Bensin',
-    amount: 450000,
-    claimDate: '2026-10-15',
-    receiptNumber: 'BBM-SHELL-9912',
-    description: 'BBM dinas kunjungan audit klien site Karawang',
-    status: 'Menunggu Review',
-  },
-];
-
 export const PayrollManagement: React.FC = () => {
   const {
     currentTenant,
@@ -152,7 +105,11 @@ export const PayrollManagement: React.FC = () => {
   };
 
   const [activeTab, setActiveTab] = useState<'payroll' | 'reimburse' | 'thr_phk' | 'kalkulator_pajak' | 'komponen' | 'pengaturan'>('payroll');
-  const [period, setPeriod] = useState('Oktober 2026');
+  const [period, setPeriod] = useState(() => {
+    const names = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+    const now = new Date();
+    return `${names[now.getMonth()]} ${now.getFullYear()}`;
+  });
   const [selectedPayslip, setSelectedPayslip] = useState<PayrollRecord | null>(null);
   const payslipSheetRef = useRef<HTMLDivElement>(null);
   const [isExportingPayslip, setIsExportingPayslip] = useState(false);
@@ -162,7 +119,6 @@ export const PayrollManagement: React.FC = () => {
   const [isDocModalOpen, setIsDocModalOpen] = useState(false);
 
   // Reimbursement State
-  const [, setClaims] = useState<any[]>(INITIAL_REIMBURSEMENTS);
   const claims = reimbursementClaims.filter((c) => c.tenantId === currentTenant.id);
   const [isClaimModalOpen, setIsClaimModalOpen] = useState(false);
   const [claimEmpId, setClaimEmpId] = useState(employees[0]?.id || '');
@@ -215,12 +171,30 @@ export const PayrollManagement: React.FC = () => {
   // Filter records for this period
   const periodRecords = payrollRecords.filter((p) => p.period === period);
 
-  // Auto-generate if empty on initial visit
-  useEffect(() => {
-    if (periodRecords.length === 0 && employees.length > 0) {
-      generatePayrollRun(period);
+  // Payroll action feedback (server errors such as "periode terkunci" are shown inline).
+  const [payrollActionError, setPayrollActionError] = useState<string | null>(null);
+  const [payrollActionBusy, setPayrollActionBusy] = useState(false);
+  const runPayrollAction = async (action: (period: string) => Promise<void>) => {
+    setPayrollActionError(null);
+    setPayrollActionBusy(true);
+    try {
+      await action(period);
+    } catch (err) {
+      setPayrollActionError(err instanceof Error ? err.message : 'Gagal memproses payroll.');
+    } finally {
+      setPayrollActionBusy(false);
     }
-  }, [period, employees.length, periodRecords.length]);
+  };
+
+  // Month choices: the last 11 months through next month (labels match the server's period labels).
+  const periodOptions = React.useMemo(() => {
+    const names = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+    const now = new Date();
+    return Array.from({ length: 13 }, (_, i) => {
+      const d = new Date(now.getFullYear(), now.getMonth() + 1 - i, 1);
+      return `${names[d.getMonth()]} ${d.getFullYear()}`;
+    });
+  }, []);
 
   // Aggregate stats
   const totalGross = periodRecords.reduce((sum, r) => sum + r.grossPay, 0);
@@ -288,52 +262,34 @@ export const PayrollManagement: React.FC = () => {
   // Reimbursement Actions
   const [claimSubmitAttempted, setClaimSubmitAttempted] = useState(false);
 
-  const handleAddClaim = (e: React.FormEvent) => {
+  const [claimError, setClaimError] = useState<string | null>(null);
+  const handleAddClaim = async (e: React.FormEvent) => {
     e.preventDefault();
     setClaimSubmitAttempted(true);
     if (!claimEmpId || claimAmount <= 0) return;
-
-    const newClaim: any = {
-      id: `clm-${Date.now()}`,
-      employeeId: claimEmpId,
-      type: claimType,
-      amount: Number(claimAmount),
-      claimDate: new Date().toISOString().split('T')[0],
-      receiptNumber: claimReceiptNo || `KWT-${Date.now().toString().slice(-6)}`,
-      description: claimDesc || 'Klaim reimbursement operasional/kesehatan',
-      status: 'Menunggu Review',
-    };
-
+    setClaimError(null);
     const todayStr = new Date().toISOString().split('T')[0];
-    addReimbursementClaim({
-      employeeId: claimEmpId,
-      category: claimType,
-      claimDate: todayStr,
-      receiptDate: todayStr,
-      receiptNumber: claimReceiptNo || `KWT-${Date.now().toString().slice(-6)}`,
-      amount: Number(claimAmount),
-      description: claimDesc || 'Klaim reimbursement operasional/kesehatan',
-      processInPayroll: true,
-    });
-    setClaims((prev) => [newClaim, ...prev]);
-    setIsClaimModalOpen(false);
-    setClaimDesc('');
-    setClaimReceiptNo('');
+    try {
+      await addReimbursementClaim({
+        employeeId: claimEmpId,
+        category: claimType,
+        claimDate: todayStr,
+        receiptDate: todayStr,
+        receiptNumber: claimReceiptNo || undefined,
+        amount: Number(claimAmount),
+        description: claimDesc || 'Klaim reimbursement operasional/kesehatan',
+        processInPayroll: true,
+      });
+      setIsClaimModalOpen(false);
+      setClaimDesc('');
+      setClaimReceiptNo('');
+    } catch (err) {
+      setClaimError(err instanceof Error ? err.message : 'Gagal menyimpan klaim.');
+    }
   };
 
   const handleReviewClaim = (id: string, status: string) => {
     reviewReimbursementClaim(id, status.includes('Disetujui'));
-    setClaims((prev) =>
-      prev.map((c) =>
-        c.id === id
-          ? {
-              ...c,
-              status,
-              approvedAmount: status === 'Disetujui (Dibayarkan di Payroll)' ? c.amount : 0,
-            }
-          : c
-      )
-    );
   };
 
   // THR / PHK Calculations
@@ -489,15 +445,16 @@ export const PayrollManagement: React.FC = () => {
                 onChange={(e) => setPeriod(e.target.value)}
                 className="py-2 px-3 text-xs bg-slate-50 border border-slate-300 rounded-lg font-semibold text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 shadow-2xs"
               >
-                <option value="Oktober 2026">Oktober 2026</option>
-                <option value="September 2026">September 2026</option>
-                <option value="Agustus 2026">Agustus 2026</option>
+                {periodOptions.map((label) => (
+                  <option key={label} value={label}>{label}</option>
+                ))}
               </select>
             </div>
 
             <div className="flex flex-wrap sm:flex-nowrap items-center gap-2">
               <button
-                onClick={() => generatePayrollRun(period)}
+                onClick={() => runPayrollAction(generatePayrollRun)}
+                disabled={payrollActionBusy}
                 className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg text-xs font-semibold transition-colors"
               >
                 <Calculator className="w-3.5 h-3.5 text-indigo-600" />
@@ -516,7 +473,8 @@ export const PayrollManagement: React.FC = () => {
 
               {!isApproved && !isDisbursed && (
                 <button
-                  onClick={() => approvePayrollRun(period)}
+                  onClick={() => runPayrollAction(approvePayrollRun)}
+                  disabled={payrollActionBusy}
                   className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors"
                 >
                   <CheckCircle2 className="w-3.5 h-3.5" />
@@ -526,7 +484,8 @@ export const PayrollManagement: React.FC = () => {
 
               {isApproved && !isDisbursed && (
                 <button
-                  onClick={() => disbursePayrollRun(period)}
+                  onClick={() => runPayrollAction(disbursePayrollRun)}
+                  disabled={payrollActionBusy}
                   className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors"
                 >
                   <Send className="w-3.5 h-3.5" />
@@ -542,6 +501,9 @@ export const PayrollManagement: React.FC = () => {
               )}
             </div>
           </div>
+          {payrollActionError && (
+            <div className="mx-0 mt-2 p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs font-semibold text-rose-700">{payrollActionError}</div>
+          )}
 
           {/* Aggregate Financial Metrics */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
@@ -2145,6 +2107,7 @@ export const PayrollManagement: React.FC = () => {
             </div>
 
             <form onSubmit={handleAddClaim} noValidate className="p-5 space-y-3.5 text-xs">
+              {claimError && <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 font-semibold">{claimError}</div>}
               <div>
                 <label className="font-semibold text-slate-700 block mb-1">Karyawan Pemohon</label>
                 <EmployeeSelect

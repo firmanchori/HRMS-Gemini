@@ -454,7 +454,7 @@ export const EssPortal: React.FC = () => {
       amount: Number(reimburseForm.amount),
       description: reimburseForm.description.trim(),
       processInPayroll: true,
-    });
+    }).catch((err: unknown) => setNoticeMessage(err instanceof Error ? err.message : 'Gagal mengirim klaim reimbursement.'));
     setNoticeMessage(`Klaim reimbursement ${formatRupiah(reimburseForm.amount)} berhasil dikirimkan.`);
     setReimburseForm({
       category: 'Transportasi Dinas' as ReimbursementCategory,

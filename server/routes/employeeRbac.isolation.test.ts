@@ -113,9 +113,9 @@ describe("RBAC granular enforcement — employee module access is real, not deco
 
   it("the granted view permission does NOT imply create — the matrix is per-action, not all-or-nothing", async () => {
     const res = await staffAgent
-      .post("/api/employee/payroll-records/upsert")
+      .post("/api/employee/payroll-runs")
       .set("Origin", origin)
-      .send({ employeeId, period: "2026-11" });
+      .send({ periodKey: "2026-11" });
     expect(res.status).toBe(403);
   });
 

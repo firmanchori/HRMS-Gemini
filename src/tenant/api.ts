@@ -655,6 +655,50 @@ export interface EmployeeSalaryAssignment {
   isActive: boolean;
 }
 
+export interface PayrollPeriod {
+  id: string;
+  tenantId: string;
+  periodKey: string;
+  label: string;
+  status: "Draft" | "Approved" | "Disbursed";
+  generatedAt: string | null;
+  approvedBy: string | null;
+  approvedAt: string | null;
+  disbursedAt: string | null;
+}
+
+export interface ReimbursementClaimRow {
+  id: string;
+  tenantId: string;
+  employeeId: string;
+  claimNumber: string;
+  category: string;
+  amount: number;
+  approvedAmount: number | null;
+  description: string;
+  receiptDate: string;
+  receiptNumber: string | null;
+  proofUrl: string | null;
+  status: "Menunggu Review" | "Disetujui" | "Ditolak";
+  processInPayroll: boolean;
+  processedPeriod: string | null;
+  approvedBy: string | null;
+  notes: string | null;
+  approvalItemId: string | null;
+  createdAt: string;
+}
+
+export interface ReimbursementClaimInput {
+  employeeId: string;
+  category: string;
+  amount: number;
+  description: string;
+  receiptDate: string;
+  receiptNumber?: string | null;
+  proofUrl?: string | null;
+  processInPayroll?: boolean;
+}
+
 export interface PayrollRecord {
   id: string;
   tenantId: string;
@@ -1306,10 +1350,16 @@ export const tenantApi = {
     request<{ ok: true }>(`/api/tenant/employee-salary-assignments/${id}`, { method: "DELETE" }),
 
   listPayrollRecords: () => request<PayrollRecord[]>("/api/tenant/payroll-records"),
-  upsertPayrollRecord: (data: Omit<PayrollRecord, "id" | "tenantId">) =>
-    request<PayrollRecord>("/api/tenant/payroll-records/upsert", { method: "POST", body: JSON.stringify(data) }),
-  updatePayrollRecord: (id: string, data: Partial<PayrollRecord>) =>
-    request<PayrollRecord>(`/api/tenant/payroll-records/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  listPayrollPeriods: () => request<PayrollPeriod[]>("/api/tenant/payroll-periods"),
+  /** Payroll is computed by the server from database facts; a run is requested by period only. */
+  generatePayrollRun: (periodKey: string) => request<{ period: PayrollPeriod; records: PayrollRecord[] }>("/api/tenant/payroll-runs", { method: "POST", body: JSON.stringify({ periodKey }) }),
+  approvePayrollRun: (periodKey: string) => request<{ ok: true }>(`/api/tenant/payroll-runs/${periodKey}/approve`, { method: "POST" }),
+  disbursePayrollRun: (periodKey: string) => request<{ ok: true }>(`/api/tenant/payroll-runs/${periodKey}/disburse`, { method: "POST" }),
+
+  listReimbursementClaims: () => request<ReimbursementClaimRow[]>("/api/tenant/reimbursement-claims"),
+  createReimbursementClaim: (data: ReimbursementClaimInput) => request<ReimbursementClaimRow>("/api/tenant/reimbursement-claims", { method: "POST", body: JSON.stringify(data) }),
+  setReimbursementPayrollOptIn: (id: string, processInPayroll: boolean) =>
+    request<ReimbursementClaimRow>(`/api/tenant/reimbursement-claims/${id}/payroll-opt-in`, { method: "PUT", body: JSON.stringify({ processInPayroll }) }),
 
   listLoans: () => request<EmployeeLoan[]>("/api/tenant/loans"),
   createLoan: (data: Omit<EmployeeLoan, "id" | "tenantId">) =>

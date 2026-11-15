@@ -54,6 +54,7 @@ import {
   salaryComponents,
   employeeSalaryComponentAssignments,
   payrollRecords,
+  payrollPeriods,
   employeeLoans,
   leaveRequests,
   employeeKpis,
@@ -77,6 +78,8 @@ import {
 } from "../db/schema.ts";
 import { requireTenantAdmin } from "../middleware/auth.ts";
 import { generateAssetsFromReceivedOrder, isReceivedStatus, deriveUsageStatus, isPostApprovalProcurementStatus, hasPendingProcurementApproval } from "../lib/assetLifecycle.ts";
+import { generatePayrollRun, approvePayrollPeriod, disbursePayrollPeriod, PayrollError } from "../lib/payrollEngine.ts";
+import { reimbursementClaimSchema, createReimbursementClaim, listReimbursementClaims, setClaimPayrollOptIn, ReimbursementError } from "../lib/reimbursement.ts";
 import { applyContractRenewalReview } from "../lib/contractRenewal.ts";
 import { createOfficialDocumentRecord, isFullySigned, buildVerificationUrl } from "../lib/documents.ts";
 import { personaliaActionSchema, createPersonaliaAction, submitPersonaliaAction, deletePersonaliaDraft, listPersonaliaActions, PersonaliaError } from "../lib/personalia.ts";
@@ -2700,32 +2703,8 @@ tenantRouter.delete("/employee-salary-assignments/:id", validateParams(uuidParam
   res.json({ ok: true });
 });
 
-const payrollRecordSchema = z.object({
-  employeeId: z.string().uuid(),
-  period: z.string().trim().min(1).max(100),
-  basicSalary: z.number().int().min(0).optional(),
-  allowances: z.number().int().min(0).optional(),
-  overtimePay: z.number().int().min(0).optional(),
-  reimbursement: z.number().int().min(0).optional(),
-  thrBonus: z.number().int().min(0).optional(),
-  grossPay: z.number().int().min(0).optional(),
-  bpjsKesCompany: z.number().int().min(0).optional(),
-  bpjsKesEmployee: z.number().int().min(0).optional(),
-  bpjsTkCompany: z.number().int().min(0).optional(),
-  bpjsTkEmployee: z.number().int().min(0).optional(),
-  pph21TERCategory: z.enum(["TER A", "TER B", "TER C"]).optional(),
-  pph21RatePercent: z.number().min(0).optional(),
-  pph21Amount: z.number().int().min(0).optional(),
-  loanDeduction: z.number().int().min(0).optional(),
-  lateDeduction: z.number().int().min(0).optional(),
-  unpaidLeaveDeduction: z.number().int().min(0).optional().nullable(),
-  severancePay: z.number().int().min(0).optional().nullable(),
-  totalDeductions: z.number().int().min(0).optional(),
-  netPay: z.number().int().min(0).optional(),
-  status: z.enum(["Draft", "Approved", "Disbursed"]).optional(),
-  paidDate: z.string().trim().max(20).optional().nullable(),
-});
-
+// Payroll numbers are computed ONLY by server/lib/payrollEngine.ts. There is intentionally no route that accepts
+// salary/tax/deduction figures from a client: a run is requested by period, then approved, then disbursed.
 tenantRouter.get("/payroll-records", async (req, res) => {
   const tenantId = req.session!.tenantId!;
   const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
@@ -2738,31 +2717,65 @@ tenantRouter.get("/payroll-records", async (req, res) => {
   );
 });
 
-/** Upsert by (employeeId, period) — re-generating a draft run for the same period must replace that employee's row, not duplicate it. */
-tenantRouter.post("/payroll-records/upsert", validateBody(payrollRecordSchema), async (req, res) => {
-  const tenantId = req.session!.tenantId!;
-  const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
-  if (!visibleEmployeeIds.includes(req.body.employeeId)) return res.status(403).json({ error: "Karyawan di luar ruang lingkup Anda" });
-  const [existing] = await db
-    .select()
-    .from(payrollRecords)
-    .where(and(eq(payrollRecords.tenantId, tenantId), eq(payrollRecords.employeeId, req.body.employeeId), eq(payrollRecords.period, req.body.period)))
-    .limit(1);
-  if (existing) {
-    const [updated] = await db.update(payrollRecords).set(req.body).where(eq(payrollRecords.id, existing.id)).returning();
-    return res.json(updated);
-  }
-  const [created] = await db.insert(payrollRecords).values({ ...req.body, tenantId }).returning();
-  res.status(201).json(created);
+tenantRouter.get("/payroll-periods", async (req, res) => {
+  res.json(await db.select().from(payrollPeriods).where(eq(payrollPeriods.tenantId, req.session!.tenantId!)));
 });
 
-tenantRouter.put("/payroll-records/:id", validateParams(uuidParam("id")), validateBody(payrollRecordSchema.partial()), async (req, res) => {
+const payrollRunSchema = z.object({ periodKey: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Periode harus berformat YYYY-MM") });
+const payrollPeriodParam = z.object({ periodKey: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/) });
+
+tenantRouter.post("/payroll-runs", validateBody(payrollRunSchema), async (req, res) => {
   const tenantId = req.session!.tenantId!;
-  const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
-  const [existing] = await db.select().from(payrollRecords).where(and(eq(payrollRecords.id, req.params.id), eq(payrollRecords.tenantId, tenantId))).limit(1);
-  if (!existing || !visibleEmployeeIds.includes(existing.employeeId)) return res.status(404).json({ error: "Data payroll tidak ditemukan" });
-  const [updated] = await db.update(payrollRecords).set(req.body).where(eq(payrollRecords.id, req.params.id)).returning();
-  res.json(updated);
+  try {
+    const visible = await resolveVisibleEmployeeIds(req, tenantId);
+    res.status(201).json(await generatePayrollRun({ tenantId, periodKey: req.body.periodKey, visibleEmployeeIds: visible, actorUserId: req.session!.userId }));
+  } catch (err) {
+    if (err instanceof PayrollError) return res.status(err.status).json({ error: err.message });
+    throw err;
+  }
+});
+tenantRouter.post("/payroll-runs/:periodKey/approve", validateParams(payrollPeriodParam), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [admin] = await db.select({ name: users.name }).from(users).where(eq(users.id, req.session!.userId)).limit(1);
+  try {
+    await approvePayrollPeriod({ tenantId, periodKey: req.params.periodKey, approvedBy: admin?.name ?? "Admin Tenant", actorUserId: req.session!.userId });
+    res.json({ ok: true });
+  } catch (err) {
+    if (err instanceof PayrollError) return res.status(err.status).json({ error: err.message });
+    throw err;
+  }
+});
+tenantRouter.post("/payroll-runs/:periodKey/disburse", validateParams(payrollPeriodParam), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  try {
+    await disbursePayrollPeriod({ tenantId, periodKey: req.params.periodKey, actorUserId: req.session!.userId });
+    res.json({ ok: true });
+  } catch (err) {
+    if (err instanceof PayrollError) return res.status(err.status).json({ error: err.message });
+    throw err;
+  }
+});
+
+// --- Reimbursement claims: created pending + approved only via the Approval Engine; payroll consumes approved ones. ---
+tenantRouter.get("/reimbursement-claims", async (req, res) => {
+  res.json(await listReimbursementClaims(req.session!.tenantId!));
+});
+tenantRouter.post("/reimbursement-claims", validateBody(reimbursementClaimSchema.extend({ employeeId: z.string().uuid() })), async (req, res) => {
+  try {
+    const { employeeId, ...input } = req.body;
+    res.status(201).json(await createReimbursementClaim({ tenantId: req.session!.tenantId!, employeeId, actorUserId: req.session!.userId, input }));
+  } catch (err) {
+    if (err instanceof ReimbursementError) return res.status(err.status).json({ error: err.message });
+    throw err;
+  }
+});
+tenantRouter.put("/reimbursement-claims/:id/payroll-opt-in", validateParams(uuidParam("id")), validateBody(z.object({ processInPayroll: z.boolean() })), async (req, res) => {
+  try {
+    res.json(await setClaimPayrollOptIn(req.session!.tenantId!, req.params.id, req.body.processInPayroll));
+  } catch (err) {
+    if (err instanceof ReimbursementError) return res.status(err.status).json({ error: err.message });
+    throw err;
+  }
 });
 
 // ---------------------------------------------------------------------------

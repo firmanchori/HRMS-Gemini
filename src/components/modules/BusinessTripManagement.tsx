@@ -1389,7 +1389,7 @@ export const BusinessTripManagement: React.FC = () => {
                         amount: diff,
                         description: `Reimbursement kelebihan realisasi biaya SPPD ${selectedTripForClaim.tripNumber} (${selectedTripForClaim.destinationCity}): ${receiptNotes || 'Sesuai lampiran nota dinas'}`,
                         processInPayroll: true,
-                      });
+                      }).catch((err: unknown) => setSppdNotice(err instanceof Error ? err.message : 'Gagal mengirim klaim reimbursement.'));
                       setSppdNotice(`Settlement ${selectedTripForClaim.tripNumber} disimpan & klaim kurang bayar ${formatRupiah(diff)} diteruskan ke Reimbursement Payroll & Approval Center.`);
                     } else {
                       setSppdNotice(`Laporan settlement ${selectedTripForClaim.tripNumber} berhasil disimpan.`);

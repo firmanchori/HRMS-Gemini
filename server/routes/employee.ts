@@ -11,6 +11,8 @@ import { authLimiter } from "../lib/rateLimit.ts";
 import { logAudit } from "../lib/audit.ts";
 import { logLoginAttempt, isAccountLockedOut, LOCKOUT_WINDOW_MINUTES, alertIfAccountJustLockedOut } from "./auth.ts";
 import { getPermission } from "../lib/permissions.ts";
+import { generatePayrollRun, approvePayrollPeriod, disbursePayrollPeriod, PayrollError } from "../lib/payrollEngine.ts";
+import { reimbursementClaimSchema, createReimbursementClaim, listReimbursementClaims, ReimbursementError } from "../lib/reimbursement.ts";
 import { isInManagerChain } from "../lib/orgHierarchy.ts";
 import { checkClockIn, checkClockOut, performClockIn, performClockOut, ClockError } from "../lib/attendanceClock.ts";
 import { encryptSecret, decryptSecret } from "../lib/crypto.ts";
@@ -375,62 +377,57 @@ employeeRouter.post("/approvals/leave/:id/decision", requirePermission("attendan
 // concept for employee accounts, not an oversight.
 // ---------------------------------------------------------------------------
 
-const employeePayrollRecordSchema = z.object({
-  employeeId: z.string().uuid(),
-  period: z.string().trim().min(1).max(100),
-  basicSalary: z.number().int().min(0).optional(),
-  allowances: z.number().int().min(0).optional(),
-  overtimePay: z.number().int().min(0).optional(),
-  reimbursement: z.number().int().min(0).optional(),
-  thrBonus: z.number().int().min(0).optional(),
-  grossPay: z.number().int().min(0).optional(),
-  bpjsKesCompany: z.number().int().min(0).optional(),
-  bpjsKesEmployee: z.number().int().min(0).optional(),
-  bpjsTkCompany: z.number().int().min(0).optional(),
-  bpjsTkEmployee: z.number().int().min(0).optional(),
-  pph21TERCategory: z.enum(["TER A", "TER B", "TER C"]).optional(),
-  pph21RatePercent: z.number().min(0).optional(),
-  pph21Amount: z.number().int().min(0).optional(),
-  loanDeduction: z.number().int().min(0).optional(),
-  lateDeduction: z.number().int().min(0).optional(),
-  unpaidLeaveDeduction: z.number().int().min(0).optional().nullable(),
-  severancePay: z.number().int().min(0).optional().nullable(),
-  totalDeductions: z.number().int().min(0).optional(),
-  netPay: z.number().int().min(0).optional(),
-  status: z.enum(["Draft", "Approved", "Disbursed"]).optional(),
-  paidDate: z.string().trim().max(20).optional().nullable(),
-});
-
 employeeRouter.get("/payroll-records", requirePermission("payroll", "view"), async (req, res) => {
   const tenantId = req.session!.tenantId!;
   res.json(await db.select().from(payrollRecords).where(eq(payrollRecords.tenantId, tenantId)));
 });
 
-/** Upsert by (employeeId, period) — same replace-not-duplicate contract as tenant.ts's admin route. */
-employeeRouter.post("/payroll-records/upsert", requirePermission("payroll", "create"), validateBody(employeePayrollRecordSchema), async (req, res) => {
+// Same server-computed engine as the admin routes. view → read; create → run; approve → approve; edit → disburse.
+const employeePayrollPeriodParam = z.object({ periodKey: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/) });
+async function payrollActorName(req: { session?: { employeeId?: string | null } }): Promise<string> {
+  const [me] = await db.select({ fullName: employees.fullName }).from(employees).where(eq(employees.id, req.session!.employeeId!)).limit(1);
+  return me?.fullName ?? "Karyawan";
+}
+employeeRouter.post("/payroll-runs", requirePermission("payroll", "create"), validateBody(z.object({ periodKey: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/) })), async (req, res) => {
   const tenantId = req.session!.tenantId!;
-  const [existing] = await db
-    .select()
-    .from(payrollRecords)
-    .where(and(eq(payrollRecords.tenantId, tenantId), eq(payrollRecords.employeeId, req.body.employeeId), eq(payrollRecords.period, req.body.period)))
-    .limit(1);
-  if (existing) {
-    const [updated] = await db.update(payrollRecords).set(req.body).where(eq(payrollRecords.id, existing.id)).returning();
-    await logAudit({ actorUserId: null, tenantId, action: "payroll.record_upserted", details: { payrollRecordId: updated.id, employeeAccountId: req.session!.userId } });
-    return res.json(updated);
+  try {
+    const visible = (await db.select({ id: employees.id }).from(employees).where(eq(employees.tenantId, tenantId))).map((e) => e.id);
+    res.status(201).json(await generatePayrollRun({ tenantId, periodKey: req.body.periodKey, visibleEmployeeIds: visible, actorUserId: null }));
+  } catch (err) {
+    if (err instanceof PayrollError) return res.status(err.status).json({ error: err.message });
+    throw err;
   }
-  const [created] = await db.insert(payrollRecords).values({ ...req.body, tenantId }).returning();
-  await logAudit({ actorUserId: null, tenantId, action: "payroll.record_upserted", details: { payrollRecordId: created.id, employeeAccountId: req.session!.userId } });
-  res.status(201).json(created);
+});
+employeeRouter.post("/payroll-runs/:periodKey/approve", requirePermission("payroll", "approve"), validateParams(employeePayrollPeriodParam), async (req, res) => {
+  try {
+    await approvePayrollPeriod({ tenantId: req.session!.tenantId!, periodKey: req.params.periodKey, approvedBy: await payrollActorName(req), actorUserId: null });
+    res.json({ ok: true });
+  } catch (err) {
+    if (err instanceof PayrollError) return res.status(err.status).json({ error: err.message });
+    throw err;
+  }
+});
+employeeRouter.post("/payroll-runs/:periodKey/disburse", requirePermission("payroll", "edit"), validateParams(employeePayrollPeriodParam), async (req, res) => {
+  try {
+    await disbursePayrollPeriod({ tenantId: req.session!.tenantId!, periodKey: req.params.periodKey, actorUserId: null });
+    res.json({ ok: true });
+  } catch (err) {
+    if (err instanceof PayrollError) return res.status(err.status).json({ error: err.message });
+    throw err;
+  }
 });
 
-employeeRouter.put("/payroll-records/:id", requirePermission("payroll", "edit"), validateParams(uuidParam("id")), validateBody(employeePayrollRecordSchema.partial()), async (req, res) => {
-  const tenantId = req.session!.tenantId!;
-  const [existing] = await db.select().from(payrollRecords).where(and(eq(payrollRecords.id, req.params.id), eq(payrollRecords.tenantId, tenantId))).limit(1);
-  if (!existing) return res.status(404).json({ error: "Data payroll tidak ditemukan" });
-  const [updated] = await db.update(payrollRecords).set(req.body).where(eq(payrollRecords.id, req.params.id)).returning();
-  await logAudit({ actorUserId: null, tenantId, action: "payroll.record_updated", details: { payrollRecordId: updated.id, employeeAccountId: req.session!.userId } });
-  res.json(updated);
+// Self-service reimbursement: an employee files and reads ONLY their own claims; approval goes through the Approval Engine.
+employeeRouter.get("/reimbursements", async (req, res) => {
+  res.json(await listReimbursementClaims(req.session!.tenantId!, req.session!.employeeId!));
+});
+employeeRouter.post("/reimbursements", validateBody(reimbursementClaimSchema), async (req, res) => {
+  try {
+    res.status(201).json(await createReimbursementClaim({ tenantId: req.session!.tenantId!, employeeId: req.session!.employeeId!, actorUserId: null, input: req.body }));
+  } catch (err) {
+    if (err instanceof ReimbursementError) return res.status(err.status).json({ error: err.message });
+    throw err;
+  }
 });
 
 // ---------------------------------------------------------------------------
