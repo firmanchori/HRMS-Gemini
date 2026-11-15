@@ -25,11 +25,14 @@ const isBareDomain = currentHost === APP_BASE_DOMAIN || currentHost === `www.${A
 // not by which of these pages is rendering.
 const path = window.location.pathname;
 const resetToken = path.startsWith('/reset-password/') ? path.slice('/reset-password/'.length) : null;
+const activateToken = path.startsWith('/activate/') ? path.slice('/activate/'.length) : null;
 const confirmToken = path.startsWith('/confirm-email/') ? path.slice('/confirm-email/'.length) : null;
 
 let view: ReactElement;
 if (resetToken) {
   view = <ResetPasswordPage token={resetToken} />;
+} else if (activateToken) {
+  view = <ResetPasswordPage token={activateToken} kind="employee" />;
 } else if (confirmToken) {
   view = <ConfirmEmailPage token={confirmToken} />;
 } else if (isBareDomain && path === '/signup') {

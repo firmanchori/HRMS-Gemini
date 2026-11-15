@@ -89,8 +89,7 @@ const text = (label: string, max = 200) => z.string().trim().min(1, `${label} ti
 const optionalList = z.array(z.record(z.string(), z.unknown())).max(50);
 
 /** Allow-list of the personal-data fields a "Koreksi"/"Tambah Data" SK may change, each validated by its real format. Anything else (identity keys, salary, org links) is rejected, not silently dropped. */
-export const personalDataUpdatesSchema = z
-  .object({
+const personalDataBase = z.object({
     fullName: text("Nama lengkap"),
     email: z.string().trim().email("Email tidak valid").max(200),
     personalEmail: z.string().trim().email("Email pribadi tidak valid").max(200),
@@ -129,10 +128,34 @@ export const personalDataUpdatesSchema = z
     nonFormalEducations: optionalList,
     familyMembers: optionalList,
     emergencyContacts: optionalList,
-  })
+});
+
+export const personalDataUpdatesSchema = personalDataBase
   .partial()
   .strict()
   .refine((o) => Object.keys(o).length > 0, "Tidak ada data yang diubah");
+
+const employeeFormatSchema = personalDataBase.pick({ email: true, personalEmail: true, phone: true, whatsApp: true, nikKtp: true, noKk: true, birthDate: true, postalCode: true, npwp: true, npwp16: true, bankAccount: true }).partial();
+
+/**
+ * Format check for the identity/contact/finance fields of an employee record (columns + details). Blank values are allowed — an
+ * onboarded/migrated employee is legitimately incomplete — but anything filled in must be well-formed. Returns a user-facing message or null.
+ */
+export function employeeFormatError(body: { email?: string | null; phone?: string | null; details?: Record<string, unknown> }): string | null {
+  const candidate: Record<string, unknown> = {};
+  const pick = (k: string, v: unknown) => {
+    if (typeof v === "string" ? v.trim() !== "" : v !== undefined && v !== null) candidate[k] = v;
+  };
+  pick("email", body.email);
+  pick("phone", body.phone);
+  for (const k of ["email", "personalEmail", "phone", "whatsApp", "nikKtp", "noKk", "birthDate", "postalCode", "npwp", "npwp16", "bankAccount"]) {
+    if (body.details && k in body.details) pick(k, body.details[k]);
+  }
+  const parsed = employeeFormatSchema.safeParse(candidate);
+  if (parsed.success) return null;
+  const issue = parsed.error.issues[0];
+  return `Data karyawan tidak valid — ${issue.path.join(".")}: ${issue.message}`;
+}
 
 export class PersonaliaError extends Error {
   constructor(message: string, public status = 400) {

@@ -2081,7 +2081,7 @@ export const GaAssetManagement: React.FC = () => {
                           </div>
                           <div className="text-[11px] text-slate-500">
                             Pengguna Sewaktu-waktu:{' '}
-                            <strong className="text-slate-800">{borrower?.fullName || 'Aditya Pratama'}</strong> ·
+                            <strong className="text-slate-800">{borrower?.fullName || ''}</strong> ·
                             Pengemudi: <strong className="text-slate-700">{vb.driverName || vb.driverType}</strong>
                           </div>
                           <div className="text-[11px] font-mono text-slate-600">
@@ -2609,7 +2609,7 @@ export const GaAssetManagement: React.FC = () => {
                     <span>{rb.date} · {rb.startTime} - {rb.endTime} WIB</span>
                   </div>
                   <div className="text-slate-500">
-                    Pemohon: <span className="font-medium text-slate-700">{employees.find((e) => e.id === rb.organizerId)?.fullName || 'Aditya Pratama'}</span> ({rb.capacity} Peserta)
+                    Pemohon: <span className="font-medium text-slate-700">{employees.find((e) => e.id === rb.organizerId)?.fullName || ''}</span> ({rb.capacity} Peserta)
                   </div>
                 </div>
 
@@ -2692,7 +2692,7 @@ export const GaAssetManagement: React.FC = () => {
                       </span>
                     </td>
                     <td className="p-3">
-                      <div className="font-medium text-slate-800">{employees.find((e) => e.id === vb.borrowerId)?.fullName || 'Aditya Pratama'}</div>
+                      <div className="font-medium text-slate-800">{employees.find((e) => e.id === vb.borrowerId)?.fullName || ''}</div>
                       <div className="text-[11px] text-slate-400">Pengemudi: {vb.driverName || vb.driverType || 'Lepas Kunci'}</div>
                     </td>
                     <td className="p-3 text-slate-600 max-w-xs">
@@ -2828,7 +2828,7 @@ export const GaAssetManagement: React.FC = () => {
                   return (
                     <tr key={req.id} className="hover:bg-slate-50/60">
                       <td className="p-3 font-mono text-slate-600">{req.requestDate}</td>
-                      <td className="p-3 font-medium text-slate-800">{requester?.fullName || 'Aditya Pratama'}</td>
+                      <td className="p-3 font-medium text-slate-800">{requester?.fullName || ''}</td>
                       <td className="p-3 font-semibold text-slate-900">{supplyItem?.itemName || 'Barang ATK'}</td>
                       <td className="p-3 font-mono font-bold">{req.qty} {supplyItem?.unit || 'Unit'}</td>
                       <td className="p-3 text-slate-600 max-w-xs">{req.reason}</td>
@@ -2913,7 +2913,7 @@ export const GaAssetManagement: React.FC = () => {
                         <div className="text-[11px] text-slate-500">{t.description}</div>
                       </td>
                       <td className="p-3 font-medium text-slate-700">{t.category}</td>
-                      <td className="p-3 text-slate-700">{requester?.fullName || 'Aditya Pratama'}</td>
+                      <td className="p-3 text-slate-700">{requester?.fullName || ''}</td>
                       <td className="p-3">
                         <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
                           t.priority === 'Darurat' ? 'bg-rose-100 text-rose-700 font-bold' :
@@ -4187,7 +4187,7 @@ export const GaAssetManagement: React.FC = () => {
             <form onSubmit={handleResolveTicket} className="p-5 space-y-3.5 text-xs" noValidate>
               <div className="p-3 bg-slate-50 border border-slate-200 rounded">
                 <div className="font-bold text-slate-900">{selectedTicketForResolve.title}</div>
-                <div className="text-[11px] text-slate-500 mt-0.5">{selectedTicketForResolve.category} · Pelapor: {employees.find((e) => e.id === selectedTicketForResolve.requesterId)?.fullName || 'Aditya Pratama'}</div>
+                <div className="text-[11px] text-slate-500 mt-0.5">{selectedTicketForResolve.category} · Pelapor: {employees.find((e) => e.id === selectedTicketForResolve.requesterId)?.fullName || ''}</div>
               </div>
 
               <ValidatedTextarea

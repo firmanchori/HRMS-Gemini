@@ -52,7 +52,7 @@ export const ComplianceManagement: React.FC = () => {
   const [issueDate, setIssueDate] = useState(new Date().toISOString().split('T')[0]);
   const [validMonths, setValidMonths] = useState<number>(6);
   const [letterNumber, setLetterNumber] = useState('');
-  const [signedBy, setSignedBy] = useState('Aditya Pratama, S.Psi');
+  const [signedBy, setSignedBy] = useState('');
 
   const selectedTargetEmp = employees.find((e) => e.id === employeeId);
 
@@ -120,7 +120,7 @@ export const ComplianceManagement: React.FC = () => {
         `Sanksi ini berlaku selama 6 (enam) bulan terhitung sejak tanggal diterbitkan sesuai ketentuan Pasal 161 UU No. 13/2003 jo PP No. 35/2021. Karyawan diwajibkan menjalani masa pembinaan dan mematuhi seluruh tata tertib Peraturan Perusahaan (PP).`,
         `Apabila dalam masa berlakunya sanksi ini karyawan melakukan pelanggaran tata tertib kembali, maka manajemen akan menjatuhkan sanksi disiplin pada tingkat yang lebih tinggi hingga Pemutusan Hubungan Kerja (PHK).`,
       ],
-      signeeName: rec.signedBy || 'Aditya Pratama, S.Psi',
+      signeeName: rec.signedBy || '',
       signeeRole: 'VP of Human Capital & Industrial Relations',
     });
   };

@@ -576,7 +576,7 @@ export const PersonaliaManagement: React.FC = () => {
         (e.department || '').toLowerCase().includes('hr') ||
         e.fullName === currentUser?.name
     );
-    const creatorName = currentUser?.name || hrEmp?.fullName || 'Aditya Pratama, S.Psi';
+    const creatorName = currentUser?.name || hrEmp?.fullName || '';
     const creatorRole = hrEmp?.position || 'HR Operations Officer';
     const creatorId = hrEmp?.id || '';
     const creatorNik = hrEmp?.nik || '';
@@ -1128,7 +1128,7 @@ export const PersonaliaManagement: React.FC = () => {
         : [
             {
               label: 'Dibuat Oleh',
-              name: currentUser?.name || 'Aditya Pratama, S.Psi',
+              name: currentUser?.name || '',
               role: 'HR Operations Officer',
             },
             {

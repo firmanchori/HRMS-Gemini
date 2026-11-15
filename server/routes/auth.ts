@@ -335,7 +335,7 @@ authRouter.get("/me", async (req, res) => {
 
   const [user] = await db.select().from(users).where(eq(users.id, session.userId)).limit(1);
   if (!user) return res.status(401).json({ error: "Belum login" });
-  res.json({ id: user.id, name: user.name, email: user.email, role: user.role });
+  res.json({ id: user.id, name: user.name, email: user.email, role: user.role, tenant: req.tenant ? { id: req.tenant.id, name: req.tenant.name, subdomain: req.tenant.subdomain } : null });
 });
 
 authRouter.post("/logout", async (req, res) => {

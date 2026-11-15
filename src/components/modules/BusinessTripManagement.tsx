@@ -1207,7 +1207,7 @@ export const BusinessTripManagement: React.FC = () => {
                     Jakarta, {selectedTripForDoc.startDate}
                   </div>
                   <div className="font-bold text-slate-900 text-xs">
-                    {selectedTripForDoc.approvedBy || 'Aditya Pratama, S.Psi'}
+                    {selectedTripForDoc.approvedBy || ''}
                   </div>
                   <div className="text-[10px] text-slate-500">Pemberi Perintah / Direksi</div>
                   <div className="text-[9px] text-emerald-700 font-medium bg-emerald-50 px-2 py-0.5 rounded inline-block">

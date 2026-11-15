@@ -305,7 +305,6 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
     resetToSampleFlowData,
     currentTenant,
     currentUser,
-    setCurrentUserRole,
     roles = [],
   } = useHrms();
 
@@ -383,34 +382,13 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
           }, 1000);
         },
       },
-      ...roles.map((r) => ({
-        id: `action-role-${r.id}`,
-        category: 'actions' as const,
-        groupTitle: 'Ganti Peran Pengguna (RBAC Testing)',
-        title: `Beralih ke Peran: ${r.label}`,
-        subtitle: r.description,
-        badge: currentUser.role === r.id ? 'Aktif' : 'Pilih',
-        icon: ShieldCheck,
-        score: 0,
-        onSelect: () => {
-          setCurrentUserRole(r.id);
-          setActionFeedback(`Peran berhasil diubah ke ${r.label}`);
-          setTimeout(() => {
-            setActionFeedback(null);
-            onClose();
-          }, 800);
-        },
-      })),
     ];
 
     return actions;
   }, [
-    roles,
-    currentUser.role,
     onToggleSidebar,
     onOpenMigrationWizard,
     resetToSampleFlowData,
-    setCurrentUserRole,
     onClose,
   ]);
 

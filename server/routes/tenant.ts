@@ -78,6 +78,9 @@ import {
 } from "../db/schema.ts";
 import { requireTenantAdmin } from "../middleware/auth.ts";
 import { generateAssetsFromReceivedOrder, isReceivedStatus, deriveUsageStatus, isPostApprovalProcurementStatus, hasPendingProcurementApproval } from "../lib/assetLifecycle.ts";
+import { employeeFormatError } from "../lib/personalia.ts";
+import { revokeAllSessionsForUser } from "../lib/sessionStore.ts";
+import { provisionEmployeeAccount, sendEmployeeResetLink, EmployeeAccountError } from "../lib/employeeAccounts.ts";
 import { generateThrRun, payThr, listThrPayments, ThrError } from "../lib/thr.ts";
 import { generatePayrollRun, approvePayrollPeriod, disbursePayrollPeriod, PayrollError } from "../lib/payrollEngine.ts";
 import { reimbursementClaimSchema, createReimbursementClaim, listReimbursementClaims, setClaimPayrollOptIn, ReimbursementError } from "../lib/reimbursement.ts";
@@ -1413,6 +1416,8 @@ const employeeSchema = z.object({
 
 tenantRouter.post("/employees", validateBody(employeeSchema), async (req, res) => {
   const tenantId = req.session!.tenantId!;
+  const formatError = employeeFormatError(req.body);
+  if (formatError) return res.status(400).json({ error: formatError });
   const visibleEntityIds = await resolveVisibleEntityIds(req, tenantId);
   if (!visibleEntityIds.includes(req.body.entityId)) return res.status(403).json({ error: "Entitas di luar ruang lingkup Anda" });
   const [created] = await db.insert(employees).values({ ...req.body, tenantId }).returning();
@@ -1427,6 +1432,8 @@ const geoCheckBodySchema = z.object({
 
 tenantRouter.put("/employees/:id", validateParams(uuidParam("id")), validateBody(employeeSchema.partial()), async (req, res) => {
   const tenantId = req.session!.tenantId!;
+  const formatError = employeeFormatError(req.body);
+  if (formatError) return res.status(400).json({ error: formatError });
   const visibleEntityIds = await resolveVisibleEntityIds(req, tenantId);
   const [existing] = await db.select().from(employees).where(and(eq(employees.id, req.params.id), eq(employees.tenantId, tenantId))).limit(1);
   if (!existing || !visibleEntityIds.includes(existing.entityId)) return res.status(404).json({ error: "Karyawan tidak ditemukan" });
@@ -3402,52 +3409,53 @@ tenantRouter.get("/employee-accounts", async (req, res) => {
 const createEmployeeAccountSchema = z.object({
   employeeId: z.string().uuid(),
   email: z.string().trim().toLowerCase().email(),
-  password: z.string().min(8).max(200),
   roleKey: z.string().trim().min(1).max(100).default("employee"),
 });
 
-tenantRouter.post("/employee-accounts", validateBody(createEmployeeAccountSchema), rejectBreachedPassword((req) => req.body.password), async (req, res) => {
+/** Provisioning never involves a password anyone types or sees: the employee gets a one-time activation link and sets their own. */
+tenantRouter.post("/employee-accounts", validateBody(createEmployeeAccountSchema), async (req, res) => {
   const tenantId = req.session!.tenantId!;
   const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
   if (!visibleEmployeeIds.includes(req.body.employeeId)) return res.status(403).json({ error: "Karyawan di luar ruang lingkup Anda" });
+  try {
+    await ensureDefaultEmployeeRbac(tenantId);
+    res.status(201).json(await provisionEmployeeAccount({ tenantId, ...req.body, actorUserId: req.session!.userId }));
+  } catch (err) {
+    if (err instanceof EmployeeAccountError) return res.status(err.status).json({ error: err.message });
+    throw err;
+  }
+});
 
-  const [existing] = await db.select().from(employeeAccounts).where(eq(employeeAccounts.employeeId, req.body.employeeId)).limit(1);
-  if (existing) return res.status(400).json({ error: "Karyawan ini sudah memiliki akun login" });
-  const [existingEmail] = await db.select().from(employeeAccounts).where(and(eq(employeeAccounts.tenantId, tenantId), eq(employeeAccounts.email, req.body.email))).limit(1);
-  if (existingEmail) return res.status(400).json({ error: "Email tersebut sudah digunakan untuk akun karyawan lain" });
-
-  await ensureDefaultEmployeeRbac(tenantId);
-  const passwordHash = await bcrypt.hash(req.body.password, 10);
-  const [created] = await db
-    .insert(employeeAccounts)
-    .values({ tenantId, employeeId: req.body.employeeId, email: req.body.email, passwordHash, roleKey: req.body.roleKey })
-    .returning({ id: employeeAccounts.id, employeeId: employeeAccounts.employeeId, email: employeeAccounts.email, roleKey: employeeAccounts.roleKey, isActive: employeeAccounts.isActive, createdAt: employeeAccounts.createdAt });
-  await logAudit({ actorUserId: req.session!.userId, tenantId, action: "employee_account.created", details: { employeeId: req.body.employeeId, email: req.body.email } });
-  res.status(201).json(created);
+tenantRouter.post("/employee-accounts/:id/send-reset", validateParams(uuidParam("id")), async (req, res) => {
+  const tenantId = req.session!.tenantId!;
+  const [account] = await db.select().from(employeeAccounts).where(and(eq(employeeAccounts.id, req.params.id), eq(employeeAccounts.tenantId, tenantId))).limit(1);
+  const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
+  if (!account || !visibleEmployeeIds.includes(account.employeeId)) return res.status(404).json({ error: "Akun karyawan tidak ditemukan" });
+  try {
+    res.json(await sendEmployeeResetLink({ tenantId, accountId: account.id, actorUserId: req.session!.userId }));
+  } catch (err) {
+    if (err instanceof EmployeeAccountError) return res.status(err.status).json({ error: err.message });
+    throw err;
+  }
 });
 
 const updateEmployeeAccountSchema = z.object({
   roleKey: z.string().trim().min(1).max(100).optional(),
   isActive: z.boolean().optional(),
-  password: z.string().min(8).max(200).optional(),
 });
 
-tenantRouter.put("/employee-accounts/:id", validateParams(uuidParam("id")), validateBody(updateEmployeeAccountSchema), rejectBreachedPassword((req) => req.body.password), async (req, res) => {
+tenantRouter.put("/employee-accounts/:id", validateParams(uuidParam("id")), validateBody(updateEmployeeAccountSchema), async (req, res) => {
   const tenantId = req.session!.tenantId!;
   const visibleEmployeeIds = await resolveVisibleEmployeeIds(req, tenantId);
   const [existing] = await db.select().from(employeeAccounts).where(and(eq(employeeAccounts.id, req.params.id), eq(employeeAccounts.tenantId, tenantId))).limit(1);
   if (!existing || !visibleEmployeeIds.includes(existing.employeeId)) return res.status(404).json({ error: "Akun karyawan tidak ditemukan" });
-
-  const { password, ...rest } = req.body as z.infer<typeof updateEmployeeAccountSchema>;
-  const patch: Partial<typeof employeeAccounts.$inferInsert> = { ...rest };
-  if (password) patch.passwordHash = await bcrypt.hash(password, 10);
-
   const [updated] = await db
     .update(employeeAccounts)
-    .set(patch)
+    .set(req.body)
     .where(eq(employeeAccounts.id, existing.id))
     .returning({ id: employeeAccounts.id, employeeId: employeeAccounts.employeeId, email: employeeAccounts.email, roleKey: employeeAccounts.roleKey, isActive: employeeAccounts.isActive, createdAt: employeeAccounts.createdAt });
-  await logAudit({ actorUserId: req.session!.userId, tenantId, action: "employee_account.updated", details: { employeeAccountId: existing.id, passwordChanged: Boolean(password) } });
+  if (req.body.isActive === false) await revokeAllSessionsForUser(existing.id);
+  await logAudit({ actorUserId: req.session!.userId, tenantId, action: "employee_account.updated", details: { employeeAccountId: existing.id, ...req.body } });
   res.json(updated);
 });
 

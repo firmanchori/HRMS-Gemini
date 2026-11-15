@@ -248,7 +248,7 @@ export const KNOWN_VARIABLE_DESCRIPTIONS: Record<string, KnownVariableMeta> = {
   telepon_perusahaan: { label: 'Telepon Resmi Perusahaan', example: '+62 21 5566 7788', category: 'Perusahaan & Naskah Dinas' },
   email_perusahaan: { label: 'Email Resmi Legal Perusahaan', example: 'legal.hr@nusantara.id', category: 'Perusahaan & Naskah Dinas' },
   npwp_perusahaan_16: { label: 'NPWP Badan Usaha Perusahaan (16 Digit)', example: '0199988870110000', category: 'Perusahaan & Naskah Dinas' },
-  penandatangan: { label: 'Nama Pejabat Penanda Tangan', example: 'Aditya Pratama, S.Psi', category: 'Perusahaan & Naskah Dinas' },
+  penandatangan: { label: 'Nama Pejabat Penanda Tangan', example: 'Nama Pejabat, Gelar', category: 'Perusahaan & Naskah Dinas' },
   jabatan_penandatangan: { label: 'Jabatan Pejabat Penanda Tangan', example: 'VP of Human Capital', category: 'Perusahaan & Naskah Dinas' },
   tanggal_terbit: { label: 'Tanggal Surat Diterbitkan', example: '22 Oktober 2026', category: 'Perusahaan & Naskah Dinas' },
   qr_code: { label: 'Stempel Tanda Tangan QR Digital UU ITE', example: '[QR Code Verifikasi]', category: 'Perusahaan & Naskah Dinas' },
@@ -669,11 +669,10 @@ export const getPresetSignatoryForDocType = (docType: string, employees: Employe
     const ceo = employees.find(
       (e) =>
         (e.position || '').toLowerCase().includes('director') ||
-        (e.position || '').toLowerCase().includes('ceo') ||
-        (e.fullName || '').includes('Budi Santoso')
-    ) || employees[0];
+        (e.position || '').toLowerCase().includes('ceo')
+    );
     return {
-      preferredName: ceo ? ceo.fullName : 'Ir. Budi Santoso, MBA',
+      preferredName: ceo ? ceo.fullName : '',
       preferredRole: 'President Director & CEO',
       matchedEmployeeId: ceo?.id,
       documentRoleLabel: 'Direksi Perusahaan',
@@ -686,11 +685,10 @@ export const getPresetSignatoryForDocType = (docType: string, employees: Employe
     const dir = employees.find(
       (e) =>
         (e.position || '').toLowerCase().includes('direktur') ||
-        (e.fullName || '').includes('Hendra') ||
         (e.department || '').toLowerCase().includes('human')
-    ) || employees[0];
+    );
     return {
-      preferredName: dir ? dir.fullName : 'Dr. Hendra Wijaya',
+      preferredName: dir ? dir.fullName : '',
       preferredRole: 'Direktur Sumber Daya Manusia',
       matchedEmployeeId: dir?.id,
       documentRoleLabel: 'Pemberi Mandat & Kuasa Tugas',
@@ -702,11 +700,10 @@ export const getPresetSignatoryForDocType = (docType: string, employees: Employe
   if (norm.includes('mutasi') || norm.includes('transfer') || norm.includes('rotasi')) {
     const vp = employees.find(
       (e) =>
-        (e.position || '').toLowerCase().includes('vp') ||
-        (e.fullName || '').includes('Aditya Pratama')
-    ) || employees[0];
+        (e.position || '').toLowerCase().includes('vp')
+    );
     return {
-      preferredName: vp ? vp.fullName : 'Aditya Pratama, S.Psi',
+      preferredName: vp ? vp.fullName : '',
       preferredRole: 'VP of Human Capital',
       matchedEmployeeId: vp?.id,
       documentRoleLabel: 'Pejabat Penetap Mutasi',
@@ -719,11 +716,10 @@ export const getPresetSignatoryForDocType = (docType: string, employees: Employe
     const ir = employees.find(
       (e) =>
         (e.position || '').toLowerCase().includes('compliance') ||
-        (e.position || '').toLowerCase().includes('industrial') ||
-        (e.fullName || '').includes('Aditya')
-    ) || employees[0];
+        (e.position || '').toLowerCase().includes('industrial')
+    );
     return {
-      preferredName: ir ? ir.fullName : 'Aditya Pratama, S.Psi',
+      preferredName: ir ? ir.fullName : '',
       preferredRole: 'VP of Human Capital & Compliance',
       matchedEmployeeId: ir?.id,
       documentRoleLabel: 'Pejabat Penegak Disiplin & Hubungan Industrial',
@@ -736,11 +732,10 @@ export const getPresetSignatoryForDocType = (docType: string, employees: Employe
     const head = employees.find(
       (e) =>
         (e.position || '').toLowerCase().includes('lead') ||
-        (e.position || '').toLowerCase().includes('head') ||
-        (e.fullName || '').includes('Siti Aminah')
-    ) || employees[0];
+        (e.position || '').toLowerCase().includes('head')
+    );
     return {
-      preferredName: head ? head.fullName : 'Siti Aminah, S.E.',
+      preferredName: head ? head.fullName : '',
       preferredRole: 'Head of Division / Finance Director',
       matchedEmployeeId: head?.id,
       documentRoleLabel: 'Pejabat Pemberi Mandat Perjalanan Dinas',
@@ -755,9 +750,9 @@ export const getPresetSignatoryForDocType = (docType: string, employees: Employe
         (e.position || '').toLowerCase().includes('payroll') ||
         (e.position || '').toLowerCase().includes('finance') ||
         (e.department || '').toLowerCase().includes('finance')
-    ) || employees[0];
+    );
     return {
-      preferredName: payroll ? payroll.fullName : 'Dewi Lestari, S.E.',
+      preferredName: payroll ? payroll.fullName : '',
       preferredRole: 'Payroll & Remuneration Manager',
       matchedEmployeeId: payroll?.id,
       documentRoleLabel: 'Finance & Remuneration Department',
@@ -770,11 +765,10 @@ export const getPresetSignatoryForDocType = (docType: string, employees: Employe
     const hr = employees.find(
       (e) =>
         (e.position || '').toLowerCase().includes('people') ||
-        (e.fullName || '').includes('Siti Aminah') ||
         (e.department || '').toLowerCase().includes('human')
-    ) || employees[0];
+    );
     return {
-      preferredName: hr ? hr.fullName : 'Siti Aminah, S.E.',
+      preferredName: hr ? hr.fullName : '',
       preferredRole: 'Head of People Operations',
       matchedEmployeeId: hr?.id,
       documentRoleLabel: 'Human Capital Department',
@@ -787,11 +781,10 @@ export const getPresetSignatoryForDocType = (docType: string, employees: Employe
     const ga = employees.find(
       (e) =>
         (e.position || '').toLowerCase().includes('facility') ||
-        (e.position || '').toLowerCase().includes('ga') ||
-        (e.fullName || '').includes('Bambang Sudiro')
-    ) || employees[0];
+        (e.position || '').toLowerCase().includes('ga')
+    );
     return {
-      preferredName: ga ? ga.fullName : 'Bambang Sudiro',
+      preferredName: ga ? ga.fullName : '',
       preferredRole: 'General Affairs & Asset Lead',
       matchedEmployeeId: ga?.id,
       documentRoleLabel: 'Bagian Logistik & Sarana',
@@ -801,13 +794,11 @@ export const getPresetSignatoryForDocType = (docType: string, employees: Employe
 
   // 9. Default: Kontrak Kerja PKWT / PKWTT / Dokumen Personalia Umum
   const defaultHc = employees.find(
-    (e) =>
-      (e.fullName || '').includes('Aditya Pratama') ||
-      (e.position || '').toLowerCase().includes('human capital')
-  ) || employees[0];
+    (e) => (e.position || '').toLowerCase().includes('human capital')
+  );
 
   return {
-    preferredName: defaultHc ? defaultHc.fullName : 'Aditya Pratama, S.Psi',
+    preferredName: defaultHc ? defaultHc.fullName : '',
     preferredRole: 'VP of Human Capital',
     matchedEmployeeId: defaultHc?.id,
     documentRoleLabel: 'Pihak Pertama (Manajemen)',

@@ -1419,7 +1419,9 @@ export const RecruitmentManagement: React.FC = () => {
   // 4. Modal Form Provisioning Akun-Akun Sistem & Email Korporat
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
   const [corpEmail, setCorpEmail] = useState('');
-  const [tempPassword, setTempPassword] = useState('Nusa2026!Secure');
+  const [accountError, setAccountError] = useState<string | null>(null);
+  const [accountBusy, setAccountBusy] = useState(false);
+  const [activationLinkShown, setActivationLinkShown] = useState<string | null>(null);
   const [accountSystems, setAccountSystems] = useState<string[]>([
     'NusaHR Employee Portal (Self Service)',
     'Google Workspace (Gmail & Drive Korporat)',
@@ -1726,7 +1728,7 @@ export const RecruitmentManagement: React.FC = () => {
     setDossierBpjsKesNumber(p.dossierBpjsKesNumber || '000192837465');
     setDossierAddressKtp(p.dossierAddressKtp || 'Jl. Gandaria Tengah III No. 12, Jakarta Selatan');
     setDossierEmergencyContactName(p.dossierEmergencyContactName || 'Budi Santoso');
-    setDossierEmergencyContactPhone(p.dossierEmergencyContactPhone || '081234567890');
+    setDossierEmergencyContactPhone(p.dossierEmergencyContactPhone || '');
     setDossierEmergencyContactRelation(p.dossierEmergencyContactRelation || 'Orang Tua');
     const docs = Array.isArray(p.dossierVerifiedDocs) && p.dossierVerifiedDocs.length > 0
       ? p.dossierVerifiedDocs
@@ -1803,10 +1805,12 @@ export const RecruitmentManagement: React.FC = () => {
     setSelectedOnboardingTask(task);
     const firstName = (process.employeeName || 'karyawan').toLowerCase().split(' ')[0].replace(/[^a-z]/g, '') || 'staff';
     const lastName = (process.employeeName || '').toLowerCase().split(' ')[1]?.replace(/[^a-z]/g, '') || 'work';
-    const suggestedEmail = `${firstName}.${lastName}@nusantara.id`;
+    void firstName;
+    void lastName;
     const p = task.actionPayload || {};
-    setCorpEmail(p.corporateEmail || suggestedEmail);
-    setTempPassword(p.temporaryPassword || `Nusa${new Date().getFullYear()}!${Math.floor(100 + Math.random() * 900)}`);
+    setCorpEmail(p.corporateEmail || '');
+    setAccountError(null);
+    setActivationLinkShown(null);
     const systems = Array.isArray(p.accountSystems) && p.accountSystems.length > 0
       ? p.accountSystems
       : [
@@ -1820,18 +1824,45 @@ export const RecruitmentManagement: React.FC = () => {
     setIsAccountModalOpen(true);
   };
 
-  const submitAccountSetup = () => {
+  /**
+   * Creates the employee's login account on the server. No password is typed, generated here or shown: the employee receives a
+   * one-time activation link by email (and the link is displayed once here only if no mail could be delivered).
+   */
+  const submitAccountSetup = async () => {
     if (!selectedOnboardingProcess || !selectedOnboardingTask) return;
-    updateOnboardingTask(selectedOnboardingProcess.id, selectedOnboardingTask.id, true, {
-      corporateEmail: corpEmail,
-      temporaryPassword: tempPassword,
-      accountSystems,
-      notifyPersonalEmail,
-      provisionedAt: new Date().toISOString().split('T')[0],
-      provisionedBy: currentUser?.name || 'IT Sysadmin',
-    });
-    setToastFeedback(`Email resmi korporat ${corpEmail} dan 4 akun sistem berhasil diaktivasi untuk ${selectedOnboardingProcess.employeeName}. Item checklist otomatis Selesai!`);
-    setIsAccountModalOpen(false);
+    setAccountError(null);
+    const employeeId = selectedOnboardingProcess.createdEmployeeId;
+    if (!employeeId) {
+      setAccountError('Karyawan belum dibuat dari proses onboarding ini. Selesaikan konversi kandidat menjadi karyawan terlebih dahulu.');
+      return;
+    }
+    if (!corpEmail.trim() || !/^\S+@\S+\.\S+$/.test(corpEmail.trim())) {
+      setAccountError('Alamat email login wajib diisi dengan format yang benar.');
+      return;
+    }
+    setAccountBusy(true);
+    try {
+      const result = await tenantApi.provisionEmployeeAccount({ employeeId, email: corpEmail.trim(), roleKey: 'employee' });
+      updateOnboardingTask(selectedOnboardingProcess.id, selectedOnboardingTask.id, true, {
+        corporateEmail: corpEmail.trim(),
+        accountSystems,
+        notifyPersonalEmail,
+        activationDelivery: result.delivery,
+        provisionedAt: new Date().toISOString().split('T')[0],
+        provisionedBy: currentUser?.name || '',
+      });
+      if (result.activationLink) {
+        setActivationLinkShown(result.activationLink);
+        setToastFeedback(`Akun ${corpEmail.trim()} dibuat. Email belum terkirim — salin tautan aktivasi yang ditampilkan dan berikan kepada karyawan (hanya muncul sekali).`);
+      } else {
+        setToastFeedback(`Akun ${corpEmail.trim()} dibuat. Tautan aktivasi telah dikirim ke email karyawan.`);
+        setIsAccountModalOpen(false);
+      }
+    } catch (err) {
+      setAccountError(err instanceof Error ? err.message : 'Gagal membuat akun karyawan.');
+    } finally {
+      setAccountBusy(false);
+    }
   };
 
   // Compatibility Bindings for Onboarding Action Modals (Modals 12, 13, 14, 15)
@@ -1930,7 +1961,7 @@ export const RecruitmentManagement: React.FC = () => {
         id: 'sig-1',
         role: 'Menyetujui',
         employeeId: firstEmp?.id || 'emp-1',
-        name: firstEmp ? firstEmp.fullName : 'Aditya Pratama, S.Psi',
+        name: firstEmp ? firstEmp.fullName : '',
         title: firstEmp ? firstEmp.position : 'VP of Human Capital',
         nik: firstEmp?.nik || 'NTM-2022-014',
         withDegree: true,
@@ -2152,32 +2183,26 @@ export const RecruitmentManagement: React.FC = () => {
   // ===================== 3. FORM TAMBAH PELAMAR MANUAL / INCOMING =====================
   const [candName, setCandName] = useState('');
   const [candEmail, setCandEmail] = useState('');
-  const [candPhone, setCandPhone] = useState('0812' + Math.floor(10000000 + Math.random() * 90000000));
+  const [candPhone, setCandPhone] = useState('');
   const [candCompany, setCandCompany] = useState('');
   const [candSalary, setCandSalary] = useState<number>(18000000);
   const [candVacancyId, setCandVacancyId] = useState(vacancies[0]?.id || '');
   const [candSource, setCandSource] = useState<string>('Website Karir Internal');
   const [uploadedCv, setUploadedCv] = useState<{ name: string; size: string } | null>(null);
-  const [isExtractingCv, setIsExtractingCv] = useState(false);
-  const [extractedPreview, setExtractedPreview] = useState<{
-    summary: string;
-    skills: string[];
-    experienceYears: number;
-    education: string;
-    score: number;
-  } | null>(null);
+  const [candSubmitAttempted, setCandSubmitAttempted] = useState(false);
+  const [candCvError, setCandCvError] = useState<string | null>(null);
 
   const resetCandidateModal = () => {
     setCandName('');
     setCandEmail('');
-    setCandPhone('0812' + Math.floor(10000000 + Math.random() * 90000000));
+    setCandPhone('');
     setCandCompany('');
     setCandSalary(18000000);
     setCandVacancyId(selectedVacancyId !== 'all' ? selectedVacancyId : (vacancies[0]?.id || 'job-1'));
     setCandSource('Upload Manual (File CV)');
     setUploadedCv(null);
-    setIsExtractingCv(false);
-    setExtractedPreview(null);
+    setCandSubmitAttempted(false);
+    setCandCvError(null);
   };
 
   // ===================== PENGATURAN JENIS TES KOMPETENSI =====================
@@ -2271,7 +2296,7 @@ export const RecruitmentManagement: React.FC = () => {
   const [activeInterviewerScoringId, setActiveInterviewerScoringId] = useState<string>('');
   const [interviewDate, setInterviewDate] = useState('2026-10-24 14:00');
   const [interviewTimeEnd, setInterviewTimeEnd] = useState('15:00');
-  const [interviewerName, setInterviewerName] = useState('Aditya Pratama (Head of People)');
+  const [interviewerName, setInterviewerName] = useState('');
   const [interviewPlatform, setInterviewPlatform] = useState<'Google Meet' | 'Microsoft Teams' | 'Ruang Interview Kantor'>('Google Meet');
   const [interviewMeetingLink, setInterviewMeetingLink] = useState('https://meet.google.com/xyz-ntm-hr');
   const [techRating, setTechRating] = useState<number>(5);
@@ -2286,7 +2311,7 @@ export const RecruitmentManagement: React.FC = () => {
   const [assignedInterviewers, setAssignedInterviewers] = useState<AssignedInterviewer[]>([
     {
       id: 'inv-lead-user',
-      name: 'Aditya Pratama, M.Psi.',
+      name: '',
       title: 'Head of People & Organization',
       department: 'Human Resources',
       email: 'aditya.pratama@nusantara.id',
@@ -3238,7 +3263,7 @@ export const RecruitmentManagement: React.FC = () => {
     const primaryApprover =
       target?.signatories && target.signatories.length > 0
         ? target.signatories[target.signatories.length - 1].name
-        : (target?.approvedBy || 'Aditya Pratama (Head of People)');
+        : (target?.approvedBy || '');
 
     const updatedSignatories = target?.signatories?.map((s) => ({
       ...s,
@@ -3402,48 +3427,6 @@ export const RecruitmentManagement: React.FC = () => {
       }
     }
 
-    // Ekstraksi berkas dokumen PDF
-    setIsExtractingCv(true);
-    setTimeout(() => {
-      setIsExtractingCv(false);
-      setExtractedPreview({
-        summary: 'Kandidat memiliki rekam jejak kerja yang kuat di bidang terkait, adaptif dengan sistem kerja agile, dan memiliki sertifikasi profesional terverifikasi.',
-        skills: ['Analisis Sistem', 'Problem Solving', 'Komunikasi Efektif', 'Manajemen Waktu', 'Kolaborasi Tim'],
-        experienceYears: Math.floor(2 + Math.random() * 4),
-        education: 'S1 Sarjana',
-        score: 100,
-      });
-      setToastFeedback(`Berkas CV PDF '${file.name}' berhasil diverifikasi & diekstrak (100%)!`);
-    }, 600);
-  };
-
-  const handleTriggerCvParsing = () => {
-    if (!uploadedCv && !candName.trim()) {
-      setToastFeedback('Silakan pilih berkas CV terlebih dahulu untuk diparsing.');
-      return;
-    }
-    setIsExtractingCv(true);
-    setTimeout(() => {
-      setIsExtractingCv(false);
-      if (!candName && uploadedCv) {
-        const clean = uploadedCv.name
-          .replace(/\.[^/.]+$/, '')
-          .replace(/^(cv|resume)[_\-\s]+/i, '')
-          .replace(/[_\-]+/g, ' ')
-          .trim();
-        if (clean.length > 2) {
-          setCandName(clean.replace(/\b\w/g, (l) => l.toUpperCase()));
-        }
-      }
-      setExtractedPreview({
-        summary: 'Kandidat memiliki rekam jejak kerja yang kuat di bidang terkait, adaptif dengan sistem kerja agile, dan memiliki sertifikasi profesional terverifikasi.',
-        skills: ['Analisis Sistem', 'Problem Solving', 'Komunikasi Efektif', 'Manajemen Waktu', 'Kolaborasi Tim'],
-        experienceYears: Math.floor(2 + Math.random() * 4),
-        education: 'S1 Sarjana',
-        score: Math.floor(88 + Math.random() * 10),
-      });
-      setToastFeedback(`Parsing AI CV selesai! Data pelamar berhasil diekstrak otomatis.`);
-    }, 600);
   };
 
   const handleDownloadCv = (candidate: Candidate) => {
@@ -3508,47 +3491,49 @@ Nama Berkas: ${fileName} (${candidate.cvFileSize || '1.2 MB'})
     setToastFeedback(`Berkas CV '${fileName}' berhasil diunduh.`);
   };
 
-  const handleSaveIncomingCandidate = (e: React.FormEvent) => {
+  const candEmailError = (v: string) => (/^\S+@\S+\.\S+$/.test(v.trim()) ? null : 'Format email tidak valid');
+  const candPhoneError = (v: string) => (/^\+?[\d\s\-]{8,20}$/.test(v.trim()) ? null : 'Nomor telepon/WA tidak valid (8–20 digit)');
+
+  /** Registers a candidate from what the user actually entered — nothing is inferred or invented (no parsed résumé data exists until a real parser does). */
+  const submitManualCandidate = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!candName.trim()) {
-      setToastFeedback('Nama lengkap pelamar wajib diisi.');
+    setCandSubmitAttempted(true);
+    setCandCvError(null);
+    if (!candName.trim() || candEmailError(candEmail) || candPhoneError(candPhone) || !candVacancyId) return;
+    if (!uploadedCv) {
+      setCandCvError('Berkas CV (PDF) wajib diunggah.');
       return;
     }
-
-    const targetVac = vacancies.find((v) => v.id === candVacancyId) || vacancies[0];
-    const newCandEmail = candEmail.trim() || `${candName.toLowerCase().replace(/\s+/g, '.')}@example.com`;
-    const fileName = uploadedCv?.name || `CV_${candName.replace(/\s+/g, '_')}.pdf`;
-    const fileSize = uploadedCv?.size || '1.2 MB';
-
+    const targetVac = vacancies.find((v) => v.id === candVacancyId);
+    if (!targetVac) return;
     addCandidate({
-      jobVacancyId: targetVac?.id || 'job-1',
+      jobVacancyId: candVacancyId,
       name: candName.trim(),
-      email: newCandEmail,
-      phone: candPhone.trim() || '081234567890',
-      lastCompany: candCompany.trim() || 'Pelamar Baru',
-      expectedSalary: Number(candSalary) || (targetVac?.maxSalary || 15000000),
-      stage: 'Applied',
+      email: candEmail.trim(),
+      phone: candPhone.trim(),
+      lastCompany: candCompany.trim() || '-',
+      expectedSalary: 0,
+      stage: 'Incoming',
       sourcePortal: (candSource as any) || 'Upload Manual',
-      resumeParsed: true,
-      cvFileName: fileName,
-      cvFileSize: fileSize,
+      resumeParsed: false,
+      cvFileName: uploadedCv.name,
+      cvFileSize: uploadedCv.size,
       parsedData: {
         fullName: candName.trim(),
-        email: newCandEmail,
-        phone: candPhone.trim() || '081234567890',
-        currentTitle: targetVac?.title || 'Professional Specialist',
-        currentCompany: candCompany.trim() || 'Pelamar Baru',
-        totalExperienceYears: extractedPreview?.experienceYears || 3,
-        education: extractedPreview?.education || 'S1 Sarjana',
-        university: 'Universitas Terkemuka',
-        topSkills: extractedPreview?.skills || ['Problem Solving', 'Komunikasi', 'Analisis Data'],
-        extractionScore: extractedPreview?.score || 100,
+        email: candEmail.trim(),
+        phone: candPhone.trim(),
+        currentTitle: '',
+        currentCompany: candCompany.trim(),
+        totalExperienceYears: 0,
+        education: '',
+        university: '',
+        topSkills: [],
+        extractionScore: 0,
         parsedAt: new Date().toISOString().split('T')[0],
       },
     });
-
     setIsCandidateModalOpen(false);
-    setToastFeedback(`Berkas pelamar '${candName.trim()}' berhasil disimpan ke tahap Applied (Screening)!`);
+    setToastFeedback(`Berkas pelamar '${candName.trim()}' (${uploadedCv.name}) berhasil disimpan ke Pipeline Incoming.`);
     resetCandidateModal();
   };
 
@@ -4402,7 +4387,7 @@ Nama Berkas: ${fileName} (${candidate.cvFileSize || '1.2 MB'})
         expectedOutput: getDefaultExpectedOutputForTest(test2.id, test2.category, test2.name),
         isTokenUsed: false,
         locationOrSandboxNotes: 'Tes kepribadian & soft-skill online via portal psikotes.',
-        assessorName: currentUser?.name ? `${currentUser.name} (HRBP)` : 'Aditya Pratama (Head of People)',
+        assessorName: currentUser?.name ? `${currentUser.name} (HRBP)` : '',
         assessorRole: 'Tim HR',
         passingGrade: test2.passingGrade || 70,
         status: 'Belum Dinilai',
@@ -4476,7 +4461,7 @@ Nama Berkas: ${fileName} (${candidate.cvFileSize || '1.2 MB'})
               ? 'Budi Santoso (Tech Lead / User)'
               : currentUser?.name
               ? `${currentUser.name} (HR / Asesor)`
-              : 'Aditya Pratama (HR Lead)',
+              : '',
             assessorRole: isTechnical ? 'User (Divisi Terkait)' : 'Tim HR',
             passingGrade: testItem.passingGrade || 75,
             status: 'Belum Dinilai',
@@ -4629,7 +4614,7 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
           category: 'Hard Skill',
           format: globalAssessmentFormat,
           durationMinutes: 60,
-          assessorName: 'Aditya Pratama (HRBP)',
+          assessorName: '',
           assessorRole: 'Tim HR',
           passingGrade: 75,
           status: 'Belum Dinilai',
@@ -4975,7 +4960,7 @@ Catatan Penting: Tautan di atas hanya berlaku untuk 1 (satu) kali submit pengerj
       currentInterviewers = [
         {
           id: 'inv-lead-user',
-          name: candidate.interviewer || (currentUser?.name ? `${currentUser.name}` : 'Aditya Pratama, M.Psi.'),
+          name: candidate.interviewer || (currentUser?.name ? `${currentUser.name}` : ''),
           title: 'Head of People & Organization',
           department: 'Human Resources',
           email: 'aditya.pratama@nusantara.id',
@@ -5886,7 +5871,7 @@ PT Nusantara Multi Talenta Tbk`);
     <div style="width: 260px;">
       <p style="font-size: 11px; color: #64748b;">Diterbitkan oleh Perusahaan:</p>
       <div style="font-weight: bold; margin-top: 40px;">PT NUSANTARA MULTI TALENTA TBK</div>
-      <div style="font-size: 11px; color: #475569;">Aditya Pratama, S.Psi. · Head of HR</div>
+      <div style="font-size: 11px; color: #475569;">${currentUser?.name || ''} · HR</div>
     </div>
     <div style="width: 260px; text-align: right;">
       <p style="font-size: 11px; color: #64748b;">Menyetujui Penawaran Kerja:</p>
@@ -11623,7 +11608,7 @@ PT Nusantara Multi Talenta Tbk`);
                         const primaryApprover =
                           previewFptk.signatories && previewFptk.signatories.length > 0
                             ? previewFptk.signatories[previewFptk.signatories.length - 1].name
-                            : (previewFptk.approvedBy || 'Aditya Pratama (Head of People)');
+                            : (previewFptk.approvedBy || '');
                         setPreviewFptk({
                           ...previewFptk,
                           status: 'Disetujui',
@@ -14242,7 +14227,7 @@ PT Nusantara Multi Talenta Tbk`);
               category: 'Hard Skill',
               format: globalAssessmentFormat,
               durationMinutes: 60,
-              assessorName: 'Aditya Pratama (HRBP)',
+              assessorName: '',
               assessorRole: 'Tim HR',
               passingGrade: 75,
               status: 'Belum Dinilai',
@@ -14596,7 +14581,7 @@ PT Nusantara Multi Talenta Tbk`);
                             durationMinutes: masterTest?.durationMinutes || 60,
                             testUrlOrRepo: 'https://github.com/nusantara-eval/code-challenge',
                             locationOrSandboxNotes: '',
-                            assessorName: 'Aditya Pratama (HRBP)',
+                            assessorName: '',
                             assessorRole: 'Tim HR',
                             passingGrade: masterTest?.passingGrade || 75,
                             status: 'Belum Dinilai',
@@ -18926,7 +18911,7 @@ PT Nusantara Multi Talenta Tbk`);
                         [TERVALIDASI HRD / TTD DIGITAL]
                       </div>
                     </div>
-                    <p className="font-bold text-slate-900 underline">Aditya Pratama, S.Psi., CHRP</p>
+                    <p className="font-bold text-slate-900 underline">{currentUser?.name || ''}</p>
                     <p className="text-[10px] text-slate-500">Head of Talent Acquisition & People Operations</p>
                   </div>
                 </div>
@@ -19965,7 +19950,7 @@ PT Nusantara Multi Talenta Tbk`);
                         />
                       </div>
                       <div>
-                        <div className="font-bold text-slate-900 text-xs">Aditya Pratama, S.Psi., CHRP</div>
+                        <div className="font-bold text-slate-900 text-xs">{currentUser?.name || ''}</div>
                         <div className="text-[10px] text-slate-600 font-medium">Head of People & Culture</div>
                         <div className="text-[9px] font-mono text-emerald-700 font-semibold mt-0.5 flex items-center gap-1">
                           <CheckCircle className="w-3 h-3" />
@@ -20600,44 +20585,8 @@ PT Nusantara Multi Talenta Tbk`);
             </div>
 
             <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                const defaultName = candName.trim() || 'Kandidat Baru';
-                const finalFileName = uploadedCv?.name || `CV_${defaultName.replace(/\s+/g, '_')}.pdf`;
-                const finalFileSize = uploadedCv?.size || '1.2 MB';
-                const targetVac = vacancies.find((v) => v.id === candVacancyId) || vacancies[0];
-
-                addCandidate({
-                  jobVacancyId: candVacancyId,
-                  name: defaultName,
-                  email: candEmail || `${defaultName.toLowerCase().replace(/\s+/g, '.')}@example.com`,
-                  phone: candPhone || '081234567890',
-                  lastCompany: candCompany || 'Pelamar Baru',
-                  expectedSalary: targetVac?.maxSalary || 15000000,
-                  stage: 'Incoming',
-                  sourcePortal: candSource || 'Upload Manual',
-                  resumeParsed: true,
-                  cvFileName: finalFileName,
-                  cvFileSize: finalFileSize,
-                  parsedData: {
-                    fullName: defaultName,
-                    email: candEmail || `${defaultName.toLowerCase().replace(/\s+/g, '.')}@example.com`,
-                    phone: candPhone || '081234567890',
-                    currentTitle: targetVac?.title || 'Professional Specialist',
-                    currentCompany: candCompany || 'Pelamar Baru',
-                    totalExperienceYears: 3,
-                    education: 'S1 Sarjana',
-                    university: 'Universitas Terkemuka',
-                    topSkills: ['Problem Solving', 'Communication', 'Technical Proficiency'],
-                    extractionScore: 100,
-                    parsedAt: new Date().toISOString().split('T')[0],
-                  },
-                });
-                setIsCandidateModalOpen(false);
-                setCandName('');
-                setUploadedCv(null);
-                setToastFeedback(`File CV PDF '${finalFileName}' untuk '${defaultName}' berhasil disimpan ke Pipeline Incoming!`);
-              }}
+              onSubmit={submitManualCandidate}
+              noValidate
               className="p-5 space-y-4 text-xs max-h-[80vh] overflow-y-auto"
             >
               {/* 1. UPLOAD FILE CV DROPZONE */}
@@ -20709,16 +20658,48 @@ PT Nusantara Multi Talenta Tbk`);
                 )}
               </div>
 
-              {/* DATA PELAMAR: HANYA NAMA LENGKAP, POSISI LOWONGAN, DAN KANAL ASAL/SUMBER PELAMAR */}
+              {candCvError && <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 font-semibold text-xs">{candCvError}</div>}
+
+              {/* DATA PELAMAR */}
               <div className="pt-2 border-t border-slate-100 space-y-3.5">
                 {/* 2. NAMA LENGKAP */}
                 <ValidatedInput
-                  label="Nama Lengkap Pelamar (Opsional)"
+                  label="Nama Lengkap Pelamar"
+                  required
+                  requiredLabel="Nama lengkap pelamar wajib diisi"
+                  showError={candSubmitAttempted}
                   value={candName}
                   onChange={setCandName}
-                  placeholder="Contoh: Raditya Pratama, S.Kom. (jika kosong, sistem akan mengisi 'Kandidat Baru')"
+                  placeholder="Nama sesuai CV"
                   className="font-medium text-xs"
                 />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <ValidatedInput
+                    label="Email Pelamar"
+                    type="email"
+                    required
+                    requiredLabel="Email pelamar wajib diisi"
+                    validate={candEmailError}
+                    showError={candSubmitAttempted}
+                    value={candEmail}
+                    onChange={setCandEmail}
+                    placeholder="nama@email.com"
+                    className="text-xs"
+                  />
+                  <ValidatedInput
+                    label="No. Telepon / WhatsApp"
+                    type="tel"
+                    required
+                    requiredLabel="Nomor telepon pelamar wajib diisi"
+                    validate={candPhoneError}
+                    showError={candSubmitAttempted}
+                    value={candPhone}
+                    onChange={setCandPhone}
+                    placeholder="08xxxxxxxxxx"
+                    className="text-xs"
+                  />
+                </div>
+                <ValidatedInput label="Perusahaan Terakhir (opsional)" value={candCompany} onChange={setCandCompany} className="text-xs" />
 
                 {/* 3. POSISI LOWONGAN */}
                 <div>
@@ -21723,7 +21704,7 @@ PT Nusantara Multi Talenta Tbk`);
               </div>
 
               <div>
-                <label className="font-semibold text-slate-700 block mb-1">Alamat Email Korporat Resmi *</label>
+                <label className="font-semibold text-slate-700 block mb-1">Alamat Email Login Karyawan *</label>
                 <input
                   type="email"
                   value={corporateEmail}
@@ -21732,28 +21713,20 @@ PT Nusantara Multi Talenta Tbk`);
                 />
               </div>
 
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">Password Sementara (First-Time Login)</label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    value={tempPassword}
-                    readOnly
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono text-xs bg-slate-50 text-slate-700 select-all"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      navigator.clipboard.writeText(tempPassword);
-                      alert('Password sementara disalin ke clipboard!');
-                    }}
-                    className="px-3 py-2 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-lg text-slate-700 shrink-0 flex items-center gap-1 cursor-pointer"
-                  >
-                    <Copy className="w-3.5 h-3.5" />
-                    <span>Salin</span>
-                  </button>
-                </div>
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-[11px] text-slate-600 space-y-1.5">
+                <div className="font-semibold text-slate-800">Aktivasi Akun</div>
+                <p>Tidak ada password sementara. Karyawan menerima tautan aktivasi sekali pakai (berlaku 7 hari) untuk membuat passwordnya sendiri.</p>
+                {activationLinkShown && (
+                  <div className="space-y-1.5 pt-1">
+                    <div className="text-amber-800 font-semibold">Email belum terkirim — berikan tautan ini kepada karyawan. Tautan hanya ditampilkan sekali.</div>
+                    <div className="flex items-center gap-2">
+                      <input type="text" readOnly value={activationLinkShown} className="w-full px-2 py-1.5 border border-slate-300 rounded-lg font-mono text-[10px] bg-white select-all" />
+                      <button type="button" onClick={() => navigator.clipboard.writeText(activationLinkShown)} className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-lg shrink-0 flex items-center gap-1"><Copy className="w-3 h-3" /><span>Salin</span></button>
+                    </div>
+                  </div>
+                )}
               </div>
+              {accountError && <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 font-semibold">{accountError}</div>}
 
               <div>
                 <label className="font-semibold text-slate-700 block mb-1.5">Sistem & Platform yang Diaktivasi *</label>
@@ -21800,6 +21773,7 @@ PT Nusantara Multi Talenta Tbk`);
               <button
                 type="button"
                 onClick={handleSubmitAccount}
+                disabled={accountBusy || Boolean(activationLinkShown)}
                 className="px-4 py-2 bg-violet-700 hover:bg-violet-800 text-white rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1.5 cursor-pointer"
               >
                 <Check className="w-3.5 h-3.5" />

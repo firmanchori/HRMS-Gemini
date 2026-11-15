@@ -4,7 +4,7 @@ import { authApi, AuthApiError } from "./authApi";
 import { ValidatedInput } from "../components/common/ValidatedInput";
 
 /** Consumes the token from the password-reset email link — works for both App Owner and tenant admin (same token mechanism, backend tells them apart by subdomain). */
-export function ResetPasswordPage({ token }: { token: string }) {
+export function ResetPasswordPage({ token, kind = "admin" }: { token: string; kind?: "admin" | "employee" }) {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -20,7 +20,7 @@ export function ResetPasswordPage({ token }: { token: string }) {
     if (password !== confirm) return setError("Konfirmasi password tidak cocok.");
     setLoading(true);
     try {
-      await authApi.resetPassword(token, password);
+      await (kind === "employee" ? authApi.activateEmployeeAccount(token, password) : authApi.resetPassword(token, password));
       setDone(true);
     } catch (err) {
       setError(err instanceof AuthApiError ? err.message : "Gagal mengatur ulang password.");
@@ -33,7 +33,7 @@ export function ResetPasswordPage({ token }: { token: string }) {
     <div className="min-h-screen w-screen flex items-center justify-center bg-slate-950 p-4">
       <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
         <div className="px-6 py-5 bg-slate-900 text-white border-b border-slate-800">
-          <h1 className="font-extrabold text-base">Atur Ulang Password</h1>
+          <h1 className="font-extrabold text-base">{kind === "employee" ? "Buat Password & Aktifkan Akun" : "Atur Ulang Password"}</h1>
         </div>
         <div className="p-6">
           {done ? (

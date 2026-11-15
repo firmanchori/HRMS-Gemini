@@ -37,7 +37,7 @@ import { EmployeeApp } from './employee/EmployeeApp';
 import { employeeApi } from './employee/api';
 
 const MainLayout: React.FC<{ onSwitchToEmployeeLogin: () => void }> = ({ onSwitchToEmployeeLogin }) => {
-  const { activeModule, setActiveModule, setCurrentUserRole, setCurrentSessionUser, loadTenantOrgData } = useHrms();
+  const { activeModule, setActiveModule, setCurrentSessionUser, setCurrentSessionTenant, loadTenantOrgData } = useHrms();
 
   // Deteksi jika link tes online pelamar sedang dibuka via URL query param (?testToken=...)
   const [portalToken, setPortalToken] = useState<string | null>(() => {
@@ -60,8 +60,8 @@ const MainLayout: React.FC<{ onSwitchToEmployeeLogin: () => void }> = ({ onSwitc
     authApi
       .me()
       .then((user) => {
-        setCurrentUserRole(user.role as UserRole);
         setCurrentSessionUser({ id: user.id, name: user.name, email: user.email });
+        if (user.tenant) setCurrentSessionTenant(user.tenant);
         setIsAuthenticated(true);
         return loadTenantOrgData();
       })
@@ -222,13 +222,17 @@ const MainLayout: React.FC<{ onSwitchToEmployeeLogin: () => void }> = ({ onSwitc
   if (!isAuthenticated) {
     return (
       <LoginScreen
-        onLoginSuccess={(user, role) => {
-          if (role) {
-            setCurrentUserRole(role as UserRole);
-          }
+        onLoginSuccess={(user) => {
           setCurrentSessionUser(user);
-          setIsAuthenticated(true);
-          loadTenantOrgData().catch((err) => console.error('Gagal memuat data struktur organisasi:', err));
+          // The tenant identity always comes from the server session, never from client state.
+          authApi
+            .me()
+            .then((me) => {
+              if (me.tenant) setCurrentSessionTenant(me.tenant);
+              setIsAuthenticated(true);
+              return loadTenantOrgData();
+            })
+            .catch((err) => console.error('Gagal memuat sesi/data awal:', err));
         }}
         onSwitchToEmployeeLogin={onSwitchToEmployeeLogin}
       />

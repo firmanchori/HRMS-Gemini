@@ -51,14 +51,11 @@ export const Header: React.FC<HeaderProps> = ({
   onLogout,
 }) => {
   const {
-    tenants,
     currentTenant,
-    setCurrentTenantId,
     entities,
     currentEntityId,
     setCurrentEntityId,
     currentUser,
-    setCurrentUserRole,
     roles = [],
     resetToSampleFlowData,
     employees = [],
@@ -99,7 +96,7 @@ export const Header: React.FC<HeaderProps> = ({
     {
       id: 'notif-3',
       title: 'FPTK Rekrutmen Baru Disetujui',
-      sender: 'Aditya Pratama (HR Admin)',
+      sender: '',
       time: '3 jam yang lalu',
       type: 'recruitment',
       unread: true,
@@ -636,42 +633,6 @@ export const Header: React.FC<HeaderProps> = ({
                     </div>
                     <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-amber-700 shrink-0" />
                   </button>
-
-                  {/* Option D: Simulasi Peran (Role Switcher inside Dropdown) */}
-                  <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200/90 my-1">
-                    <div className="flex items-center justify-between text-[11px] font-semibold text-slate-600 mb-1.5">
-                      <span className="flex items-center gap-1">
-                        <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" />
-                        <span>Ganti Simulasi Peran:</span>
-                      </span>
-                      <span className="text-[10px] text-indigo-600 font-mono">Live Demo</span>
-                    </div>
-                    <select
-                      value={currentUser.role}
-                      onChange={(e) => {
-                        setCurrentUserRole(e.target.value as UserRole);
-                        setIsProfileDropdownOpen(false);
-                      }}
-                      className="w-full px-2 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-800 cursor-pointer outline-none focus:border-indigo-500 shadow-2xs"
-                    >
-                      {roles && roles.length > 0 ? (
-                        roles.map((r) => (
-                          <option key={r.id} value={r.id}>
-                            {r.label}
-                          </option>
-                        ))
-                      ) : (
-                        <>
-                          <option value="super_admin">Super Admin</option>
-                          <option value="hr_admin">HR Director</option>
-                          <option value="payroll_admin">Payroll Lead</option>
-                          <option value="ga_admin">GA Manager</option>
-                          <option value="manager">Line Manager (Atasan)</option>
-                          <option value="employee">Employee (ESS)</option>
-                        </>
-                      )}
-                    </select>
-                  </div>
 
                   {/* Option E: Pintasan Keyboard & Bantuan */}
                   <button

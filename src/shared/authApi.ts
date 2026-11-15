@@ -40,6 +40,7 @@ export interface AuthUser {
   name: string;
   email: string;
   role: "app_owner" | "tenant_admin";
+  tenant?: { id: string; name: string; subdomain: string } | null;
 }
 
 export interface DevAccount {
@@ -75,6 +76,9 @@ export const authApi = {
   forgotPassword: (email: string) => post<{ ok: true }>("/api/auth/forgot-password", { email }),
   resetPassword: (token: string, newPassword: string) =>
     post<{ ok: true }>(`/api/auth/reset-password/${token}`, { newPassword }),
+  activateEmployeeAccount: (token: string, newPassword: string) =>
+    post<{ ok: true }>(`/api/employee/activate/${token}`, { newPassword }),
+  employeeForgotPassword: (email: string) => post<{ ok: true }>('/api/employee/forgot-password', { email }),
   confirmEmail: (token: string) => post<{ ok: true }>(`/api/auth/confirm-email/${token}`),
   // Dev/test convenience only — the backend hides this (404) outside development.
   listDevAccounts: () => get<DevAccount[]>("/api/auth/dev-accounts"),

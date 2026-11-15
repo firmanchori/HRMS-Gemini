@@ -177,7 +177,7 @@ export const ProcurementManagement: React.FC = () => {
   const [newVenName, setNewVenName] = useState('');
   const [newVenCategory, setNewVenCategory] = useState<Vendor['category']>('Hardware & IT');
   const [newVenPic, setNewVenPic] = useState('');
-  const [newVenPhone, setNewVenPhone] = useState('021-555' + Math.floor(1000 + Math.random() * 9000));
+  const [newVenPhone, setNewVenPhone] = useState('');
   const [newVenEmail, setNewVenEmail] = useState('');
   const [newVenNpwp, setNewVenNpwp] = useState('01.234.567.8-000.000');
   const [newVenAddress, setNewVenAddress] = useState('Kawasan Industri Pulogadung, Jakarta Timur');
@@ -231,7 +231,7 @@ export const ProcurementManagement: React.FC = () => {
       itemName: `[${procurementCategory}] ${itemName}`,
       quantity: Number(quantity),
       estimatedCost: Number(estimatedCost),
-      requestor: reqEmp?.fullName || 'Aditya Pratama',
+      requestor: reqEmp?.fullName || '',
       department,
     });
 

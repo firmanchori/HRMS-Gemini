@@ -11,6 +11,9 @@ import { authLimiter } from "../lib/rateLimit.ts";
 import { logAudit } from "../lib/audit.ts";
 import { logLoginAttempt, isAccountLockedOut, LOCKOUT_WINDOW_MINUTES, alertIfAccountJustLockedOut } from "./auth.ts";
 import { getPermission } from "../lib/permissions.ts";
+import { employeeFormatError } from "../lib/personalia.ts";
+import { redeemEmployeeToken, requestEmployeeReset, EmployeeAccountError } from "../lib/employeeAccounts.ts";
+import { rejectBreachedPassword } from "../middleware/passwordCheck.ts";
 import { generatePayrollRun, approvePayrollPeriod, disbursePayrollPeriod, PayrollError } from "../lib/payrollEngine.ts";
 import { reimbursementClaimSchema, createReimbursementClaim, listReimbursementClaims, ReimbursementError } from "../lib/reimbursement.ts";
 import { isInManagerChain } from "../lib/orgHierarchy.ts";
@@ -84,6 +87,23 @@ employeeRouter.post("/login", authLimiter, validateBody(employeeLoginSchema), as
 
   const [employee] = await db.select().from(employees).where(eq(employees.id, account.employeeId)).limit(1);
   res.json({ id: account.id, email: account.email, roleKey: account.roleKey, name: employee?.fullName ?? account.email });
+});
+
+// Public (no session): consume an activation/reset link, or ask for a reset link. Same password policy as everywhere else.
+employeeRouter.post("/activate/:token", authLimiter, validateBody(z.object({ newPassword: z.string().min(8).max(200) })), rejectBreachedPassword((req) => req.body.newPassword), async (req, res) => {
+  const tenantId = req.tenant?.id;
+  if (!tenantId) return res.status(400).json({ error: "Aktivasi hanya tersedia di subdomain perusahaan" });
+  try {
+    await redeemEmployeeToken(tenantId, req.params.token, req.body.newPassword);
+    res.json({ ok: true });
+  } catch (err) {
+    if (err instanceof EmployeeAccountError) return res.status(err.status).json({ error: err.message });
+    throw err;
+  }
+});
+employeeRouter.post("/forgot-password", authLimiter, validateBody(z.object({ email: z.string().trim().toLowerCase().email() })), async (req, res) => {
+  if (req.tenant) await requestEmployeeReset(req.tenant.id, req.tenant.subdomain, req.body.email);
+  res.json({ ok: true });
 });
 
 const employeeMfaVerifyLoginSchema = z.object({
@@ -658,6 +678,8 @@ employeeRouter.get("/employees", requirePermission("employees", "view"), async (
 });
 
 employeeRouter.post("/employees", requirePermission("employees", "create"), validateBody(employeeRecordSchema), async (req, res) => {
+  const formatError = employeeFormatError(req.body);
+  if (formatError) return res.status(400).json({ error: formatError });
   const tenantId = req.session!.tenantId!;
   if (!(await assertEntityInTenant(tenantId, req.body.entityId))) return res.status(404).json({ error: "Entitas tidak ditemukan" });
   const [created] = await db.insert(employees).values({ ...req.body, tenantId }).returning();
@@ -666,6 +688,8 @@ employeeRouter.post("/employees", requirePermission("employees", "create"), vali
 });
 
 employeeRouter.put("/employees/:id", requirePermission("employees", "edit"), validateParams(uuidParam("id")), validateBody(employeeRecordSchema.partial()), async (req, res) => {
+  const formatError = employeeFormatError(req.body);
+  if (formatError) return res.status(400).json({ error: formatError });
   const tenantId = req.session!.tenantId!;
   const [existing] = await db.select().from(employees).where(and(eq(employees.id, req.params.id), eq(employees.tenantId, tenantId))).limit(1);
   if (!existing) return res.status(404).json({ error: "Karyawan tidak ditemukan" });

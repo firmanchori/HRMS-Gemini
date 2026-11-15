@@ -225,7 +225,7 @@ export const EmployeeManagement: React.FC = () => {
   const [newNik, setNewNik] = useState('');
   const [newEmail, setNewEmail] = useState('');
   const [newPersonalEmail, setNewPersonalEmail] = useState('');
-  const [newPhone, setNewPhone] = useState('0812' + Math.floor(10000000 + Math.random() * 90000000));
+  const [newPhone, setNewPhone] = useState('');
   const [newType, setNewType] = useState<EmploymentType>('Tetap');
   const [newWorkerCategory, setNewWorkerCategory] = useState<WorkerCategory>('Karyawan');
   const [newContractDoc, setNewContractDoc] = useState('');
@@ -242,8 +242,8 @@ export const EmployeeManagement: React.FC = () => {
   const [newContractEndDate, setNewContractEndDate] = useState('2027-10-31');
 
   // Identitas KTP/KK
-  const [newNikKtp, setNewNikKtp] = useState('3174' + Math.floor(100000000000 + Math.random() * 900000000000));
-  const [newNoKk, setNewNoKk] = useState('3174' + Math.floor(100000000000 + Math.random() * 900000000000));
+  const [newNikKtp, setNewNikKtp] = useState('');
+  const [newNoKk, setNewNoKk] = useState('');
   const [newBirthPlace, setNewBirthPlace] = useState('Jakarta');
   const [newBirthDate, setNewBirthDate] = useState('1995-05-20');
   const [newGender, setNewGender] = useState<'Laki-laki' | 'Perempuan'>('Laki-laki');
@@ -262,8 +262,8 @@ export const EmployeeManagement: React.FC = () => {
   const [newKpp, setNewKpp] = useState('KPP Pratama Jakarta Selatan');
   const [hasBpjsTk, setHasBpjsTk] = useState<boolean>(true);
   const [hasBpjsKes, setHasBpjsKes] = useState<boolean>(true);
-  const [newBpjsTk, setNewBpjsTk] = useState('24' + Math.floor(1000000000 + Math.random() * 9000000000));
-  const [newBpjsKes, setNewBpjsKes] = useState('0001' + Math.floor(10000000 + Math.random() * 90000000));
+  const [newBpjsTk, setNewBpjsTk] = useState('');
+  const [newBpjsKes, setNewBpjsKes] = useState('');
   const [newFaskes, setNewFaskes] = useState('Puskesmas Kecamatan Setiabudi');
 
   // Gaji & Bank (Kompensasi bulanan disetup melalui Menu Payroll)
@@ -315,13 +315,13 @@ export const EmployeeManagement: React.FC = () => {
       id: `emg-1`,
       fullName: 'Kontak Darurat Utama',
       relation: 'Orang Tua',
-      phone: '0812' + Math.floor(10000000 + Math.random() * 90000000),
+      phone: '',
       address: 'Jl. Jenderal Sudirman No. 25, Jakarta Selatan',
     },
   ]);
 
   // Riwayat SK Karier Awal
-  const [newSkSignee, setNewSkSignee] = useState('Aditya Pratama, S.Psi');
+  const [newSkSignee, setNewSkSignee] = useState('');
   const [newSkRole, setNewSkRole] = useState('VP of Human Capital & People Operation');
   const [newSkEffectiveDate, setNewSkEffectiveDate] = useState(new Date().toISOString().split('T')[0]);
   const [newSkNotes, setNewSkNotes] = useState(
@@ -446,7 +446,7 @@ export const EmployeeManagement: React.FC = () => {
         `Karyawan ditempatkan pada unit ${emp.department} dengan tugas pokok sebagai ${emp.position}, dan berhak atas seluruh benefit, asuransi BPJS Ketenagakerjaan & Kesehatan, serta remunerasi bulanan sesuai kesepakatan tertulis.`,
         `Keputusan ini memiliki kekuatan hukum yang sah dan mengikat kedua belah pihak sejak ditandatangani.`,
       ],
-      signeeName: 'Aditya Pratama, S.Psi',
+      signeeName: '',
       signeeRole: 'VP of Human Capital & People Operation',
     });
   };
@@ -468,7 +468,7 @@ export const EmployeeManagement: React.FC = () => {
     setNewNik(generatedNik);
     setNewEmail('');
     setNewPersonalEmail('');
-    setNewPhone('0812' + Math.floor(10000000 + Math.random() * 90000000));
+    setNewPhone('');
     setNewType('Tetap');
     setNewWorkerCategory('Karyawan');
     setNewDept('Engineering');
@@ -484,8 +484,8 @@ export const EmployeeManagement: React.FC = () => {
     setNewContractEndDate('2027-10-31');
 
     // Identitas
-    setNewNikKtp('3174' + Math.floor(100000000000 + Math.random() * 900000000000));
-    setNewNoKk('3174' + Math.floor(100000000000 + Math.random() * 900000000000));
+    setNewNikKtp('');
+    setNewNoKk('');
     setNewBirthPlace('Jakarta');
     setNewBirthDate('1996-06-15');
     setNewGender('Laki-laki');
@@ -504,8 +504,8 @@ export const EmployeeManagement: React.FC = () => {
     setNewKpp(`KPP Pratama ${currentTenant.city || 'Jakarta Selatan'}`);
     setHasBpjsTk(true);
     setHasBpjsKes(true);
-    setNewBpjsTk('24' + Math.floor(1000000000 + Math.random() * 9000000000));
-    setNewBpjsKes('0001' + Math.floor(10000000 + Math.random() * 90000000));
+    setNewBpjsTk('');
+    setNewBpjsKes('');
     setNewFaskes('Puskesmas Kecamatan Setiabudi');
 
     // Gaji & Bank - Kompensasi disetup melalui Menu Payroll
@@ -555,13 +555,13 @@ export const EmployeeManagement: React.FC = () => {
         id: `emg-${Date.now()}`,
         fullName: 'Kontak Darurat Utama',
         relation: 'Orang Tua',
-        phone: '0812' + Math.floor(10000000 + Math.random() * 90000000),
+        phone: '',
         address: 'Jl. Jenderal Sudirman No. 25, Jakarta Selatan',
       },
     ]);
 
     // SK Karier
-    setNewSkSignee('Aditya Pratama, S.Psi');
+    setNewSkSignee('');
     setNewSkRole('VP of Human Capital & People Operation');
     setNewSkEffectiveDate(today);
     setNewSkNotes(
@@ -2586,7 +2586,7 @@ export const EmployeeManagement: React.FC = () => {
                                 const belumAda = e.target.checked;
                                 setHasBpjsTk(!belumAda);
                                 if (belumAda) setNewBpjsTk('');
-                                else if (!newBpjsTk) setNewBpjsTk('24' + Math.floor(1000000000 + Math.random() * 9000000000));
+                                else if (!newBpjsTk) setNewBpjsTk('');
                               }}
                               className="w-3.5 h-3.5 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
                             />
@@ -2639,7 +2639,7 @@ export const EmployeeManagement: React.FC = () => {
                                 const belumAda = e.target.checked;
                                 setHasBpjsKes(!belumAda);
                                 if (belumAda) setNewBpjsKes('');
-                                else if (!newBpjsKes) setNewBpjsKes('0001' + Math.floor(10000000 + Math.random() * 90000000));
+                                else if (!newBpjsKes) setNewBpjsKes('');
                               }}
                               className="w-3.5 h-3.5 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
                             />

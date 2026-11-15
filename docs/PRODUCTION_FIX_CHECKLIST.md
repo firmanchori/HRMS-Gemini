@@ -46,28 +46,28 @@ Ini data demo. Tempatnya **hanya** di seed server untuk tenant demo `contoh` (`s
 - [x] Test: `payroll.isolation.test.ts` — angka klien diabaikan; periode Final menolak ubah; karyawan hanya melihat slip Final; PPh21 sesuai tabel TER untuk 3 kasus (TK/0, K/1, K/3). _(selesai: 6 test, termasuk angka klien diabaikan, periode terkunci, pinjaman dipotong sekali, klaim ditandai; kasus TER dicek untuk K/1 — TK/0 dan K/3 belum)_
 
 **B2. Identitas & peran UI diturunkan dari sesi server**
-- [ ] `HrmsContext.tsx:821` `useState<UserRole>('super_admin')`: hapus default; peran = hasil `/api/auth/me`.
-- [ ] `HrmsContext.tsx:843-855` `currentUser`: hapus fallback `'Aditya Pratama (Admin)' / aditya@nusantara.id`; tanpa sesi → tampilkan layar login, bukan pengguna palsu.
-- [ ] `src/components/layout/Header.tsx:640-670`: hapus blok "Ganti Simulasi Peran / Live Demo" dan `setCurrentUserRole` (`HrmsContext.tsx:190, 4996`).
-- [ ] `TenantRbacManagement.tsx:101` & `RbacManagement.tsx:281`: hapus teks/kontrol "Simulasi Role Aktif".
-- [ ] Menu sidebar disaring dari matriks izin sesi nyata (`rolePermissions` dari server), bukan peran lokal.
+- [x] `HrmsContext.tsx:821` `useState<UserRole>('super_admin')`: hapus default; peran = hasil `/api/auth/me`. _(selesai 2026-11-15: state peran dihapus; identitas = sesi server)_
+- [x] `HrmsContext.tsx:843-855` `currentUser`: hapus fallback `'Aditya Pratama (Admin)' / aditya@nusantara.id`; tanpa sesi → tampilkan layar login, bukan pengguna palsu. _(selesai: tanpa sesi → pengguna kosong, bukan "Aditya Pratama"; **bug serius ikut ditemukan & diperbaiki:** `currentTenant.id` berisi `'tenant-ntm'` (mock) sehingga filter `tenantId === currentTenant.id` menyembunyikan SEMUA data nyata (Personalia, klaim reimbursement). Tenant kini dari `/api/auth/me`, profil perusahaan (kode, NPWP, kota, UMR, logo) disimpan server di module-settings `profile`)_
+- [x] `src/components/layout/Header.tsx:640-670`: hapus blok "Ganti Simulasi Peran / Live Demo" dan `setCurrentUserRole` (`HrmsContext.tsx:190, 4996`). _(selesai; juga dihapus: aksi "Ganti Peran" di Command Palette dan "Uji Coba Hak Akses Role" di RbacManagement)_
+- [x] `TenantRbacManagement.tsx:101` & `RbacManagement.tsx:281`: hapus teks/kontrol "Simulasi Role Aktif". _(selesai: file TenantRbacManagement.tsx dihapus (tak terpakai))_
+- [x] Menu sidebar disaring dari matriks izin sesi nyata (`rolePermissions` dari server), bukan peran lokal. _(tidak berlaku untuk aplikasi admin: semua akunnya tenant_admin dan server default-deny; karyawan berperan terbatas memakai Employee App yang menampilkan tab sesuai izin)_
 - [ ] Test e2e (Playwright): login sebagai karyawan role terbatas → menu tak berizin tidak tampil dan direct-URL ditolak server.
 
 **B3. Password sementara & kredensial**
-- [ ] `RecruitmentManagement.tsx:1809`: hapus `Nusa{tahun}!{random}`; buat endpoint server `POST /api/tenant/onboarding/:id/provision-account` yang membuat password acak kriptografis (`crypto.randomBytes`), menandai `mustChangePassword`, dan mengirimnya lewat email (bukan ditampilkan di UI).
-- [ ] Paksa ganti password saat login pertama (kolom `employee_accounts.mustChangePassword`, cek di `/api/employee/login`).
-- [ ] Test: akun baru tidak bisa memakai API selain ganti-password sampai diganti.
+- [x] `RecruitmentManagement.tsx:1809`: hapus `Nusa{tahun}!{random}`; buat endpoint server `POST /api/tenant/onboarding/:id/provision-account` yang membuat password acak kriptografis (`crypto.randomBytes`), menandai `mustChangePassword`, dan mengirimnya lewat email (bukan ditampilkan di UI). _(selesai: tidak ada lagi password sementara; modal onboarding memanggil `POST /api/tenant/employee-accounts` yang membuat akun dengan hash acak tak dikenal + tautan aktivasi sekali pakai (7 hari, hanya hash token disimpan). Email dikirim; bila tak ada mailer/gagal, tautan ditampilkan SEKALI ke admin. Script `scrubTemporaryPasswords.ts` membersihkan sisa password lama)_
+- [x] Paksa ganti password saat login pertama (kolom `employee_accounts.mustChangePassword`, cek di `/api/employee/login`). _(digantikan desain lebih kuat: karyawan membuat passwordnya sendiri lewat tautan; tidak ada password awal yang perlu diganti. Admin tidak lagi bisa mengatur password karyawan (field dihapus dari PUT); tersedia `POST /employee-accounts/:id/send-reset` dan `POST /api/employee/forgot-password`)_
+- [x] Test: akun baru tidak bisa memakai API selain ganti-password sampai diganti. _(diganti test `employeeAccountActivation.isolation.test.ts`: akun baru tak bisa login, token hash, sekali pakai, kedaluwarsa, tanpa enumerasi akun)_
 
 **B4. Hapus PII/data acak dari form**
-- [ ] `EmployeeManagement.tsx:228, 245, 246, 265, 266` (nilai awal state): ganti `'0812'+random`, `'3174'+random`, `'24'+random`, `'0001'+random` menjadi `''`.
-- [ ] `EmployeeManagement.tsx:318, 471, 487, 488, 507, 508, 558, 2589, 2642`: hapus pengisian acak (termasuk tombol "isi otomatis" di 2589/2642).
-- [ ] `RecruitmentManagement.tsx:2155, 2173` (telepon acak), `3527, 3538, 1729` (fallback `081234567890`): jadikan kosong + validasi wajib isi.
-- [ ] Validasi format di server untuk NIK KTP 16 digit, NPWP 15/16, telepon (zod, pola sama dengan `personalDataUpdatesSchema` di `server/lib/personalia.ts`) pada `POST/PUT /employees` dan `/candidates`.
-- [ ] Test: POST employee dengan NIK KTP 3 digit → 400 dengan pesan per-field.
+- [x] `EmployeeManagement.tsx:228, 245, 246, 265, 266` (nilai awal state): ganti `'0812'+random`, `'3174'+random`, `'24'+random`, `'0001'+random` menjadi `''`. _(selesai)_
+- [x] `EmployeeManagement.tsx:318, 471, 487, 488, 507, 508, 558, 2589, 2642`: hapus pengisian acak (termasuk tombol "isi otomatis" di 2589/2642). _(selesai)_
+- [x] `RecruitmentManagement.tsx:2155, 2173` (telepon acak), `3527, 3538, 1729` (fallback `081234567890`): jadikan kosong + validasi wajib isi. _(selesai; form kandidat kini punya kolom email & telepon wajib dengan validasi format inline, nama wajib, CV wajib; `@example.com`, nama "Kandidat Baru", ukuran "1.2 MB" dan data parsing karangan dihapus; `resumeParsed:false`)_
+- [x] Validasi format di server untuk NIK KTP 16 digit, NPWP 15/16, telepon (zod, pola sama dengan `personalDataUpdatesSchema` di `server/lib/personalia.ts`) pada `POST/PUT /employees` dan `/candidates`. _(selesai: `employeeFormatError` dipakai `POST/PUT /employees` (admin & karyawan); kolom kosong tetap boleh; test ditambahkan. Validasi server untuk `/candidates` belum)_
+- [x] Test: POST employee dengan NIK KTP 3 digit → 400 dengan pesan per-field. _(selesai)_
 
 **B5. "Parsing AI CV" palsu**
-- [ ] `RecruitmentManagement.tsx:~3405-3446` (`setTimeout` 600 ms, ringkasan tetap, `Math.random` untuk skor/tahun pengalaman): pilih satu — (a) hapus fitur dan tombolnya, atau (b) implementasikan nyata (endpoint server yang mengekstrak teks PDF + panggilan model, dengan label "saran, harus diverifikasi"). Sampai itu, **hapus**.
-- [ ] Hapus toast "diverifikasi & diekstrak (100%)".
+- [x] `RecruitmentManagement.tsx:~3405-3446` (`setTimeout` 600 ms, ringkasan tetap, `Math.random` untuk skor/tahun pengalaman): pilih satu — (a) hapus fitur dan tombolnya, atau (b) implementasikan nyata (endpoint server yang mengekstrak teks PDF + panggilan model, dengan label "saran, harus diverifikasi"). Sampai itu, **hapus**. _(selesai: opsi (a) — kode ekstraksi palsu, `handleTriggerCvParsing`, dan `handleSaveIncomingCandidate` (mati) dihapus)_
+- [x] Hapus toast "diverifikasi & diekstrak (100%)".
 
 ### P0 — Persistensi (data tidak boleh hilang saat ganti perangkat)
 
@@ -98,6 +98,18 @@ Ini data demo. Tempatnya **hanya** di seed server untuk tenant demo `contoh` (`s
 - [x] Test `officeLocation.isolation.test.ts` (3 test: round-trip poligon, edit tidak merusak, ganti bentuk).
 - [ ] Verifikasi manual di peta (browser): gambar poligon → simpan → buka edit → titik tampil → radius tidak menimpa; `lib/geofence.ts` dipakai saat clock-in untuk poligon (uji lewat `attendanceClock` dengan titik di dalam/luar poligon).
 - [ ] `addOfficeLocation/updateOfficeLocation` hanya `console.error` saat gagal (`HrmsContext.tsx`): tampilkan error di form (ikuti aturan error inline).
+
+### P1 — Sisa data karangan yang ditemukan saat B2–B5 (belum dikerjakan)
+
+**B20. Nama orang & data karangan yang masih tertanam**
+- [x] ~40 fallback "Aditya Pratama" (penandatangan SK, pemohon, assessor) di EmployeeManagement, ComplianceManagement, ProcurementManagement, PersonaliaManagement, GaAssetManagement, RecruitmentManagement, ModuleDocumentModal, docxTemplateHelper: dikosongkan / memakai nama pengguna sesi. `docxTemplateHelper.ts`: pencarian penandatangan berbasis nama (Budi Santoso, Hendra, Siti Aminah, Bambang…) dan fallback `employees[0]` (karyawan pertama jadi penandatangan!) dihapus.
+- [ ] `RecruitmentManagement.tsx:~3490-3520` (unduh CV): isi CV dibuat dari nilai bawaan ("Jakarta & Wilayah Sekitarnya", "S1 Teknik Informatika", "Perguruan Tinggi Terakreditasi", skill karangan). Hanya cetak data yang benar-benar ada.
+- [ ] `RecruitmentManagement.tsx` nomor dokumen bawaan `'001/PKWT-HRD/NTM/X/2026'`, `'001/NDA-HRD/NTM/X/2026'` (modal kontrak/NDA) → nomor dari server (B11).
+- [ ] `RecruitmentManagement.tsx:987, 8868` objek tenant mock `'tenant-ntm'` → `currentTenant`.
+- [ ] `RecruitmentManagement.tsx` skor default `aiMatchScore ?? 88`, `'Komunikasi Efektif, Problem Solving, Manajemen Waktu'` sebagai kata kunci cocok bawaan (`handleOpenAppliedProfilingModal`): jangan menampilkan skor/kecocokan yang tidak dihitung.
+- [ ] `EmployeeManagement.tsx` nilai awal form (`newDept = 'Engineering'`, tunjangan/tipe bawaan) → kosong/pilih dari master.
+- [ ] UI "Lupa password" di layar login Employee App (endpoint `/api/employee/forgot-password` sudah ada) dan UI admin untuk membuat akun karyawan dari menu Karyawan (saat ini hanya dari onboarding) serta tombol "Kirim ulang tautan".
+- [ ] Validasi server untuk `POST/PUT /candidates` (email/telepon) dan tampilkan error server inline di form karyawan (saat ini error API tidak ditampilkan).
 
 ### P1 — Integrasi antar fungsi/modul
 

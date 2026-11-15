@@ -243,4 +243,22 @@ describe("Personalia end-to-end", () => {
     const redo = await adminAgent.put(`/api/tenant/contract-renewal-reviews/${created.body.id}`).set("Origin", origin).send({ status: "Ditolak" });
     expect(redo.status).toBe(409);
   });
+
+  it("creating/editing an employee validates identity, contact and bank formats when filled (blank stays allowed)", async () => {
+    const base = { entityId, nik: "FMT-1", fullName: "Uji Format" };
+    const bad = await adminAgent.post("/api/tenant/employees").set("Origin", origin).send({ ...base, details: { nikKtp: "123" } });
+    expect(bad.status).toBe(400);
+    expect(bad.body.error).toMatch(/NIK KTP/);
+    const badPhone = await adminAgent.post("/api/tenant/employees").set("Origin", origin).send({ ...base, phone: "abc" });
+    expect(badPhone.status).toBe(400);
+    const badBank = await adminAgent.post("/api/tenant/employees").set("Origin", origin).send({ ...base, details: { bankAccount: "12-34" } });
+    expect(badBank.status).toBe(400);
+
+    const blank = await adminAgent.post("/api/tenant/employees").set("Origin", origin).send({ ...base, details: { nikKtp: "", npwp: "", bankAccount: "" } });
+    expect(blank.status).toBe(201);
+    const good = await adminAgent.put(`/api/tenant/employees/${blank.body.id}`).set("Origin", origin).send({ phone: "+62 812-3456-7890", details: { nikKtp: "3201010101010002", npwp: "01.234.567.8-012.000", bankAccount: "1234567890" } });
+    expect(good.status).toBe(200);
+    const badEdit = await adminAgent.put(`/api/tenant/employees/${blank.body.id}`).set("Origin", origin).send({ details: { nikKtp: "99" } });
+    expect(badEdit.status).toBe(400);
+  });
 });

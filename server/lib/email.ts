@@ -162,3 +162,26 @@ export async function sendEmailChangeConfirmation(to: string, token: string, sub
 export async function sendContactReplyEmail(to: string, subject: string, replyBody: string) {
   await send(to, `Re: ${subject}`, `<p>${replyBody.replace(/\n/g, "<br/>")}</p>`);
 }
+
+/**
+ * Activation / reset link for an employee account. Unlike sendSafe this reports whether the mail was actually handed to a provider,
+ * so the caller can fall back to showing the admin the one-time link when no mailer is configured. The link itself is never logged.
+ */
+export async function sendEmployeeAccountLinkEmail(to: string, token: string, subdomain: string, purpose: "activation" | "reset", tenantId: string): Promise<boolean> {
+  const link = tenantUrl(subdomain, `/activate/${token}`);
+  const subject = purpose === "activation" ? "Aktifkan Akun NusaHR Anda" : "Atur Ulang Password NusaHR";
+  const lead = purpose === "activation" ? "Akun NusaHR Anda sudah dibuat. Klik tautan berikut untuk membuat password dan mengaktifkan akun (berlaku 7 hari, hanya sekali pakai):" : "Klik tautan berikut untuk mengatur ulang password Anda (berlaku 1 jam, hanya sekali pakai):";
+  const mailer = await resolveMailer(tenantId);
+  if (!mailer) return false;
+  try {
+    await send(to, subject, `<p>${lead}</p><p><a href="${link}">${link}</a></p>`, tenantId);
+    return true;
+  } catch (err) {
+    console.error(`[email] failed to send "${subject}" to ${to}`, err);
+    return false;
+  }
+}
+
+export function employeeAccountLink(subdomain: string, token: string): string {
+  return tenantUrl(subdomain, `/activate/${token}`);
+}

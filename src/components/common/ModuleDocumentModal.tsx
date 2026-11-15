@@ -142,7 +142,7 @@ const ModuleDocumentModalContent: React.FC<ModuleDocumentModalProps> = ({
 
   // Document Number & Signatory State
   const [documentNumber, setDocumentNumber] = useState<string>('');
-  const [signeeName, setSigneeName] = useState<string>(activeTemplate?.signeeTitle || 'Aditya Pratama, S.Psi');
+  const [signeeName, setSigneeName] = useState<string>(activeTemplate?.signeeTitle || '');
   const [signeeRole, setSigneeRole] = useState<string>(activeTemplate?.signeeRole || 'VP of Human Capital');
   const [issueDate, setIssueDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
 
@@ -162,7 +162,7 @@ const ModuleDocumentModalContent: React.FC<ModuleDocumentModalProps> = ({
       { docType: activeTemplate.type, companyName: currentTenant?.name }
     );
     setDocumentNumber(autoNumber);
-    setSigneeName(activeTemplate.signeeTitle || 'Aditya Pratama, S.Psi');
+    setSigneeName(activeTemplate.signeeTitle || '');
     setSigneeRole(activeTemplate.signeeRole || 'Pihak Manajemen');
 
     // Populate initial variables

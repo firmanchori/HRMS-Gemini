@@ -134,7 +134,6 @@ import {
   OfficeLocation,
 } from '../types/hrms';
 import {
-  INITIAL_TENANTS,
   INITIAL_USERS,
   INITIAL_EMPLOYEES,
   INITIAL_ATTENDANCE,
@@ -185,11 +184,10 @@ interface HrmsContextType {
   // Tenant & User RBAC
   tenants: Tenant[];
   currentTenant: Tenant;
-  setCurrentTenantId: (id: string) => void;
+  setCurrentSessionTenant: (t: { id: string; name: string; subdomain: string }) => void;
   updateTenant: (id: string, updates: Partial<Tenant>) => void;
   updateTenantBranding: (documentLogoUrl?: string, appFaviconUrl?: string) => void;
   currentUser: UserAccount;
-  setCurrentUserRole: (role: UserRole) => void;
   /** Set once from the real session (login success / the on-mount session check) so `currentUser` reflects who's actually logged in, not a hardcoded placeholder. */
   setCurrentSessionUser: (user: { id: string; name: string; email: string } | null) => void;
   users: UserAccount[];
@@ -774,19 +772,40 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const openFilePreview = (item: UniversalPreviewItem) => setActivePreviewItem(item);
   const closeFilePreview = () => setActivePreviewItem(null);
 
-  // Tenant State
-  const [tenants, setTenants] = useState<Tenant[]>(() => {
-    const saved = localStorage.getItem('nusahr_tenants');
-    return saved ? JSON.parse(saved) : INITIAL_TENANTS;
-  });
-  const [currentTenantId, setCurrentTenantId] = useState<string>(() => {
-    return localStorage.getItem('nusahr_active_tenant') || 'tenant-ntm';
-  });
+  // Tenant identity comes ONLY from the server session (/api/auth/me). The editable company profile (code, NPWP, city, UMR,
+  // work hours, logos) is stored server-side in the tenant's module settings under the key "profile".
+  const [sessionTenant, setSessionTenant] = useState<{ id: string; name: string; subdomain: string } | null>(null);
+  const [tenantProfile, setTenantProfile] = useState<Partial<Tenant>>({});
+  const setCurrentSessionTenant = (t: { id: string; name: string; subdomain: string }) => setSessionTenant(t);
 
-  const updateTenant = (id: string, updates: Partial<Tenant>) => {
-    setTenants((prev) => {
-      const next = prev.map((t) => (t.id === id ? { ...t, ...updates } : t));
-      localStorage.setItem('nusahr_tenants', JSON.stringify(next));
+  const currentTenant = useMemo<Tenant>(() => {
+    const name = sessionTenant?.name ?? '';
+    return {
+      id: sessionTenant?.id ?? '',
+      name,
+      code: tenantProfile.code || (sessionTenant?.subdomain ?? '').replace(/[^a-z0-9]/gi, '').slice(0, 6).toUpperCase(),
+      logoText: tenantProfile.logoText || name,
+      documentLogoUrl: tenantProfile.documentLogoUrl,
+      appFaviconUrl: tenantProfile.appFaviconUrl,
+      npwp: tenantProfile.npwp ?? '',
+      city: tenantProfile.city ?? '',
+      umr: tenantProfile.umr ?? 0,
+      workDaysPerWeek: tenantProfile.workDaysPerWeek ?? 5,
+      standardWorkHours: tenantProfile.standardWorkHours ?? 8,
+      planTier: tenantProfile.planTier ?? 'Starter',
+      address: tenantProfile.address,
+    };
+  }, [sessionTenant, tenantProfile]);
+  const tenants = useMemo<Tenant[]>(() => (sessionTenant ? [currentTenant] : []), [sessionTenant, currentTenant]);
+  const currentTenantId = currentTenant.id;
+
+  const updateTenant = (_id: string, updates: Partial<Tenant>) => {
+    const { id: _ignoredId, name: _ignoredName, ...profileUpdates } = updates;
+    void _ignoredId;
+    void _ignoredName;
+    setTenantProfile((prev) => {
+      const next = { ...prev, ...profileUpdates };
+      tenantApi.updateModuleSettings('profile', next as Record<string, unknown>).catch((err) => console.error('Gagal menyimpan profil perusahaan:', err));
       return next;
     });
   };
@@ -797,10 +816,6 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       ...(appFaviconUrl !== undefined ? { appFaviconUrl } : {}),
     });
   };
-
-  const currentTenant = useMemo(() => {
-    return tenants.find((t) => t.id === currentTenantId) || tenants[0];
-  }, [tenants, currentTenantId]);
 
   // Sync Favicon to HTML head
   useEffect(() => {
@@ -825,7 +840,6 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   ];
 
   // Current User State & Role Switching
-  const [currentUserRole, setCurrentUserRole] = useState<UserRole>('super_admin');
   const [currentSessionUser, setCurrentSessionUser] = useState<{ id: string; name: string; email: string } | null>(null);
   // Real backend data, loaded via loadTenantOrgData() (user, 2026-11-05:
   // "RBAC — role & permission"). Falls back to the system defaults when the
@@ -847,20 +861,12 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // users is now derived from real backend accounts — no mock persistence.
   // roles/rolePermissions are now derived from real backend data (apiRoles / loadTenantOrgData) — no mock persistence.
 
-  const currentUser = useMemo(() => {
-    if (currentSessionUser) {
-      const found = users.find((u) => u.id === currentSessionUser.id);
-      if (found) return found;
-      return { id: currentSessionUser.id, tenantId: currentTenant.id, name: currentSessionUser.name, email: currentSessionUser.email, role: currentUserRole };
-    }
-    return {
-      id: 'current-usr',
-      tenantId: currentTenant.id,
-      name: 'Aditya Pratama (Admin)',
-      email: 'aditya@nusantara.id',
-      role: currentUserRole,
-    };
-  }, [currentTenant.id, currentUserRole, users, currentSessionUser]);
+  // The signed-in identity is exactly the server session's. Every account in this app is a tenant_admin, which this app's role model labels 'super_admin'.
+  const currentUser = useMemo<UserAccount>(() => {
+    if (!currentSessionUser) return { id: '', tenantId: currentTenant.id, name: '', email: '', role: 'super_admin', status: 'Aktif' };
+    const found = users.find((u) => u.id === currentSessionUser.id);
+    return found ?? { id: currentSessionUser.id, tenantId: currentTenant.id, name: currentSessionUser.name, email: currentSessionUser.email, role: 'super_admin', status: 'Aktif' };
+  }, [currentTenant.id, users, currentSessionUser]);
 
   // Active module view
   const [activeModule, setActiveModule] = useState<string>('dashboard');
@@ -1495,6 +1501,7 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setContractReviews(realContractReviews.map(toMockContractReview));
     setModuleSettings((prev) => {
       const merged = { ...prev };
+      if (realModuleSettings.profile) setTenantProfile(realModuleSettings.profile as Partial<Tenant>);
       for (const key of Object.keys(realModuleSettings)) {
         (merged as any)[key] = { ...(merged as any)[key], ...realModuleSettings[key] };
       }
@@ -4849,11 +4856,10 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
       value={{
         tenants,
         currentTenant,
-        setCurrentTenantId,
+        setCurrentSessionTenant,
         updateTenant,
         updateTenantBranding,
         currentUser,
-        setCurrentUserRole,
         setCurrentSessionUser,
         users,
         addUser,

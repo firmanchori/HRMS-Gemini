@@ -257,6 +257,17 @@ export const passwordResetTokens = pgTable("password_reset_tokens", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+/** One-time activation/reset links for employee (ESS/MSS) accounts. Only the SHA-256 of the token is stored; a link works once and expires. Replaces temporary passwords entirely. */
+export const employeeAccountTokens = pgTable("employee_account_tokens", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  employeeAccountId: uuid("employee_account_id").references(() => employeeAccounts.id).notNull(),
+  purpose: text("purpose").notNull(), // activation | reset
+  tokenHash: text("token_hash").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  usedAt: timestamp("used_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 export const emailChangeRequests = pgTable("email_change_requests", {
   id: uuid("id").defaultRandom().primaryKey(),
   userId: uuid("user_id").references(() => users.id).notNull(),

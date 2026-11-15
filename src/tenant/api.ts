@@ -1377,6 +1377,12 @@ export const tenantApi = {
   approvePayrollRun: (periodKey: string) => request<{ ok: true }>(`/api/tenant/payroll-runs/${periodKey}/approve`, { method: "POST" }),
   disbursePayrollRun: (periodKey: string) => request<{ ok: true }>(`/api/tenant/payroll-runs/${periodKey}/disburse`, { method: "POST" }),
 
+  /** No password is ever typed, shown or stored in the clear: the employee gets a one-time activation link (emailed; returned once here only if no mail could be sent). */
+  provisionEmployeeAccount: (data: { employeeId: string; email: string; roleKey?: string }) =>
+    request<{ account: { id: string; employeeId: string; email: string; roleKey: string; isActive: boolean }; delivery: "email" | "manual"; activationLink: string | null }>("/api/tenant/employee-accounts", { method: "POST", body: JSON.stringify(data) }),
+  sendEmployeeResetLink: (accountId: string) =>
+    request<{ delivery: "email" | "manual"; resetLink: string | null }>(`/api/tenant/employee-accounts/${accountId}/send-reset`, { method: "POST" }),
+
   listThrPayments: (year?: number) => request<ThrPayment[]>(`/api/tenant/thr-payments${year ? `?year=${year}` : ""}`),
   /** THR is computed by the server (Permenaker 6/2016 + PPh 21 TER); the client sends only year/occasion/date. */
   generateThrRun: (data: { year: number; occasion: string; paymentDate: string }) => request<ThrPayment[]>("/api/tenant/thr-runs", { method: "POST", body: JSON.stringify(data) }),
