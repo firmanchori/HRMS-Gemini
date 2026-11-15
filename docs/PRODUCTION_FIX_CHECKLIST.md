@@ -111,6 +111,23 @@ Ini data demo. Tempatnya **hanya** di seed server untuk tenant demo `contoh` (`s
 - [ ] UI "Lupa password" di layar login Employee App (endpoint `/api/employee/forgot-password` sudah ada) dan UI admin untuk membuat akun karyawan dari menu Karyawan (saat ini hanya dari onboarding) serta tombol "Kirim ulang tautan".
 - [ ] Validasi server untuk `POST/PUT /candidates` (email/telepon) dan tampilkan error server inline di form karyawan (saat ini error API tidak ditampilkan).
 
+### P1 — Pengaturan identitas aplikasi tenant (permintaan 2026-11-15)
+
+**B21. Pengaturan Nama Aplikasi, Deskripsi, SEO, Favicon, dll. di App-Tenant belum ada**
+Kondisi sekarang (hasil pemeriksaan kode): menu **Branding** (`BrandingManagement.tsx`) hanya mengatur **logo dokumen** dan **URL favicon** per entitas. Tidak ada nama aplikasi, deskripsi, SEO, atau pengaturan tampilan lain. `index.html` memakai satu judul tetap ("NusaHR Enterprise - SaaS HRMS…") dan satu `<meta description>` untuk semua tenant; tidak ada kode yang mengubah `document.title`. Favicon: `HrmsContext` membaca `currentTenant.appFaviconUrl` (profil tenant) sedangkan layar Branding menyimpan ke entitas (`updateEntity`) — dua sumber berbeda. Favicon hanya berupa kolom URL (dengan preset contoh dari domain pihak ketiga/`example.com`), tanpa unggah berkas.
+
+Yang harus dibuat:
+- [ ] **Model data:** simpan pengaturan di server per tenant (kunci module-settings `appearance` atau tabel `tenant_branding`): `appName`, `tagline`, `description`, `seoTitle`, `seoDescription`, `seoKeywords`, `ogImageUrl`, `faviconUrl`, `appleTouchIconUrl`, `loginLogoUrl`, `loginBackgroundUrl`, `primaryColor`, `accentColor`, `supportEmail`, `supportPhone`, `footerText`, `defaultLanguage`, `timezone`, `dateFormat`, `currency`. Validasi zod (panjang judul ≤ 60, deskripsi ≤ 160, URL https, warna hex).
+- [ ] **Satu sumber kebenaran:** pilih tingkat tenant untuk nama/SEO/favicon aplikasi, dan tingkat entitas hanya untuk logo kop dokumen; hapus favicon dari `updateEntity` atau jadikan fallback eksplisit. Perbaiki sinkron favicon di `HrmsContext.tsx` (efek "Sync Favicon to HTML head") agar membaca sumber yang sama.
+- [ ] **Unggah berkas** (logo, favicon, OG image) ke object storage (lihat P2 lampiran) dengan validasi tipe (PNG/ICO/SVG), ukuran (favicon ≤ 100 KB, logo ≤ 1 MB), dan dimensi; hapus preset contoh dari domain pihak ketiga di `BrandingManagement.tsx:246-275`.
+- [ ] **Terapkan ke halaman:** `document.title = appName`, `<meta name="description">`, `og:title/og:description/og:image`, `twitter:*`, `theme-color` di-set saat aplikasi memuat pengaturan tenant (aplikasi admin, Employee App, layar login tenant, halaman aktivasi/reset). Untuk SEO/preview tautan yang dibaca crawler (yang tidak menjalankan JavaScript), render meta di server: rute `GET /` per subdomain menyisipkan tag ke `index.html` (middleware SSR ringan) — periksa dengan "view source".
+- [ ] `robots`: halaman tenant adalah aplikasi privat → `<meta name="robots" content="noindex,nofollow">` + header `X-Robots-Tag` kecuali halaman publik yang memang ingin diindeks (tentukan: layar login tenant tidak diindeks); sediakan `/robots.txt` dan `/manifest.webmanifest` (nama, ikon, warna tema) per tenant.
+- [ ] **Email & dokumen:** nama aplikasi/tenant dan email dukungan dipakai di template email (`server/lib/email.ts`: saat ini "NusaHR" tertanam di subjek/isi) dan footer dokumen.
+- [ ] **UI:** perluas menu Branding menjadi tab "Identitas Aplikasi" (Nama & Deskripsi, SEO & Pratinjau Tautan, Ikon & Favicon, Warna, Kontak & Footer, Bahasa & Format) dengan pratinjau langsung (tab browser, kartu bagikan tautan, layar login), validasi inline per kolom, dan tombol "Kembalikan ke bawaan" dengan modal konfirmasi.
+- [ ] **RBAC & audit:** hanya `tenant_admin` (atau peran dengan izin modul `branding:edit`); setiap perubahan tercatat di audit trail (siapa, nilai lama→baru).
+- [ ] **Test:** integrasi — simpan/ambil pengaturan, validasi menolak judul >60 karakter dan URL `javascript:`, pengaturan tenant A tidak terlihat tenant B; render meta server menyisipkan judul/deskripsi tenant yang benar (tanpa XSS: nilai di-escape).
+- [ ] Bukti: ubah nama aplikasi → judul tab dan layar login berubah tanpa rebuild; `curl -s https://<subdomain>/ | grep -i "<title>\|og:"` menampilkan nilai tenant.
+
 ### P1 — Integrasi antar fungsi/modul
 
 **B7. Approval dibuat oleh server, bukan klien**
