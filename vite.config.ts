@@ -6,6 +6,8 @@ import {defineConfig} from 'vite';
 export default defineConfig(() => {
   return {
     plugins: [react(), tailwindcss()],
+    // Integration tests run against a real (remote) Postgres: several requests per test routinely exceed vitest's 5s default.
+    test: { testTimeout: 30000, hookTimeout: 60000 },
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
