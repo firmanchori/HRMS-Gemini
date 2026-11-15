@@ -112,6 +112,23 @@ export interface ThrSlip {
   netAmount: number;
 }
 
+export interface LeaveBalance { entitlement: number; carried: number; used: number; pending: number; remaining: number; available: number; year: number }
+
+export interface ApprovalItem {
+  id: string;
+  category: string;
+  title: string;
+  requesterId: string;
+  status: string;
+  notes: string | null;
+  amount: number | null;
+  level: number;
+  totalLevels: number;
+  submittedAt: string;
+  deadlineAt: string | null;
+  steps: { level: number; mode: string; label: string; approverEmployeeId: string | null; decision: string | null; decidedByName: string | null; reason: string | null }[];
+}
+
 export interface LeaveRequest {
   id: string;
   employeeId: string;
@@ -150,7 +167,17 @@ export const employeeApi = {
   getLeave: () => request<LeaveRequest[]>('/api/employee/leave'),
   submitLeave: (body: { leaveType: string; startDate: string; endDate: string; totalDays: number; reason?: string; attachmentUrl?: string }) =>
     request<LeaveRequest>('/api/employee/leave', { method: 'POST', body: JSON.stringify(body) }),
-  getApprovalQueue: () => request<LeaveRequest[]>('/api/employee/approvals/leave'),
-  decideLeave: (id: string, decision: 'Disetujui' | 'Ditolak') =>
-    request<LeaveRequest>(`/api/employee/approvals/leave/${id}/decision`, { method: 'POST', body: JSON.stringify({ decision }) }),
+  // ----- Self-service requests (server creates the approval item; the browser never sets a status) -----
+  getLeaveBalance: (year?: number) => request<LeaveBalance>(`/api/employee/requests/leave-balance${year ? `?year=${year}` : ''}`),
+  list: <T = Record<string, unknown>>(resource: 'overtime' | 'corrections' | 'shift-swaps' | 'loans' | 'trips' | 'colleagues' | 'my-documents' | 'team' | 'delegations') =>
+    request<T[]>(`/api/employee/requests/${resource}`),
+  submit: <T = Record<string, unknown>>(resource: 'overtime' | 'corrections' | 'shift-swaps' | 'loans' | 'trips' | 'delegations', body: Record<string, unknown>) =>
+    request<T>(`/api/employee/requests/${resource}`, { method: 'POST', body: JSON.stringify(body) }),
+  removeDelegation: (id: string) => request<{ ok: true }>(`/api/employee/requests/delegations/${id}`, { method: 'DELETE' }),
+  getReimbursements: () => request<Record<string, unknown>[]>('/api/employee/reimbursements'),
+  submitReimbursement: (body: Record<string, unknown>) => request<Record<string, unknown>>('/api/employee/reimbursements', { method: 'POST', body: JSON.stringify(body) }),
+  // ----- Approvals: every category goes through the Approval Engine -----
+  getApprovalItems: () => request<ApprovalItem[]>('/api/employee/approval-items'),
+  decideApproval: (id: string, decision: 'Disetujui' | 'Ditolak' | 'Diketahui', reason?: string) =>
+    request<ApprovalItem>(`/api/employee/approval-items/${id}/decision`, { method: 'POST', body: JSON.stringify({ decision, reason }) }),
 };

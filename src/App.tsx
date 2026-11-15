@@ -23,8 +23,6 @@ import { BusinessTripManagement } from './components/modules/BusinessTripManagem
 import { ApprovalCenter } from './components/modules/ApprovalCenter';
 import { RbacManagement } from './components/modules/RbacManagement';
 import { BrandingManagement } from './components/modules/BrandingManagement';
-import { EssPortal } from './components/modules/EssPortal';
-import { MssPortal } from './components/modules/MssPortal';
 import { AuditTrailManagement } from './components/modules/AuditTrailManagement';
 import { ReportsManagement } from './components/modules/ReportsManagement';
 import { UniversalFilePreviewModal } from './components/common/UniversalFilePreviewModal';
@@ -176,10 +174,6 @@ const MainLayout: React.FC<{ onSwitchToEmployeeLogin: () => void }> = ({ onSwitc
         return <ProcurementManagement />;
       case 'documents':
         return <DocumentManagement />;
-      case 'ess':
-        return <EssPortal />;
-      case 'mss':
-        return <MssPortal />;
       case 'rbac':
         return <RbacManagement />;
       case 'audit':

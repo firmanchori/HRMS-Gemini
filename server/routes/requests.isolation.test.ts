@@ -10,7 +10,7 @@ import { withCsrf } from "../lib/testCsrf.ts";
 import { db, pool } from "../db/client.ts";
 import { ensureDefaultEmployeeRbac } from "../lib/permissions.ts";
 import { lateMinutes, overtimeHours, DEFAULT_SHIFT, type ShiftRule } from "../lib/attendanceFacts.ts";
-import { tenants, tenantSubscriptions, users, subscriptionPlans, companyEntities, entityClosure, employees, employeeAccounts, sessions, auditLogEntries, approvalItems, leaveRequests, leaveBalances, leaveLedger, overtimeRequests, employeeLoans, attendanceCorrectionRequests, attendanceRecords, shiftSwapRequests, employeeSchedules, workShifts, businessTrips, companyCalendarEvents, rolePermissionEntries, roleDefinitions } from "../db/schema.ts";
+import { tenants, tenantSubscriptions, users, subscriptionPlans, companyEntities, entityClosure, employees, employeeAccounts, sessions, auditLogEntries, approvalItems, leaveRequests, leaveBalances, leaveLedger, overtimeRequests, employeeLoans, attendanceCorrectionRequests, attendanceRecords, shiftSwapRequests, employeeSchedules, workShifts, businessTrips, companyCalendarEvents, officialDocuments, approvalDelegations, rolePermissionEntries, roleDefinitions } from "../db/schema.ts";
 
 /**
  * B7/B8/B9: every request is born pending WITH its server-created approval item (approver = the real manager), outcomes are applied
@@ -83,6 +83,8 @@ afterAll(async () => {
   await db.delete(leaveRequests).where(eq(leaveRequests.tenantId, tenantId));
   await db.delete(companyCalendarEvents).where(eq(companyCalendarEvents.tenantId, tenantId));
   await db.delete(approvalItems).where(eq(approvalItems.tenantId, tenantId));
+  await db.delete(approvalDelegations).where(eq(approvalDelegations.tenantId, tenantId));
+  await db.delete(officialDocuments).where(eq(officialDocuments.tenantId, tenantId));
   await db.delete(employeeAccounts).where(eq(employeeAccounts.tenantId, tenantId));
   await db.delete(rolePermissionEntries).where(eq(rolePermissionEntries.tenantId, tenantId));
   await db.delete(roleDefinitions).where(eq(roleDefinitions.tenantId, tenantId));
@@ -264,5 +266,39 @@ describe("B9: lateness and overtime are derived on the server", () => {
     expect(lateMinutes(night, "21:20")).toBe(20);
     expect(overtimeHours(night, "07:30", "21:00")).toBe(1);
     expect(overtimeHours(night, "05:00", "21:00")).toBe(0);
+  });
+});
+
+describe("B10: the employee portal covers what the retired ESS/MSS screens did", () => {
+  it("my-documents shows only my issued documents; colleagues are my manager's other reports", async () => {
+    const base = { tenantId, type: "SK", issueDate: "2026-11-01", signeeName: "Direktur", signeeRole: "Direktur", contentPreview: "isi" };
+    await db.insert(officialDocuments).values([
+      { ...base, documentNumber: "DOC-1", title: "Surat Saya", targetEmployeeId: staffId, status: "Resmi Diterbitkan" },
+      { ...base, documentNumber: "DOC-2", title: "Draf Saya", targetEmployeeId: staffId, status: "Menunggu Tanda Tangan" },
+      { ...base, documentNumber: "DOC-3", title: "Surat Orang Lain", targetEmployeeId: otherId, status: "Resmi Diterbitkan" },
+    ]);
+    const docs = (await staff.get("/api/employee/requests/my-documents").set("Origin", origin)).body as { title: string }[];
+    expect(docs.map((d) => d.title)).toEqual(["Surat Saya"]);
+    // 'other' has no manager, so has no peers; staff's only peer would be someone else under the same manager (none here).
+    expect((await other.get("/api/employee/requests/colleagues").set("Origin", origin)).body).toEqual([]);
+  });
+
+  it("a manager sees their team's attendance and upcoming approved leave; a non-manager sees nothing", async () => {
+    const team = (await mgr.get("/api/employee/requests/team").set("Origin", origin)).body as { id: string; today: unknown; upcomingLeave: unknown[] }[];
+    expect(team.map((t) => t.id)).toEqual([staffId]);
+    expect(Array.isArray(team[0].upcomingLeave)).toBe(true);
+    expect((await staff.get("/api/employee/requests/team").set("Origin", origin)).body).toEqual([]);
+  });
+
+  it("an approver delegates to a substitute for a period; only their own delegations are visible/removable", async () => {
+    const bad = await mgr.post("/api/employee/requests/delegations").set("Origin", origin).send({ substituteId: mgrId, startDate: "2026-12-01", endDate: "2026-12-05" });
+    expect(bad.status).toBe(400);
+    const ok = await mgr.post("/api/employee/requests/delegations").set("Origin", origin).send({ substituteId: otherId, startDate: "2026-12-01", endDate: "2026-12-05", reason: "Cuti" });
+    expect(ok.status).toBe(201);
+    expect(ok.body.principalId).toBe(mgrId);
+    expect(((await mgr.get("/api/employee/requests/delegations").set("Origin", origin)).body as unknown[]).length).toBe(1);
+    expect(((await staff.get("/api/employee/requests/delegations").set("Origin", origin)).body as unknown[]).length).toBe(0);
+    expect((await staff.delete(`/api/employee/requests/delegations/${ok.body.id}`).set("Origin", origin)).status).toBe(404);
+    expect((await mgr.delete(`/api/employee/requests/delegations/${ok.body.id}`).set("Origin", origin)).status).toBe(200);
   });
 });

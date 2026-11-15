@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { readAttachment } from '../shared/attachment';
-import { Lock, Mail, Eye, EyeOff, AlertCircle, ArrowRight, LogOut, User, Clock, CalendarDays, CheckSquare, ArrowLeft, KeyRound, Wallet } from 'lucide-react';
-import { employeeApi, EmployeeApiError, type EmployeeProfile, type AttendanceRecord, type LeaveRequest, type Payslip, type ThrSlip } from './api';
+import { Lock, Mail, Eye, EyeOff, AlertCircle, ArrowRight, LogOut, User, Clock, CalendarDays, CheckSquare, ArrowLeft, KeyRound, Wallet, FileText, FolderOpen } from 'lucide-react';
+import { employeeApi, EmployeeApiError, type EmployeeProfile, type AttendanceRecord, type LeaveRequest, type LeaveBalance, type Payslip, type ThrSlip } from './api';
+import { RequestsTab, DocsTab, TeamApprovalTab } from './PortalTabs';
 import { ValidatedInput } from '../components/common/ValidatedInput';
 import { ValidatedDateInput } from '../components/common/ValidatedDateInput';
 
@@ -192,18 +193,19 @@ const EmployeeLoginScreen: React.FC<{ onLoginSuccess: (profile: EmployeeProfile)
   );
 };
 
-type Tab = 'profil' | 'presensi' | 'cuti' | 'slip' | 'approval';
+type Tab = 'profil' | 'presensi' | 'cuti' | 'pengajuan' | 'slip' | 'dokumen' | 'approval';
 
 const EmployeeDashboard: React.FC<{ profile: EmployeeProfile; onLogout: () => void }> = ({ profile, onLogout }) => {
-  const canApprove = profile.permissions.attendance.approve;
   const [tab, setTab] = useState<Tab>('profil');
 
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: 'profil', label: 'Profil', icon: <User className="w-4 h-4" /> },
     { id: 'presensi', label: 'Presensi', icon: <Clock className="w-4 h-4" /> },
     { id: 'cuti', label: 'Cuti', icon: <CalendarDays className="w-4 h-4" /> },
+    { id: 'pengajuan', label: 'Pengajuan', icon: <FileText className="w-4 h-4" /> },
     { id: 'slip', label: 'Slip Gaji', icon: <Wallet className="w-4 h-4" /> },
-    ...(canApprove ? [{ id: 'approval' as Tab, label: 'Approval Tim', icon: <CheckSquare className="w-4 h-4" /> }] : []),
+    { id: 'dokumen', label: 'Dokumen', icon: <FolderOpen className="w-4 h-4" /> },
+    { id: 'approval', label: 'Tim & Approval', icon: <CheckSquare className="w-4 h-4" /> },
   ];
 
   return (
@@ -239,8 +241,10 @@ const EmployeeDashboard: React.FC<{ profile: EmployeeProfile; onLogout: () => vo
         {tab === 'profil' && <ProfilTab profile={profile} />}
         {tab === 'presensi' && <PresensiTab canCreate={profile.permissions.attendance.create} />}
         {tab === 'cuti' && <CutiTab canCreate={profile.permissions.attendance.create} />}
+        {tab === 'pengajuan' && <RequestsTab canCreateAttendance={profile.permissions.attendance.create} />}
         {tab === 'slip' && <SlipTab />}
-        {tab === 'approval' && canApprove && <ApprovalTab />}
+        {tab === 'dokumen' && <DocsTab />}
+        {tab === 'approval' && <TeamApprovalTab />}
       </main>
     </div>
   );
@@ -503,11 +507,15 @@ const CutiTab: React.FC<{ canCreate: boolean }> = ({ canCreate }) => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [form, setForm] = useState({ leaveType: LEAVE_TYPES[0], startDate: '', endDate: '', reason: '' });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [balance, setBalance] = useState<LeaveBalance | null>(null);
   const [attachment, setAttachment] = useState<{ name: string; dataUrl: string } | null>(null);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const needsDoctorNote = form.leaveType === 'Sakit dengan Surat Dokter';
 
-  const load = () => employeeApi.getLeave().then(setRequests).catch(() => {}).finally(() => setIsLoading(false));
+  const load = () => {
+    employeeApi.getLeaveBalance().then(setBalance).catch(() => {});
+    return employeeApi.getLeave().then(setRequests).catch(() => {}).finally(() => setIsLoading(false));
+  };
   useEffect(() => { load(); }, []);
 
   const [submitAttempted, setSubmitAttempted] = useState(false);
@@ -542,6 +550,13 @@ const CutiTab: React.FC<{ canCreate: boolean }> = ({ canCreate }) => {
       {canCreate && (
         <form onSubmit={handleSubmit} noValidate className="bg-white border border-slate-200 rounded-xl p-5 space-y-3">
           <h2 className="font-bold text-sm text-slate-800">Ajukan Cuti</h2>
+          {balance && (
+            <div className="grid grid-cols-3 gap-2 text-center text-[11px]">
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-2"><div className="text-slate-500">Jatah {balance.year}</div><div className="font-bold text-slate-800">{balance.entitlement + balance.carried} hari</div></div>
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-2"><div className="text-slate-500">Terpakai</div><div className="font-bold text-slate-800">{balance.used} hari</div></div>
+              <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-2"><div className="text-emerald-700">Tersedia</div><div className="font-bold text-emerald-800">{balance.available} hari</div></div>
+            </div>
+          )}
           {errorMessage && <div className="text-[11px] text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-2 py-1.5">{errorMessage}</div>}
           <select value={form.leaveType} onChange={(e) => setForm({ ...form, leaveType: e.target.value })} className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs">
             {LEAVE_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
@@ -661,44 +676,3 @@ const SlipTab: React.FC = () => {
   );
 };
 
-const ApprovalTab: React.FC = () => {
-  const [queue, setQueue] = useState<LeaveRequest[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [busyId, setBusyId] = useState<string | null>(null);
-
-  const load = () => employeeApi.getApprovalQueue().then(setQueue).catch(() => {}).finally(() => setIsLoading(false));
-  useEffect(() => { load(); }, []);
-
-  async function decide(id: string, decision: 'Disetujui' | 'Ditolak') {
-    setBusyId(id);
-    try {
-      await employeeApi.decideLeave(id, decision);
-      load();
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  return (
-    <div className="bg-white border border-slate-200 rounded-xl p-5">
-      <h2 className="font-bold text-sm text-slate-800 mb-3">Pengajuan Cuti Tim — Menunggu Persetujuan</h2>
-      {isLoading ? <div className="text-xs text-slate-400">Memuat...</div> : queue.length === 0 ? <div className="text-xs text-slate-400">Tidak ada pengajuan menunggu.</div> : (
-        <div className="space-y-2">
-          {queue.map((r) => (
-            <div key={r.id} className="flex items-center justify-between text-xs border border-slate-200 rounded-lg p-2.5">
-              <div>
-                <div className="font-semibold">{r.leaveType}</div>
-                <div className="text-slate-500">{r.startDate} s/d {r.endDate} ({r.totalDays} hari){r.reason ? ` — ${r.reason}` : ''}</div>
-                {r.attachmentUrl && <a href={r.attachmentUrl} target="_blank" rel="noreferrer" className="text-indigo-600 underline text-[11px]">Lihat surat dokter</a>}
-              </div>
-              <div className="flex gap-1.5 shrink-0">
-                <button onClick={() => decide(r.id, 'Disetujui')} disabled={busyId === r.id} className="px-2.5 py-1 bg-emerald-600 text-white rounded text-[11px] font-semibold disabled:opacity-50">Setujui</button>
-                <button onClick={() => decide(r.id, 'Ditolak')} disabled={busyId === r.id} className="px-2.5 py-1 bg-rose-600 text-white rounded text-[11px] font-semibold disabled:opacity-50">Tolak</button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-};

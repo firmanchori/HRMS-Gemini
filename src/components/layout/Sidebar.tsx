@@ -51,13 +51,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const navigationGroups = [
     {
-      title: 'PORTAL MANDIRI (SELF-SERVICE)',
-      items: [
-        { id: 'ess', label: 'ESS (Employee Self-Service)', icon: UserCheck },
-        { id: 'mss', label: 'MSS (Manager Self-Service)', icon: ShieldCheck },
-      ],
-    },
-    {
       title: 'OPERASIONAL & PERSONALIA',
       items: [
         { id: 'dashboard', label: 'Ringkasan Dashboard', icon: LayoutDashboard },

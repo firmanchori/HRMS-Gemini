@@ -589,31 +589,6 @@ export const Header: React.FC<HeaderProps> = ({
                     <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-indigo-600 shrink-0" />
                   </button>
 
-                  {/* Option B: Portal Mandiri ESS / MSS */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsProfileDropdownOpen(false);
-                      setActiveModule(
-                        currentUser.role === 'manager' || currentUser.role === 'super_admin' ? 'mss' : 'ess'
-                      );
-                    }}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-slate-50 transition-colors text-slate-700 hover:text-emerald-700 group text-left"
-                  >
-                    <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
-                      <UserCheck className="w-4 h-4" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="font-semibold text-slate-800 group-hover:text-emerald-700">
-                        {currentUser.role === 'manager' || currentUser.role === 'super_admin'
-                          ? 'Portal MSS (Manager)'
-                          : 'Portal ESS (Karyawan)'}
-                      </div>
-                      <div className="text-[11px] text-slate-400 truncate">Pengajuan cuti, presensi & slip gaji</div>
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-emerald-700 shrink-0" />
-                  </button>
-
                   {/* Option C: Log Aktivitas & Audit Trail */}
                   <button
                     type="button"

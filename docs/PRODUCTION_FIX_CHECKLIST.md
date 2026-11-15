@@ -128,6 +128,15 @@ Yang harus dibuat:
 - [ ] **Test:** integrasi — simpan/ambil pengaturan, validasi menolak judul >60 karakter dan URL `javascript:`, pengaturan tenant A tidak terlihat tenant B; render meta server menyisipkan judul/deskripsi tenant yang benar (tanpa XSS: nilai di-escape).
 - [ ] Bukti: ubah nama aplikasi → judul tab dan layar login berubah tanpa rebuild; `curl -s https://<subdomain>/ | grep -i "<title>\|og:"` menampilkan nilai tenant.
 
+### Temuan tambahan B7–B10
+- [x] **Penghapusan pinjaman diam-diam:** penyelesaian offboarding di klien menandai semua pinjaman aktif "Lunas" (sisa 0) — dihapus. Server kini menolak finance clearance bila masih ada pinjaman aktif; pelunasan manual lewat `POST /loans/:id/settle` (catatan wajib, audit).
+- [x] PR yang ditolak di Approval Center tidak bisa lagi dilanjutkan ke PO (sebelumnya lolos karena hanya cek "menunggu"); PUT pengadaan jalur karyawan kini memakai gerbang & pembuatan aset yang sama; PR selalu lahir "Pengajuan PR" dengan item approval dari server.
+- [ ] Parameter pinjaman per skema (aturan "existingLoanRule", bunga, biaya admin) di `LoanManagement` masih hanya divalidasi klien; server baru menegakkan plafon cicilan % gaji, tenor maks, dan satu pinjaman aktif (module-settings `loan`). Pindahkan skema ke server dan tegakkan semuanya (B15).
+- [ ] Nomor PR (`PR-YYYY-NNN`) masih dibuat klien (`HrmsContext.addProcurementOrder`); nomor SPPD kini dari server — samakan penomoran PR/PO di B11.
+- [ ] Pengaturan presensi `lateGracePeriodMins`, `latePenaltyPerHour`, jendela clock-in/out: satukan dengan toleransi shift (satu sumber).
+- [ ] Settlement SPPD (biaya aktual) belum tersimpan (B15); status "Disetujui Atasan" kini tak dipakai (satu keputusan engine → "Disetujui Finance"; atur 2 tahap lewat workflow config kategori Perjalanan Dinas).
+- [ ] Verifikasi manual di browser untuk semua layar Employee App baru (Pengajuan, Dokumen, Tim & Approval) dan layar admin yang berubah (Presensi, Pinjaman, SPPD, Procurement, Dashboard).
+
 ### Temuan tambahan B6 (belum dikerjakan)
 - [ ] Master data GA masih tertanam di UI: daftar ruangan ("Ruang Meeting VIP - Lantai 18" dst.) dan armada ("Toyota Avanza Veloz (B 5678 NTM)", plat diambil dari teks nama kendaraan, "Pak Supriadi") di GaAssetManagement.tsx → tabel master ruangan & kendaraan (kapasitas, lokasi, plat, jadwal servis, masa pajak) dengan CRUD; booking merujuk ke master (FK) bukan teks.
 - [ ] GaAssetManagement.tsx: nama "Bambang Sudiro" tertanam di dokumen pemeliharaan (signeeName), fallback peminjam, form tiket location 'Lantai 18 - Wing Barat'.
@@ -138,26 +147,26 @@ Yang harus dibuat:
 ### P1 — Integrasi antar fungsi/modul
 
 **B7. Approval dibuat oleh server, bukan klien**
-- [ ] Saat ini klien memanggil `createApprovalItem` untuk Cuti (`HrmsContext.tsx:~1824`), Lembur, Reimbursement, Pinjaman, Perbaikan Presensi, Tukar Shift, Perjalanan Dinas, Procurement PR.
-- [ ] Untuk tiap kategori: pembuatan entitas di server (`POST /leave-requests`, dst.) langsung membuat `approvalItem` via `buildApprovalSteps` (seperti `submitPersonaliaAction`) dan mendaftarkan `finalizeHooks[kategori]` yang menerapkan hasil (potong saldo cuti, aktifkan pinjaman, dll.). Hapus `runApprovalSideEffects` kategori terkait di `HrmsContext.tsx:~3336-3395`.
-- [ ] Hapus endpoint `POST /approval-items` untuk kategori yang sudah ditangani server (hanya admin override).
-- [ ] Test per kategori: tidak bisa pre-approve; approver = atasan nyata; hook menerapkan efek tepat sekali.
+- [x] Saat ini klien memanggil `createApprovalItem` untuk Cuti (`HrmsContext.tsx:~1824`), Lembur, Reimbursement, Pinjaman, Perbaikan Presensi, Tukar Shift, Perjalanan Dinas, Procurement PR. _(selesai 2026-11-15: server/lib/requests.ts + approvalFlows.ts; Cuti, Lembur, Pinjaman, Perbaikan Presensi, Tukar Shift, Perjalanan Dinas, Procurement PR dibuat server bersama permintaannya (approver = atasan nyata); Personalia & Reimbursement sudah sebelumnya)_
+- [x] Untuk tiap kategori: pembuatan entitas di server (`POST /leave-requests`, dst.) langsung membuat `approvalItem` via `buildApprovalSteps` (seperti `submitPersonaliaAction`) dan mendaftarkan `finalizeHooks[kategori]` yang menerapkan hasil (potong saldo cuti, aktifkan pinjaman, dll.). Hapus `runApprovalSideEffects` kategori terkait di `HrmsContext.tsx:~3336-3395`. _(selesai: finalizeHooks + approvalPrechecks (saldo cuti, roster tukar shift diperiksa SEBELUM keputusan dicatat); efek diterapkan sekali. Helper klien createApprovalItem/persistApprovalItem* dihapus; runApprovalSideEffects tinggal memuat ulang data. Catatan: surat "Hak Cuti" yang dibuat klien tiap cuti disetujui dihapus (dokumen dibuat lewat aksi eksplisit))_
+- [x] Hapus endpoint `POST /approval-items` untuk kategori yang sudah ditangani server (hanya admin override). _(selesai: POST /approval-items menolak kategori server-managed (400); PUT tak bisa mengubah status item kategori itu; tabel permintaan tak punya rute edit status lagi — PUT/POST lama leave/overtime/loans/corrections/swaps/trips dihapus)_
+- [x] Test per kategori: tidak bisa pre-approve; approver = atasan nyata; hook menerapkan efek tepat sekali. _(selesai: requests.isolation.test.ts, 17 test)_
 
 **B8. Saldo cuti server-side**
-- [ ] Tabel `leave_balances(employeeId, year, entitlement, used, carried)` + `leave_ledger` (mutasi: grant, deduct, adjust, expire).
-- [ ] `HrmsContext.tsx:~1876` (`remainingLeaveDays - totalDays` di klien) dan nilai tertanam 12 (`HrmsContext.tsx:2300, 2794, 3054, 4173`): hapus; pemotongan terjadi di `finalizeHooks['Cuti']`.
-- [ ] Cuti bersama: potong ke ledger saat kalender ditetapkan (bukan dihitung ulang tiap render — temuan audit §4).
-- [ ] Test: approve cuti 2 hari mengurangi saldo 2; reject tidak; saldo tidak bisa negatif; approve dua kali tidak memotong dua kali.
+- [x] Tabel `leave_balances(employeeId, year, entitlement, used, carried)` + `leave_ledger` (mutasi: grant, deduct, adjust, expire). _(selesai: leave_balances + leave_ledger (deduct/restore/grant, idempotent per sumber); entitlement dari module-settings "leave".annualEntitlementDays, default 12 (UU 13/2003); saldo tersedia = sisa − cuti tertunda sehingga dua pengajuan tak bisa melewati saldo)_
+- [x] `HrmsContext.tsx:~1876` (`remainingLeaveDays - totalDays` di klien) dan nilai tertanam 12 (`HrmsContext.tsx:2300, 2794, 3054, 4173`): hapus; pemotongan terjadi di `finalizeHooks['Cuti']`. _(selesai: pemotongan hanya di finalizeHooks['Cuti']; tampilan sisa cuti karyawan ditimpa dari ledger. Catatan: angka 12 yang masih tertulis di payload pembuatan karyawan (details.remainingLeaveDays) kini tidak dipakai — hapus saat normalisasi B12; belum ada pro-rata karyawan baru, carry-over, dan kedaluwarsa)_
+- [x] Cuti bersama: potong ke ledger saat kalender ditetapkan (bukan dihitung ulang tiap render — temuan audit §4). _(selesai: applyCollectiveLeave saat event Cuti Bersama (deductsLeaveBucket) dibuat; idempotent per event)_
+- [x] Test: approve cuti 2 hari mengurangi saldo 2; reject tidak; saldo tidak bisa negatif; approve dua kali tidak memotong dua kali. _(selesai)_
 
 **B9. Presensi: waktu & status dari server**
-- [ ] `HrmsContext.tsx` `clockIn/clockOut` (jam 08:30 tertanam `8*60+30`, lembur setelah 17:30 `17*60+30`): hapus; server memakai jam server + jadwal shift karyawan (`server/lib/attendanceClock.ts` sudah ada — jadikan satu-satunya sumber).
-- [ ] Klien hanya mengirim koordinat/foto; tolak `clockIn` dari body.
-- [ ] Test: mengirim `clockIn:"08:00"` di body diabaikan; terlambat dihitung dari shift.
+- [x] `HrmsContext.tsx` `clockIn/clockOut` (jam 08:30 tertanam `8*60+30`, lembur setelah 17:30 `17*60+30`): hapus; server memakai jam server + jadwal shift karyawan (`server/lib/attendanceClock.ts` sudah ada — jadikan satu-satunya sumber). _(selesai: fungsi klien dihapus (termasuk kartu "simulasi presensi" Dashboard yang memakai employees[0]); server memakai jam Asia/Jakarta (sebelumnya jam lokal server), shift terjadwal → shift SH-NOR tenant → DEFAULT_SHIFT 08:00–17:00 (satu tempat), toleransi dari shift. **Bug ditemukan:** clock-in server sebelumnya tidak pernah menghitung keterlambatan (status selalu "Hadir", lateMinutes 0) sehingga potongan keterlambatan payroll selalu nol untuk presensi nyata)_
+- [x] Klien hanya mengirim koordinat/foto; tolak `clockIn` dari body. _(selesai: rute presensi admin menolak lateMinutes/overtimeHours dari body dan menurunkannya dari shift; format jam HH:MM divalidasi. Pengaturan lateGracePeriodMins di modul Presensi belum dipakai server (toleransi per shift) — samakan di B12)_
+- [x] Test: mengirim `clockIn:"08:00"` di body diabaikan; terlambat dihitung dari shift. _(selesai, termasuk shift malam lintas tengah malam)_
 
 **B10. Satu portal karyawan**
-- [ ] Bandingkan fitur `EssPortal.tsx` (1.646 baris) dengan `employee/EmployeeApp.tsx` (yang sudah ada: profil, presensi, cuti, MFA, antrean approval atasan) dan pindahkan yang belum ada (periksa: reimbursement, slip gaji, pinjaman, lembur, tukar shift, dokumen) ke Employee App dengan API `/api/employee/*`.
-- [ ] Hapus rute `case 'ess'` (`App.tsx:179-180`) dan `EssPortal.tsx`; evaluasi `MssPortal.tsx` (dipakai `App.tsx` dan `EmployeeApp.tsx`) → hanya satu antrean persetujuan atasan.
-- [ ] Bukti: tidak ada import `EssPortal`; fitur ESS di Employee App lolos test RBAC.
+- [x] Bandingkan fitur `EssPortal.tsx` (1.646 baris) dengan `employee/EmployeeApp.tsx` (yang sudah ada: profil, presensi, cuti, MFA, antrean approval atasan) dan pindahkan yang belum ada (periksa: reimbursement, slip gaji, pinjaman, lembur, tukar shift, dokumen) ke Employee App dengan API `/api/employee/*`. _(selesai: Employee App kini punya Pengajuan (lembur, koreksi presensi, tukar shift, pinjaman, SPPD, reimbursement), Slip Gaji+THR, Dokumen Saya, Cuti dengan saldo, Tim & Approval (antrean semua kategori lewat engine, alasan tolak wajib, monitoring tim, delegasi))_
+- [x] Hapus rute `case 'ess'` (`App.tsx:179-180`) dan `EssPortal.tsx`; evaluasi `MssPortal.tsx` (dipakai `App.tsx` dan `EmployeeApp.tsx`) → hanya satu antrean persetujuan atasan. _(selesai: EssPortal.tsx dan MssPortal.tsx dihapus beserta menu sidebar & tautan Header; satu antrean persetujuan atasan = Tim & Approval)_
+- [x] Bukti: tidak ada import `EssPortal`; fitur ESS di Employee App lolos test RBAC. _(selesai; fitur baru diuji di requests.isolation.test.ts. UI Employee App belum diuji di browser)_
 
 **B11. Penomoran & nomor acak**
 - [ ] `OrganizationManagement.tsx:603` (`SK-DIR/RESTRUCT/…random`), `RecruitmentManagement.tsx:1582, 4263, 1706, 4943` (nomor tiket/ID acak): ganti dengan penomoran server berurutan per tenant per tahun (pola `nextLetterNumber` di `server/lib/personalia.ts`), unik via indeks DB.
