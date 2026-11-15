@@ -650,6 +650,8 @@ function mapApiOfficeLocationToMock(apiLoc: ApiOfficeLocation, entityNameById: M
     latitude: apiLoc.latitude ?? 0,
     longitude: apiLoc.longitude ?? 0,
     radiusMeters: apiLoc.radiusMeters,
+    shapeType: apiLoc.shapeType ?? 'circle',
+    polygonPoints: apiLoc.shapeType === 'polygon' ? apiLoc.polygonPoints ?? undefined : undefined,
     isActive: apiLoc.isActive,
     notes: apiLoc.notes ?? undefined,
   };
@@ -1356,6 +1358,8 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         latitude: loc.latitude ?? null,
         longitude: loc.longitude ?? null,
         radiusMeters: loc.radiusMeters,
+        shapeType: loc.shapeType ?? 'circle',
+        polygonPoints: loc.shapeType === 'polygon' ? loc.polygonPoints ?? null : null,
         notes: loc.notes ?? null,
       })
       .then((created) => setApiOfficeLocations((prev) => [...prev, created]))
@@ -1374,6 +1378,8 @@ export const HrmsProvider: React.FC<{ children: React.ReactNode }> = ({ children
         latitude: updates.latitude,
         longitude: updates.longitude,
         radiusMeters: updates.radiusMeters,
+        shapeType: updates.shapeType,
+        polygonPoints: updates.shapeType === undefined ? undefined : updates.shapeType === 'polygon' ? updates.polygonPoints ?? null : null,
         isActive: updates.isActive,
         notes: updates.notes,
       })

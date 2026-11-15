@@ -1220,7 +1220,7 @@ const officeLocationSchema = z.object({
   longitude: z.number().min(-180).max(180).optional(),
   radiusMeters: z.number().int().min(10).max(5000).optional(),
   shapeType: z.enum(["circle", "polygon"]).optional(),
-  polygonPoints: z.array(z.object({ lat: z.number().min(-90).max(90), lng: z.number().min(-180).max(180) })).min(3).max(50).optional(),
+  polygonPoints: z.array(z.object({ lat: z.number().min(-90).max(90), lng: z.number().min(-180).max(180) })).min(3).max(50).optional().nullable(),
   notes: z.string().trim().max(1000).optional(),
 });
 
@@ -1230,7 +1230,9 @@ tenantRouter.post("/office-locations", validateBody(officeLocationSchema), async
     const visibleEntityIds = await resolveVisibleEntityIds(req, tenantId);
     if (!visibleEntityIds.includes(req.body.entityId)) return res.status(403).json({ error: "Entitas di luar ruang lingkup Anda" });
   }
-  const [created] = await db.insert(officeLocations).values({ ...req.body, tenantId }).returning();
+  const shape = req.body.shapeType ?? "circle";
+  if (shape === "polygon" && !(req.body.polygonPoints && req.body.polygonPoints.length >= 3)) return res.status(400).json({ error: "Area polygon minimal butuh 3 titik." });
+  const [created] = await db.insert(officeLocations).values({ ...req.body, shapeType: shape, polygonPoints: shape === "polygon" ? req.body.polygonPoints : null, tenantId }).returning();
   await logAudit({ actorUserId: req.session!.userId, tenantId, action: "office_location.create", details: { officeLocationId: created.id } });
   res.status(201).json(created);
 });
@@ -1252,9 +1254,13 @@ tenantRouter.put("/office-locations/:id", validateParams(uuidParam("id")), valid
   const visibleEntityIds = await resolveVisibleEntityIds(req, tenantId);
   if (existing.entityId && !visibleEntityIds.includes(existing.entityId)) return res.status(404).json({ error: "Lokasi kantor tidak ditemukan" });
   if (req.body.entityId && !visibleEntityIds.includes(req.body.entityId)) return res.status(403).json({ error: "Entitas di luar ruang lingkup Anda" });
+  // The stored shape always matches its data: polygon needs >=3 points, circle clears any old polygon.
+  const finalShape = req.body.shapeType ?? existing.shapeType;
+  const finalPoints = req.body.polygonPoints === undefined ? existing.polygonPoints : req.body.polygonPoints;
+  if (finalShape === "polygon" && !(finalPoints && finalPoints.length >= 3)) return res.status(400).json({ error: "Area polygon minimal butuh 3 titik." });
   const [updated] = await db
     .update(officeLocations)
-    .set(req.body)
+    .set({ ...req.body, shapeType: finalShape, polygonPoints: finalShape === "polygon" ? finalPoints : null })
     .where(eq(officeLocations.id, req.params.id))
     .returning();
   if (!updated) return res.status(404).json({ error: "Lokasi kantor tidak ditemukan" });

@@ -169,6 +169,9 @@ export interface OfficeLocation {
   latitude: number | null;
   longitude: number | null;
   radiusMeters: number;
+  /** "circle" = radiusMeters around lat/lng; "polygon" = polygonPoints (lat/lng/radius are then only the centroid reference). */
+  shapeType: "circle" | "polygon";
+  polygonPoints: { lat: number; lng: number }[] | null;
   isActive: boolean;
   notes: string | null;
 }
@@ -1144,7 +1147,7 @@ export const tenantApi = {
   deleteGrade: (id: string) => request<{ ok: true }>(`/api/tenant/grades/${id}`, { method: "DELETE" }),
 
   // Office locations — plain CRUD.
-  createOfficeLocation: (data: Omit<OfficeLocation, "id" | "tenantId" | "isActive">) =>
+  createOfficeLocation: (data: Omit<OfficeLocation, "id" | "tenantId" | "isActive" | "shapeType" | "polygonPoints"> & { shapeType?: "circle" | "polygon"; polygonPoints?: { lat: number; lng: number }[] | null })  =>
     request<OfficeLocation>("/api/tenant/office-locations", { method: "POST", body: JSON.stringify(data) }),
   listOfficeLocations: () => request<OfficeLocation[]>("/api/tenant/office-locations"),
   updateOfficeLocation: (id: string, data: Partial<OfficeLocation>) =>

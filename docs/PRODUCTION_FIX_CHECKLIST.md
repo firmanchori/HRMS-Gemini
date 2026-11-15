@@ -36,14 +36,14 @@ Ini data demo. Tempatnya **hanya** di seed server untuk tenant demo `contoh` (`s
 ### P0 — Keuangan, identitas, keamanan
 
 **B1. Payroll dihitung di server, bukan browser**
-- [ ] `src/context/HrmsContext.tsx:1979-2018` (`generatePayroll`): berhenti menghitung `calculatePPh21TER`/BPJS di klien; panggil endpoint baru `POST /api/tenant/payroll-runs` berisi hanya `{ period, employeeIds }`.
-- [ ] Buat `server/lib/payrollEngine.ts`: pindahkan logika `src/utils/taxCalculator.ts` (PPh21 TER, BPJS, lembur, THR, pesangon) ke server; sumber input = `employees.basicSalary`, `employeeSalaryAssignments`, presensi/lembur/reimbursement/pinjaman dari DB.
-- [ ] `server/routes/tenant.ts:2716-2760` (`payrollRecordSchema`, `/payroll-records/upsert`, `PUT /payroll-records/:id`): **hapus** `pph21*`, gaji bersih, potongan dari body; server mengabaikan angka klien. Tolak PUT pada record berstatus Final/Dibayar.
-- [ ] Skema: tambah `payroll_periods(tenantId, period, status Draft|Final|Dibayar, lockedAt, lockedBy)`; semua `payrollRecords` mengacu ke periode; Final = tidak bisa diubah, hanya koreksi lewat periode berikutnya.
-- [ ] `server/routes/employee.ts` (slip gaji karyawan): hanya tampilkan periode Final/Dibayar.
-- [ ] Audit trail untuk: generate, finalisasi, pembayaran, koreksi (saat ini upsert payroll **tidak** mencatat audit).
-- [ ] Pindahkan `PayrollManagement.tsx:1085, 1468, 2621` (THR/simulasi) agar memakai endpoint server; kalkulator simulasi boleh tetap di klien hanya berlabel "Simulasi".
-- [ ] Test: `payroll.isolation.test.ts` — angka klien diabaikan; periode Final menolak ubah; karyawan hanya melihat slip Final; PPh21 sesuai tabel TER untuk 3 kasus (TK/0, K/1, K/3).
+- [x] `src/context/HrmsContext.tsx:1979-2018` (`generatePayroll`): berhenti menghitung `calculatePPh21TER`/BPJS di klien; panggil endpoint baru `POST /api/tenant/payroll-runs` berisi hanya `{ period, employeeIds }`. _(selesai 2026-11-15: `generatePayrollRun` kini memanggil `POST /payroll-runs`)_
+- [x] Buat `server/lib/payrollEngine.ts`: pindahkan logika `src/utils/taxCalculator.ts` (PPh21 TER, BPJS, lembur, THR, pesangon) ke server; sumber input = `employees.basicSalary`, `employeeSalaryAssignments`, presensi/lembur/reimbursement/pinjaman dari DB. _(selesai: kalkulasi memakai `src/utils/taxCalculator.ts` yang sama, dijalankan di server)_
+- [x] `server/routes/tenant.ts:2716-2760` (`payrollRecordSchema`, `/payroll-records/upsert`, `PUT /payroll-records/:id`): **hapus** `pph21*`, gaji bersih, potongan dari body; server mengabaikan angka klien. Tolak PUT pada record berstatus Final/Dibayar. _(selesai: tidak ada rute yang menerima angka payroll; `/payroll-records/upsert` dan `PUT /payroll-records/:id` dihapus di admin & karyawan)_
+- [x] Skema: tambah `payroll_periods(tenantId, period, status Draft|Final|Dibayar, lockedAt, lockedBy)`; semua `payrollRecords` mengacu ke periode; Final = tidak bisa diubah, hanya koreksi lewat periode berikutnya. _(selesai: tabel `payroll_periods`, status Draft→Approved→Disbursed, periode terkunci; koreksi pasca-bayar belum ada)_
+- [ ] `server/routes/employee.ts` (slip gaji karyawan): hanya tampilkan periode Final/Dibayar. **Catatan:** saat ini belum ada rute slip gaji milik sendiri untuk karyawan biasa; `GET /api/employee/payroll-records` (izin `payroll:view`) menampilkan seluruh tenant termasuk Draft. Buat `GET /api/employee/my-payslips` (hanya milik sendiri, hanya Approved/Disbursed) dan batasi rute lama ke peran HR.
+- [x] Audit trail untuk: generate, finalisasi, pembayaran, koreksi (saat ini upsert payroll **tidak** mencatat audit). _(generate/approve/disburse tercatat; koreksi belum ada karena belum ada fitur koreksi)_
+- [ ] Pindahkan `PayrollManagement.tsx` THR/simulasi (`calculatePPh21TER` di sekitar baris 1085, 1468, 2621) agar memakai endpoint server — **bug ditemukan:** kode THR membaca `emp.ptkpStatus` (properti tidak ada; yang benar `emp.ptkp`, juga di baris ~1221, 2720) sehingga pajak THR selalu dihitung sebagai TK/0; kalkulator simulasi boleh tetap di klien hanya berlabel "Simulasi".
+- [x] Test: `payroll.isolation.test.ts` — angka klien diabaikan; periode Final menolak ubah; karyawan hanya melihat slip Final; PPh21 sesuai tabel TER untuk 3 kasus (TK/0, K/1, K/3). _(selesai: 6 test, termasuk angka klien diabaikan, periode terkunci, pinjaman dipotong sekali, klaim ditandai; kasus TER dicek untuk K/1 — TK/0 dan K/3 belum)_
 
 **B2. Identitas & peran UI diturunkan dari sesi server**
 - [ ] `HrmsContext.tsx:821` `useState<UserRole>('super_admin')`: hapus default; peran = hasil `/api/auth/me`.
@@ -72,7 +72,7 @@ Ini data demo. Tempatnya **hanya** di seed server untuk tenant demo `contoh` (`s
 ### P0 — Persistensi (data tidak boleh hilang saat ganti perangkat)
 
 **B6. Pindahkan semua localStorage ke backend** (setiap butir = tabel + route admin + route karyawan bila relevan + RBAC + audit + test)
-- [ ] **Reimbursement** — `HrmsContext.tsx:1112-1128` (`INITIAL_REIMBURSEMENT_CLAIMS`). Tabel `reimbursement_claims`; approval lewat Approval Engine (kategori "Reimbursement"); masuk perhitungan payroll (B1). **Kerjakan pertama.**
+- [x] **Reimbursement** — `HrmsContext.tsx:1112-1128` (`INITIAL_REIMBURSEMENT_CLAIMS`). Tabel `reimbursement_claims`; approval lewat Approval Engine (kategori "Reimbursement"); masuk perhitungan payroll (B1). **Kerjakan pertama.** _(selesai: tabel `reimbursement_claims`, rute admin + `/api/employee/reimbursements`, approval via Approval Engine, masuk payroll server; kunci localStorage dihapus)_
 - [ ] **Staging onboarding** — `HrmsContext.tsx:1096`, `4107` (`TEMP-xxxx` acak). Tabel `employee_staging`; nomor sementara dari urutan DB.
 - [ ] **Tiket GA / persediaan / permintaan persediaan / booking ruang / booking kendaraan** — `HrmsContext.tsx:1322-1338` (5 kunci localStorage). Tabel `ga_tickets, ga_supplies, ga_supply_requests, ga_room_bookings, ga_vehicle_bookings`.
 - [ ] **Proposal struktur organisasi** — `HrmsContext.tsx:1212` + `OrganizationManagement.tsx` (kunci `nusahr_org_proposals`). Tabel `org_change_proposals` + Approval Engine.
@@ -81,6 +81,23 @@ Ini data demo. Tempatnya **hanya** di seed server untuk tenant demo `contoh` (`s
 - [ ] **Tenant & entitas aktif** — `HrmsContext.tsx:773-776` (`nusahr_tenants`, `'tenant-ntm'`): tenant datang dari sesi; hanya `nusahr_active_entity` boleh di localStorage sebagai preferensi UI (divalidasi server).
 - [ ] `LoanManagement.tsx`, `GaAssetManagement.tsx`, `OrganizationManagement.tsx`, `Header.tsx` (4 file lain yang menyentuh localStorage): audit tiap penggunaan; sisakan hanya preferensi UI.
 - [ ] Bukti selesai: `grep -rn "localStorage" src` hanya menyisakan preferensi UI (tema, tab terakhir, entitas aktif); dua browser berbeda melihat data yang sama.
+
+### P1 — Presensi & lokasi kantor (permintaan 2026-11-15)
+
+**B18. Pengaturan Lokasi Kantor dipindah ke dalam menu Presensi**
+- [ ] `src/App.tsx` (`case 'office_locations'`, ~baris 147) dan item sidebar `office_locations` (`src/components/layout/Sidebar.tsx`): hapus menu mandiri "Lokasi Kantor".
+- [ ] `src/components/modules/AttendanceManagement.tsx`: tambahkan tab/sub-menu "Lokasi Kantor" yang merender `OfficeLocationManagement` (sudah 1.510 baris — render sebagai komponen anak, jangan salin). Tab hanya tampil bagi yang punya izin RBAC `attendance` (view); aksi tambah/ubah/nonaktif butuh `attendance:edit`.
+- [ ] Rute kompatibilitas: `activeModule === 'office_locations'` (command palette `CommandPaletteModal.tsx`, dashboard, tautan di modul lain) diarahkan ke Presensi → tab Lokasi Kantor.
+- [ ] Modul RBAC `office_locations` (jika ada di matriks): gabungkan ke `attendance` atau pertahankan sub-izin; pastikan matriks di `RbacManagement.tsx` tidak menampilkan modul yatim.
+- [ ] Penugasan karyawan ke lokasi (`assigningLoc`, `OfficeLocationManagement.tsx:~1396`) tetap berfungsi; hasil terlihat di form presensi karyawan.
+- [ ] Bukti: tidak ada item sidebar "Lokasi Kantor"; Presensi → tab Lokasi Kantor berisi seluruh fitur lama; test RBAC: peran tanpa `attendance:edit` tidak dapat mengubah lokasi (rute `PUT /api/tenant/office-locations/:id` juga diberi pemeriksaan izin untuk jalur karyawan).
+
+**B19. Poligon geofence tersimpan sebagai poligon (bug)** — *selesai 2026-11-15*
+- [x] **Penyebab:** `src/tenant/api.ts` (`OfficeLocation`) tidak punya `shapeType`/`polygonPoints`; `HrmsContext.tsx` `mapApiOfficeLocationToMock`, `addOfficeLocation`, dan `updateOfficeLocation` tidak mengirim maupun membaca keduanya, sehingga poligon hilang saat simpan dan form edit kembali ke lingkaran + radius.
+- [x] Perbaikan: tipe API, pemetaan baca/tulis, dan server (`server/routes/tenant.ts` rute POST/PUT `/office-locations`): bentuk selalu konsisten — poligon wajib ≥3 titik, beralih ke lingkaran menghapus titik, edit nama/radius tidak menghapus poligon.
+- [x] Test `officeLocation.isolation.test.ts` (3 test: round-trip poligon, edit tidak merusak, ganti bentuk).
+- [ ] Verifikasi manual di peta (browser): gambar poligon → simpan → buka edit → titik tampil → radius tidak menimpa; `lib/geofence.ts` dipakai saat clock-in untuk poligon (uji lewat `attendanceClock` dengan titik di dalam/luar poligon).
+- [ ] `addOfficeLocation/updateOfficeLocation` hanya `console.error` saat gagal (`HrmsContext.tsx`): tampilkan error di form (ikuti aturan error inline).
 
 ### P1 — Integrasi antar fungsi/modul
 
